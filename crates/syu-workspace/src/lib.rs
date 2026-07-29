@@ -786,7 +786,12 @@ fn symbol_identity_matches(identity: &str, name: &str) -> bool {
 }
 
 fn scope_matches(scope: &OwnershipScope, unit: &ArtifactUnit) -> bool {
-    if scope.adapter != unit.adapter {
+    if scope.adapter != unit.adapter
+        || !matches!(
+            unit.reachability,
+            syu_inventory::ArtifactReachability::Active
+        )
+    {
         return false;
     }
     match &scope.selector {
@@ -1011,6 +1016,101 @@ pub fn resolve_indexed_target(
         excerpt: excerpt.to_owned(),
         excerpt_hash: hash_bytes(excerpt.as_bytes()),
     }))
+}
+
+/// Resolve an active semantic inventory unit to its exact source range.  The
+/// inventory deliberately keeps some coarse spans (notably OpenAPI operations
+/// and JSON pointer nodes), so callers that turn a semantic identity into an
+/// executable scope must come through this resolver rather than copying the
+/// inventory span.
+pub fn resolve_artifact_unit(
+    workspace: &SpecWorkspace,
+    unit: &ArtifactUnit,
+) -> Result<ResolvedTarget> {
+    if !matches!(
+        unit.reachability,
+        syu_inventory::ArtifactReachability::Active
+    ) {
+        bail!("semantic artifact {} is not active", unit.identity);
+    }
+    let selector = match unit.kind {
+        ArtifactUnitKind::Operation => {
+            let operation = unit
+                .identity
+                .rsplit_once("::")
+                .map(|(_, operation)| operation)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("operation identity is malformed: {}", unit.identity)
+                })?;
+            let (method, path) = operation.split_once(' ').ok_or_else(|| {
+                anyhow::anyhow!("operation identity is malformed: {}", unit.identity)
+            })?;
+            Selector::Operation {
+                method: method.into(),
+                path: path.into(),
+            }
+        }
+        ArtifactUnitKind::SchemaNode => {
+            let pointer = unit
+                .identity
+                .rsplit_once("::pointer::")
+                .map(|(_, pointer)| pointer)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("schema identity is malformed: {}", unit.identity)
+                })?;
+            Selector::JsonPointer {
+                value: pointer.into(),
+            }
+        }
+        _ => {
+            // Symbol, heading and marker inventory spans are source-derived
+            // already.  Preserve those exact spans instead of attempting to
+            // recover a declared target from a potentially broader owner.
+            let bytes = workspace.read_bytes(&workspace.root.join(unit.path.as_path()))?;
+            let text = std::str::from_utf8(&bytes).map_err(|error| {
+                anyhow::anyhow!("inventory target source is not UTF-8: {error}")
+            })?;
+            let start = unit.span.byte_start.min(bytes.len());
+            let end = unit.span.byte_end.min(bytes.len()).max(start);
+            let excerpt = text.get(start..end).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "inventory span is not on UTF-8 boundaries: {}",
+                    unit.identity
+                )
+            })?;
+            return Ok(ResolvedTarget {
+                path: unit.path.as_path().to_path_buf(),
+                description: format!("semantic artifact {}", unit.identity),
+                symbols: if matches!(unit.kind, ArtifactUnitKind::File) {
+                    vec![]
+                } else {
+                    vec![
+                        unit.identity
+                            .rsplit("::")
+                            .next()
+                            .unwrap_or(&unit.identity)
+                            .into(),
+                    ]
+                },
+                content_hash: hash_bytes(&bytes),
+                bytes: bytes.len(),
+                byte_start: start,
+                byte_end: end,
+                line_start: unit.span.line_start,
+                line_end: unit.span.line_end,
+                excerpt: excerpt.into(),
+                excerpt_hash: hash_bytes(excerpt.as_bytes()),
+            });
+        }
+    };
+    let target = ArtifactTarget {
+        id: LocalId::from("semantic-unit"),
+        adapter: unit.adapter.clone(),
+        path: unit.path.clone(),
+        selector,
+        claims: vec![],
+    };
+    resolve_target_in_workspace(workspace, &target)
 }
 
 pub fn resolve_target_with_adapters(

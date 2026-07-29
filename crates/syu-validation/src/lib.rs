@@ -28,8 +28,8 @@ use syu_work_model::{
     work_plan_digest,
 };
 use syu_workspace::{
-    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_indexed_target,
-    resolve_target_in_workspace, selector_supports_editable,
+    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
+    resolve_indexed_target, resolve_target_in_workspace, selector_supports_editable,
 };
 use tempfile::TempDir;
 
@@ -599,33 +599,7 @@ fn resolve_planned_target_for_workspace(
             .artifact_units
             .iter()
             .find(|unit| &unit.identity == identity)?;
-        if !matches!(
-            unit.reachability,
-            syu_inventory::ArtifactReachability::Active
-        ) {
-            return None;
-        }
-        let bytes = workspace.read_bytes(unit.path.as_path()).ok()?;
-        let byte_start = unit.span.byte_start.min(bytes.len());
-        let byte_end = unit.span.byte_end.min(bytes.len()).max(byte_start);
-        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
-        return Some(ResolvedTarget {
-            path: unit.path.as_path().to_path_buf(),
-            description: format!("changed semantic artifact {identity}"),
-            symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
-                vec![]
-            } else {
-                vec![symbol]
-            },
-            content_hash: unit.digest.clone(),
-            bytes: bytes.len(),
-            byte_start,
-            byte_end,
-            line_start: unit.span.line_start,
-            line_end: unit.span.line_end,
-            excerpt: String::from_utf8_lossy(&bytes[byte_start..byte_end]).into_owned(),
-            excerpt_hash: unit.digest.clone(),
-        });
+        return resolve_artifact_unit(workspace, unit).ok();
     }
     let declared = index.target(&target.reference)?;
     if let Some(identity) = index.target_to_artifact.get(&target.reference)
@@ -4164,15 +4138,21 @@ fn target_line_range(
     changed_path: &RepoPath,
 ) -> Option<(usize, usize)> {
     if let Some(identity) = &target.artifact_identity {
+        // The plan is the pre-state authority.  The identity can be absent or
+        // moved after a rename/deletion, so never use the post-state inventory
+        // to judge an old-side hunk.
+        if matches!(side, TargetRangeSide::Old) {
+            return (target.resolved_path == changed_path.to_string_lossy())
+                .then_some((target.line_start, target.line_end));
+        }
         let unit = ctx
             .index
             .artifact_units
             .iter()
             .find(|unit| &unit.identity == identity)?;
-        if unit.path.to_string_lossy() != changed_path.to_string_lossy() {
-            return None;
-        }
-        return Some((unit.span.line_start, unit.span.line_end));
+        let resolved = resolve_artifact_unit(ctx.workspace, unit).ok()?;
+        return (resolved.path.to_string_lossy() == changed_path.to_string_lossy())
+            .then_some((resolved.line_start, resolved.line_end));
     }
     let current = if matches!(
         target.lifecycle,
@@ -4223,33 +4203,7 @@ fn resolve_planned_target(
             .artifact_units
             .iter()
             .find(|unit| &unit.identity == identity)?;
-        if !matches!(
-            unit.reachability,
-            syu_inventory::ArtifactReachability::Active
-        ) {
-            return None;
-        }
-        let bytes = ctx.workspace.read_bytes(unit.path.as_path()).ok()?;
-        let byte_start = unit.span.byte_start.min(bytes.len());
-        let byte_end = unit.span.byte_end.min(bytes.len()).max(byte_start);
-        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
-        return Some(ResolvedTarget {
-            path: unit.path.as_path().to_path_buf(),
-            description: format!("changed semantic artifact {identity}"),
-            symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
-                vec![]
-            } else {
-                vec![symbol]
-            },
-            content_hash: unit.digest.clone(),
-            bytes: bytes.len(),
-            byte_start,
-            byte_end,
-            line_start: unit.span.line_start,
-            line_end: unit.span.line_end,
-            excerpt: String::from_utf8_lossy(&bytes[byte_start..byte_end]).into_owned(),
-            excerpt_hash: unit.digest.clone(),
-        });
+        return resolve_artifact_unit(ctx.workspace, unit).ok();
     }
     let declared = ctx.index.target(&target.reference)?;
     if let Some(identity) = ctx.index.target_to_artifact.get(&target.reference)

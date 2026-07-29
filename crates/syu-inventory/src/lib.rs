@@ -99,6 +99,7 @@ pub enum SemanticChangeKind {
     Addition,
     PrivateModification,
     Modification,
+    ReachabilityChange,
     Rename,
     Deletion,
 }
@@ -113,6 +114,10 @@ pub struct SemanticChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_identity: Option<String>,
     pub exposure: ArtifactExposure,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_reachability: Option<ArtifactReachability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_reachability: Option<ArtifactReachability>,
 }
 
 /// Deliberately boring provider used for declared/documentation assets. Language
@@ -1720,7 +1725,9 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
             continue;
         }
         changes.push(SemanticChange {
-            kind: if current.exposure == ArtifactExposure::Public
+            kind: if unit.reachability != current.reachability {
+                SemanticChangeKind::ReachabilityChange
+            } else if current.exposure == ArtifactExposure::Public
                 && unit.exposure != ArtifactExposure::Public
             {
                 SemanticChangeKind::PublicAddition
@@ -1741,6 +1748,8 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
             before_identity: Some(unit.identity.clone()),
             after_identity: Some(current.identity.clone()),
             exposure: current.exposure.clone(),
+            before_reachability: Some(unit.reachability.clone()),
+            after_reachability: Some(current.reachability.clone()),
         });
     }
 
@@ -1785,6 +1794,8 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
             before_identity: Some(previous.identity.clone()),
             after_identity: Some(current.identity.clone()),
             exposure: current.exposure.clone(),
+            before_reachability: Some(previous.reachability.clone()),
+            after_reachability: Some(current.reachability.clone()),
         });
     }
 
@@ -1799,6 +1810,8 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
             before_identity: Some(unit.identity.clone()),
             after_identity: None,
             exposure: unit.exposure.clone(),
+            before_reachability: Some(unit.reachability.clone()),
+            after_reachability: None,
         });
     }
     for (index, unit) in added.drain(..).enumerate() {
@@ -1816,6 +1829,8 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
             before_identity: None,
             after_identity: Some(unit.identity.clone()),
             exposure: unit.exposure.clone(),
+            before_reachability: None,
+            after_reachability: Some(unit.reachability.clone()),
         });
     }
     changes.sort_by(|left, right| {
@@ -2609,7 +2624,7 @@ mod tests {
                     },
                 ),
             ),
-            SemanticChangeKind::Modification
+            SemanticChangeKind::ReachabilityChange
         );
         assert_eq!(
             classify(
@@ -2621,7 +2636,7 @@ mod tests {
                 ),
                 base(ArtifactExposure::Public, ArtifactReachability::Active),
             ),
-            SemanticChangeKind::Modification
+            SemanticChangeKind::ReachabilityChange
         );
     }
 
