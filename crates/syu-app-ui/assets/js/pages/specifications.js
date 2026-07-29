@@ -135,6 +135,8 @@ function patchFromForm(editor, state, form) {
   editor.draft = draft;
   return editor.mode === 'create'
     ? createWizardPatch(editor, draft)
+    : editor.mode === 'add-criterion'
+      ? createAddCriterionPatch(editor, draft)
     : editor.anchor
       ? createAnchorPatch(editor, draft)
       : createItemPatch(itemById(state, editor.itemId), draft);
@@ -151,6 +153,19 @@ function createAnchorPatch(editor, form) {
   if (editor.anchorKind === 'principle') fields.applies_to = String(formValue(form, 'applies_to') || '')
     .split(',').map(value => value.trim()).filter(Boolean);
   return { kind: 'anchor', anchor: editor.anchor, fields };
+}
+
+function createAddCriterionPatch(editor, form) {
+  return {
+    kind: 'add_criterion',
+    requirement_id: editor.requirementId,
+    criterion: {
+      id: formValue(form, 'criterion_id'),
+      kind: formValue(form, 'criterion_kind'),
+      statement: formValue(form, 'criterion_statement'),
+      governed_by: editor.governedBy || [],
+    },
+  };
 }
 
 function createWizardPatch(editor, form) {
@@ -222,7 +237,7 @@ function renderImpact(root, preview) {
   root.append(card);
 }
 
-function renderTargetSuggestions(root, state) {
+export function renderTargetSuggestions(root, state) {
   const set = state.targetSuggestions;
   if (!set) return;
   const card = document.createElement('section');
@@ -336,16 +351,27 @@ function renderTargetSuggestions(root, state) {
   root.append(card);
 }
 
-function renderEditor(root, state) {
+export function renderEditor(root, state) {
   const editor = state.specificationEditor;
   const form = document.createElement('form');
   form.className = 'specification-editor card';
   const heading = document.createElement('div');
   heading.className = 'canvas-head';
   const title = document.createElement('h2');
-  title.textContent = editor.mode === 'create' ? t('items.new.title') : t('common.edit');
+  title.textContent = editor.mode === 'create'
+    ? t('items.new.title')
+    : editor.mode === 'add-criterion'
+      ? t('items.add_criterion')
+      : t('common.edit');
   heading.append(title);
-  heading.append(button(t('common.close'), '×', () => { state.specificationEditor = null; state.specificationPreview = null; state.render(); }, 'btn small ghost'));
+  heading.append(button(t('common.close'), '×', () => {
+    if (typeof editor.onClose === 'function') editor.onClose(state);
+    else {
+      state.specificationEditor = null;
+      state.specificationPreview = null;
+      state.render();
+    }
+  }, 'btn small ghost'));
   form.append(heading);
 
   if (editor.mode === 'create') {
@@ -385,6 +411,21 @@ function renderEditor(root, state) {
       governance.append(governanceText);
       form.append(governance);
     }
+  } else if (editor.mode === 'add-criterion') {
+    const draft = editor.draft || {};
+    const requirement = itemById(state, editor.requirementId);
+    if (requirement) form.append(field(t('items.field.requirement'), requirement.title, 'requirement', 'text'));
+    form.append(field(t('items.field.criterion_id'), draftValue(editor, draft, 'criterion_id'), 'criterion_id'));
+    form.append(field(t('items.field.criterion_kind'), draftValue(editor, draft, 'criterion_kind', 'behavior'), 'criterion_kind', 'select', ['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom']));
+    form.append(field(t('items.field.criterion_statement'), draftValue(editor, draft, 'criterion_statement'), 'criterion_statement', 'textarea'));
+    const governance = document.createElement('details');
+    const governanceSummary = document.createElement('summary');
+    governanceSummary.textContent = t('common.advanced');
+    governance.append(governanceSummary);
+    const governanceText = document.createElement('p');
+    governanceText.textContent = `${t('items.field.governed_by')}: ${editor.governedBy?.join(', ') || '—'}`;
+    governance.append(governanceText);
+    form.append(governance);
   } else if (editor.anchor) {
     const draft = editor.draft || {};
     form.append(field(t('items.field.statement'), draftValue(editor, draft, 'statement', editor.statement), 'statement', 'textarea'));
@@ -477,8 +518,12 @@ function renderEditor(root, state) {
         );
         state.projection = await state.api.readProjection();
         state.specificationCandidates = null;
-        state.specificationEditor = null;
         state.specificationPreview = null;
+        if (typeof editor.afterApply === 'function') {
+          await editor.afterApply(state, state.specificationPreview?.patch || currentPatch);
+          return;
+        }
+        state.specificationEditor = null;
         state.selectedSpecification = null;
     }), 'btn primary specification-apply');
     actions.append(apply);
@@ -635,6 +680,19 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       ));
     }
     if (!readOnly) {
+      if (selected.kind === 'requirement') {
+        actions.append(button(t('items.add_criterion'), '+', () => {
+          state.specificationEditor = {
+            mode: 'add-criterion',
+            requirementId: selected.id,
+            governedBy: [],
+          };
+          state.specificationPreview = null;
+          state.targetSuggestions = null;
+          state.targetSuggestionSelection = [];
+          state.render();
+        }, 'btn small'));
+      }
       actions.append(button(t('common.edit'), '✎', () => {
         state.specificationEditor = { mode: 'edit', itemId: selected.id };
         state.specificationPreview = null;

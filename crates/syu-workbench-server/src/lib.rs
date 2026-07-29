@@ -575,6 +575,10 @@ pub enum EditPatch {
         anchor: String,
         fields: AnchorPatchFields,
     },
+    AddCriterion {
+        requirement_id: SpecId,
+        criterion: NewCriterion,
+    },
     CreateRequirement {
         document: String,
         id: SpecId,
@@ -1119,6 +1123,12 @@ pub struct SpecificationCandidateView {
     pub item: ItemSummary,
     pub matches: Vec<CandidateMatch>,
     pub relevance: Vec<String>,
+    /// Ranking is advisory.  It is intentionally separated from the stable
+    /// criterion anchors that a person must explicitly select before work can
+    /// be created.
+    pub score: usize,
+    pub evidence: Vec<CandidateEvidence>,
+    pub stable_anchors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1128,13 +1138,126 @@ pub struct CandidateMatch {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateEvidence {
+    pub source: String,
+    pub detail: String,
+}
+
+#[derive(Clone, Copy)]
+struct DiscoveryConcept {
+    label: &'static str,
+    terms: &'static [&'static str],
+}
+
+// This intentionally small, deterministic glossary is a discovery aid, not
+// an authority on scope.  It keeps multilingual matching inspectable and
+// testable without turning an embedding or an LLM result into executable work.
+const DISCOVERY_CONCEPTS: &[DiscoveryConcept] = &[
+    DiscoveryConcept {
+        label: "behavior",
+        terms: &[
+            "behavior",
+            "behaviour",
+            "function",
+            "functional",
+            "動作",
+            "振る舞い",
+            "挙動",
+            "機能",
+        ],
+    },
+    DiscoveryConcept {
+        label: "validation",
+        terms: &[
+            "validate",
+            "validation",
+            "verify",
+            "verification",
+            "test",
+            "valid",
+            "検証",
+            "確認",
+            "テスト",
+            "有効",
+        ],
+    },
+    DiscoveryConcept {
+        label: "change",
+        terms: &[
+            "change",
+            "modify",
+            "update",
+            "implement",
+            "implementation",
+            "変更",
+            "改修",
+            "更新",
+            "実装",
+        ],
+    },
+    DiscoveryConcept {
+        label: "scope",
+        terms: &[
+            "scope", "boundary", "bounded", "plan", "planning", "範囲", "境界", "計画",
+        ],
+    },
+    DiscoveryConcept {
+        label: "security",
+        terms: &[
+            "security",
+            "secure",
+            "auth",
+            "permission",
+            "安全",
+            "認証",
+            "権限",
+        ],
+    },
+];
+
+fn matching_discovery_concepts(query: &str) -> Vec<&'static DiscoveryConcept> {
+    DISCOVERY_CONCEPTS
+        .iter()
+        .filter(|concept| concept.terms.iter().any(|term| query.contains(term)))
+        .collect()
+}
+
+fn candidate_field_weight(kind: &str) -> usize {
+    match kind {
+        "item" => 7,
+        "title" => 6,
+        "criterion" => 5,
+        "summary" | "description" => 4,
+        "rule" | "principle" => 3,
+        _ => 1,
+    }
+}
+
+fn discovery_history(workspace: &SpecWorkspace) -> BTreeMap<String, usize> {
+    DeliveryStore::for_workspace(&workspace.root)
+        .and_then(|store| store.attempts())
+        .map(|attempts| {
+            let mut history = BTreeMap::new();
+            for attempt in attempts {
+                for evidence in attempt.report.demonstrated {
+                    *history.entry(evidence.anchor.to_string()).or_insert(0) += 1;
+                }
+            }
+            history
+        })
+        .unwrap_or_default()
+}
+
 async fn api_specification_candidates(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<SpecificationCandidateQuery>,
 ) -> Result<Json<Vec<SpecificationCandidateView>>, ApiError> {
     let snapshot = service.snapshot()?;
     let entries = snapshot.projection.specifications.specifications.clone();
-    let query_text = query.q.unwrap_or_default().trim().to_ascii_lowercase();
+    let query_text = query.q.unwrap_or_default().trim().to_lowercase();
+    let query_concepts = matching_discovery_concepts(&query_text);
+    let history = discovery_history(&snapshot.workspace);
     let kind_filter = query.kind.as_deref().filter(|kind| !kind.is_empty());
     let mut candidates = entries
         .into_iter()
@@ -1167,54 +1290,129 @@ async fn api_specification_candidates(
                     criterion.statement.clone(),
                 ));
             }
-            let matches = if query_text.is_empty() {
-                vec![CandidateMatch {
+            let mut matches = Vec::new();
+            let mut evidence = Vec::new();
+            let mut score = 0;
+            if query_text.is_empty() {
+                matches.push(CandidateMatch {
                     anchor: item.id.clone(),
                     kind: "item".into(),
                     text: item.title.clone(),
-                }]
+                });
+                evidence.push(CandidateEvidence {
+                    source: "available".into(),
+                    detail: "available specification".into(),
+                });
             } else {
-                fields
-                    .into_iter()
-                    .filter_map(|(anchor, kind, text)| {
-                        text.to_ascii_lowercase()
-                            .contains(&query_text)
-                            .then_some(CandidateMatch { anchor, kind, text })
-                    })
-                    .collect::<Vec<_>>()
-            };
+                for (anchor, kind, text) in &fields {
+                    if text.to_lowercase().contains(&query_text) {
+                        score += candidate_field_weight(kind);
+                        matches.push(CandidateMatch {
+                            anchor: anchor.clone(),
+                            kind: kind.clone(),
+                            text: text.clone(),
+                        });
+                        evidence.push(CandidateEvidence {
+                            source: "lexical".into(),
+                            detail: format!("lexical {kind} match"),
+                        });
+                    }
+                }
+                for concept in &query_concepts {
+                    let mut concept_matches = 0;
+                    for (anchor, _kind, text) in &fields {
+                        if concept
+                            .terms
+                            .iter()
+                            .any(|term| text.to_lowercase().contains(term))
+                        {
+                            concept_matches += 1;
+                            if !matches.iter().any(|entry| {
+                                entry.anchor == *anchor
+                                    && entry.kind == "semantic"
+                                    && entry.text == *text
+                            }) {
+                                matches.push(CandidateMatch {
+                                    anchor: anchor.clone(),
+                                    kind: "semantic".into(),
+                                    text: text.clone(),
+                                });
+                            }
+                        }
+                    }
+                    if concept_matches > 0 {
+                        score += 3;
+                        evidence.push(CandidateEvidence {
+                            source: "semantic".into(),
+                            detail: format!(
+                                "semantic concept '{}' links the intent to {concept_matches} specification field(s)",
+                                concept.label
+                            ),
+                        });
+                    }
+                }
+            }
             if matches.is_empty() {
                 return None;
             }
-            let mut relevance = Vec::new();
-            if query_text.is_empty() {
-                relevance.push("available specification".into());
-            } else {
-                if item.id.to_ascii_lowercase() == query_text {
-                    relevance.push("exact item id".into());
-                } else if item.id.to_ascii_lowercase().contains(&query_text) {
-                    relevance.push("item id match".into());
-                }
-                if item.title.to_ascii_lowercase().contains(&query_text) {
-                    relevance.push("title match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "criterion") {
-                    relevance.push("criterion match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "rule") {
-                    relevance.push("rule match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "principle") {
-                    relevance.push("principle match".into());
-                }
-            }
-            let score = relevance.len();
+            let stable_anchors = item
+                .criteria
+                .iter()
+                .map(|criterion| criterion.anchor.clone())
+                .collect::<Vec<_>>();
+            let (implementation_targets, verification_targets) = stable_anchors.iter().fold(
+                (0, 0),
+                |(implementation, verification), anchor| {
+                    let anchor = anchor.parse::<SpecAnchor>().ok();
+                    let implementation = implementation
+                        + anchor
+                            .as_ref()
+                            .and_then(|anchor| {
+                                snapshot
+                                    .index
+                                    .criteria_to_implementation_targets
+                                    .get(anchor)
+                            })
+                            .map_or(0, Vec::len);
+                    let verification = verification
+                        + anchor
+                            .as_ref()
+                            .and_then(|anchor| {
+                                snapshot.index.criteria_to_verification_targets.get(anchor)
+                            })
+                            .map_or(0, Vec::len);
+                    (implementation, verification)
+                },
+            );
+            evidence.push(CandidateEvidence {
+                source: "graph".into(),
+                detail: format!(
+                    "{} exact criterion anchor(s), {implementation_targets} implementation target(s), and {verification_targets} verification target(s)",
+                    stable_anchors.len(),
+                ),
+            });
+            let completed = stable_anchors
+                .iter()
+                .map(|anchor| history.get(anchor).copied().unwrap_or_default())
+                .sum::<usize>();
+            evidence.push(CandidateEvidence {
+                source: "history".into(),
+                detail: if completed == 0 {
+                    "no completed evidence recorded for these criterion anchors".into()
+                } else {
+                    format!("{completed} completed evidence record(s) reference these criterion anchors")
+                },
+            });
+            let relevance = evidence.iter().map(|entry| entry.detail.clone()).collect();
             Some((
                 score,
                 SpecificationCandidateView {
                     item,
                     matches,
                     relevance,
+                    score,
+                    evidence,
+                    stable_anchors,
                 },
             ))
         })
@@ -1523,6 +1721,9 @@ fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
                 .ok_or_else(|| anyhow::anyhow!("anchor is missing an item id"))?;
             specification_path(workspace, item)
         }
+        EditPatch::AddCriterion { requirement_id, .. } => {
+            specification_path(workspace, &requirement_id.to_string())
+        }
         EditPatch::CreateRequirement { document, .. }
         | EditPatch::CreateFeature { document, .. } => {
             specification_document_path(workspace, document)
@@ -1600,6 +1801,9 @@ fn specification_impact(
         .collect::<BTreeSet<_>>();
     if let Some(EditPatch::Specification { item_id, .. }) = patch {
         affected_items.insert(item_id.clone());
+    }
+    if let Some(EditPatch::AddCriterion { requirement_id, .. }) = patch {
+        affected_items.insert(requirement_id.to_string());
     }
     if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
         patch
@@ -1724,6 +1928,17 @@ fn changed_specification_anchors(
         Some(EditPatch::Specification { item_id, .. }) => {
             let _ = (index, item_id);
         }
+        Some(EditPatch::AddCriterion {
+            requirement_id,
+            criterion,
+        }) => {
+            let anchor = anchor_string(requirement_id, LocalAnchorKind::Criterion, &criterion.id);
+            if let Ok(parsed) = anchor.parse::<SpecAnchor>()
+                && index.anchor(&parsed).is_some()
+            {
+                anchors.insert(anchor);
+            }
+        }
         Some(EditPatch::CreateRequirement { id, .. })
         | Some(EditPatch::CreateFeature { id, .. }) => {
             if let Some(item) = index
@@ -1815,6 +2030,47 @@ fn specification_patch_content(
             for (key, field) in anchor_patch_fields(fields)? {
                 entry.insert(serde_yaml::Value::String(key), field);
             }
+        }
+        EditPatch::AddCriterion {
+            requirement_id,
+            criterion,
+        } => {
+            if collection_for_value(&value)? != "requirements" {
+                anyhow::bail!("a criterion can only be added to a requirement");
+            }
+            let requirements = specification_sequence(&mut value, "requirements")?;
+            let requirement = requirements
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == requirement_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("requirement {requirement_id} not found"))?;
+            let mapping = requirement
+                .as_mapping_mut()
+                .ok_or_else(|| anyhow::anyhow!("requirement is not a mapping"))?;
+            let criteria = mapping
+                .get_mut(serde_yaml::Value::String("criteria".into()))
+                .and_then(serde_yaml::Value::as_sequence_mut)
+                .ok_or_else(|| anyhow::anyhow!("requirement criteria are missing"))?;
+            if criteria.iter().any(|entry| {
+                entry
+                    .get("id")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|id| id == criterion.id.to_string())
+            }) {
+                anyhow::bail!(
+                    "criterion {} already exists in requirement {requirement_id}",
+                    criterion.id
+                );
+            }
+            criteria.push(serde_yaml::to_value(Criterion {
+                id: criterion.id.clone(),
+                kind: criterion.kind,
+                statement: criterion.statement.clone(),
+                governed_by: criterion.governed_by.clone(),
+            })?);
         }
         EditPatch::CreateRequirement {
             id,
@@ -1979,6 +2235,7 @@ fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Re
     match patch {
         EditPatch::Specification { .. }
         | EditPatch::Anchor { .. }
+        | EditPatch::AddCriterion { .. }
         | EditPatch::CreateRequirement { .. }
         | EditPatch::CreateFeature { .. } => specification_patch_content(workspace, path, patch),
         EditPatch::Config { config } => Ok(serde_yaml::to_string(config)?),
@@ -7346,6 +7603,126 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn advisory_specification_discovery_is_multilingual_and_never_creates_scope() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=%E6%8C%AF%E3%82%8B%E8%88%9E%E3%81%84%E3%82%92%E6%A4%9C%E8%A8%BC&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let candidates: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("multilingual candidate response");
+        let fixture_candidate = candidates
+            .iter()
+            .find(|candidate| candidate.item.id == "REQ-FIXTURE-001")
+            .expect("Japanese intent finds the English fixture requirement");
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "semantic")
+        );
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "graph")
+        );
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "history")
+        );
+        assert_eq!(
+            fixture_candidate.stable_anchors,
+            vec!["REQ-FIXTURE-001#criterion.behavior"]
+        );
+        assert!(
+            service.session.read().unwrap().draft_request.is_none(),
+            "discovery results must remain advisory"
+        );
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=function&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let synonyms: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("synonym candidate response");
+        assert!(synonyms.iter().any(|candidate| {
+            candidate.item.id == "REQ-FIXTURE-001"
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|entry| entry.source == "semantic")
+        }));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=orchard&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let no_match: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("no-match response");
+        assert!(
+            no_match.is_empty(),
+            "unrelated intent must not become a false positive"
+        );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#binding.verification",
+                "summary": "Do not accept a non-criterion anchor"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            service.session.read().unwrap().draft_request.is_none(),
+            "an unapproved or non-criterion discovery result cannot create scope"
+        );
+    }
+
+    #[tokio::test]
     async fn workbench_specification_candidates_support_search_edit_and_create() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7521,6 +7898,56 @@ mod tests {
             .expect("created requirement");
         assert!(created.contains("REQ-FIXTURE-002"));
         assert!(created.contains("guided"));
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let add_criterion = StructuredEditCommand {
+            basis,
+            patch: EditPatch::AddCriterion {
+                requirement_id: SpecId("REQ-FIXTURE-001".into()),
+                criterion: NewCriterion {
+                    id: "recovery".into(),
+                    kind: CriterionKind::Behavior,
+                    statement: "The no-match recovery path adds a reviewable behavior.".into(),
+                    governed_by: vec!["POL-FIXTURE-001#rule.behavior".parse().unwrap()],
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &add_criterion,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: EditPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("criterion add preview");
+        assert!(preview.impact.as_ref().is_some_and(|impact| {
+            impact
+                .changed_anchors
+                .iter()
+                .any(|anchor| anchor == "REQ-FIXTURE-001#criterion.recovery")
+        }));
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/candidates/apply",
+            &csrf,
+            &StructuredEditCommand {
+                preview_token: Some(preview.preview_token),
+                ..add_criterion
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+                .expect("criterion added")
+                .contains("recovery")
+        );
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let feature = StructuredEditCommand {
@@ -8965,6 +9392,30 @@ mod tests {
         .unwrap();
         assert!(html.contains("aria-label"));
         assert!(html.contains("/assets/js/main.js"));
+        let response = WorkbenchServer::new(workspace_root())
+            .router()
+            .oneshot(
+                Request::builder()
+                    .uri("/assets/catalog.js")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let catalog = String::from_utf8(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(catalog.contains("journey.no_match.add_criterion"));
+        assert!(catalog.contains("Add a criterion"));
+        assert!(catalog.contains("Criterionを追加"));
     }
 
     #[test]

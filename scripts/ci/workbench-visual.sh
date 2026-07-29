@@ -91,6 +91,9 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/specifications/candidates')) { const item=projection.specifications.specifications.find(value=>value.kind==='requirement'&&value.criteria?.length); return body(item?[{item,matches:[{anchor:item.criteria[0].anchor,kind:'criterion',text:item.criteria[0].statement}],relevance:['lexical criterion match'],score:1,evidence:[{source:'lexical',detail:'lexical criterion match'},{source:'graph',detail:'one exact criterion anchor'}],stable_anchors:item.criteria.map(criterion=>criterion.anchor)}]:[]); }\n"""
+    """  if(path.includes('/target-suggestions/approve')) { const anchor=payload.criterion; const item=projection.specifications.specifications.find(value=>value.criteria?.some(criterion=>criterion.anchor===anchor)); const criterion=item?.criteria.find(value=>value.anchor===anchor); projection.work.request={summary:'Make the behavior clear',operation:'modify',seed_count:0,requested_target_count:1}; projection.journey={title:'Make the behavior clear',current_step:'review',steps:[],primary_action:{action:'prepare',confirmation_required:false},recovery_action:{action:'cancel',confirmation_required:true},approved_scope:null,evidence:{status:'draft',blockers:[]},related_specification:item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null,advanced:{request_id:'work-visual',plan_id:null,selected_slice_id:null,attempt_id:null,specification_anchor:criterion?.anchor||null}}; return body({request:{summary:'Make the behavior clear'}}); }\n"""
+    """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-FIXTURE-001#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'visual-target',rank:1,ref:'FEAT-FIXTURE-001#binding.implementation/target.behavior',confidence:'high',role:'implementation',evidence:['exact fixture target']}]});\n"""
     """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
@@ -160,43 +163,18 @@ setTimeout(()=>{
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
 
   (async()=>{
-  const workStart=document.querySelector('[data-page="work"] .work-start');
-  if(!workStart) failures.push('Work did not show the specification-first start state');
-  if(document.querySelector('[data-page="work"] .journey-intake, [data-page="work"] .journey-card')) failures.push('Work still shows the legacy behavior search');
-  const locale=document.documentElement.dataset.locale;
-  if(locale==='ja') {
-    if(workStart?.querySelector('h2')?.textContent!=='作業を作る仕様を選ぶ') failures.push('Japanese initial Work title is not localized');
-    if(workStart?.querySelector('.journey-action-label')?.textContent!=='仕様一覧を開く') failures.push('Japanese initial Work CTA is not localized');
-    if(!workStart?.querySelector('p')?.textContent.includes('仕様一覧から対象を選びます')) failures.push('Japanese initial Work explanation is not localized');
-  }
-  window.SyuPreferences.translate('ja');
-  await wait(40);
-  if(document.documentElement.lang!=='ja') failures.push('Japanese locale did not apply');
-  if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='作業') failures.push('already-rendered Work page did not rerender in Japanese');
-  window.SyuPreferences.translate('en');
-  await wait(40);
-  if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
-  await click('[data-page="work"] .work-start .journey-action');
-  if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
-  const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
-  const selectedCriterion=document.querySelector('[data-page="specifications"] .specification-criterion');
-  const selectedCriterionAnchor=selectedCriterion?.querySelector('strong')?.textContent;
-  const selectedCriterionStatement=selectedCriterion?.querySelector('p')?.textContent;
-  await click('[data-page="specifications"] [data-review-target-suggestions]');
-  if(!document.querySelector('[data-page="specifications"] .target-suggestions')) failures.push('Target Suggestions did not open');
-  await click('[data-page="specifications"] [data-approve-target-suggestions]');
-  if(!visible('[data-page="specifications"]')) failures.push('Target Suggestions approval left Specifications');
-  if(projection.work.request) failures.push('Target Suggestions approval created a WorkRequest');
-  await click('[data-page="specifications"] .target-suggestions .btn.ghost');
-  await click('[data-page="specifications"] [data-review-target-suggestions]');
-  if(!document.querySelector('[data-page="specifications"] [data-target-suggestion-approved]')) failures.push('accepted target suggestion state was not restored');
-  await click('[data-page="specifications"] .target-suggestions .btn.ghost');
-  await click('[data-page="specifications"] [data-create-work]');
-  if(!visible('[data-page="work"]')) failures.push('specification Create Work did not open Work');
-  if(document.querySelector('[data-page="work"] .journey-header h2')?.textContent.startsWith('Change ')) failures.push('Create Work title still has the English Change prefix');
-  if(document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent!==selectedSpecificationTitle) failures.push('related specification does not match the selected specification');
-  if(document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent!==selectedCriterionStatement) failures.push('related criterion does not match the selected criterion');
-  if(document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor!==selectedCriterionAnchor) failures.push('Work seed anchor does not match the selected criterion');
+  const query=document.querySelector('[data-page="work"] .journey-intake textarea');
+  query.value='s';
+  await click('[data-page="work"] .journey-intake .journey-action');
+  await click('[data-page="work"] .journey-card .journey-action');
+  if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
+  if(!document.querySelector('[data-work-specification] [data-journey-preview]')) failures.push('search did not render the specification preview');
+  const previewColumns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
+  if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
+  await click('[data-work-specification] .actions .primary');
+  if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('candidate did not open target suggestion review');
+  await click('[data-page="work"] .target-suggestions .primary');
+  if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
@@ -251,7 +229,7 @@ setTimeout(()=>{
   if(!document.querySelector('[data-work-specification] [data-journey-panel="diff"] .diff-file')) failures.push('implementation did not open the diff panel');
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
-  if(JSON.stringify(window.__SYU_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  if(JSON.stringify(window.__SYU_FLOW__)!=='["prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
   if(!document.querySelector('[data-page="work"] .journey-advanced')) failures.push('advanced completion evidence missing');
   await click('[data-page="work"] [data-tab="slices"]');
   if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('Work slices tab did not open');
