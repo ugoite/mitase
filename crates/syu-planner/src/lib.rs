@@ -1380,6 +1380,12 @@ fn build_requested_target_slice(
         },
     } {
         anchors.push(criterion.clone());
+        for planned in &mut verification {
+            planned.verification_claim = Some(VerificationClaimRef {
+                target: planned.reference.clone(),
+                criterion: criterion.clone(),
+            });
+        }
         verification.extend(criterion_verification_targets(
             request,
             workspace,
@@ -1460,7 +1466,16 @@ fn build_requested_criterion_slice(
             exclude_matcher,
             &mut blockers,
         );
-        for target in planned {
+        for mut target in planned {
+            if target.access == TargetAccessMode::RunOnly {
+                target.verification_claim =
+                    planned_criterion
+                        .as_ref()
+                        .map(|criterion| VerificationClaimRef {
+                            target: target.reference.clone(),
+                            criterion: criterion.clone(),
+                        });
+            }
             match target.access {
                 TargetAccessMode::Editable => editable.push(target),
                 TargetAccessMode::RunOnly => verification.push(target),
@@ -1741,6 +1756,7 @@ fn apply_changed_artifact_overrides(
         };
         let planned = PlannedTarget {
             reference: reference.clone(),
+            verification_claim: None,
             artifact_identity: Some(identity.clone()),
             transition: TargetTransition::Modify,
             lifecycle: TargetLifecycle::Stable,
@@ -2176,7 +2192,11 @@ fn criterion_verification_targets(
         } else {
             target_policy(TargetTransition::RunOnly)
         };
-        verification.extend(one_target(
+        let claim = VerificationClaimRef {
+            target: reference.clone(),
+            criterion: criterion.clone(),
+        };
+        for mut planned in one_target(
             workspace,
             index,
             reference,
@@ -2191,7 +2211,10 @@ fn criterion_verification_targets(
                 exclude_matcher,
             },
             blockers,
-        ));
+        ) {
+            planned.verification_claim = Some(claim.clone());
+            verification.push(planned);
+        }
     }
     verification
 }
@@ -2515,6 +2538,7 @@ fn one_target(
             }
             vec![PlannedTarget {
                 reference: reference.clone(),
+                verification_claim: None,
                 artifact_identity: None,
                 transition: options.policy.transition,
                 lifecycle: options.policy.lifecycle,
@@ -2605,6 +2629,7 @@ fn declared_target_plan(
 ) -> PlannedTarget {
     PlannedTarget {
         reference: reference.clone(),
+        verification_claim: None,
         artifact_identity: None,
         transition: policy.transition,
         lifecycle: policy.lifecycle,
@@ -2665,9 +2690,13 @@ fn dedup(values: &mut Vec<PlannedTarget>) {
         a.reference
             .cmp(&b.reference)
             .then(a.artifact_identity.cmp(&b.artifact_identity))
+            .then(a.verification_claim.cmp(&b.verification_claim))
     });
-    values
-        .dedup_by(|a, b| a.reference == b.reference && a.artifact_identity == b.artifact_identity);
+    values.dedup_by(|a, b| {
+        a.reference == b.reference
+            && a.artifact_identity == b.artifact_identity
+            && a.verification_claim == b.verification_claim
+    });
 }
 
 fn validate_target_access_uniqueness(

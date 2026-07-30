@@ -3,10 +3,10 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::process::Command;
 use syu_project_model::{ProjectConfig, ReadinessLevel};
-use syu_spec_model::{BoundTargetRef, ItemStatus, OwnershipSelector, SpecAnchor, TargetClaim};
+use syu_spec_model::{BoundTargetRef, ItemStatus, OwnershipSelector, SpecAnchor};
 use syu_work_model::{
-    PlanStatus, RequestedTarget, TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA,
-    WorkOperation, WorkRequest, WorkSeed,
+    PlanStatus, RequestedTarget, TargetTransition, VerificationClaimRef, VerificationReceipt,
+    WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest, WorkSeed,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -1007,11 +1007,14 @@ fn verification_subject(
     }
     for implementation in implementations {
         let covered = verifications.iter().any(|verification| {
-            index.target(verification).is_some_and(|target| {
-                target.claims.iter().any(|claim| {
-                    matches!(claim, TargetClaim::Verifies { criterion: actual, covers, .. } if actual == criterion && !covers.is_empty() && covers.contains(implementation))
-                })
-            })
+            crate::resolve_verification_claim(
+                index,
+                &VerificationClaimRef {
+                    target: verification.clone(),
+                    criterion: criterion.clone(),
+                },
+            )
+            .is_ok_and(|(_, _, covers)| covers.contains(implementation))
         });
         if !covered {
             blockers.push(format!(
@@ -1020,10 +1023,10 @@ fn verification_subject(
         }
     }
     for verification in verifications {
-        let Some(target) = index.target(verification) else {
+        if index.target(verification).is_none() {
             blockers.push(format!("verification target {verification} is unresolved"));
             continue;
-        };
+        }
         let exact_owner = index
             .target_to_artifact
             .get(verification)
@@ -1039,30 +1042,22 @@ fn verification_subject(
                 "verification target {verification} requires its own exact ownership"
             ));
         }
-        let claims = target
-            .claims
-            .iter()
-            .filter_map(|claim| match claim {
-                TargetClaim::Verifies {
-                    criterion: actual,
-                    runner,
-                    covers,
-                } if actual == criterion => Some((runner, covers)),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        if claims.len() != 1 {
-            blockers.push(format!(
-                "verification target {verification} must have one exact claim"
-            ));
-            continue;
-        }
-        let runner = &claims[0].0.runner;
+        let claim = VerificationClaimRef {
+            target: verification.clone(),
+            criterion: criterion.clone(),
+        };
+        let (_, runner_ref, _) = match crate::resolve_verification_claim(index, &claim) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                blockers.push(error.to_string());
+                continue;
+            }
+        };
+        let runner = &runner_ref.runner;
         if !workspace.config.verification.runners.contains_key(runner) {
             blockers.push(format!("verification runner {runner} is not configured"));
         }
-        if claims[0]
-            .0
+        if runner_ref
             .arguments
             .values()
             .any(|value| value.contains('{'))
