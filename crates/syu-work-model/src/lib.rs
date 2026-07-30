@@ -9,7 +9,7 @@ use syu_spec_model::{
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
-pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v2";
+pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v3";
 pub const COMPLETION_REPORT_SCHEMA: &str = "syu/completion-report/v1";
 pub const CONTEXT_PACK_SCHEMA: &str = "syu/context-pack/v1";
 pub const PLAN_APPROVAL_SCHEMA: &str = "syu/plan-approval/v1";
@@ -139,11 +139,23 @@ pub struct ResolvedSelector {
     #[serde(default)]
     pub symbols: Vec<String>,
 }
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationClaimRef {
+    pub target: BoundTargetRef,
+    pub criterion: SpecAnchor,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlannedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    /// Exact verification claim selected for a run-only target. A target can
+    /// prove several criteria, so the target reference alone is insufficient
+    /// to determine the runner, covered implementation, or receipt evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_claim: Option<VerificationClaimRef>,
     /// When a request originates from a changed semantic unit, retain that
     /// exact identity even when its owner binding also declares a broader
     /// entrypoint target.
@@ -566,6 +578,10 @@ pub struct VerificationReceipt {
 #[serde(deny_unknown_fields)]
 pub struct VerificationExecution {
     pub target: BoundTargetRef,
+    /// Legacy v2 receipts omit this field. New v3 receipts require it during
+    /// validation so their evidence is always criterion-specific.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim: Option<VerificationClaimRef>,
     pub runner: String,
     pub command: Vec<String>,
     pub exit_code: i32,
@@ -643,6 +659,8 @@ pub enum VerificationAttemptStatus {
 pub struct VerificationExecutionAttempt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<BoundTargetRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim: Option<VerificationClaimRef>,
     pub runner: String,
     pub command: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -767,6 +785,10 @@ pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
             hash.update(target.adapter.as_bytes());
             hash.update(target.facet.as_bytes());
             hash.update(format!("{:?}", target.role).as_bytes());
+            if let Some(claim) = &target.verification_claim {
+                hash.update(claim.target.to_string().as_bytes());
+                hash.update(claim.criterion.to_string().as_bytes());
+            }
         }
     }
     format_sha256(hash.finalize())
