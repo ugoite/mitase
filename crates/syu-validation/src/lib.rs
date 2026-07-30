@@ -15,17 +15,17 @@ use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, OwnershipSelector, RepoPath,
-    RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim,
+    ArtifactTarget, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, OwnershipSelector,
+    RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim, VerificationRunnerRef,
 };
 use syu_work_model::{
     COMPLETION_REPORT_SCHEMA, CompletionBlocker, CompletionCheck, CompletionCheckEvidence,
     CompletionCriterionEvidence, CompletionReport, CompletionStatus, ExactTestEvidence,
     ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
     VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure, VerificationAttemptResult,
-    VerificationAttemptStatus, VerificationExecution, VerificationExecutionAttempt,
-    VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan, readonly_targets_fingerprint,
-    work_plan_digest,
+    VerificationAttemptStatus, VerificationClaimRef, VerificationExecution,
+    VerificationExecutionAttempt, VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan,
+    readonly_targets_fingerprint, work_plan_digest,
 };
 use syu_workspace::{
     AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
@@ -614,9 +614,54 @@ fn resolve_planned_target_for_workspace(
     resolve_target_in_workspace(workspace, declared).ok()
 }
 
-/// Execute exactly the verification targets selected by a canonical slice.
+/// Resolve the one claim selected by a plan or receipt. A verification target
+/// may serve several criteria, but every execution must name precisely one.
+pub(crate) fn resolve_verification_claim<'a>(
+    index: &'a SpecIndex,
+    claim: &VerificationClaimRef,
+) -> Result<(
+    &'a ArtifactTarget,
+    &'a VerificationRunnerRef,
+    &'a [BoundTargetRef],
+)> {
+    let target = index
+        .target(&claim.target)
+        .ok_or_else(|| anyhow::anyhow!("verification target {} is unresolved", claim.target))?;
+    let mut matching = target.claims.iter().filter_map(|entry| match entry {
+        TargetClaim::Verifies {
+            criterion,
+            covers,
+            runner,
+        } if criterion == &claim.criterion => Some((runner, covers.as_slice())),
+        _ => None,
+    });
+    let Some((runner, covers)) = matching.next() else {
+        bail!(
+            "verification target {} has no claim for criterion {}",
+            claim.target,
+            claim.criterion
+        );
+    };
+    if matching.next().is_some() {
+        bail!(
+            "verification target {} has multiple claims for criterion {}",
+            claim.target,
+            claim.criterion
+        );
+    }
+    if covers.is_empty() {
+        bail!(
+            "verification target {} has no covers for criterion {}",
+            claim.target,
+            claim.criterion
+        );
+    }
+    Ok((target, runner, covers))
+}
+
+/// Execute exactly the verification claims selected by a canonical slice.
 /// Runner executable and arguments come only from the workspace registry and
-/// target claim; no planner or caller guesses a command.
+/// selected claim; no planner or caller guesses a command.
 pub fn execute_verification(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
@@ -670,31 +715,20 @@ pub fn execute_verification(
     let started_at = epoch_seconds();
     let mut executions = Vec::with_capacity(slice.verification_targets.len());
     for planned in &slice.verification_targets {
-        let target = index.target(&planned.reference).ok_or_else(|| {
-            anyhow::anyhow!("verification target {} is unresolved", planned.reference)
-        })?;
-        let claims = target
-            .claims
-            .iter()
-            .filter_map(|claim| match claim {
-                TargetClaim::Verifies {
-                    criterion,
-                    covers,
-                    runner,
-                } => Some((criterion, covers, runner)),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        if claims.len() != 1 {
-            bail!(
-                "verification target {} must have exactly one verification claim",
+        let claim = planned.verification_claim.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "verification target {} is missing its selected claim",
                 planned.reference
+            )
+        })?;
+        if claim.target != planned.reference {
+            bail!(
+                "verification target {} does not match its selected claim target {}",
+                planned.reference,
+                claim.target
             );
         }
-        let (_, covers, runner_ref) = claims[0];
-        if covers.is_empty() {
-            bail!("verification target {} has no covers", planned.reference);
-        }
+        let (target, runner_ref, covers) = resolve_verification_claim(index, claim)?;
         let configured = workspace
             .config
             .verification
@@ -758,6 +792,7 @@ pub fn execute_verification(
         let verification = syu_workspace::resolve_target_in_workspace(workspace, target)?;
         executions.push(VerificationExecution {
             target: planned.reference.clone(),
+            claim: Some(claim.clone()),
             runner: runner_ref.runner.clone(),
             command: std::iter::once(configured.executable.clone())
                 .chain(arguments)
@@ -809,6 +844,7 @@ pub fn execute_verification_attempt(
                 .iter()
                 .map(|execution| VerificationExecutionAttempt {
                     target: Some(execution.target.clone()),
+                    claim: execution.claim.clone(),
                     runner: execution.runner.clone(),
                     command: execution.command.clone(),
                     exit_code: Some(execution.exit_code),
@@ -906,13 +942,27 @@ pub fn validate_verification_receipt(
     let expected = slice
         .verification_targets
         .iter()
-        .map(|target| target.reference.clone())
-        .collect::<BTreeSet<_>>();
+        .map(|target| {
+            target.verification_claim.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "verification target {} is missing its selected claim",
+                    target.reference
+                )
+            })
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
     let actual = receipt
         .executions
         .iter()
-        .map(|execution| execution.target.clone())
-        .collect::<Vec<_>>();
+        .map(|execution| {
+            execution.claim.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "verification receipt execution {} is missing its selected claim",
+                    execution.target
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
     if actual.len() != expected.len() || actual.into_iter().collect::<BTreeSet<_>>() != expected {
         bail!("verification receipt execution set is not exact");
     }
@@ -923,17 +973,16 @@ pub fn validate_verification_receipt(
         if execution.proof.matched_count == 0 {
             bail!("verification receipt proves zero exact tests");
         }
-        let target = index.target(&execution.target).ok_or_else(|| {
-            anyhow::anyhow!("verification target {} is unresolved", execution.target)
+        let claim = execution.claim.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "verification receipt execution {} is missing its selected claim",
+                execution.target
+            )
         })?;
-        let (runner_ref, covers) = target
-            .claims
-            .iter()
-            .find_map(|claim| match claim {
-                TargetClaim::Verifies { runner, covers, .. } => Some((runner, covers)),
-                _ => None,
-            })
-            .ok_or_else(|| anyhow::anyhow!("{} is not a verification target", execution.target))?;
+        if execution.target != claim.target {
+            bail!("verification receipt target does not match its selected claim");
+        }
+        let (target, runner_ref, covers) = resolve_verification_claim(index, claim)?;
         let configured = workspace
             .config
             .verification
@@ -1130,7 +1179,7 @@ pub fn evaluate_completion(
     }
 
     let demonstrated = if receipt_valid {
-        acceptance_evidence(index, slice, receipt, &mut blockers)
+        acceptance_evidence(slice, receipt, &mut blockers)
     } else {
         vec![]
     };
@@ -1236,7 +1285,6 @@ fn completion_check_result(
 }
 
 fn acceptance_evidence(
-    index: &SpecIndex,
     slice: &ExecutionSlice,
     receipt: &VerificationReceipt,
     blockers: &mut Vec<CompletionBlocker>,
@@ -1244,7 +1292,7 @@ fn acceptance_evidence(
     let executed = receipt
         .executions
         .iter()
-        .map(|execution| execution.target.clone())
+        .filter_map(|execution| execution.claim.clone())
         .collect::<BTreeSet<_>>();
     let mut demonstrated = Vec::new();
     for acceptance in &slice.acceptance {
@@ -1252,12 +1300,9 @@ fn acceptance_evidence(
             .verification_targets
             .iter()
             .filter(|planned| {
-                executed.contains(&planned.reference)
-                    && index.target(&planned.reference).is_some_and(|target| {
-                        target.claims.iter().any(|claim| {
-                            matches!(claim, TargetClaim::Verifies { criterion, .. } if criterion == &acceptance.anchor)
-                        })
-                    })
+                planned.verification_claim.as_ref().is_some_and(|claim| {
+                    claim.criterion == acceptance.anchor && executed.contains(claim)
+                })
             })
             .map(|planned| planned.reference.clone())
             .collect::<Vec<_>>();
@@ -4513,6 +4558,19 @@ mod tests {
         String::from_utf8(output.stdout).unwrap().trim().to_string()
     }
 
+    fn git_revision(root: &Path) -> String {
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(root)
+            .output()
+            .expect("read revision");
+        assert!(output.status.success(), "read revision");
+        String::from_utf8(output.stdout)
+            .expect("revision text")
+            .trim()
+            .to_string()
+    }
+
     fn git_commit(root: &Path, message: &str) -> String {
         for args in [vec!["add", "."], vec!["commit", "-qm", message]] {
             let status = Command::new("git")
@@ -4557,6 +4615,7 @@ mod tests {
     ) -> syu_work_model::PlannedTarget {
         syu_work_model::PlannedTarget {
             reference: "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap(),
+            verification_claim: None,
             artifact_identity: None,
             transition: TargetTransition::Add,
             lifecycle: TargetLifecycle::EnsurePresent,
@@ -5373,6 +5432,129 @@ requirements:
         )
         .is_err());
         assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());
+    }
+
+    #[test]
+    fn legacy_receipt_execution_deserializes_without_a_claim() {
+        let execution: VerificationExecution = serde_json::from_value(serde_json::json!({
+            "target": "FEAT-AUTH-001#binding.ui/target.requested",
+            "runner": "cargo-test",
+            "command": ["cargo", "test"],
+            "exit_code": 0,
+            "stdout_digest": "sha256:stdout",
+            "stderr_digest": "sha256:stderr",
+            "proof": { "identity": "tests::behavior", "matched_count": 1 },
+            "implementation_digests": {},
+            "verification_digest": "sha256:verification"
+        }))
+        .expect("v2 execution remains readable");
+        assert!(execution.claim.is_none());
+    }
+
+    #[test]
+    fn self_hosted_shared_verification_targets_execute_claim_by_claim() {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repository root");
+        let tempdir = tempdir().expect("temporary clone parent");
+        let worktree = tempdir.path().join("self-hosted-shared-verification");
+        let status = Command::new("git")
+            .args(["clone", "--local", "--no-hardlinks", "--quiet"])
+            .arg(&repository)
+            .arg(&worktree)
+            .current_dir(&repository)
+            .status()
+            .expect("create self-hosted clone");
+        assert!(status.success(), "create self-hosted clone");
+
+        let workspace_root = worktree
+            .canonicalize()
+            .expect("canonical self-hosted clone");
+        let revision = git_revision(&workspace_root);
+        let workspace = SpecWorkspace::load(&workspace_root).expect("self-hosted workspace");
+        let index = workspace.index().expect("self-hosted index");
+        let shared_targets = [
+            (
+                "REQ-CAPABILITY-001#binding.delivery-verification/target.verification-test",
+                2,
+            ),
+            (
+                "REQ-WORKBENCH-012#binding.responsiveness-check/target.responsiveness-test",
+                2,
+            ),
+            (
+                "FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey-verification/target.journey-test",
+                2,
+            ),
+            (
+                "FEAT-AGENT-001#binding.verification/target.agent-http-test",
+                4,
+            ),
+        ];
+
+        for (target, expected_claims) in shared_targets {
+            let target: BoundTargetRef = target.parse().expect("shared verification target ref");
+            let criteria = index
+                .target(&target)
+                .expect("shared verification target")
+                .claims
+                .iter()
+                .filter_map(|claim| match claim {
+                    TargetClaim::Verifies { criterion, .. } => Some(criterion.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(criteria.len(), expected_claims, "{target}");
+
+            for criterion in criteria {
+                let request = syu_work_model::WorkRequest {
+                    schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+                    id: format!("WORK-SHARED-{}", criterion.local_id),
+                    summary: "Execute a shared verification claim.".into(),
+                    operation: syu_work_model::WorkOperation::Modify,
+                    seeds: vec![syu_work_model::WorkSeed::Anchor(criterion.clone())],
+                    constraints: Default::default(),
+                    requested_targets: vec![],
+                };
+                let plan = syu_planner::plan(&request, &workspace, &index, &revision)
+                    .expect("shared verification plan");
+                assert_eq!(plan.status, syu_work_model::PlanStatus::Ready, "{plan:#?}");
+                let claim = VerificationClaimRef {
+                    target: target.clone(),
+                    criterion: criterion.clone(),
+                };
+                let slice = plan
+                    .slices
+                    .iter()
+                    .find(|slice| {
+                        slice
+                            .verification_targets
+                            .iter()
+                            .any(|planned| planned.verification_claim.as_ref() == Some(&claim))
+                    })
+                    .expect("slice with exact shared verification claim");
+                let receipt = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
+                    .expect("shared verification execution");
+                let execution = receipt
+                    .executions
+                    .iter()
+                    .find(|execution| execution.claim.as_ref() == Some(&claim))
+                    .expect("criterion-specific receipt execution");
+                assert_eq!(execution.target, target);
+                let (_, _, covers) = resolve_verification_claim(&index, &claim)
+                    .expect("selected verification claim");
+                assert_eq!(
+                    execution
+                        .implementation_digests
+                        .keys()
+                        .cloned()
+                        .collect::<BTreeSet<_>>(),
+                    covers.iter().cloned().collect(),
+                    "{claim:#?}"
+                );
+            }
+        }
     }
 
     #[test]
