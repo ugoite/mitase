@@ -72,6 +72,13 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.project-config
+      - **owns**:
+        - **id**: project-config-tests
+          - **adapter**: rust
+          - **path**: crates/syu-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: tests
 - **id**: FEAT-INVENTORY-001
   - **title**: Inventory providers
   - **summary**: Discover active artifact units through profile-selected providers.
@@ -252,6 +259,11 @@ features:
             path: crates/syu-project-model/src/lib.rs
             selector: { kind: symbol, name: ProjectConfig }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.project-config }]
+        owns:
+          - id: project-config-tests
+            adapter: rust
+            path: crates/syu-project-model/src/lib.rs
+            selector: { kind: module, name: tests }
 
   - id: FEAT-INVENTORY-001
     title: Inventory providers

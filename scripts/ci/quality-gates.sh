@@ -6,6 +6,36 @@ if (($# > 0)); then
   shift
 fi
 
+check_root_self_hosting_limits() {
+  python3 - <<'PY'
+from pathlib import Path
+import sys
+
+import yaml
+
+config = yaml.safe_load(Path("syu.yaml").read_text(encoding="utf-8"))
+actual = {
+    "max_ownership_scope_units": config["validation"]["readiness"]["limits"][
+        "max_ownership_scope_units"
+    ],
+    **config["work"]["slicing"],
+}
+expected = {
+    "max_ownership_scope_units": 64,
+    "max_editable_files": 4,
+    "max_editable_symbols": 8,
+    "max_verification_targets": 8,
+    "max_readonly_targets": 12,
+    "max_total_bytes": 80000,
+}
+if actual != expected:
+    print(f"root self-hosting limits drifted: {actual!r}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+check_root_self_hosting_limits
+
 case "$mode" in
   full)
     cargo fmt --check
