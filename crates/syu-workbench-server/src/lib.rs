@@ -181,6 +181,10 @@ impl WorkbenchServer {
                 "/api/specifications/candidates/apply",
                 put(api_specification_candidate_apply),
             )
+            .route(
+                "/api/specifications/{item_id}/trace",
+                get(api_specification_trace),
+            )
             .route("/api/specifications/{anchor}", get(api_specification))
             .route(
                 "/api/specifications/{anchor}/target-suggestions",
@@ -1128,6 +1132,62 @@ pub struct CandidateMatch {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpecificationTraceQuery {
+    #[serde(default)]
+    pub depth: Option<usize>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub node_budget: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecificationTraceView {
+    pub root_item_id: String,
+    pub revision: String,
+    pub workspace_fingerprint: String,
+    pub source_hash: String,
+    pub mode: String,
+    pub nodes: Vec<TraceNodeView>,
+    pub edges: Vec<TraceEdgeView>,
+    pub closures: Vec<CriterionClosureView>,
+    pub truncated: bool,
+    pub hidden_node_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceNodeView {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub secondary_label: Option<String>,
+    pub lane: String,
+    pub stable_order: usize,
+    pub source_target: Option<String>,
+    pub item_id: Option<String>,
+    pub metadata: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceEdgeView {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+    pub relation: String,
+    pub display_label: String,
+    pub exact_claim: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CriterionClosureView {
+    pub criterion: String,
+    pub implementation_targets: Vec<String>,
+    pub verification_targets: Vec<String>,
+    pub state: String,
+    pub reasons: Vec<String>,
+}
+
 async fn api_specification_candidates(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<SpecificationCandidateQuery>,
@@ -1254,6 +1314,682 @@ async fn api_specification(
             )
         })?;
     Ok(Json(item))
+}
+
+async fn api_specification_trace(
+    State(service): State<Arc<WorkbenchService>>,
+    AxumPath(item_id): AxumPath<String>,
+    Query(query): Query<SpecificationTraceQuery>,
+) -> Result<Json<SpecificationTraceView>, ApiError> {
+    let snapshot = service.snapshot()?;
+    let item = snapshot
+        .projection
+        .specifications
+        .specifications
+        .iter()
+        .find(|item| item.id == item_id)
+        .ok_or_else(|| {
+            ApiError(
+                StatusCode::NOT_FOUND,
+                anyhow::anyhow!("specification {item_id} not found"),
+            )
+        })?;
+    Ok(Json(specification_trace_view(
+        &snapshot.projection,
+        item,
+        &query,
+    )))
+}
+
+fn specification_trace_view(
+    projection: &WorkspaceProjection,
+    root: &ItemSummary,
+    query: &SpecificationTraceQuery,
+) -> SpecificationTraceView {
+    let mode = query
+        .mode
+        .as_deref()
+        .filter(|value| matches!(*value, "readable" | "exact"))
+        .unwrap_or("readable")
+        .to_string();
+    let depth = query.depth.unwrap_or(3).clamp(1, 8);
+    let node_budget = query.node_budget.unwrap_or(80).clamp(8, 500);
+    let items = &projection.specifications.specifications;
+    let mut nodes = BTreeMap::<String, TraceNodeView>::new();
+    let mut edges = BTreeMap::<String, TraceEdgeView>::new();
+
+    trace_node(
+        &mut nodes,
+        root.id.clone(),
+        "item",
+        root.title.clone(),
+        Some(root.kind.clone()),
+        "specification",
+        None,
+        Some(root.id.clone()),
+        BTreeMap::new(),
+    );
+
+    for principle in &root.principles {
+        add_anchor_trace_node(&mut nodes, items, principle.anchor.clone());
+        add_trace_edge(
+            &mut edges,
+            &root.id,
+            &principle.anchor,
+            "contains",
+            "contains",
+            None,
+        );
+    }
+    for rule in &root.rules {
+        add_anchor_trace_node(&mut nodes, items, rule.anchor.clone());
+        add_trace_edge(
+            &mut edges,
+            &root.id,
+            &rule.anchor,
+            "contains",
+            "contains",
+            None,
+        );
+        for governed_by in &rule.governed_by {
+            let governed_by = governed_by.to_string();
+            add_anchor_trace_node(&mut nodes, items, governed_by.clone());
+            add_trace_edge(
+                &mut edges,
+                &rule.anchor,
+                &governed_by,
+                "governed_by",
+                "governed by",
+                None,
+            );
+        }
+    }
+    for criterion in &root.criteria {
+        add_anchor_trace_node(&mut nodes, items, criterion.anchor.clone());
+        add_trace_edge(
+            &mut edges,
+            &root.id,
+            &criterion.anchor,
+            "contains",
+            "contains",
+            None,
+        );
+        for governed_by in &criterion.governed_by {
+            let governed_by = governed_by.to_string();
+            add_anchor_trace_node(&mut nodes, items, governed_by.clone());
+            add_trace_edge(
+                &mut edges,
+                &criterion.anchor,
+                &governed_by,
+                "governed_by",
+                "governed by",
+                None,
+            );
+        }
+    }
+    for binding in &root.bindings {
+        add_anchor_trace_node(&mut nodes, items, binding.anchor.clone());
+        add_trace_edge(
+            &mut edges,
+            &root.id,
+            &binding.anchor,
+            "contains",
+            "contains",
+            None,
+        );
+        for ownership in &binding.owns {
+            let ownership_id = format!("{}/owns.{}", binding.anchor, ownership.id);
+            let mut metadata = BTreeMap::new();
+            metadata.insert("adapter".into(), ownership.adapter.clone());
+            metadata.insert("path".into(), ownership.path.to_string_lossy().into_owned());
+            metadata.insert(
+                "selector".into(),
+                serde_json::to_string(&ownership.selector).unwrap_or_default(),
+            );
+            trace_node(
+                &mut nodes,
+                ownership_id.clone(),
+                "ownership",
+                ownership.id.to_string(),
+                Some("owned scope".into()),
+                "implementation",
+                None,
+                Some(root.id.clone()),
+                metadata,
+            );
+            add_trace_edge(
+                &mut edges,
+                &binding.anchor,
+                &ownership_id,
+                "owns",
+                "owns",
+                None,
+            );
+        }
+        for target in &binding.targets {
+            add_target_trace_node(&mut nodes, root, binding, target);
+            add_trace_edge(
+                &mut edges,
+                &root.id,
+                &target.reference,
+                "contains",
+                "contains",
+                None,
+            );
+            add_trace_edge(
+                &mut edges,
+                &binding.anchor,
+                &target.reference,
+                "owns",
+                "owns",
+                None,
+            );
+            for (index, claim) in target.claims.iter().enumerate() {
+                add_claim_trace(
+                    &mut nodes,
+                    &mut edges,
+                    items,
+                    &mode,
+                    &target.reference,
+                    index,
+                    claim,
+                );
+            }
+        }
+    }
+    for contract in &root.contracts {
+        add_anchor_trace_node(&mut nodes, items, contract.anchor.clone());
+        add_trace_edge(
+            &mut edges,
+            &root.id,
+            &contract.anchor,
+            "contains",
+            "contains",
+            None,
+        );
+        let source = contract.source.clone();
+        add_target_or_anchor_trace_node(&mut nodes, items, &source);
+        add_trace_edge(
+            &mut edges,
+            &contract.anchor,
+            &source,
+            "owns",
+            "source",
+            None,
+        );
+        for participant in &contract.participants {
+            add_target_or_anchor_trace_node(&mut nodes, items, &participant.binding);
+            add_trace_edge(
+                &mut edges,
+                &contract.anchor,
+                &participant.binding,
+                "participates",
+                &participant.role,
+                None,
+            );
+        }
+    }
+
+    let closures = specification_closures(items, root);
+    let reachable = trace_reachable(&root.id, &edges, depth);
+    let ordered = nodes
+        .values()
+        .filter(|node| reachable.contains(&node.id))
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let mut ordered = ordered;
+    ordered.sort_by(|left, right| {
+        trace_lane_rank(nodes[left].lane.as_str())
+            .cmp(&trace_lane_rank(nodes[right].lane.as_str()))
+            .then_with(|| nodes[left].kind.cmp(&nodes[right].kind))
+            .then_with(|| left.cmp(right))
+    });
+    let hidden_node_count = ordered.len().saturating_sub(node_budget);
+    let mut visible = ordered
+        .into_iter()
+        .take(node_budget)
+        .collect::<BTreeSet<_>>();
+    visible.insert(root.id.clone());
+    let mut visible_nodes = visible
+        .iter()
+        .filter_map(|id| nodes.remove(id))
+        .collect::<Vec<_>>();
+    visible_nodes.sort_by(|left, right| {
+        trace_lane_rank(left.lane.as_str())
+            .cmp(&trace_lane_rank(right.lane.as_str()))
+            .then_with(|| left.kind.cmp(&right.kind))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    for (stable_order, node) in visible_nodes.iter_mut().enumerate() {
+        node.stable_order = stable_order;
+    }
+    let visible_edges = edges
+        .into_values()
+        .filter(|edge| visible.contains(&edge.from) && visible.contains(&edge.to))
+        .collect();
+    SpecificationTraceView {
+        root_item_id: root.id.clone(),
+        revision: projection.snapshot.revision.clone(),
+        workspace_fingerprint: projection.snapshot.fingerprint.clone(),
+        source_hash: root.source_hash.clone(),
+        mode,
+        nodes: visible_nodes,
+        edges: visible_edges,
+        closures,
+        truncated: hidden_node_count > 0,
+        hidden_node_count,
+    }
+}
+
+fn trace_node(
+    nodes: &mut BTreeMap<String, TraceNodeView>,
+    id: String,
+    kind: &str,
+    label: String,
+    secondary_label: Option<String>,
+    lane: &str,
+    source_target: Option<String>,
+    item_id: Option<String>,
+    metadata: BTreeMap<String, String>,
+) {
+    nodes.entry(id.clone()).or_insert_with(|| TraceNodeView {
+        id,
+        kind: kind.into(),
+        label,
+        secondary_label,
+        lane: lane.into(),
+        stable_order: 0,
+        source_target,
+        item_id,
+        metadata,
+    });
+}
+
+fn add_trace_edge(
+    edges: &mut BTreeMap<String, TraceEdgeView>,
+    from: &str,
+    to: &str,
+    relation: &str,
+    display_label: &str,
+    exact_claim: Option<String>,
+) {
+    let id = format!("{from}|{relation}|{to}");
+    edges.entry(id.clone()).or_insert_with(|| TraceEdgeView {
+        id,
+        from: from.into(),
+        to: to.into(),
+        relation: relation.into(),
+        display_label: display_label.into(),
+        exact_claim,
+    });
+}
+
+fn add_anchor_trace_node(
+    nodes: &mut BTreeMap<String, TraceNodeView>,
+    items: &[ItemSummary],
+    anchor: String,
+) {
+    if nodes.contains_key(&anchor) {
+        return;
+    }
+    let (kind, item_id, label, secondary_label, lane, metadata) =
+        items
+            .iter()
+            .flat_map(|item| {
+                item.principles
+                    .iter()
+                    .map(move |value| (&value.anchor, "principle", item, value.statement.clone()))
+                    .chain(
+                        item.rules.iter().map(move |value| {
+                            (&value.anchor, "rule", item, value.statement.clone())
+                        }),
+                    )
+                    .chain(item.criteria.iter().map(move |value| {
+                        (&value.anchor, "criterion", item, value.statement.clone())
+                    }))
+                    .chain(item.bindings.iter().map(move |value| {
+                        (&value.anchor, "binding", item, value.responsibility.clone())
+                    }))
+                    .chain(
+                        item.contracts.iter().map(move |value| {
+                            (&value.anchor, "contract", item, value.kind.clone())
+                        }),
+                    )
+            })
+            .find(|(value, _, _, _)| *value == &anchor)
+            .map(|(_, kind, item, statement)| {
+                let kind = kind.to_string();
+                let lane = if matches!(kind.as_str(), "principle" | "rule") {
+                    "governance"
+                } else {
+                    "specification"
+                };
+                (
+                    kind,
+                    Some(item.id.clone()),
+                    statement,
+                    Some(item.title.clone()),
+                    lane,
+                    BTreeMap::from([("item_kind".into(), item.kind.clone())]),
+                )
+            })
+            .unwrap_or_else(|| {
+                let kind = anchor
+                    .clone()
+                    .split_once('#')
+                    .and_then(|(_, local)| local.split_once('.'))
+                    .map(|(kind, _)| kind.to_string())
+                    .unwrap_or_else(|| "anchor".into());
+                (
+                    kind.clone(),
+                    anchor.split_once('#').map(|(item, _)| item.to_string()),
+                    anchor.clone(),
+                    None,
+                    if matches!(kind.as_str(), "principle" | "rule") {
+                        "governance"
+                    } else {
+                        "specification"
+                    },
+                    BTreeMap::new(),
+                )
+            });
+    trace_node(
+        nodes,
+        anchor,
+        kind.as_str(),
+        label,
+        secondary_label,
+        lane,
+        None,
+        item_id,
+        metadata,
+    );
+}
+
+fn add_target_trace_node(
+    nodes: &mut BTreeMap<String, TraceNodeView>,
+    root: &ItemSummary,
+    binding: &BindingSummary,
+    target: &BindingTargetSummary,
+) {
+    let evidence = binding.role == "verification"
+        || target.claims.iter().any(|claim| {
+            matches!(
+                claim,
+                TargetClaim::Verifies { .. } | TargetClaim::Evidences { .. }
+            )
+        });
+    let lane = if evidence {
+        "evidence"
+    } else {
+        "implementation"
+    };
+    let kind = if evidence {
+        "verification-target"
+    } else {
+        "implementation-target"
+    };
+    let mut metadata = BTreeMap::new();
+    metadata.insert("role".into(), binding.role.clone());
+    metadata.insert("facet".into(), binding.facet.clone());
+    metadata.insert("responsibility".into(), binding.responsibility.clone());
+    metadata.insert("adapter".into(), target.adapter.clone());
+    metadata.insert("path".into(), target.path.clone());
+    metadata.insert(
+        "selector".into(),
+        serde_json::to_string(&target.selector).unwrap_or_default(),
+    );
+    trace_node(
+        nodes,
+        target.reference.clone(),
+        kind,
+        selector_label(&target.selector),
+        Some(target.path.clone()),
+        lane,
+        Some(target.reference.clone()),
+        Some(root.id.clone()),
+        metadata,
+    );
+}
+
+fn add_target_or_anchor_trace_node(
+    nodes: &mut BTreeMap<String, TraceNodeView>,
+    items: &[ItemSummary],
+    reference: &str,
+) {
+    if nodes.contains_key(reference) {
+        return;
+    }
+    if let Some((item, binding, target)) = items.iter().find_map(|item| {
+        item.bindings.iter().find_map(|binding| {
+            binding
+                .targets
+                .iter()
+                .find(|target| target.reference == reference)
+                .map(|target| (item, binding, target))
+        })
+    }) {
+        add_target_trace_node(nodes, item, binding, target);
+    } else {
+        add_anchor_trace_node(nodes, items, reference.to_string());
+    }
+}
+
+fn selector_label(selector: &Selector) -> String {
+    match selector {
+        Selector::File => "file".into(),
+        Selector::Symbol { name } => format!("symbol · {name}"),
+        Selector::Operation { method, path } => format!("{method} {path}"),
+        Selector::Heading { value } => format!("heading · {value}"),
+        Selector::JsonPointer { value } => format!("json pointer · {value}"),
+        Selector::Marker { value } => format!("marker · {value}"),
+    }
+}
+
+fn add_claim_trace(
+    nodes: &mut BTreeMap<String, TraceNodeView>,
+    edges: &mut BTreeMap<String, TraceEdgeView>,
+    items: &[ItemSummary],
+    mode: &str,
+    target_reference: &str,
+    index: usize,
+    claim: &TargetClaim,
+) {
+    let exact_claim = serde_json::to_string(claim).ok();
+    let claim_node = format!("{target_reference}#claim.{index}");
+    let mut destinations = Vec::<(&str, String, &str)>::new();
+    match claim {
+        TargetClaim::Satisfies { criterion } => {
+            destinations.push(("satisfies", criterion.to_string(), "satisfies"));
+        }
+        TargetClaim::Verifies {
+            criterion, covers, ..
+        } => {
+            destinations.push(("verifies", criterion.to_string(), "verifies"));
+            destinations.extend(
+                covers
+                    .iter()
+                    .map(|target| ("covers", target.to_string(), "covers")),
+            );
+        }
+        TargetClaim::Documents { anchor } => {
+            destinations.push(("documents", anchor.to_string(), "documents"));
+        }
+        TargetClaim::Enforces { rule } => {
+            destinations.push(("enforces", rule.to_string(), "enforces"));
+        }
+        TargetClaim::GeneratedFrom { targets } => destinations.extend(
+            targets
+                .iter()
+                .map(|target| ("generated-from", target.to_string(), "generated from")),
+        ),
+        TargetClaim::Exposes { target } => {
+            destinations.push(("exposes", target.to_string(), "exposes"));
+        }
+        TargetClaim::Evidences { anchor } => {
+            destinations.push(("evidences", anchor.to_string(), "evidences"));
+        }
+    }
+    if mode == "exact" {
+        let mut metadata = BTreeMap::new();
+        metadata.insert("claim".into(), exact_claim.clone().unwrap_or_default());
+        trace_node(
+            nodes,
+            claim_node.clone(),
+            "claim",
+            destinations
+                .first()
+                .map(|(_, _, label)| (*label).to_string())
+                .unwrap_or_else(|| "claim".into()),
+            Some("exact canonical claim".into()),
+            "specification",
+            None,
+            None,
+            metadata,
+        );
+        add_trace_edge(edges, target_reference, &claim_node, "claim", "claim", None);
+    }
+    for (relation, destination, display_label) in destinations {
+        add_target_or_anchor_trace_node(nodes, items, &destination);
+        if mode == "exact" {
+            add_trace_edge(
+                edges,
+                &claim_node,
+                &destination,
+                relation,
+                display_label,
+                exact_claim.clone(),
+            );
+        } else {
+            add_trace_edge(
+                edges,
+                target_reference,
+                &destination,
+                relation,
+                display_label,
+                exact_claim.clone(),
+            );
+        }
+    }
+}
+
+fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<CriterionClosureView> {
+    root.criteria
+        .iter()
+        .map(|criterion| {
+            let mut implementation_targets = BTreeSet::new();
+            let mut verification_targets = BTreeSet::new();
+            let unresolved;
+            for item in items {
+                for binding in &item.bindings {
+                    for target in &binding.targets {
+                        for claim in &target.claims {
+                            match claim {
+                                TargetClaim::Satisfies { criterion: claimed }
+                                    if claimed.to_string() == criterion.anchor =>
+                                {
+                                    implementation_targets.insert(target.reference.clone());
+                                }
+                                TargetClaim::Verifies {
+                                    criterion: claimed,
+                                    covers,
+                                    ..
+                                } if claimed.to_string() == criterion.anchor => {
+                                    verification_targets.insert(target.reference.clone());
+                                    for covered in covers {
+                                        implementation_targets.insert(covered.to_string());
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            if implementation_targets.is_empty() {
+                return CriterionClosureView {
+                    criterion: criterion.anchor.clone(),
+                    implementation_targets: Vec::new(),
+                    verification_targets: verification_targets.into_iter().collect(),
+                    state: "implementation-missing".into(),
+                    reasons: vec![
+                        "No exact implementation target satisfies this criterion.".into(),
+                    ],
+                };
+            }
+            if verification_targets.is_empty() {
+                return CriterionClosureView {
+                    criterion: criterion.anchor.clone(),
+                    implementation_targets: implementation_targets.into_iter().collect(),
+                    verification_targets: Vec::new(),
+                    state: "verification-missing".into(),
+                    reasons: vec!["No exact verification target covers this criterion.".into()],
+                };
+            }
+            let known_targets = items
+                .iter()
+                .flat_map(|item| item.bindings.iter())
+                .flat_map(|binding| binding.targets.iter())
+                .map(|target| target.reference.as_str())
+                .collect::<BTreeSet<_>>();
+            unresolved = implementation_targets
+                .iter()
+                .chain(verification_targets.iter())
+                .any(|target| !known_targets.contains(target.as_str()));
+            CriterionClosureView {
+                criterion: criterion.anchor.clone(),
+                implementation_targets: implementation_targets.into_iter().collect(),
+                verification_targets: verification_targets.into_iter().collect(),
+                state: if unresolved {
+                    "target-unresolved"
+                } else {
+                    "closed"
+                }
+                .into(),
+                reasons: if unresolved {
+                    vec![
+                        "A claim points at a target that is not in the canonical projection."
+                            .into(),
+                    ]
+                } else {
+                    Vec::new()
+                },
+            }
+        })
+        .collect()
+}
+
+fn trace_reachable(
+    root: &str,
+    edges: &BTreeMap<String, TraceEdgeView>,
+    depth: usize,
+) -> BTreeSet<String> {
+    let mut distances = BTreeMap::from([(root.to_string(), 0usize)]);
+    let mut frontier = vec![root.to_string()];
+    while let Some(current) = frontier.pop() {
+        let current_depth = distances[&current];
+        if current_depth >= depth {
+            continue;
+        }
+        for edge in edges.values().filter(|edge| edge.from == current) {
+            if distances.contains_key(&edge.to) {
+                continue;
+            }
+            distances.insert(edge.to.clone(), current_depth + 1);
+            frontier.push(edge.to.clone());
+        }
+    }
+    distances.into_keys().collect()
+}
+
+fn trace_lane_rank(lane: &str) -> usize {
+    match lane {
+        "governance" => 0,
+        "specification" => 1,
+        "implementation" => 2,
+        "evidence" => 3,
+        _ => 4,
+    }
 }
 
 fn filtered_target_suggestions(
@@ -5446,6 +6182,62 @@ mod tests {
         assert_eq!(
             builtin_presentation_title_key(&id, "User-edited capability title"),
             None
+        );
+    }
+
+    #[test]
+    fn specification_trace_is_deterministic_and_preserves_canonical_claims() {
+        let fixture = workspace_root().join("fixtures/v1/valid-web-app");
+        let workspace = SpecWorkspace::load(fixture).expect("trace fixture loads");
+        let projection = project(&workspace, None, "test-revision").expect("projection loads");
+        let root = projection
+            .specifications
+            .specifications
+            .iter()
+            .find(|item| item.id == "REQ-AUTH-001")
+            .expect("fixture requirement");
+        let query = SpecificationTraceQuery {
+            depth: Some(4),
+            mode: Some("exact".into()),
+            node_budget: Some(80),
+        };
+        let first = specification_trace_view(&projection, root, &query);
+        let second = specification_trace_view(&projection, root, &query);
+        assert_eq!(
+            serde_json::to_string(&first).expect("serialize trace"),
+            serde_json::to_string(&second).expect("serialize trace")
+        );
+        assert_eq!(first.root_item_id, "REQ-AUTH-001");
+        assert_eq!(first.mode, "exact");
+        assert!(first.nodes.iter().any(|node| node.kind == "claim"));
+        assert!(first.edges.iter().any(|edge| edge.exact_claim.is_some()));
+        assert_eq!(first.closures.len(), 1);
+        assert_eq!(first.closures[0].state, "closed");
+    }
+
+    #[tokio::test]
+    async fn specification_trace_endpoint_returns_server_owned_view() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root().join("fixtures/v1/valid-web-app")).router();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/REQ-AUTH-001/trace?depth=4&mode=readable")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let trace: SpecificationTraceView = serde_json::from_slice(&body).expect("trace JSON");
+        assert_eq!(trace.root_item_id, "REQ-AUTH-001");
+        assert_eq!(trace.mode, "readable");
+        assert!(
+            trace
+                .nodes
+                .iter()
+                .any(|node| node.kind == "verification-target")
         );
     }
 

@@ -1,5 +1,6 @@
 export const PAGES = ['work', 'readiness', 'scope', 'specifications', 'diagnostics', 'settings'];
 export const TAB_GROUPS = ['work', 'scope', 'specifications'];
+export const SPECIFICATION_DETAIL_TABS = ['information', 'trace', 'evidence'];
 
 export function navigate(page, push = true) {
   const selected = PAGES.includes(page) ? page : 'work';
@@ -21,7 +22,40 @@ function selectTab(group, tab, push = true) {
   document.querySelectorAll(`[data-panel-group="${group}"]`).forEach(node => {
     node.hidden = node.dataset.panel !== tab;
   });
-  if (push) history.pushState({}, '', `?page=${encodeURIComponent(group === 'specifications' ? 'specifications' : group)}&${group}Tab=${encodeURIComponent(tab)}`);
+  if (push) {
+    const parameters = new URLSearchParams(location.search);
+    parameters.set('page', group === 'specifications' ? 'specifications' : group);
+    parameters.set(`${group}Tab`, tab);
+    if (group === 'specifications') {
+      parameters.delete('item');
+      parameters.delete('detailTab');
+      parameters.delete('node');
+      parameters.delete('traceMode');
+      parameters.delete('depth');
+    }
+    history.pushState({}, '', `?${parameters.toString()}`);
+  }
+}
+
+export function syncSpecificationLocation(state, push = true) {
+  const parameters = new URLSearchParams(location.search);
+  parameters.set('page', 'specifications');
+  parameters.set('specificationsTab', state.specificationKind || 'all');
+  if (state.selectedSpecification) parameters.set('item', state.selectedSpecification);
+  else parameters.delete('item');
+  if (SPECIFICATION_DETAIL_TABS.includes(state.specificationDetailTab)) {
+    parameters.set('detailTab', state.specificationDetailTab);
+  } else {
+    parameters.delete('detailTab');
+  }
+  if (state.specificationTraceNode) parameters.set('node', state.specificationTraceNode);
+  else parameters.delete('node');
+  if (state.specificationDetailTab === 'trace' && state.specificationTraceMode === 'exact') parameters.set('traceMode', 'exact');
+  else parameters.delete('traceMode');
+  if (state.specificationDetailTab === 'trace' && state.specificationTraceDepth > 1) parameters.set('depth', String(state.specificationTraceDepth));
+  else parameters.delete('depth');
+  const url = `?${parameters.toString()}`;
+  if (push) history.pushState({}, '', url); else history.replaceState({}, '', url);
 }
 
 function bindKeyboardTabs() {
@@ -67,6 +101,17 @@ export function bindRouter(state, onRoute) {
       selectTab(group, selected, false);
       if (group === 'scope' && selected) state.selectedScopeTab = selected;
       if (group === 'specifications' && selected) state.specificationKind = selected;
+    }
+    if (page === 'specifications') {
+      const item = parameters.get('item');
+      if (item) state.selectedSpecification = item;
+      const detailTab = parameters.get('detailTab');
+      if (SPECIFICATION_DETAIL_TABS.includes(detailTab)) state.specificationDetailTab = detailTab;
+      const traceMode = parameters.get('traceMode');
+      if (traceMode === 'exact' || traceMode === 'readable') state.specificationTraceMode = traceMode;
+      const depth = Number.parseInt(parameters.get('depth') || '3', 10);
+      state.specificationTraceDepth = Number.isFinite(depth) ? Math.max(1, Math.min(depth, 8)) : 3;
+      state.specificationTraceNode = parameters.get('node');
     }
     onRoute?.(state.selectedPage);
   };

@@ -1,4 +1,5 @@
 import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
+import { SPECIFICATION_DETAIL_TABS, syncSpecificationLocation } from '../router.js';
 
 const t = key => translate(key);
 
@@ -470,6 +471,8 @@ function renderEditor(root, state) {
         );
         state.projection = await state.api.readProjection();
         state.specificationCandidates = null;
+        state.specificationTrace = null;
+        state.specificationTraceRoot = null;
         state.specificationEditor = null;
         state.specificationPreview = null;
         state.selectedSpecification = null;
@@ -479,28 +482,39 @@ function renderEditor(root, state) {
   root.append(form);
 }
 
-function allTargets(projection) {
-  return (projection?.specifications?.specifications || []).flatMap(item =>
-    (item.bindings || []).flatMap(binding => (binding.targets || []).map(target => ({ item, binding, target }))),
-  );
-}
-
 function relatedTargets(state, selected) {
+  ensureSpecificationTrace(state, selected);
+  const trace = state.specificationTrace;
+  if (!trace || trace.error || trace.root_item_id !== selected.id) return [];
   const criteria = new Set((selected.criteria || []).map(value => value.anchor));
-  allTargets(state.projection).forEach(entry => {
-    if (entry.item.id !== selected.id) return;
-    (entry.target.claims || []).forEach(claim => {
-      if (claim.criterion) criteria.add(claim.criterion);
-    });
-  });
+  const items = state.projection?.specifications?.specifications || [];
   const related = [];
-  allTargets(state.projection).forEach(entry => {
-    (entry.target.claims || []).forEach(claim => {
-      const isOwnCriterion = criteria.has(claim.criterion);
-      const isOwnTarget = entry.item.id === selected.id;
-      if (isOwnCriterion || isOwnTarget) related.push({ ...entry, claim });
+  const seen = new Set();
+  trace.edges
+    .filter(edge => ['satisfies', 'verifies', 'covers'].includes(edge.relation))
+    .forEach(edge => {
+      const targetReference = edge.relation === 'covers'
+        ? edge.to
+        : edge.from.includes('#claim.')
+        ? edge.from.slice(0, edge.from.indexOf('#claim.'))
+        : edge.from;
+      const target = specificationTarget(state, targetReference);
+      if (!target) return;
+      const item = items.find(candidate => candidate.id === target.itemId);
+      if (!item) return;
+      if (item.id !== selected.id && !criteria.has(edge.to) && edge.relation !== 'covers') return;
+      const kind = edge.relation === 'verifies' ? 'verifies' : 'satisfies';
+      const key = `${kind}:${targetReference}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const binding = { anchor: target.bindingAnchor };
+      related.push({
+        item,
+        binding,
+        target,
+        claim: { kind, criterion: edge.relation === 'covers' ? [...criteria][0] : edge.to },
+      });
     });
-  });
   return related;
 }
 
@@ -586,7 +600,539 @@ function renderRelated(root, state, selected, onItem, onTarget) {
   root.append(section);
 }
 
+function specificationTarget(state, reference) {
+  return (state.projection?.specifications?.specifications || [])
+    .flatMap(item => (item.bindings || []).flatMap(binding => (binding.targets || []).map(target => ({
+      ...target,
+      itemId: item.id,
+      bindingAnchor: binding.anchor,
+    }))))
+    .find(target => target.reference === reference);
+}
+
+function ensureSpecificationTrace(state, selected) {
+  const signature = `${selected.id}:${state.specificationTraceMode}:${state.specificationTraceDepth}`;
+  if (state.specificationTraceRoot === signature || state.specificationTraceLoading) return;
+  state.specificationTraceLoading = true;
+  state.api.readSpecificationTrace(selected.id, {
+    mode: state.specificationTraceMode,
+    depth: state.specificationTraceDepth,
+    nodeBudget: 80,
+  }).then(trace => {
+    state.specificationTrace = trace;
+    state.specificationTraceRoot = signature;
+    state.specificationTraceLoading = false;
+    state.render();
+  }).catch(error => {
+    state.specificationTrace = { error: error.message };
+    state.specificationTraceRoot = signature;
+    state.specificationTraceLoading = false;
+    state.render();
+  });
+}
+
+function detailLabel(label, value) {
+  const row = document.createElement('div');
+  row.className = 'spec-detail-field';
+  const caption = document.createElement('dt');
+  caption.textContent = label;
+  const content = document.createElement('dd');
+  content.textContent = value === undefined || value === null || value === '' ? '—' : String(value);
+  row.append(caption, content);
+  return row;
+}
+
+function detailList(label, values) {
+  const row = document.createElement('div');
+  row.className = 'spec-detail-field';
+  const caption = document.createElement('dt');
+  caption.textContent = label;
+  const content = document.createElement('dd');
+  const list = values || [];
+  if (!list.length) {
+    content.textContent = t('items.detail.empty');
+  } else {
+    const valueList = document.createElement('ul');
+    valueList.className = 'spec-detail-values';
+    list.forEach(value => {
+      const item = document.createElement('li');
+      item.textContent = value;
+      valueList.append(item);
+    });
+    content.append(valueList);
+  }
+  row.append(caption, content);
+  return row;
+}
+
+function detailCard(title, fields, className = '') {
+  const card = document.createElement('section');
+  card.className = `card specification-detail-card${className ? ` ${className}` : ''}`;
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  card.append(heading);
+  const definition = document.createElement('dl');
+  definition.className = 'spec-detail-fields';
+  fields.forEach(fieldValue => definition.append(fieldValue));
+  card.append(definition);
+  return card;
+}
+
+function claimLabel(claim) {
+  if (claim.kind === 'verifies') return `verifies ${claim.criterion || ''}`;
+  if (claim.kind === 'satisfies') return `satisfies ${claim.criterion || ''}`;
+  if (claim.kind === 'covers') return `covers ${(claim.targets || []).join(', ')}`;
+  return claim.kind || 'claim';
+}
+
+function renderInformation(root, state, selected, onItem, onTarget) {
+  const counts = selected.bindings || [];
+  const targets = counts.flatMap(binding => binding.targets || []);
+  const verificationTargets = targets.filter(target => target.claims?.some(claim => claim.kind === 'verifies'));
+  root.append(detailCard(t('items.detail.basic'), [
+    detailLabel(t('items.detail.kind'), selected.kind),
+    detailLabel(t('items.detail.status'), selected.status),
+    detailLabel(t('items.detail.priority'), selected.priority),
+    detailLabel(t('items.detail.source'), selected.path),
+    detailLabel(t('items.detail.source_hash'), selected.source_hash),
+    detailLabel(t('items.detail.count.criteria'), selected.criteria?.length || 0),
+    detailLabel(t('items.detail.count.bindings'), selected.bindings?.length || 0),
+    detailLabel(t('items.detail.count.targets'), targets.length),
+    detailLabel(t('items.detail.count.verification'), verificationTargets.length),
+  ], 'specification-detail-basic'));
+
+  const anchors = [
+    ['principles', selected.principles || [], 'principle'],
+    ['rules', selected.rules || [], 'rule'],
+    ['criteria', selected.criteria || [], 'criterion'],
+  ];
+  anchors.forEach(([label, values, kind]) => {
+    const card = document.createElement('section');
+    card.className = 'card specification-detail-card';
+    const heading = document.createElement('h3');
+    heading.textContent = t(`items.${label}`);
+    card.append(heading);
+    if (!values.length) {
+      const empty = document.createElement('p');
+      empty.className = 'spec-detail-empty';
+      empty.textContent = t('items.detail.empty');
+      card.append(empty);
+    }
+    values.forEach(value => {
+      const row = document.createElement('article');
+      row.className = 'specification-detail-anchor';
+      const head = document.createElement('div');
+      head.className = 'spec-detail-anchor-head';
+      const exact = document.createElement('code');
+      exact.textContent = value.anchor;
+      const badge = document.createElement('span');
+      badge.className = 'chip';
+      badge.textContent = value.kind || value.level || kind;
+      head.append(exact, badge);
+      row.append(head);
+      const statement = document.createElement('p');
+      statement.textContent = value.statement;
+      row.append(statement);
+      const fields = document.createElement('dl');
+      fields.className = 'spec-detail-fields compact';
+      if (kind === 'principle') fields.append(detailList('applies_to', value.applies_to));
+      if (kind === 'rule') {
+        fields.append(detailLabel('level', value.level));
+        fields.append(detailList('governed_by', value.governed_by));
+        fields.append(detailList('applies_to_roles', value.applies_to_roles));
+        fields.append(detailLabel('enforcement', value.enforcement));
+      }
+      if (kind === 'criterion') {
+        fields.append(detailLabel('kind', value.kind));
+        fields.append(detailList('governed_by', value.governed_by));
+      }
+      row.append(fields);
+      card.append(row);
+    });
+    root.append(card);
+  });
+
+  const bindingCard = document.createElement('section');
+  bindingCard.className = 'card specification-detail-card';
+  const bindingHeading = document.createElement('h3');
+  bindingHeading.textContent = t('items.detail.bindings');
+  bindingCard.append(bindingHeading);
+  if (!selected.bindings?.length) {
+    const empty = document.createElement('p');
+    empty.className = 'spec-detail-empty';
+    empty.textContent = t('items.detail.empty');
+    bindingCard.append(empty);
+  }
+  (selected.bindings || []).forEach(binding => {
+    const bindingSection = document.createElement('article');
+    bindingSection.className = 'specification-detail-binding';
+    const bindingTitle = document.createElement('code');
+    bindingTitle.textContent = binding.anchor;
+    bindingSection.append(bindingTitle, detailCard('', [
+      detailLabel(t('items.detail.role'), binding.role),
+      detailLabel(t('items.detail.facet'), binding.facet),
+      detailLabel(t('items.detail.responsibility'), binding.responsibility),
+      detailList(t('items.detail.owns'), (binding.owns || []).map(scope => `${scope.id} · ${scope.path}`)),
+    ], 'specification-detail-inline-card'));
+    const targetList = document.createElement('div');
+    targetList.className = 'specification-detail-targets';
+    if (!binding.targets?.length) {
+      const empty = document.createElement('p');
+      empty.className = 'spec-detail-empty';
+      empty.textContent = t('items.detail.empty');
+      targetList.append(empty);
+    }
+    (binding.targets || []).forEach(target => {
+      const targetCard = document.createElement('article');
+      targetCard.className = 'specification-detail-target';
+      const targetHead = document.createElement('div');
+      targetHead.className = 'spec-detail-anchor-head';
+      const targetRef = document.createElement('code');
+      targetRef.textContent = target.reference;
+      const open = button(t('items.detail.open_source'), '⌘', () => onTarget(target), 'btn small ghost');
+      targetHead.append(targetRef, open);
+      targetCard.append(targetHead);
+      const targetFields = document.createElement('dl');
+      targetFields.className = 'spec-detail-fields compact';
+      targetFields.append(
+        detailLabel(t('items.detail.adapter'), target.adapter),
+        detailLabel(t('items.detail.path'), target.path),
+        detailLabel(t('items.detail.selector'), JSON.stringify(target.selector)),
+        detailList(t('items.detail.claims'), (target.claims || []).map(claimLabel)),
+      );
+      targetCard.append(targetFields);
+      targetList.append(targetCard);
+    });
+    bindingSection.append(targetList);
+    bindingCard.append(bindingSection);
+  });
+  root.append(bindingCard);
+
+  const contracts = document.createElement('section');
+  contracts.className = 'card specification-detail-card';
+  const contractsHeading = document.createElement('h3');
+  contractsHeading.textContent = t('items.detail.contracts');
+  contracts.append(contractsHeading);
+  if (!selected.contracts?.length) {
+    const empty = document.createElement('p');
+    empty.className = 'spec-detail-empty';
+    empty.textContent = t('items.detail.empty');
+    contracts.append(empty);
+  }
+  (selected.contracts || []).forEach(contract => {
+    const card = document.createElement('article');
+    card.className = 'specification-detail-contract';
+    card.append(Object.assign(document.createElement('code'), { textContent: contract.anchor }));
+    const fields = document.createElement('dl');
+    fields.className = 'spec-detail-fields compact';
+    fields.append(
+      detailLabel('kind', contract.kind),
+      detailLabel('source', contract.source),
+      detailList('participants', (contract.participants || []).map(participant => `${participant.role} · ${participant.binding}`)),
+      detailList('guarantees', contract.guarantees),
+    );
+    card.append(fields);
+    contracts.append(card);
+  });
+  root.append(contracts);
+}
+
+function traceNodeButton(state, node, onSelect) {
+  const buttonNode = document.createElement('button');
+  buttonNode.type = 'button';
+  buttonNode.className = `trace-node trace-node-${node.kind}${state.specificationTraceNode === node.id ? ' is-selected' : ''}`;
+  buttonNode.dataset.traceNode = node.id;
+  buttonNode.setAttribute('aria-label', `${t('items.detail.inspect_node')}: ${node.label}`);
+  const kind = document.createElement('span');
+  kind.className = 'trace-node-kind';
+  kind.textContent = node.kind;
+  const label = document.createElement('strong');
+  label.textContent = node.label;
+  buttonNode.append(kind, label);
+  if (node.secondary_label) buttonNode.append(Object.assign(document.createElement('small'), { textContent: node.secondary_label }));
+  buttonNode.addEventListener('click', () => onSelect(node));
+  return buttonNode;
+}
+
+function renderTrace(root, state, selected, onSelect) {
+  ensureSpecificationTrace(state, selected);
+  const trace = state.specificationTrace;
+  if (state.specificationTraceLoading || !trace || state.specificationTraceRoot !== `${selected.id}:${state.specificationTraceMode}:${state.specificationTraceDepth}`) {
+    const loading = document.createElement('p');
+    loading.className = 'empty-state';
+    loading.textContent = t('items.detail.trace_loading');
+    root.append(loading);
+    return;
+  }
+  if (trace.error) {
+    const error = document.createElement('p');
+    error.className = 'status-message status-error';
+    error.textContent = trace.error;
+    root.append(error);
+    return;
+  }
+  const controls = document.createElement('div');
+  controls.className = 'trace-controls';
+  [['readable', t('items.detail.readable')], ['exact', t('items.detail.exact')]].forEach(([mode, label]) => {
+    const modeButton = button(label, mode === state.specificationTraceMode ? '●' : '○', () => {
+      state.specificationTraceMode = mode;
+      state.specificationTraceRoot = null;
+      syncSpecificationLocation(state);
+      state.render();
+    }, `btn small ${mode === state.specificationTraceMode ? 'primary' : 'ghost'}`);
+    controls.append(modeButton);
+  });
+  const depth = document.createElement('label');
+  depth.className = 'trace-depth';
+  depth.append(Object.assign(document.createElement('span'), { textContent: t('items.detail.depth') }));
+  const select = document.createElement('select');
+  select.className = 'native-select';
+  [1, 2, 3].forEach(value => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = String(value);
+    option.selected = value === state.specificationTraceDepth;
+    select.append(option);
+  });
+  select.addEventListener('change', () => {
+    state.specificationTraceDepth = Number(select.value);
+    state.specificationTraceRoot = null;
+    syncSpecificationLocation(state);
+    state.render();
+  });
+  depth.append(select);
+  controls.append(depth);
+  root.append(controls);
+
+  const lanes = ['governance', 'specification', 'implementation', 'evidence'];
+  const graph = document.createElement('div');
+  graph.className = 'trace-lanes';
+  lanes.forEach(lane => {
+    const column = document.createElement('section');
+    column.className = `trace-lane trace-lane-${lane}`;
+    const heading = document.createElement('h3');
+    heading.textContent = lane;
+    column.append(heading);
+    const laneNodes = trace.nodes
+      .filter(node => node.lane === lane)
+      .sort((left, right) => left.stable_order - right.stable_order);
+    laneNodes.forEach(node => {
+      column.append(traceNodeButton(state, node, onSelect));
+    });
+    if (!laneNodes.length) column.append(Object.assign(document.createElement('p'), { className: 'spec-detail-empty', textContent: t('items.detail.empty') }));
+    graph.append(column);
+  });
+  root.append(graph);
+  if (trace.truncated) {
+    const notice = document.createElement('p');
+    notice.className = 'notice warn';
+    notice.textContent = t('items.detail.hidden').replace('{count}', String(trace.hidden_node_count));
+    root.append(notice);
+  }
+  const edges = document.createElement('section');
+  edges.className = 'card trace-edge-card';
+  edges.append(Object.assign(document.createElement('h3'), { textContent: t('items.detail.edge') }));
+  const list = document.createElement('ol');
+  list.className = 'trace-edge-list';
+  trace.edges.forEach(edge => {
+    const item = document.createElement('li');
+    item.textContent = `${edge.from} → ${edge.display_label} → ${edge.to}`;
+    list.append(item);
+  });
+  if (!trace.edges.length) list.append(Object.assign(document.createElement('li'), { textContent: t('items.detail.trace_empty') }));
+  edges.append(list);
+  root.append(edges);
+}
+
+function closureLabel(state) {
+  return t(`items.detail.${state}`) || state;
+}
+
+function renderEvidence(root, state, selected) {
+  ensureSpecificationTrace(state, selected);
+  const trace = state.specificationTrace;
+  if (state.specificationTraceLoading || !trace || state.specificationTraceRoot !== `${selected.id}:${state.specificationTraceMode}:${state.specificationTraceDepth}`) {
+    root.append(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: t('items.detail.trace_loading') }));
+    return;
+  }
+  if (trace.error) {
+    root.append(Object.assign(document.createElement('p'), { className: 'status-message status-error', textContent: trace.error }));
+    return;
+  }
+  (trace.closures || []).forEach(closure => {
+    const card = document.createElement('article');
+    card.className = `card closure-card closure-${closure.state}`;
+    const heading = document.createElement('h3');
+    heading.textContent = closure.criterion;
+    const stateChip = document.createElement('span');
+    stateChip.className = 'chip';
+    stateChip.textContent = closureLabel(closure.state);
+    heading.append(' ', stateChip);
+    card.append(heading);
+    card.append(detailList(t('items.detail.target_definition'), closure.implementation_targets));
+    card.append(detailList(t('items.detail.latest_run'), closure.verification_targets));
+    const note = document.createElement('p');
+    note.className = 'spec-detail-evidence-note';
+    note.textContent = t('items.detail.runtime_unavailable');
+    card.append(note);
+    if (closure.reasons?.length) card.append(detailList(t('items.detail.reasons'), closure.reasons));
+    root.append(card);
+  });
+  if (!(trace.closures || []).length) root.append(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: t('items.detail.trace_empty') }));
+}
+
+function renderSourceInspector(root, state) {
+  root.className = 'canvas specification-source-inspector';
+  const target = state.specificationSourceTarget;
+  if (!target) {
+    root.append(Object.assign(document.createElement('p'), { className: 'spec-detail-empty', textContent: t('items.detail.open_source') }));
+    return;
+  }
+  const head = document.createElement('div');
+  head.className = 'source-inspector-head';
+  head.append(Object.assign(document.createElement('h3'), { textContent: target.reference }));
+  head.append(button(t('items.back'), '×', () => {
+    state.specificationSourceTarget = null;
+    state.specificationSource = null;
+    state.specificationTraceNode = null;
+    syncSpecificationLocation(state);
+    state.render();
+  }, 'btn small ghost'));
+  root.append(head);
+  const details = document.createElement('dl');
+  details.className = 'spec-detail-fields compact';
+  details.append(
+    detailLabel(t('items.detail.adapter'), target.adapter),
+    detailLabel(t('items.detail.path'), target.path),
+    detailLabel(t('items.detail.selector'), JSON.stringify(target.selector)),
+  );
+  root.append(details);
+  const full = Boolean(state.specificationSourceFull);
+  root.append(button(full ? t('items.show_excerpt') : t('items.show_file'), full ? '↙' : '↗', () => {
+    state.specificationSourceFull = !full;
+    state.specificationSource = null;
+    state.render();
+  }, 'btn small ghost'));
+  const key = `${target.reference}:${full ? 'file' : 'excerpt'}`;
+  if (state.specificationSource?.key === key) {
+    appendSource(root, state.specificationSource.value);
+    return;
+  }
+  const loading = document.createElement('p');
+  loading.className = 'empty-state';
+  loading.textContent = t('common.loading');
+  root.append(loading);
+  const request = full ? state.api.readSource(target.path) : state.api.readTargetSource(target.reference);
+  request.then(value => {
+    if (state.specificationSourceTarget?.reference !== target.reference || Boolean(state.specificationSourceFull) !== full) return;
+    state.specificationSource = { key, value };
+    state.render();
+  }).catch(() => {
+    if (state.specificationSourceTarget?.reference !== target.reference) return;
+    state.specificationSource = { key, value: null };
+    state.render();
+  });
+}
+
+function renderSpecificationWorkspace(root, state, selected, options) {
+  if (!state.specificationSourceTarget && state.specificationTraceNode) {
+    state.specificationSourceTarget = specificationTarget(state, state.specificationTraceNode) || null;
+  }
+  const shell = document.createElement('div');
+  shell.className = `specification-detail-workspace${state.specificationSourceTarget ? ' has-inspector' : ''}`;
+  const main = document.createElement('div');
+  main.className = 'specification-detail-main';
+  const breadcrumb = document.createElement('p');
+  breadcrumb.className = 'specification-breadcrumb';
+  breadcrumb.textContent = `${t('nav.specifications')} › ${selected.kind} › ${selected.id}`;
+  main.append(breadcrumb);
+  const head = document.createElement('div');
+  head.className = 'canvas-head specification-detail-head';
+  const title = document.createElement('div');
+  title.append(Object.assign(document.createElement('h2'), { textContent: selected.title }));
+  const meta = document.createElement('div');
+  meta.className = 'meta-line';
+  meta.append(status(selected.status || selected.kind));
+  meta.append(Object.assign(document.createElement('span'), { className: 'chip', textContent: selected.id }));
+  if (selected.priority) meta.append(Object.assign(document.createElement('span'), { className: 'chip', textContent: selected.priority }));
+  title.append(meta);
+  head.append(title);
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  actions.append(button(t('items.detail.copy_ref'), '⧉', () => navigator.clipboard?.writeText(selected.id), 'btn small'));
+  if (!options.readOnly) actions.append(button(t('common.edit'), '✎', () => {
+    state.specificationEditor = { mode: 'edit', itemId: selected.id };
+    state.specificationPreview = null;
+    state.render();
+  }, 'btn small primary'));
+  head.append(actions);
+  main.append(head);
+  const description = document.createElement('p');
+  description.className = 'specification-summary';
+  description.textContent = selected.summary || selected.description || t('items.detail.empty');
+  main.append(description);
+  const tabs = document.createElement('div');
+  tabs.className = 'specification-detail-tabs';
+  tabs.setAttribute('role', 'tablist');
+  SPECIFICATION_DETAIL_TABS.forEach(tabName => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = `tab${state.specificationDetailTab === tabName ? ' active' : ''}`;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', String(state.specificationDetailTab === tabName));
+    tab.textContent = t(`items.detail.${tabName}`);
+    tab.addEventListener('click', () => {
+      state.specificationDetailTab = tabName;
+      state.specificationTraceNode = null;
+      state.specificationSourceTarget = null;
+      syncSpecificationLocation(state);
+      state.render();
+    });
+    tabs.append(tab);
+  });
+  main.append(tabs);
+  const body = document.createElement('div');
+  body.className = 'specification-detail-tab-body';
+  const onItem = itemId => {
+    state.selectedSpecification = itemId;
+    state.specificationTrace = null;
+    state.specificationTraceRoot = null;
+    state.specificationSourceTarget = null;
+    syncSpecificationLocation(state);
+    state.render();
+  };
+  const onTarget = target => {
+    state.specificationTraceNode = target.reference;
+    state.specificationSourceTarget = target;
+    syncSpecificationLocation(state);
+    state.render();
+  };
+  if (state.specificationDetailTab === 'information') renderInformation(body, state, selected, onItem, onTarget);
+  else if (state.specificationDetailTab === 'trace') {
+    renderTrace(body, state, selected, node => {
+      state.specificationTraceNode = node.id;
+      state.specificationSourceTarget = node.source_target ? specificationTarget(state, node.source_target) : null;
+      if (node.item_id && node.item_id !== selected.id && node.kind === 'item') state.selectedSpecification = node.item_id;
+      syncSpecificationLocation(state);
+      state.render();
+    });
+  } else renderEvidence(body, state, selected);
+  main.append(body);
+  shell.append(main);
+  if (state.specificationSourceTarget) {
+    const inspector = document.createElement('aside');
+    inspector.className = 'canvas specification-detail-inspector';
+    renderSourceInspector(inspector, state);
+    shell.append(inspector);
+  }
+  root.append(shell);
+}
+
 export function renderSpecificationDetail(root, state, selected, options = {}) {
+  if (options.detailWorkspace) {
+    renderSpecificationWorkspace(root, state, selected, options);
+    return;
+  }
   const readOnly = Boolean(options.readOnly);
   const onItem = options.onItem || (itemId => {
     state.selectedSpecification = itemId;
@@ -858,10 +1404,14 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
       }
       buttonNode.addEventListener('click', () => {
         state.selectedSpecification = item.id;
+        state.specificationDetailTab = 'information';
+        state.specificationTrace = null;
+        state.specificationTraceRoot = null;
         state.specificationEditor = null;
         state.specificationPreview = null;
         state.targetSuggestions = null;
         state.targetSuggestionSelection = [];
+        syncSpecificationLocation(state);
         state.render();
       });
       rail.append(buttonNode);
@@ -883,15 +1433,11 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
     root.append(empty);
     return entries;
   }
-  if (state) state.selectedSpecification = selected.id;
-  if (state?.specificationSourceTarget) {
-    renderSourceDetail(root, state, state.specificationSourceTarget, () => {
-      state.specificationSourceTarget = null;
-      state.specificationSource = null;
-      state.render();
-    });
-  } else {
-    renderSpecificationDetail(root, state, selected);
+  if (state) {
+    const changed = state.selectedSpecification !== selected.id;
+    state.selectedSpecification = selected.id;
+    if (changed && !new URL(location.href).searchParams.has('item')) syncSpecificationLocation(state, false);
   }
+  renderSpecificationDetail(root, state, selected, { detailWorkspace: true });
   return entries;
 }
