@@ -167,10 +167,17 @@ async function reviewJourneyTargetSuggestions(state, anchor) {
   state.render();
 }
 
-function openJourneyAuthoring(state, mode, requirementId = null) {
+function openJourneyAuthoring(state, mode, requirementId = null, options = {}) {
   state.specificationEditor = mode === 'add-criterion'
     ? { mode, requirementId, governedBy: [] }
-    : { mode: 'create', createKind: mode, governedBy: [] };
+    : {
+      mode: 'create',
+      createKind: mode,
+      governedBy: [],
+      draft: options.criterionAnchor
+        ? { criterion_anchor: options.criterionAnchor }
+        : undefined,
+    };
   state.specificationEditor.journey = true;
   state.specificationEditor.afterApply = continueJourneyAfterAuthoring;
   state.specificationEditor.onClose = nextState => {
@@ -189,6 +196,7 @@ function renderNoMatchRecovery(root, state) {
   recovery.append(element('p', null, t('journey.no_match.explanation')));
   const requirements = (state.projection.specifications?.specifications || [])
     .filter(item => item.kind === 'requirement' && item.status !== 'deprecated');
+  const availableCriteria = requirements.flatMap(item => item.criteria || []);
   if (requirements.length) {
     const label = element('label', null, t('journey.no_match.requirement'));
     const select = document.createElement('select');
@@ -209,10 +217,22 @@ function renderNoMatchRecovery(root, state) {
     }, true, '+'));
   }
   const choices = element('div', 'journey-actions');
-  choices.append(
-    button(t('journey.no_match.create_requirement'), () => openJourneyAuthoring(state, 'requirement'), false, '+'),
-    button(t('journey.no_match.create_feature'), () => openJourneyAuthoring(state, 'feature'), false, '+'),
-  );
+  choices.append(button(
+    t('journey.no_match.create_requirement'),
+    () => openJourneyAuthoring(state, 'requirement'),
+    false,
+    '+',
+  ));
+  if (availableCriteria.length) {
+    choices.append(button(
+      t('journey.no_match.create_feature'),
+      () => openJourneyAuthoring(state, 'feature', null, {
+        criterionAnchor: availableCriteria[0].anchor,
+      }),
+      false,
+      '+',
+    ));
+  }
   recovery.append(choices);
   root.append(recovery);
 }

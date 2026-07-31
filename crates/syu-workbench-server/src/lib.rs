@@ -607,6 +607,12 @@ pub enum EditPatch {
         #[serde(default)]
         target: Option<FeatureTargetDraft>,
     },
+    AddFeatureTarget {
+        document: String,
+        feature_id: SpecId,
+        criterion_anchor: String,
+        target: FeatureTargetDraft,
+    },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
     },
@@ -1284,9 +1290,12 @@ fn discovery_query_exact_matches(text: &str, query: &str) -> bool {
     if query_tokens.is_empty() {
         return false;
     }
-    text_tokens
-        .windows(query_tokens.len())
-        .any(|window| window == query_tokens.as_slice())
+    text_tokens.windows(query_tokens.len()).any(|window| {
+        window
+            .iter()
+            .zip(query_tokens.iter())
+            .all(|(text, query)| text.eq_ignore_ascii_case(query))
+    })
 }
 
 fn candidate_field_weight(kind: &str) -> usize {
@@ -1801,7 +1810,8 @@ fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
             specification_path(workspace, &requirement_id.to_string())
         }
         EditPatch::CreateRequirement { document, .. }
-        | EditPatch::CreateFeature { document, .. } => {
+        | EditPatch::CreateFeature { document, .. }
+        | EditPatch::AddFeatureTarget { document, .. } => {
             specification_document_path(workspace, document)
         }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a candidate patch"),
@@ -1812,19 +1822,37 @@ fn validate_feature_criterion_link(
     snapshot: &CachedWorkspaceSnapshot,
     patch: &EditPatch,
 ) -> Result<()> {
-    let EditPatch::CreateFeature {
-        criterion_anchor: Some(anchor),
-        target,
-        ..
-    } = patch
-    else {
-        return Ok(());
+    let (anchor, feature_id) = match patch {
+        EditPatch::CreateFeature {
+            criterion_anchor,
+            target,
+            status,
+            ..
+        } => {
+            if criterion_anchor.is_some() != target.is_some() {
+                anyhow::bail!(
+                    "a Feature must declare an exact Requirement Criterion and planned target together"
+                );
+            }
+            let Some(anchor) = criterion_anchor else {
+                anyhow::bail!(
+                    "a Feature must declare an exact Requirement Criterion and planned target together"
+                );
+            };
+            if status.is_some_and(|status| status != ItemStatus::Planned) {
+                anyhow::bail!(
+                    "a Feature target must remain planned until its WorkRequest is approved and finalized"
+                );
+            }
+            (anchor, None)
+        }
+        EditPatch::AddFeatureTarget {
+            criterion_anchor,
+            feature_id,
+            ..
+        } => (criterion_anchor, Some(feature_id)),
+        _ => return Ok(()),
     };
-    if target.is_none() {
-        anyhow::bail!(
-            "a Feature linked to a Requirement Criterion must declare its exact planned target"
-        );
-    }
     let parsed = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!("invalid feature criterion anchor: {error}"))?;
@@ -1847,6 +1875,20 @@ fn validate_feature_criterion_link(
         .any(|criterion| criterion.anchor == *anchor)
     {
         anyhow::bail!("feature journey link must reference an exact existing Criterion");
+    }
+    if let Some(feature_id) = feature_id {
+        let feature = snapshot
+            .projection
+            .specifications
+            .specifications
+            .iter()
+            .find(|item| item.id == feature_id.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!("Feature target addition references an unknown Feature")
+            })?;
+        if feature.kind != "feature" || feature.status.as_deref() == Some("deprecated") {
+            anyhow::bail!("Feature target addition must reference an active Feature");
+        }
     }
     Ok(())
 }
@@ -1924,10 +1966,15 @@ fn specification_impact(
     if let Some(EditPatch::AddCriterion { requirement_id, .. }) = patch {
         affected_items.insert(requirement_id.to_string());
     }
-    if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
-        patch
-    {
-        affected_items.insert(id.to_string());
+    match patch {
+        Some(EditPatch::CreateRequirement { id, .. })
+        | Some(EditPatch::CreateFeature { id, .. }) => {
+            affected_items.insert(id.to_string());
+        }
+        Some(EditPatch::AddFeatureTarget { feature_id, .. }) => {
+            affected_items.insert(feature_id.to_string());
+        }
+        _ => {}
     }
     let mut implementation_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
     let mut verification_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
@@ -2074,6 +2121,11 @@ fn changed_specification_anchors(
                         .map(ToString::to_string),
                 );
             }
+        }
+        Some(EditPatch::AddFeatureTarget {
+            criterion_anchor, ..
+        }) => {
+            anchors.insert(criterion_anchor.clone());
         }
         _ => {}
     }
@@ -2282,6 +2334,53 @@ fn specification_patch_content(
             };
             specification_sequence(&mut value, "features")?.push(serde_yaml::to_value(feature)?);
         }
+        EditPatch::AddFeatureTarget {
+            feature_id,
+            criterion_anchor,
+            target,
+            ..
+        } => {
+            if collection_for_value(&value)? != "features" {
+                anyhow::bail!("candidate destination is not a features document");
+            }
+            let parsed_criterion = criterion_anchor
+                .parse::<SpecAnchor>()
+                .map_err(|error| anyhow::anyhow!("invalid Feature target claim: {error}"))?;
+            let sequence = specification_sequence(&mut value, "features")?;
+            let item = sequence
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == feature_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("Feature {feature_id} not found"))?;
+            let mut feature: syu_spec_model::Feature = serde_yaml::from_value(item.clone())?;
+            let path = RepoPath::new(target.path.clone())
+                .map_err(|error| anyhow::anyhow!("invalid Feature target path: {error}"))?;
+            let binding = feature
+                .bindings
+                .iter_mut()
+                .find(|binding| binding.role == BindingRole::Implementation)
+                .ok_or_else(|| anyhow::anyhow!("Feature has no implementation binding"))?;
+            if binding
+                .targets
+                .iter()
+                .any(|candidate| candidate.id == target.id)
+            {
+                anyhow::bail!("Feature target {} already exists", target.id);
+            }
+            binding.targets.push(ArtifactTarget {
+                id: target.id.clone(),
+                adapter: target.adapter.clone(),
+                path,
+                selector: target.selector.clone(),
+                claims: vec![TargetClaim::Satisfies {
+                    criterion: parsed_criterion,
+                }],
+            });
+            *item = serde_yaml::to_value(feature)?;
+        }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a specification patch"),
     }
     let content = serde_yaml::to_string(&value)?;
@@ -2392,7 +2491,8 @@ fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Re
         | EditPatch::Anchor { .. }
         | EditPatch::AddCriterion { .. }
         | EditPatch::CreateRequirement { .. }
-        | EditPatch::CreateFeature { .. } => specification_patch_content(workspace, path, patch),
+        | EditPatch::CreateFeature { .. }
+        | EditPatch::AddFeatureTarget { .. } => specification_patch_content(workspace, path, patch),
         EditPatch::Config { config } => Ok(serde_yaml::to_string(config)?),
     }
 }
@@ -7908,6 +8008,9 @@ mod tests {
                 .iter()
                 .any(|entry| { entry.source == "lexical" && entry.detail.contains("substring") })
         );
+        assert!(discovery_query_exact_matches("Behavior", "behavior"));
+        assert!(discovery_query_exact_matches("BEHAVIOR", "behavior"));
+        assert!(!discovery_query_exact_matches("Behavior", "behav"));
         assert!(
             matching_discovery_concepts("test")
                 .iter()
@@ -8173,6 +8276,30 @@ mod tests {
                 .expect("criterion added")
                 .contains("recovery")
         );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let orphan_feature = StructuredEditCommand {
+            basis,
+            patch: EditPatch::CreateFeature {
+                document: "spec/feature.yaml".into(),
+                id: "FEAT-FIXTURE-ORPHAN".into(),
+                title: "Orphan feature".into(),
+                summary: "Must not enter the graph without an exact target pair.".into(),
+                status: None,
+                criterion_anchor: None,
+                target: None,
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &orphan_feature,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let feature = StructuredEditCommand {

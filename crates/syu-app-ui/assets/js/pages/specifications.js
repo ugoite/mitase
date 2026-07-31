@@ -89,6 +89,7 @@ function field(label, value, name, type = 'text', options = [], required = false
     input.className = 'input';
     input.type = type;
     input.value = value || '';
+    input.required = required;
     wrapper.append(input);
   }
   return wrapper;
@@ -136,6 +137,8 @@ function patchFromForm(editor, state, form) {
   editor.draft = draft;
   return editor.mode === 'create'
     ? createWizardPatch(editor, draft)
+    : editor.mode === 'feature-target'
+      ? createFeatureTargetPatch(editor, draft)
     : editor.mode === 'add-criterion'
       ? createAddCriterionPatch(editor, draft)
     : editor.anchor
@@ -165,6 +168,21 @@ function createAddCriterionPatch(editor, form) {
       kind: formValue(form, 'criterion_kind'),
       statement: formValue(form, 'criterion_statement'),
       governed_by: editor.governedBy || [],
+    },
+  };
+}
+
+function createFeatureTargetPatch(editor, form) {
+  return {
+    kind: 'add_feature_target',
+    document: editor.document,
+    feature_id: editor.featureId,
+    criterion_anchor: editor.criterionAnchor,
+    target: {
+      id: formValue(form, 'target_id'),
+      adapter: formValue(form, 'target_adapter'),
+      path: formValue(form, 'target_path'),
+      selector: featureSelectorFromForm(form),
     },
   };
 }
@@ -351,6 +369,84 @@ export function renderTargetSuggestions(root, state) {
     empty.className = 'empty-state';
     empty.textContent = t('items.suggestions.empty');
     card.append(empty);
+    const recovery = document.createElement('div');
+    recovery.className = 'journey-recovery card';
+    recovery.append(Object.assign(document.createElement('h4'), {
+      textContent: t('items.suggestions.recovery.title'),
+    }));
+    recovery.append(button(
+      t('items.suggestions.recovery.create_feature_target'),
+      '+',
+      () => {
+        state.specificationEditor = {
+          mode: 'create',
+          createKind: 'feature',
+          governedBy: [],
+          journey: true,
+          draft: {
+            criterion_anchor: set.criterion,
+            target_id: 'implementation',
+            target_adapter: 'rust',
+            target_selector_kind: 'symbol',
+          },
+          afterApply: continueTargetRecovery,
+        };
+        state.specificationPreview = null;
+        state.targetSuggestions = null;
+        state.targetSuggestionSelection = [];
+        state.render();
+      },
+    ));
+    const features = (state.projection.specifications?.specifications || [])
+      .filter(item => item.kind === 'feature'
+        && item.status !== 'deprecated'
+        && (item.bindings || []).some(binding => binding.role === 'implementation'));
+    if (features.length) {
+      const select = document.createElement('select');
+      select.className = 'native-select';
+      features.forEach(feature => {
+        const option = document.createElement('option');
+        option.value = feature.id;
+        option.textContent = feature.title;
+        select.append(option);
+      });
+      recovery.append(select);
+      recovery.append(button(
+        t('items.suggestions.recovery.add_feature_target'),
+        '+',
+        () => {
+          const feature = features.find(item => item.id === select.value) || features[0];
+          state.specificationEditor = {
+            mode: 'feature-target',
+            featureId: feature.id,
+            document: feature.path,
+            criterionAnchor: set.criterion,
+            journey: true,
+            draft: {
+              target_id: 'implementation',
+              target_adapter: 'rust',
+              target_selector_kind: 'symbol',
+            },
+            afterApply: continueTargetRecovery,
+          };
+          state.specificationPreview = null;
+          state.targetSuggestions = null;
+          state.targetSuggestionSelection = [];
+          state.render();
+        },
+      ));
+    }
+    recovery.append(button(
+      t('items.suggestions.recovery.edit_criterion'),
+      '✎',
+      () => {
+        state.targetSuggestions = null;
+        state.targetSuggestionSelection = [];
+        state.selectedSpecification = set.criterion.toString().split('#')[0];
+        state.render();
+      },
+    ));
+    card.append(recovery);
   } else {
     const approve = button(t('items.suggestions.approve'), '✓', () => runBusy(state, async () => {
       const result = await state.api.approveTargetSuggestions(
@@ -377,6 +473,17 @@ export function renderTargetSuggestions(root, state) {
   root.append(card);
 }
 
+async function continueTargetRecovery(state, patch) {
+  state.specificationEditor = null;
+  state.specificationPreview = null;
+  state.projection = await state.api.readProjection();
+  state.specificationError = null;
+  if (patch.criterion_anchor) {
+    state.targetSuggestions = await state.api.readTargetSuggestions(patch.criterion_anchor);
+    state.targetSuggestionSelection = [];
+  }
+}
+
 export function renderEditor(root, state) {
   const editor = state.specificationEditor;
   const form = document.createElement('form');
@@ -386,6 +493,8 @@ export function renderEditor(root, state) {
   const title = document.createElement('h2');
   title.textContent = editor.mode === 'create'
     ? t('items.new.title')
+    : editor.mode === 'feature-target'
+      ? t('items.suggestions.recovery.add_feature_target')
     : editor.mode === 'add-criterion'
       ? t('items.add_criterion')
       : t('common.edit');
@@ -431,20 +540,26 @@ export function renderEditor(root, state) {
         'criterion_anchor',
         'select',
         ['', ...criterionAnchors],
-        criterionAnchors.length > 0,
+        true,
       ));
-      form.append(field(t('items.field.target_ref'), draftValue(editor, draft, 'target_id', 'implementation'), 'target_id'));
-      form.append(field(t('items.field.adapter'), draftValue(editor, draft, 'target_adapter', 'rust'), 'target_adapter'));
-      form.append(field(t('items.field.path'), draftValue(editor, draft, 'target_path'), 'target_path', 'text', [], criterionAnchors.length > 0));
+      form.append(field(t('items.field.target_ref'), draftValue(editor, draft, 'target_id', 'implementation'), 'target_id', 'text', [], true));
+      form.append(field(t('items.field.adapter'), draftValue(editor, draft, 'target_adapter', 'rust'), 'target_adapter', 'text', [], true));
+      form.append(field(t('items.field.path'), draftValue(editor, draft, 'target_path'), 'target_path', 'text', [], true));
       form.append(field(
         t('items.field.selector_kind'),
         draftValue(editor, draft, 'target_selector_kind', 'symbol'),
         'target_selector_kind',
         'select',
         ['file', 'symbol', 'operation', 'heading', 'json-pointer', 'marker'],
-        criterionAnchors.length > 0,
+        true,
       ));
       form.append(field(t('items.field.selector_value'), draftValue(editor, draft, 'target_selector_value'), 'target_selector_value'));
+      if (!criterionAnchors.length) {
+        form.append(Object.assign(document.createElement('p'), {
+          className: 'status-message status-warning',
+          textContent: t('items.feature_requires_criterion'),
+        }));
+      }
     } else {
       form.append(field(t('items.field.description'), draftValue(editor, draft, 'description'), 'description', 'textarea'));
       form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', 'medium'), 'priority', 'select', localizedOptions('items.priority', ['low', 'medium', 'high', 'critical'])));
@@ -460,6 +575,21 @@ export function renderEditor(root, state) {
       governance.append(governanceText);
       form.append(governance);
     }
+  } else if (editor.mode === 'feature-target') {
+    const draft = editor.draft || {};
+    form.append(field(t('items.field.requirement_criterion'), editor.criterionAnchor, 'criterion_anchor', 'text', [], true));
+    form.append(field(t('items.field.target_ref'), draftValue(editor, draft, 'target_id', 'implementation'), 'target_id', 'text', [], true));
+    form.append(field(t('items.field.adapter'), draftValue(editor, draft, 'target_adapter', 'rust'), 'target_adapter', 'text', [], true));
+    form.append(field(t('items.field.path'), draftValue(editor, draft, 'target_path'), 'target_path', 'text', [], true));
+    form.append(field(
+      t('items.field.selector_kind'),
+      draftValue(editor, draft, 'target_selector_kind', 'symbol'),
+      'target_selector_kind',
+      'select',
+      ['file', 'symbol', 'operation', 'heading', 'json-pointer', 'marker'],
+      true,
+    ));
+    form.append(field(t('items.field.selector_value'), draftValue(editor, draft, 'target_selector_value'), 'target_selector_value'));
   } else if (editor.mode === 'add-criterion') {
     const draft = editor.draft || {};
     const requirement = itemById(state, editor.requirementId);

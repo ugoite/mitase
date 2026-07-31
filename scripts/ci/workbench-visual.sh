@@ -173,6 +173,7 @@ setTimeout(()=>{
   if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
   await click('[data-work-specification] .actions .primary');
   if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('candidate did not open target suggestion review');
+  if(projection.work.request) failures.push('target suggestion display created a draft WorkRequest');
   await click('[data-page="work"] .target-suggestions .primary');
   if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');

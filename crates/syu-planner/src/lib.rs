@@ -3997,6 +3997,20 @@ mod tests {
     }
 
     #[test]
+    fn implemented_missing_exact_target_is_not_reframed_as_add() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(tempdir.path().join("src/handler.rs"), "pub fn other() {}\n")
+            .expect("drifted artifact");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("workspace index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        assert!(suggestions.suggestions.is_empty());
+    }
+
+    #[test]
     fn target_suggestions_recommend_split_when_candidate_budget_overflows() {
         let tempdir = tempdir().expect("tempdir");
         write_minimal_workspace(tempdir.path());
