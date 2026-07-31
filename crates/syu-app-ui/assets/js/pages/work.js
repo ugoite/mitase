@@ -86,7 +86,7 @@ function renderStart(root, journey, state) {
   const empty = element('section', 'context-empty-state work-start');
   empty.append(
     element('span', 'context-empty-icon', '◈'),
-    element('h2', null, journey.title),
+    element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
     element('p', null, actionText(action, 'explanation')),
     button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
   );

@@ -177,7 +177,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
   - **criteria**:
     - **id**: reviewed-target-suggestions
       - **kind**: behavior
-      - **statement**: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates become exact WorkRequest targets, and budget overflow recommends split work.
+      - **statement**: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates remain in Specifications without creating Work, and budget overflow recommends split work.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
   - **bindings**:
@@ -191,7 +191,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
           - **path**: crates/syu-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: tests::target_suggestions_require_review_before_exact_work_request
+            - **name**: tests::target_suggestions_remain_advisory_until_create_work
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-008#criterion.reviewed-target-suggestions
@@ -203,7 +203,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
                 - **runner**: cargo-test
                 - **arguments**:
                   - **package**: syu-workbench-server
-                  - **test**: tests::target_suggestions_require_review_before_exact_work_request
+                  - **test**: tests::target_suggestions_remain_advisory_until_create_work
 - **id**: REQ-WORKBENCH-005
   - **title**: Secure local server
   - **description**: The Workbench server is loopback-first and protects mutation endpoints.
@@ -502,7 +502,7 @@ requirements:
     criteria:
       - id: reviewed-target-suggestions
         kind: behavior
-        statement: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates become exact WorkRequest targets, and budget overflow recommends split work.
+        statement: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates remain in Specifications without creating Work, and budget overflow recommends split work.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
     bindings:
       - id: target-suggestion-check
@@ -513,7 +513,7 @@ requirements:
           - id: target-suggestion-test
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::target_suggestions_require_review_before_exact_work_request }
+            selector: { kind: symbol, name: tests::target_suggestions_remain_advisory_until_create_work }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-008#criterion.reviewed-target-suggestions
@@ -521,7 +521,7 @@ requirements:
                   - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.rank-candidates
                   - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.approve-candidates
                   - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.suggestion-review-ui
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::target_suggestions_require_review_before_exact_work_request } }
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::target_suggestions_remain_advisory_until_create_work } }
   - id: REQ-WORKBENCH-005
     title: Secure local server
     description: The Workbench server is loopback-first and protects mutation endpoints.

@@ -89,6 +89,7 @@ WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
 SCOPE_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/scope.js").read_text()
 API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
+SERVER_RS = (ROOT / "crates/syu-workbench-server/src/lib.rs").read_text()
 assert "readInlineProjection" in MAIN_JS
 assert "establishSession" in MAIN_JS
 assert "}[state.selectedPage]" in MAIN_JS
@@ -106,6 +107,15 @@ assert "data-scope-create-work" not in HTML
 assert "scope-create-work" not in SCOPE_JS
 assert "action: 'create'" not in SCOPE_JS
 assert "data-create-work" in SPECIFICATIONS_JS
+assert "data-review-target-suggestions" in SPECIFICATIONS_JS
+assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
+assert "result.request" not in SPECIFICATIONS_JS
+assert "summary: selected.title" in SPECIFICATIONS_JS
+assert SPECIFICATIONS_JS.count("state.go('work')") == 1
+assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 1
+assert "WORK-SUGGESTION-" not in SERVER_RS
+assert "draft_request = Some(request.clone())" not in SERVER_RS
+assert "Describe the change you want to make" not in SERVER_RS
 assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
