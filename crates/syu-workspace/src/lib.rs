@@ -55,6 +55,9 @@ pub struct SpecIndex {
     pub criterion_status: BTreeMap<SpecAnchor, ItemStatus>,
     pub artifact_units: Vec<ArtifactUnit>,
     pub artifact_owners: BTreeMap<String, Vec<OwnershipRef>>,
+    /// Historical exact target identities, including targets whose lifecycle
+    /// is absent. This is evidence context, not current executable scope.
+    pub all_target_to_artifact: BTreeMap<BoundTargetRef, String>,
     pub target_to_artifact: BTreeMap<BoundTargetRef, String>,
     /// Current implementation claims from non-planned specification items.
     pub criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
@@ -484,6 +487,7 @@ impl SpecIndex {
                 Some(ItemStatus::Planned)
             );
             for target in &binding.targets {
+                let current_target = target.lifecycle != ArtifactTargetLifecycle::Absent;
                 let target_ref = BoundTargetRef {
                     binding: binding_anchor.clone(),
                     target_id: target.id.clone(),
@@ -496,10 +500,15 @@ impl SpecIndex {
                     );
                 }
                 if let Some(identity) = identities.first() {
-                    out.target_to_artifact
+                    out.all_target_to_artifact
                         .insert(target_ref.clone(), identity.clone());
+                    if current_target {
+                        out.target_to_artifact
+                            .insert(target_ref.clone(), identity.clone());
+                    }
                 }
                 if let Some(identity) = identities.first()
+                    && current_target
                     && matches!(
                         binding.role,
                         BindingRole::Implementation | BindingRole::Verification
@@ -525,7 +534,7 @@ impl SpecIndex {
                                 .entry(criterion.clone())
                                 .or_default()
                                 .push(target_ref.clone());
-                            if active_binding {
+                            if active_binding && current_target {
                                 out.criteria_to_implementation_targets
                                     .entry(criterion.clone())
                                     .or_default()
@@ -545,7 +554,7 @@ impl SpecIndex {
                                     .or_default()
                                     .push(target_ref.clone());
                             }
-                            if active_binding {
+                            if active_binding && current_target {
                                 out.criteria_to_verification_targets
                                     .entry(criterion.clone())
                                     .or_default()
@@ -558,11 +567,13 @@ impl SpecIndex {
                                 }
                             }
                         }
-                        TargetClaim::Exposes { target } if active_binding => {
+                        TargetClaim::Exposes { target } if active_binding && current_target => {
                             out.exposes_by_target
                                 .insert(target_ref.clone(), target.clone());
                         }
-                        TargetClaim::GeneratedFrom { targets } if active_binding => {
+                        TargetClaim::GeneratedFrom { targets }
+                            if active_binding && current_target =>
+                        {
                             out.generated_from
                                 .entry(target_ref.clone())
                                 .or_default()
@@ -625,6 +636,37 @@ impl SpecIndex {
                     .push(contract_anchor.clone());
             }
         }
+        let current_target_refs = out
+            .bindings
+            .iter()
+            .flat_map(|(binding_anchor, binding)| {
+                binding
+                    .targets
+                    .iter()
+                    .filter(|target| target.lifecycle != ArtifactTargetLifecycle::Absent)
+                    .map(|target| BoundTargetRef {
+                        binding: binding_anchor.clone(),
+                        target_id: target.id.clone(),
+                    })
+            })
+            .collect::<BTreeSet<_>>();
+        for values in out
+            .criteria_to_implementation_targets
+            .values_mut()
+            .chain(out.criteria_to_verification_targets.values_mut())
+            .chain(out.verification_by_target.values_mut())
+        {
+            values.retain(|reference| current_target_refs.contains(reference));
+        }
+        out.verification_by_target
+            .retain(|reference, _| current_target_refs.contains(reference));
+        out.exposes_by_target
+            .retain(|reference, _| current_target_refs.contains(reference));
+        out.generated_from
+            .retain(|reference, _| current_target_refs.contains(reference));
+        out.generated_by_source
+            .values_mut()
+            .for_each(|values| values.retain(|reference| current_target_refs.contains(reference)));
         for values in out.artifact_owners.values_mut() {
             values.sort();
             values.dedup();
@@ -1898,9 +1940,9 @@ mod tests {
                 "category: Test\n",
                 "features:\n",
                 "  - id: FEAT-TEST-001\n",
-                "    title: Planned\n",
-                "    summary: Planned capability.\n",
-                "    status: planned\n",
+                "    title: Absent target\n",
+                "    summary: Preserve an explicit removed target.\n",
+                "    status: implemented\n",
                 "    bindings:\n",
                 "      - id: implementation\n",
                 "        role: implementation\n",
@@ -1909,7 +1951,7 @@ mod tests {
                 "        owns:\n",
                 "          - { id: module, adapter: rust, path: src/lib.rs, selector: { kind: module, name: lib } }\n",
                 "        targets:\n",
-                "          - { id: api, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: api }, claims: [{ kind: satisfies, criterion: REQ-TEST-001#criterion.api }] }\n",
+                "          - { id: api, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: api }, lifecycle: absent, claims: [{ kind: satisfies, criterion: REQ-TEST-001#criterion.api }] }\n",
                 "      - id: verification\n",
                 "        role: verification\n",
                 "        facet: test\n",
@@ -1937,12 +1979,14 @@ mod tests {
                 .iter()
                 .any(|unit| unit.identity == identity)
         );
-        assert!(
-            index
-                .artifact_owners
-                .get(identity)
-                .is_none_or(Vec::is_empty)
-        );
+        assert!(index.artifact_owners.get(identity).is_none_or(|owners| {
+            owners.iter().all(|owner| {
+                owner
+                    .target_id
+                    .as_ref()
+                    .is_none_or(|target_id| target_id.0 != "api")
+            })
+        }));
         let criterion: SpecAnchor = "REQ-TEST-001#criterion.api".parse().expect("criterion");
         let implementation: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.api"
             .parse()
@@ -1978,7 +2022,7 @@ mod tests {
             index
                 .criteria_to_verification_targets
                 .get(&criterion)
-                .is_none_or(Vec::is_empty)
+                .is_some_and(|targets| targets.contains(&verification))
         );
         assert!(
             index

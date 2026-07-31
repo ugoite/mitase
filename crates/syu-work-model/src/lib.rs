@@ -19,6 +19,14 @@ pub const AGENT_RUN_SCHEMA: &str = "syu/agent-run/v1";
 pub const AGENT_PATCH_SCHEMA: &str = "syu/agent-patch/v1";
 pub const AGENT_EVENT_SCHEMA: &str = "syu/agent-event/v1";
 
+fn is_stable_target_lifecycle(value: &TargetLifecycle) -> bool {
+    matches!(value, TargetLifecycle::Stable)
+}
+
+fn is_empty_vec<T>(value: &[T]) -> bool {
+    value.is_empty()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WorkOperation {
@@ -89,10 +97,11 @@ impl RequestedTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum TargetTransition {
     Add,
+    #[default]
     Modify,
     Remove,
     RunOnly,
@@ -163,6 +172,7 @@ pub struct PlannedTarget {
     pub artifact_identity: Option<String>,
     pub transition: TargetTransition,
     #[serde(default)]
+    #[serde(skip_serializing_if = "is_stable_target_lifecycle")]
     pub lifecycle: TargetLifecycle,
     pub access: TargetAccessMode,
     pub resolved_path: String,
@@ -573,10 +583,14 @@ pub struct AgentPatchRecord {
 pub struct TargetLifecycleProof {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    #[serde(default)]
     pub transition: TargetTransition,
     #[serde(default)]
+    #[serde(skip_serializing_if = "is_stable_target_lifecycle")]
     pub lifecycle: TargetLifecycle,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub before_content_hash: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub after_content_hash: String,
     pub before_excerpt_hash: String,
     pub after_excerpt_hash: String,
@@ -622,7 +636,7 @@ pub struct VerificationReceipt {
     pub completed_at: String,
     pub executions: Vec<VerificationExecution>,
     /// Exact lifecycle proof for every editable target in the completed slice.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub lifecycle_proofs: Vec<TargetLifecycleProof>,
 }
 
@@ -804,7 +818,7 @@ pub struct FinalizationReceipt {
     pub changed_files: Vec<String>,
     /// The validated target lifecycle evidence preserved from the completion
     /// receipt that authorized this finalization.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub lifecycle_proofs: Vec<TargetLifecycleProof>,
     pub completed_at: String,
 }

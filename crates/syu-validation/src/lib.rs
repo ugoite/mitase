@@ -16,8 +16,8 @@ use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind,
-    ArtifactTarget, OwnershipSelector, RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument,
+    ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
+    LocalAnchorKind, OwnershipSelector, RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument,
     TargetClaim, VerificationRunnerRef,
 };
 use syu_work_model::{
@@ -27,8 +27,7 @@ use syu_work_model::{
     TargetTransition, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure,
     VerificationAttemptResult, VerificationAttemptStatus, VerificationClaimRef,
     VerificationExecution, VerificationExecutionAttempt, VerificationReceipt, WORK_PLAN_SCHEMA,
-    WorkPlan, readonly_targets_fingerprint, readonly_targets_fingerprint_for_execution,
-    work_plan_digest,
+    WorkPlan, readonly_targets_fingerprint_for_execution, work_plan_digest,
 };
 use syu_workspace::{
     AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
@@ -1450,7 +1449,7 @@ fn readiness_regression_blockers(
         .iter()
         .flat_map(|slice| slice.editable_targets.iter())
         .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
-        .filter_map(|target| basis.index.target_to_artifact.get(&target.reference))
+        .filter_map(|target| basis.index.all_target_to_artifact.get(&target.reference))
         .map(|identity| format!("inventory:{identity}"))
         .collect::<BTreeSet<_>>();
     let axes = [
@@ -2684,6 +2683,9 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                             local_id: binding.id.clone(),
                         };
                         for target in &binding.targets {
+                            if target.lifecycle == syu_spec_model::ArtifactTargetLifecycle::Absent {
+                                continue;
+                            }
                             let target_ref = BoundTargetRef {
                                 binding: binding_anchor.clone(),
                                 target_id: target.id.clone(),

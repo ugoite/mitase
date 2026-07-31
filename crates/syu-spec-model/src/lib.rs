@@ -344,10 +344,14 @@ pub struct ArtifactTarget {
     /// `Absent` keeps a removed target in the specification as an explicit
     /// lifecycle obligation, rather than silently dropping its ownership and
     /// finalization evidence.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_present_target_lifecycle")]
     pub lifecycle: ArtifactTargetLifecycle,
     #[serde(default)]
     pub claims: Vec<TargetClaim>,
+}
+
+fn is_present_target_lifecycle(value: &ArtifactTargetLifecycle) -> bool {
+    matches!(value, ArtifactTargetLifecycle::Present)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

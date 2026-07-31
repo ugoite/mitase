@@ -11,8 +11,8 @@ use syu_diagnostics::Diagnostic;
 use syu_project_model::ValidationPreset;
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactBinding, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, Selector,
-    SpecAnchor, TargetClaim,
+    ArtifactBinding, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
+    LocalAnchorKind, RepoPath, Selector, SpecAnchor, TargetClaim,
 };
 use syu_work_model::*;
 use syu_workspace::{
@@ -46,6 +46,14 @@ pub struct TargetSuggestion {
     pub reference: BoundTargetRef,
     pub role: BindingRole,
     pub transition: TargetTransition,
+    pub lifecycle: TargetLifecycle,
+    pub path: String,
+    pub selector: String,
+    pub existing_file: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_bytes: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_lines: Option<usize>,
     pub confidence: SuggestionConfidence,
     pub evidence: Vec<String>,
     pub evidence_fingerprint: String,
@@ -94,20 +102,20 @@ pub fn suggest_targets(
         .collect::<BTreeSet<_>>();
     let mut ranked = Vec::new();
     for (binding_anchor, binding) in &index.bindings {
-        if matches!(
-            index.item_status.get(&binding_anchor.item),
-            Some(ItemStatus::Deprecated | ItemStatus::Planned)
-        ) {
+        if index.item_status.get(&binding_anchor.item) == Some(&ItemStatus::Deprecated) {
             continue;
         }
         for target in &binding.targets {
+            if target.lifecycle == ArtifactTargetLifecycle::Absent {
+                continue;
+            }
             let reference = BoundTargetRef {
                 binding: binding_anchor.clone(),
                 target_id: target.id.clone(),
             };
-            if !index.target_to_artifact.contains_key(&reference) {
-                continue;
-            }
+            let current_target = index.target_to_artifact.contains_key(&reference);
+            let planned_missing_target = !current_target
+                && index.item_status.get(&binding_anchor.item) == Some(&ItemStatus::Planned);
             let mut score = 0usize;
             let mut evidence = Vec::new();
             let directly_claims = target.claims.iter().any(|claim| match claim {
@@ -123,6 +131,13 @@ pub fn suggest_targets(
             if directly_claims {
                 score += 100;
                 evidence.push("The target explicitly claims this criterion.".into());
+            }
+            if planned_missing_target {
+                score += 20;
+                evidence.push(
+                    "This planned target is missing from the current inventory and requires explicit Add approval."
+                        .into(),
+                );
             }
             if binding_anchor.item == criterion.item {
                 score += 40;
@@ -184,6 +199,19 @@ pub fn suggest_targets(
                 continue;
             }
             let transition = transition_for_role(binding.role);
+            let transition = if planned_missing_target {
+                TargetTransition::Add
+            } else {
+                transition
+            };
+            let lifecycle = match transition {
+                TargetTransition::Add => TargetLifecycle::EnsurePresent,
+                TargetTransition::Remove => TargetLifecycle::EnsureAbsent,
+                _ => TargetLifecycle::Stable,
+            };
+            let path = target.path.to_string_lossy().into_owned();
+            let selector = selector_text(&target.selector);
+            let existing_file = workspace.root.join(target.path.as_path()).is_file();
             let confidence = if directly_claims || enforces_governing_rule || supports_contract {
                 SuggestionConfidence::High
             } else if score >= 40 || matched_terms.len() >= 2 {
@@ -211,6 +239,10 @@ pub fn suggest_targets(
                 reference,
                 binding.role,
                 transition,
+                lifecycle,
+                path,
+                selector,
+                existing_file,
                 confidence,
                 evidence,
                 evidence_fingerprint,
@@ -224,7 +256,20 @@ pub fn suggest_targets(
         .map(
             |(
                 offset,
-                (_, id, reference, role, transition, confidence, evidence, evidence_fingerprint),
+                (
+                    _,
+                    id,
+                    reference,
+                    role,
+                    transition,
+                    lifecycle,
+                    path,
+                    selector,
+                    existing_file,
+                    confidence,
+                    evidence,
+                    evidence_fingerprint,
+                ),
             )| {
                 TargetSuggestion {
                     id,
@@ -232,6 +277,12 @@ pub fn suggest_targets(
                     reference,
                     role,
                     transition,
+                    lifecycle,
+                    path,
+                    selector,
+                    existing_file,
+                    budget_bytes: (transition == TargetTransition::Add).then_some(512),
+                    budget_lines: (transition == TargetTransition::Add).then_some(32),
                     confidence,
                     evidence,
                     evidence_fingerprint,
@@ -2459,9 +2510,11 @@ fn one_target(
         blockers.push(diagnostic);
         return vec![];
     }
-    if !matches!(options.policy.transition, TargetTransition::Add)
-        && !index.target_to_artifact.contains_key(reference)
-    {
+    let has_active_artifact = index.target_to_artifact.contains_key(reference)
+        || (target.lifecycle == ArtifactTargetLifecycle::Absent
+            && (index.all_target_to_artifact.contains_key(reference)
+                || resolve_target_in_workspace(workspace, target).is_ok()));
+    if !matches!(options.policy.transition, TargetTransition::Add) && !has_active_artifact {
         let mut d = Diagnostic::error(
             "SYU-TARGET-002",
             format!(
@@ -2554,7 +2607,7 @@ fn one_target(
                 reason: options.reason.into(),
             }]
         }
-        Err(_) => match options.policy.transition {
+        Err(error) => match options.policy.transition {
             TargetTransition::Add => {
                 let Some(add_budget_bytes) = options.add_budget_bytes else {
                     let mut d = Diagnostic::error(
@@ -2576,6 +2629,19 @@ fn one_target(
                     blockers.push(d);
                     return vec![];
                 };
+                let container_content_hash = match approved_container_hash(workspace, target) {
+                    Ok(hash) => hash,
+                    Err(error) => {
+                        let mut d = Diagnostic::error(
+                            "SYU-TARGET-003",
+                            format!("cannot inspect add target container: {error}"),
+                            target.path.to_string_lossy(),
+                        );
+                        d.target = Some(reference.clone());
+                        blockers.push(d);
+                        return vec![];
+                    }
+                };
                 vec![declared_target_plan(
                     reference,
                     binding,
@@ -2585,7 +2651,7 @@ fn one_target(
                         reason: options.reason,
                         add_budget_bytes,
                         add_budget_lines,
-                        container_content_hash: approved_container_hash(workspace, target),
+                        container_content_hash,
                     },
                 )]
             }
@@ -2602,7 +2668,10 @@ fn one_target(
             TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
                 let mut d = Diagnostic::error(
                     "SYU-TARGET-002",
-                    format!("target does not resolve: {}", target.path.to_string_lossy()),
+                    format!(
+                        "target does not resolve: {} ({error})",
+                        target.path.to_string_lossy()
+                    ),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
@@ -2661,14 +2730,32 @@ struct DeclaredTargetPlanOptions<'a> {
 fn approved_container_hash(
     workspace: &SpecWorkspace,
     target: &syu_spec_model::ArtifactTarget,
-) -> Option<String> {
+) -> Result<Option<String>> {
     if matches!(target.selector, Selector::File) {
-        return None;
+        return Ok(None);
     }
-    let bytes = fs::read(workspace.root.join(target.path.as_path())).ok()?;
+    let canonical_root = workspace.root.canonicalize()?;
+    let path = workspace.root.join(target.path.as_path());
+    let ancestor = path
+        .ancestors()
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| anyhow::anyhow!("target path has no existing workspace ancestor"))?;
+    if !ancestor.canonicalize()?.starts_with(&canonical_root) {
+        bail!(
+            "target path escapes workspace through a symlink: {}",
+            path.display()
+        );
+    }
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("read target container {}", path.display()));
+        }
+    };
     let mut hash = Sha256::new();
     hash.update(bytes);
-    Some(format_sha256(hash.finalize()))
+    Ok(Some(format_sha256(hash.finalize())))
 }
 
 fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
@@ -3507,6 +3594,43 @@ mod tests {
         assert!(!candidate.evidence_fingerprint.is_empty());
         assert!(!suggestions.suggestion_token.is_empty());
         assert!(suggestions.split_recommendation.is_none());
+    }
+
+    #[test]
+    fn planned_missing_exact_target_is_an_add_suggestion_with_scope_metadata() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("status: implemented", "status: planned")
+            .replace("name: handler", "name: handler_missing");
+        fs::write(feature_path, feature).expect("planned feature spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn existing_handler() {}\n",
+        )
+        .expect("existing container");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let candidate = suggestions.suggestions.first().expect("add suggestion");
+
+        assert_eq!(candidate.transition, TargetTransition::Add);
+        assert_eq!(candidate.lifecycle, TargetLifecycle::EnsurePresent);
+        assert_eq!(candidate.path, "src/handler.rs");
+        assert_eq!(candidate.selector, "handler_missing");
+        assert!(candidate.existing_file);
+        assert_eq!(candidate.budget_bytes, Some(512));
+        assert_eq!(candidate.budget_lines, Some(32));
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item.contains("planned target"))
+        );
     }
 
     #[test]

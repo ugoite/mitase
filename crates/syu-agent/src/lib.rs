@@ -9,6 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use syu_delivery::DeliveryStore;
+use syu_inventory::ArtifactUnit;
 use syu_spec_model::{BoundTargetRef, format_sha256};
 use syu_validation::canonical_plan_for_execution;
 use syu_work_model::{
@@ -121,7 +122,7 @@ pub fn apply_scoped_patch(
             match append_patch_event(&store, &run, record.clone()) {
                 Ok(()) => Ok(record),
                 Err(error) => {
-                    restore_files(&applied.old_files)?;
+                    restore_rollback(&applied.rollback)?;
                     Err(error)
                 }
             }
@@ -450,7 +451,7 @@ fn apply_patch_inner(
             },
         );
     }
-    let old_files = apply_file_mutations(&files)?;
+    let rollback = apply_file_mutations(&files)?;
     let post_write = (|| {
         let candidate = SpecWorkspace::load(&workspace.root)?;
         let candidate_index = candidate.index()?;
@@ -463,14 +464,14 @@ fn apply_patch_inner(
     let (after_fingerprint, changes) = match post_write {
         Ok(applied) => applied,
         Err(error) => {
-            restore_files(&old_files)?;
+            restore_rollback(&rollback)?;
             return Err(error);
         }
     };
     Ok(PatchApplied {
         after_fingerprint,
         changes,
-        old_files,
+        rollback,
     })
 }
 
@@ -529,7 +530,10 @@ fn validate_post_patch(
             .ok_or_else(|| {
                 anyhow::anyhow!("target {target} is outside the selected editable slice")
             })?;
-        let before_identity = before.target_to_artifact.get(target);
+        let before_identity = before
+            .target_to_artifact
+            .get(target)
+            .or_else(|| before.all_target_to_artifact.get(target));
         let after_identity = after.target_to_artifact.get(target);
         let after_resolved = after.target(target).and_then(|declared| {
             syu_workspace::resolve_target_in_workspace(candidate, declared).ok()
@@ -595,11 +599,40 @@ fn validate_post_patch(
         if allowed_identities.contains(identity) {
             continue;
         }
-        if before_units.get(identity) != after_units.get(identity) {
+        if !same_artifact_unit_semantics(before_units.get(identity), after_units.get(identity)) {
             bail!("patch added, removed, or changed unapproved inventory unit {identity}");
         }
     }
     Ok(proofs)
+}
+
+fn same_artifact_unit_semantics(
+    before: Option<&&ArtifactUnit>,
+    after: Option<&&ArtifactUnit>,
+) -> bool {
+    before.map(|unit| {
+        (
+            &unit.adapter,
+            &unit.path,
+            &unit.identity,
+            &unit.kind,
+            &unit.exposure,
+            &unit.reachability,
+            &unit.digest,
+            &unit.structural_digest,
+        )
+    }) == after.map(|unit| {
+        (
+            &unit.adapter,
+            &unit.path,
+            &unit.identity,
+            &unit.kind,
+            &unit.exposure,
+            &unit.reachability,
+            &unit.digest,
+            &unit.structural_digest,
+        )
+    })
 }
 
 fn write_target(write: &AgentTargetWrite) -> &BoundTargetRef {
@@ -857,7 +890,7 @@ struct Replacement {
 struct PatchApplied {
     after_fingerprint: String,
     changes: Vec<AgentTargetChange>,
-    old_files: Vec<FileRollback>,
+    rollback: PatchRollback,
 }
 
 struct FileMutation {
@@ -868,9 +901,16 @@ struct FileMutation {
 struct FileRollback {
     path: PathBuf,
     original: Option<Vec<u8>>,
+    permissions: Option<fs::Permissions>,
 }
 
-fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Vec<FileRollback>> {
+struct PatchRollback {
+    files: Vec<FileRollback>,
+    created_dirs: Vec<PathBuf>,
+}
+
+fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<PatchRollback> {
+    let mut original_permissions = BTreeMap::new();
     for (path, mutation) in files {
         if file_state(path)? != mutation.original {
             bail!(
@@ -878,13 +918,32 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Vec<F
                 path.display()
             );
         }
+        original_permissions.insert(
+            path.clone(),
+            mutation
+                .original
+                .as_ref()
+                .map(|_| fs::metadata(path).map(|metadata| metadata.permissions()))
+                .transpose()?,
+        );
     }
     let mut temporary = Vec::new();
+    let mut created_dirs = Vec::new();
     for (path, mutation) in files {
         let Some(content) = &mutation.updated else {
             continue;
         };
         let parent = path.parent().context("target path has no parent")?;
+        let mut missing = Vec::new();
+        let mut cursor = parent.to_path_buf();
+        while !cursor.exists() {
+            missing.push(cursor.clone());
+            if !cursor.pop() {
+                break;
+            }
+        }
+        missing.reverse();
+        created_dirs.extend(missing);
         fs::create_dir_all(parent)?;
         let mut file = tempfile::NamedTempFile::new_in(parent)?;
         file.write_all(content)?;
@@ -895,7 +954,10 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Vec<F
     let mut applied = Vec::new();
     for (path, mutation) in files {
         if file_state(path)? != mutation.original {
-            restore_files(&applied)?;
+            restore_rollback(&PatchRollback {
+                files: applied,
+                created_dirs: created_dirs.clone(),
+            })?;
             bail!(
                 "target {} changed while the patch was being applied",
                 path.display()
@@ -906,42 +968,87 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Vec<F
                 let file = temporary
                     .remove(path)
                     .expect("existing writes have a prepared temporary file");
-                fs::rename(file.into_temp_path(), path).map_err(Into::into)
+                fs::rename(file.into_temp_path(), path)
+                    .with_context(|| format!("replace {}", path.display()))
             }
             (None, Some(_)) => temporary
                 .remove(path)
                 .expect("new files have a prepared temporary file")
                 .persist_noclobber(path)
                 .map(|_| ())
-                .map_err(|error| error.error.into()),
-            (Some(_), None) => fs::remove_file(path).map_err(Into::into),
+                .map_err(|error| anyhow::anyhow!(error.error))
+                .with_context(|| format!("create {}", path.display())),
+            (Some(_), None) => {
+                fs::remove_file(path).with_context(|| format!("remove {}", path.display()))
+            }
             (None, None) => unreachable!("every patch mutation changes a file"),
         };
         if let Err(error) = result {
-            restore_files(&applied)?;
+            restore_rollback(&PatchRollback {
+                files: applied,
+                created_dirs: created_dirs.clone(),
+            })?;
             return Err(error);
+        }
+        let permissions = original_permissions.get(path).cloned().flatten();
+        if mutation.updated.is_some()
+            && let Some(permissions) = &permissions
+        {
+            fs::set_permissions(path, permissions.clone())?;
         }
         applied.push(FileRollback {
             path: path.clone(),
             original: mutation.original.clone(),
+            permissions,
         });
     }
-    Ok(applied)
+    Ok(PatchRollback {
+        files: applied,
+        created_dirs,
+    })
 }
 
-fn restore_files(files: &[FileRollback]) -> Result<()> {
-    for file in files.iter().rev() {
+fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
+    for file in rollback.files.iter().rev() {
         match &file.original {
             Some(content) => {
                 let parent = file.path.parent().context("target path has no parent")?;
                 fs::create_dir_all(parent)?;
+                if file.path.exists() {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mode = fs::metadata(&file.path)?.permissions().mode() | 0o200;
+                        fs::set_permissions(&file.path, fs::Permissions::from_mode(mode))?;
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let mut writable = fs::metadata(&file.path)?.permissions();
+                        writable.set_readonly(false);
+                        fs::set_permissions(&file.path, writable)?;
+                    }
+                }
                 fs::write(&file.path, content)?;
+                if let Some(permissions) = &file.permissions {
+                    fs::set_permissions(&file.path, permissions.clone())?;
+                }
             }
             None => match fs::remove_file(&file.path) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => return Err(error.into()),
             },
+        }
+    }
+    for directory in rollback.created_dirs.iter().rev() {
+        match fs::remove_dir(directory) {
+            Ok(()) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                ) => {}
+            Err(error) => return Err(error.into()),
         }
     }
     Ok(())
@@ -1007,4 +1114,49 @@ fn hash_bytes(value: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(value);
     format_sha256(hash.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rollback_restores_file_permissions_and_created_directories() {
+        let temp = tempfile::tempdir().expect("rollback tempdir");
+        let existing = temp.path().join("existing.txt");
+        fs::write(&existing, "before\n").expect("existing file");
+        let mut readonly = fs::metadata(&existing).unwrap().permissions();
+        readonly.set_readonly(true);
+        fs::set_permissions(&existing, readonly).expect("readonly file");
+
+        let mut update = BTreeMap::new();
+        update.insert(
+            existing.clone(),
+            FileMutation {
+                original: Some(b"before\n".to_vec()),
+                updated: Some(b"after\n".to_vec()),
+            },
+        );
+        let rollback = apply_file_mutations(&update).expect("apply update");
+        assert_eq!(fs::read_to_string(&existing).unwrap(), "after\n");
+        assert!(fs::metadata(&existing).unwrap().permissions().readonly());
+        restore_rollback(&rollback).expect("restore update");
+        assert_eq!(fs::read_to_string(&existing).unwrap(), "before\n");
+        assert!(fs::metadata(&existing).unwrap().permissions().readonly());
+
+        let created = temp.path().join("new/nested/file.txt");
+        let mut create = BTreeMap::new();
+        create.insert(
+            created.clone(),
+            FileMutation {
+                original: None,
+                updated: Some(b"created\n".to_vec()),
+            },
+        );
+        let rollback = apply_file_mutations(&create).expect("apply create");
+        assert!(created.is_file());
+        restore_rollback(&rollback).expect("restore create");
+        assert!(!created.exists());
+        assert!(!temp.path().join("new").exists());
+    }
 }

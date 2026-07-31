@@ -1423,6 +1423,12 @@ async fn api_target_suggestions_approve(
         .iter()
         .map(|candidate| candidate.id.clone())
         .collect::<Vec<_>>();
+    if let Some(split_recommendation) = split_work_recommendation(&approved, workspace, index) {
+        return Ok(Json(TargetSuggestionApprovalView {
+            approved_ids: vec![],
+            split_recommendation: Some(split_recommendation),
+        }));
+    }
     {
         let mut session = service
             .session
@@ -6310,6 +6316,15 @@ mod tests {
         for (target_id, transition, description) in cases {
             let temp = tempfile::tempdir().expect("lifecycle fixture tempdir");
             copy_fixture_tree(&fixture, temp.path());
+            if target_id == "removed-symbol" {
+                let config_path = temp.path().join("syu.yaml");
+                let config = fs::read_to_string(&config_path).expect("fixture config");
+                fs::write(
+                    config_path,
+                    config.replace("target: off", "target: traceable"),
+                )
+                .expect("enable readiness for remove-symbol lifecycle");
+            }
             initialize_fixture_git(temp.path());
             let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
             let (basis, csrf, slice, run, target) =
@@ -7162,6 +7177,80 @@ mod tests {
                 "anchor={anchor} status={status:?}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn planned_add_target_is_advisory_until_human_approval() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned add suggestions");
+        let add = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| candidate.transition == syu_work_model::TargetTransition::Add)
+            .expect("planned Add suggestion");
+        assert_eq!(
+            add.lifecycle,
+            syu_work_model::TargetLifecycle::EnsurePresent
+        );
+        assert_eq!(add.path, "src/lib.rs");
+        assert!(add.existing_file);
+        assert_eq!(add.budget_bytes, Some(512));
+        assert_eq!(add.budget_lines, Some(32));
+        assert!(service.session.read().unwrap().draft_request.is_none());
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: suggestions.suggestion_token,
+                suggestion_ids: vec![add.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned add approval");
+        let request = approval.request.expect("approved Add request");
+        assert_eq!(request.constraints.max_added_bytes_per_target, Some(512));
+        assert_eq!(request.constraints.max_added_lines_per_target, Some(32));
+        assert_eq!(request.requested_targets.len(), 1);
+        assert_eq!(
+            request.requested_targets[0].transition,
+            syu_work_model::TargetTransition::Add
+        );
+        assert!(service.session.read().unwrap().draft_request.is_some());
     }
 
     #[tokio::test]
