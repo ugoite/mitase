@@ -164,7 +164,7 @@ setTimeout(()=>{
 
   (async()=>{
   const query=document.querySelector('[data-page="work"] .journey-intake textarea');
-  query.value='s';
+  query.value='behavior';
   await click('[data-page="work"] .journey-intake .journey-action');
   await click('[data-page="work"] .journey-card .journey-action');
   if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');

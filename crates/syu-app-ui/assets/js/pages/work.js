@@ -112,6 +112,15 @@ async function continueJourneyAfterAuthoring(state, patch) {
     ? patch.criterion
     : patch.kind === 'create_requirement'
       ? patch.criteria?.[0]
+      : patch.kind === 'create_feature'
+        ? (state.projection.specifications?.specifications || [])
+          .flatMap(item => item.criteria || [])
+          .find(value => value.anchor === patch.criterion_anchor)
+        : null;
+  const criterionAnchor = patch.kind === 'create_feature'
+    ? patch.criterion_anchor
+    : criterion
+      ? `${patch.kind === 'add_criterion' ? patch.requirement_id : patch.id}#criterion.${criterion.id}`
       : null;
   const requirementId = patch.kind === 'add_criterion'
     ? patch.requirement_id
@@ -123,14 +132,16 @@ async function continueJourneyAfterAuthoring(state, patch) {
   state.journeyQuery = criterion?.statement || patch.title || state.journeyQuery;
   state.journeyCreatedSpecification = requirementId || (patch.kind === 'create_feature' ? patch.id : null);
   state.journeyAuthoringNotice = patch.kind === 'create_feature'
-    ? t('journey.created_feature')
+    ? t('journey.created_feature_linked')
     : t('journey.created_requirement');
-  state.journeyCandidateAnchor = requirementId && criterion
-    ? `${requirementId}#criterion.${criterion.id}`
-    : null;
+  state.journeyCandidateAnchor = criterionAnchor;
   state.journeyCandidates = await state.api.searchSpecificationCandidates(state.journeyQuery, 'requirement');
   state.journeyDiscoveryError = null;
-  state.render();
+  if (criterionAnchor) {
+    await reviewJourneyTargetSuggestions(state, criterionAnchor);
+  } else {
+    state.render();
+  }
 }
 
 async function reviewJourneyTargetSuggestions(state, anchor) {
@@ -172,7 +183,7 @@ function renderNoMatchRecovery(root, state) {
   recovery.append(element('h3', null, t('journey.no_match.title')));
   recovery.append(element('p', null, t('journey.no_match.explanation')));
   const requirements = (state.projection.specifications?.specifications || [])
-    .filter(item => item.kind === 'requirement');
+    .filter(item => item.kind === 'requirement' && item.status !== 'deprecated');
   if (requirements.length) {
     const label = element('label', null, t('journey.no_match.requirement'));
     const select = document.createElement('select');
@@ -267,7 +278,7 @@ function renderStart(root, journey, state) {
   if (state.journeyCandidates === null) return;
   const candidates = journeyAnchorCandidates(state);
   root.append(element('h2', 'journey-section-title', t('journey.choose')));
-  if (!candidates.length) {
+  if (!candidates.length && !state.targetSuggestions) {
     state.journeyCandidateAnchor = null;
     renderNoMatchRecovery(root, state);
     return;
@@ -645,7 +656,9 @@ function renderScopeDetail(root, journey, state, work) {
 
 function renderSpecification(root, workspace, journey, state, work) {
   const specification = journey?.related_specification;
-  const specificationAnchor = journey?.advanced?.specification_anchor || null;
+  const specificationAnchor = journey?.advanced?.specification_anchor
+    || state.journeyCandidateAnchor
+    || null;
   const createdItem = state.journeyCreatedSpecification
     ? (state.projection.specifications?.specifications || [])
       .find(item => item.id === state.journeyCreatedSpecification)
@@ -794,6 +807,9 @@ function renderSpecification(root, workspace, journey, state, work) {
   });
   body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
   body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
+  if (candidate && !specification) {
+    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
+  }
   root.append(body);
 }
 

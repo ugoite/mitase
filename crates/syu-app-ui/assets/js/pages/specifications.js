@@ -56,7 +56,7 @@ async function runBusy(state, task) {
   state.render();
 }
 
-function field(label, value, name, type = 'text', options = []) {
+function field(label, value, name, type = 'text', options = [], required = false) {
   const wrapper = document.createElement('label');
   wrapper.className = 'spec-field';
   const caption = document.createElement('span');
@@ -81,6 +81,7 @@ function field(label, value, name, type = 'text', options = []) {
       item.selected = entry.value === value;
       input.append(item);
     });
+    input.required = required;
     wrapper.append(input);
   } else {
     const input = document.createElement('input');
@@ -176,7 +177,12 @@ function createWizardPatch(editor, form) {
     status: 'planned',
   };
   if (editor.createKind === 'feature') {
-    return { kind: 'create_feature', ...base, summary: formValue(form, 'summary') };
+    return {
+      kind: 'create_feature',
+      ...base,
+      summary: formValue(form, 'summary'),
+      criterion_anchor: formValue(form, 'criterion_anchor') || null,
+    };
   }
   return {
     kind: 'create_requirement',
@@ -396,6 +402,17 @@ export function renderEditor(root, state) {
     form.append(field(t('items.field.title'), draftValue(editor, draft, 'title'), 'title'));
     if (editor.createKind === 'feature') {
       form.append(field(t('items.field.summary'), draftValue(editor, draft, 'summary'), 'summary', 'textarea'));
+      const criterionAnchors = (state.projection.specifications?.specifications || [])
+        .filter(item => item.kind === 'requirement' && item.status !== 'deprecated')
+        .flatMap(item => (item.criteria || []).map(criterion => criterion.anchor));
+      form.append(field(
+        t('items.field.requirement_criterion'),
+        draftValue(editor, draft, 'criterion_anchor', criterionAnchors[0] || ''),
+        'criterion_anchor',
+        'select',
+        criterionAnchors,
+        true,
+      ));
     } else {
       form.append(field(t('items.field.description'), draftValue(editor, draft, 'description'), 'description', 'textarea'));
       form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', 'medium'), 'priority', 'select', localizedOptions('items.priority', ['low', 'medium', 'high', 'critical'])));
@@ -520,7 +537,7 @@ export function renderEditor(root, state) {
         state.specificationCandidates = null;
         state.specificationPreview = null;
         if (typeof editor.afterApply === 'function') {
-          await editor.afterApply(state, state.specificationPreview?.patch || currentPatch);
+          await editor.afterApply(state, currentPatch);
           return;
         }
         state.specificationEditor = null;
@@ -729,6 +746,9 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       anchor.textContent = value.anchor;
       const statement = document.createElement('p');
       statement.textContent = value.statement;
+      if (kind === 'criterion' && value.anchor === options.highlightedAnchor) {
+        statement.setAttribute('data-work-specification-criterion', '');
+      }
       text.append(anchor, statement);
       row.append(text);
       if (kind === 'criterion' && value.kind) row.append(enumChip('criterion.kind', value.kind));

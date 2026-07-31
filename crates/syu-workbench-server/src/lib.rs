@@ -596,6 +596,11 @@ pub enum EditPatch {
         summary: String,
         #[serde(default)]
         status: Option<ItemStatus>,
+        /// A journey-only exact Requirement Criterion link. Feature documents
+        /// do not own criteria, but the guided authoring flow must retain the
+        /// human-selected anchor while it continues to target review.
+        #[serde(default)]
+        criterion_anchor: Option<String>,
     },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
@@ -1219,8 +1224,45 @@ const DISCOVERY_CONCEPTS: &[DiscoveryConcept] = &[
 fn matching_discovery_concepts(query: &str) -> Vec<&'static DiscoveryConcept> {
     DISCOVERY_CONCEPTS
         .iter()
-        .filter(|concept| concept.terms.iter().any(|term| query.contains(term)))
+        .filter(|concept| {
+            concept
+                .terms
+                .iter()
+                .any(|term| discovery_term_matches(query, term))
+        })
         .collect()
+}
+
+fn ascii_tokens(value: &str) -> Vec<&str> {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// English discovery terms are whole words. Japanese terms remain explicit
+/// glossary entries and use controlled substring matching because the
+/// Workbench does not promise a language-specific tokenizer.
+fn discovery_term_matches(text: &str, term: &str) -> bool {
+    if term.is_ascii() {
+        let tokens = ascii_tokens(text);
+        return tokens.iter().any(|token| token.eq_ignore_ascii_case(term));
+    }
+    text.contains(term)
+}
+
+fn discovery_query_matches(text: &str, query: &str) -> bool {
+    if !query.is_ascii() {
+        return text.contains(query);
+    }
+    let text_tokens = ascii_tokens(text);
+    let query_tokens = ascii_tokens(query);
+    if query_tokens.is_empty() {
+        return false;
+    }
+    text_tokens
+        .windows(query_tokens.len())
+        .any(|window| window == query_tokens.as_slice())
 }
 
 fn candidate_field_weight(kind: &str) -> usize {
@@ -1305,7 +1347,7 @@ async fn api_specification_candidates(
                 });
             } else {
                 for (anchor, kind, text) in &fields {
-                    if text.to_lowercase().contains(&query_text) {
+                    if discovery_query_matches(text, &query_text) {
                         score += candidate_field_weight(kind);
                         matches.push(CandidateMatch {
                             anchor: anchor.clone(),
@@ -1324,7 +1366,7 @@ async fn api_specification_candidates(
                         if concept
                             .terms
                             .iter()
-                            .any(|term| text.to_lowercase().contains(term))
+                            .any(|term| discovery_term_matches(text, term))
                         {
                             concept_matches += 1;
                             if !matches.iter().any(|entry| {
@@ -1730,6 +1772,43 @@ fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
         }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a candidate patch"),
     }
+}
+
+fn validate_feature_criterion_link(
+    snapshot: &CachedWorkspaceSnapshot,
+    patch: &EditPatch,
+) -> Result<()> {
+    let EditPatch::CreateFeature {
+        criterion_anchor: Some(anchor),
+        ..
+    } = patch
+    else {
+        return Ok(());
+    };
+    let parsed = anchor
+        .parse::<SpecAnchor>()
+        .map_err(|error| anyhow::anyhow!("invalid feature criterion anchor: {error}"))?;
+    if parsed.kind != LocalAnchorKind::Criterion {
+        anyhow::bail!("feature journey link must point to an exact Requirement Criterion");
+    }
+    let item = snapshot
+        .projection
+        .specifications
+        .specifications
+        .iter()
+        .find(|item| item.id == parsed.item.to_string())
+        .ok_or_else(|| anyhow::anyhow!("feature journey link references an unknown Requirement"))?;
+    if item.kind != "requirement" || item.status.as_deref() == Some("deprecated") {
+        anyhow::bail!("feature journey link must reference an active Requirement");
+    }
+    if !item
+        .criteria
+        .iter()
+        .any(|criterion| criterion.anchor == *anchor)
+    {
+        anyhow::bail!("feature journey link must reference an exact existing Criterion");
+    }
+    Ok(())
 }
 
 fn edit_preview(
@@ -2355,6 +2434,7 @@ async fn api_specification_candidate_preview(
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let workspace = &snapshot.workspace;
+    validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
     let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
@@ -2384,6 +2464,7 @@ async fn api_specification_candidate_apply(
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let workspace = &snapshot.workspace;
+    validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
     let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
@@ -7701,6 +7782,28 @@ mod tests {
             "unrelated intent must not become a false positive"
         );
 
+        for query in ["contest", "invalid", "authorization"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!(
+                            "/api/specifications/candidates?q={query}&kind=requirement"
+                        ))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let embedded_token: Vec<SpecificationCandidateView> =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("embedded-token response");
+            assert!(
+                embedded_token.is_empty(),
+                "{query} must not match a glossary term embedded in a larger word"
+            );
+        }
+
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(
             &app,
@@ -7958,6 +8061,7 @@ mod tests {
                 title: "A guided feature".into(),
                 summary: "Created through the same typed wizard.".into(),
                 status: None,
+                criterion_anchor: Some("REQ-FIXTURE-001#criterion.recovery".into()),
             },
             preview_token: None,
         };
