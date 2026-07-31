@@ -1,4 +1,4 @@
-import { translate } from '../i18n.js';
+import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 
 const t = key => translate(key);
 
@@ -17,13 +17,28 @@ function status(text) {
   const node = document.createElement('span');
   const normalized = String(text || 'planned').toLowerCase().replace(/\s+/g, '-');
   node.className = `chip status-component status-${normalized}`;
-  const translatedStatuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
-  const label = translatedStatuses.has(normalized) ? t(`status.${normalized}`) : text || normalized;
+  const translatedStatuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'binary', 'planned', 'implemented', 'deprecated', 'ready', 'blocked', 'needs-review', 'unknown']);
+  const label = translatedStatuses.has(normalized)
+    ? localizeEnum('status', normalized)
+    : ['philosophy', 'policy', 'requirement', 'feature'].includes(normalized)
+      ? localizeEnum('items', normalized)
+      : text || normalized;
   node.innerHTML = '<span class="status-dot" aria-hidden="true"></span>';
   const copy = document.createElement('span');
   copy.textContent = label;
   node.append(copy);
   return node;
+}
+
+function enumChip(namespace, value) {
+  const node = document.createElement('span');
+  node.className = 'chip';
+  node.textContent = localizeEnum(namespace, value);
+  return node;
+}
+
+function localizedOptions(namespace, values) {
+  return values.map(value => ({ value, label: localizeEnum(namespace, value) }));
 }
 
 async function runBusy(state, task) {
@@ -60,9 +75,10 @@ function field(label, value, name, type = 'text', options = []) {
     input.className = 'native-select';
     options.forEach(option => {
       const item = document.createElement('option');
-      item.value = option;
-      item.textContent = option;
-      item.selected = option === value;
+      const entry = typeof option === 'string' ? { value: option, label: option } : option;
+      item.value = entry.value;
+      item.textContent = entry.label;
+      item.selected = entry.value === value;
       input.append(item);
     });
     wrapper.append(input);
@@ -171,8 +187,8 @@ function renderImpact(root, preview) {
   card.append(heading);
   const states = document.createElement('div');
   states.className = 'meta-line';
-  states.append(status(`${t('items.preview.before')}: ${impact.readiness_before.status}`));
-  states.append(status(`${t('items.preview.after')}: ${impact.readiness_after.status}`));
+  states.append(status(`${t('items.preview.before')}: ${localizeEnum('status', impact.readiness_before.status)}`));
+  states.append(status(`${t('items.preview.after')}: ${localizeEnum('status', impact.readiness_after.status)}`));
   card.append(states);
   const list = document.createElement('ul');
   list.className = 'compact-list';
@@ -196,7 +212,7 @@ function renderImpact(root, preview) {
   addEntries(t('items.preview.targets'), impact.implementation_targets);
   addEntries(t('items.preview.tests'), impact.verification_targets);
   const suggested = (impact.target_suggestions || []).flatMap(set => set.suggestions || []);
-  addEntries(t('items.suggestions.title'), suggested.map(candidate => `${candidate.ref} (${candidate.confidence})`));
+  addEntries(t('items.suggestions.title'), suggested.map(candidate => `${candidate.ref} (${localizeEnum('suggestion.confidence', candidate.confidence)})`));
   if (impact.work?.reason) {
     const row = document.createElement('li');
     row.textContent = impact.work.reason;
@@ -255,7 +271,7 @@ function renderTargetSuggestions(root, state) {
     title.textContent = `#${candidate.rank} ${candidate.ref}`;
     const meta = document.createElement('div');
     meta.className = 'meta-line';
-    meta.append(status(candidate.confidence), status(candidate.role));
+    meta.append(enumChip('suggestion.confidence', candidate.confidence), enumChip('target.role', candidate.role));
     const evidence = document.createElement('ul');
     evidence.className = 'compact-list';
     (candidate.evidence || []).forEach(value => {
@@ -343,9 +359,9 @@ function renderEditor(root, state) {
       form.append(field(t('items.field.summary'), draftValue(editor, draft, 'summary'), 'summary', 'textarea'));
     } else {
       form.append(field(t('items.field.description'), draftValue(editor, draft, 'description'), 'description', 'textarea'));
-      form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', 'medium'), 'priority', 'select', ['low', 'medium', 'high', 'critical']));
+      form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', 'medium'), 'priority', 'select', localizedOptions('items.priority', ['low', 'medium', 'high', 'critical'])));
       form.append(field(t('items.field.criterion_id'), draftValue(editor, draft, 'criterion_id'), 'criterion_id'));
-      form.append(field(t('items.field.criterion_kind'), draftValue(editor, draft, 'criterion_kind', 'behavior'), 'criterion_kind', 'select', ['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom']));
+      form.append(field(t('items.field.criterion_kind'), draftValue(editor, draft, 'criterion_kind', 'behavior'), 'criterion_kind', 'select', localizedOptions('criterion.kind', ['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'])));
       form.append(field(t('items.field.criterion_statement'), draftValue(editor, draft, 'criterion_statement'), 'criterion_statement', 'textarea'));
       const governance = document.createElement('details');
       const governanceSummary = document.createElement('summary');
@@ -360,7 +376,7 @@ function renderEditor(root, state) {
     const draft = editor.draft || {};
     form.append(field(t('items.field.statement'), draftValue(editor, draft, 'statement', editor.statement), 'statement', 'textarea'));
     if (editor.anchorKind === 'criterion') {
-      form.append(field(t('items.field.kind'), draftValue(editor, draft, 'criterion_kind', editor.kind), 'criterion_kind', 'select', ['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom']));
+      form.append(field(t('items.field.kind'), draftValue(editor, draft, 'criterion_kind', editor.kind), 'criterion_kind', 'select', localizedOptions('criterion.kind', ['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'])));
     }
     if (editor.anchorKind === 'principle') form.append(field(t('items.field.applies_to'), draftValue(editor, draft, 'applies_to', editor.appliesTo), 'applies_to'));
     const advanced = document.createElement('details');
@@ -379,12 +395,12 @@ function renderEditor(root, state) {
     if (kind === 'philosophy' || kind === 'policy') form.append(field(t('items.field.summary'), draftValue(editor, draft, 'summary', item?.summary), 'summary', 'textarea'));
     if (kind === 'requirement') {
       form.append(field(t('items.field.description'), draftValue(editor, draft, 'description', item?.description || item?.summary), 'description', 'textarea'));
-      form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', item?.priority || 'medium'), 'priority', 'select', ['low', 'medium', 'high', 'critical']));
-      form.append(field(t('items.field.status'), draftValue(editor, draft, 'status', item?.status || 'planned'), 'status', 'select', ['planned', 'implemented', 'deprecated']));
+      form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', item?.priority || 'medium'), 'priority', 'select', localizedOptions('items.priority', ['low', 'medium', 'high', 'critical'])));
+      form.append(field(t('items.field.status'), draftValue(editor, draft, 'status', item?.status || 'planned'), 'status', 'select', localizedOptions('status', ['planned', 'implemented', 'deprecated'])));
     }
     if (kind === 'feature') {
       form.append(field(t('items.field.summary'), draftValue(editor, draft, 'summary', item?.summary), 'summary', 'textarea'));
-      form.append(field(t('items.field.status'), draftValue(editor, draft, 'status', item?.status || 'planned'), 'status', 'select', ['planned', 'implemented', 'deprecated']));
+      form.append(field(t('items.field.status'), draftValue(editor, draft, 'status', item?.status || 'planned'), 'status', 'select', localizedOptions('status', ['planned', 'implemented', 'deprecated'])));
     }
     const advanced = document.createElement('details');
     const summary = document.createElement('summary');
@@ -541,7 +557,7 @@ function renderRelated(root, state, selected, onItem, onTarget) {
   related[state.relatedKind].forEach(entry => {
     if (state.relatedKind === 'specification') {
       list.append(button(
-        entry.item.title,
+        localizeSpecificationTitle(entry.item),
         entry.item.kind === 'feature' ? '◆' : '◈',
         () => onItem(entry.item.id),
         'related-row specification',
@@ -583,7 +599,7 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
   head.className = 'canvas-head';
   const title = document.createElement('div');
   const heading = document.createElement('h2');
-  heading.textContent = selected.title;
+  heading.textContent = localizeSpecificationTitle(selected);
   title.append(heading);
   const meta = document.createElement('div');
   meta.className = 'meta-line';
@@ -644,12 +660,13 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       statement.textContent = value.statement;
       text.append(anchor, statement);
       row.append(text);
+      if (kind === 'criterion' && value.kind) row.append(enumChip('criterion.kind', value.kind));
       if (!readOnly && kind === 'criterion' && selected.status === 'implemented') {
         row.append(button(t('items.create_work'), '→', () => state.runAction(
           () => state.api.runJourneyAction(state.projection, {
             action: 'create',
             anchor: value.anchor,
-            summary: `Change ${selected.title}`,
+            summary: `${t('work.request.summary_from_anchor').replace('{anchor}', localizeSpecificationTitle(selected))}`,
           }),
           () => { state.selectedSlice = null; state.go('work'); },
         ), 'btn small'));
@@ -817,7 +834,7 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
       const id = document.createElement('b');
       id.textContent = item.id;
       const name = document.createElement('p');
-      name.textContent = item.title;
+      name.textContent = localizeSpecificationTitle(item);
       title.append(id, name);
       buttonNode.append(title);
       if (candidate.relevance?.length) {
