@@ -253,12 +253,16 @@ function renderTargetSuggestions(root, state) {
     split.textContent = set.split_recommendation.reason;
     card.append(split);
   }
+  const approvedIds = new Set(set.approved_ids || []);
   (set.suggestions || []).forEach(candidate => {
     const row = document.createElement('div');
     row.className = 'specification-row target-suggestion';
+    const approved = approvedIds.has(candidate.id);
+    if (approved) row.setAttribute('data-target-suggestion-approved', '');
     const selection = document.createElement('input');
     selection.type = 'checkbox';
-    selection.checked = state.targetSuggestionSelection.includes(candidate.id);
+    selection.checked = !approved && state.targetSuggestionSelection.includes(candidate.id);
+    selection.disabled = approved;
     selection.setAttribute('aria-label', `${t('items.suggestions.select')} ${candidate.ref}`);
     selection.addEventListener('change', () => {
       const values = new Set(state.targetSuggestionSelection);
@@ -272,6 +276,7 @@ function renderTargetSuggestions(root, state) {
     const meta = document.createElement('div');
     meta.className = 'meta-line';
     meta.append(enumChip('suggestion.confidence', candidate.confidence), enumChip('target.role', candidate.role));
+    if (approved) meta.append(status(t('items.suggestions.approved')));
     const evidence = document.createElement('ul');
     evidence.className = 'compact-list';
     (candidate.evidence || []).forEach(value => {
@@ -300,23 +305,24 @@ function renderTargetSuggestions(root, state) {
     card.append(empty);
   } else {
     const approve = button(t('items.suggestions.approve'), '✓', () => runBusy(state, async () => {
-        const result = await state.api.approveTargetSuggestions(
-          state.projection,
-          set.criterion,
-          set.suggestion_token,
-          state.targetSuggestionSelection,
-        );
-        if (result.request) {
-          state.projection = await state.api.readProjection();
-          state.targetSuggestions = null;
-          state.targetSuggestionSelection = [];
-          state.selectedSlice = null;
-          state.go('work');
-          return;
-        }
-        state.targetSuggestions = { ...set, split_recommendation: result.split_recommendation };
-        state.specificationError = null;
+      const result = await state.api.approveTargetSuggestions(
+        state.projection,
+        set.criterion,
+        set.suggestion_token,
+        state.targetSuggestionSelection,
+      );
+      const approved = new Set(result.approved_ids || []);
+      const approvedIds = new Set(set.approved_ids || []);
+      approved.forEach(id => approvedIds.add(id));
+      state.targetSuggestions = {
+        ...set,
+        approved_ids: [...approvedIds],
+        split_recommendation: result.split_recommendation,
+      };
+      state.targetSuggestionSelection = [];
+      state.specificationError = null;
     }), 'btn primary');
+    approve.setAttribute('data-approve-target-suggestions', '');
     approve.disabled = !state.targetSuggestionSelection.length;
     card.append(approve);
   }
@@ -662,22 +668,30 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       row.append(text);
       if (kind === 'criterion' && value.kind) row.append(enumChip('criterion.kind', value.kind));
       if (!readOnly && kind === 'criterion' && selected.status === 'implemented') {
-        row.append(button(t('items.create_work'), '→', () => state.runAction(
+        const createWork = button(t('items.create_work'), '→', () => state.runAction(
           () => state.api.runJourneyAction(state.projection, {
             action: 'create',
             anchor: value.anchor,
             summary: `${t('work.request.summary_from_anchor').replace('{anchor}', localizeSpecificationTitle(selected))}`,
           }),
           () => { state.selectedSlice = null; state.go('work'); },
-        ), 'btn small'));
+        ), 'btn small');
+        createWork.setAttribute('data-create-work', '');
+        createWork.setAttribute('data-create-work-anchor', value.anchor);
+        row.append(createWork);
       }
       if (!readOnly && kind === 'criterion') {
-        row.append(button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
+        const reviewSuggestions = button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
             const suggestions = await state.api.readTargetSuggestions(value.anchor);
             state.targetSuggestions = suggestions;
-            state.targetSuggestionSelection = suggestions.suggestions.map(candidate => candidate.id);
+            const approved = new Set(suggestions.approved_ids || []);
+            state.targetSuggestionSelection = suggestions.suggestions
+              .filter(candidate => !approved.has(candidate.id))
+              .map(candidate => candidate.id);
             state.specificationError = null;
-        }), 'btn small'));
+        }), 'btn small');
+        reviewSuggestions.setAttribute('data-review-target-suggestions', '');
+        row.append(reviewSuggestions);
       }
       if (!readOnly) row.append(button(t('common.edit'), '✎', () => {
         state.specificationEditor = {
