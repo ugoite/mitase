@@ -131,15 +131,13 @@ setTimeout(()=>{
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
 
   (async()=>{
-  const query=document.querySelector('[data-page="work"] .journey-intake textarea');
-  query.value='s';
-  await click('[data-page="work"] .journey-intake .journey-action');
-  if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
-  if(!document.querySelector('[data-work-specification] [data-journey-preview]')) failures.push('search did not render the specification preview');
-  const previewColumns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
-  if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
-  await click('[data-work-specification] .actions .primary');
-  if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
+  const workStart=document.querySelector('[data-page="work"] .work-start');
+  if(!workStart) failures.push('Work did not show the specification-first start state');
+  if(document.querySelector('[data-page="work"] .journey-intake, [data-page="work"] .journey-card')) failures.push('Work still shows the legacy behavior search');
+  await click('[data-page="work"] .work-start .journey-action');
+  if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
+  await click('[data-page="specifications"] .specification-criterion .btn.small');
+  if(!visible('[data-page="work"]')) failures.push('specification Create Work did not open Work');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');

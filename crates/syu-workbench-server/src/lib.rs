@@ -4162,15 +4162,15 @@ fn project_with_index(
 
 fn empty_journey() -> WorkJourneyView {
     WorkJourneyView {
-        title: "Describe the change you want to make".into(),
+        title: "Choose a specification to create Work".into(),
         current_step: "describe".into(),
         steps: journey_steps("describe"),
         primary_action: JourneyActionView {
-            action: "create".into(),
-            label: "Choose a relevant requirement".into(),
-            label_key: "journey.action.create".into(),
-            explanation: "Start with a plain-language description, then choose the behavior that should change.".into(),
-            explanation_key: "journey.explanation.create".into(),
+            action: "choose_specification".into(),
+            label: "Open Specifications".into(),
+            label_key: "journey.action.choose_specification".into(),
+            explanation: "Choose a target from Specifications before creating Work.".into(),
+            explanation_key: "journey.explanation.choose_specification".into(),
             confirmation_required: false,
             enabled: true,
         },

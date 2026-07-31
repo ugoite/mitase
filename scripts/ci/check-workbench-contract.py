@@ -95,7 +95,10 @@ assert "function disableBusyButtons()" in MAIN_JS
 assert "runJourneyAction" in API_JS
 assert "readScopeDiff" in API_JS
 assert "journey-advanced" in WORK_JS
-assert "journeyQuery" in WORK_JS
+assert "work-start" in WORK_JS
+assert "journey.start.action" in WORK_JS
+assert "journey-intake" not in WORK_JS
+assert "journey-card" not in WORK_JS
 assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS

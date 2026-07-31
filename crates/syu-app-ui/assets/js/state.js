@@ -14,8 +14,6 @@ export function createState(projection) {
     specificationSourceFull: false,
     targetSuggestions: null,
     targetSuggestionSelection: [],
-    journeyQuery: '',
-    journeyCandidateAnchor: null,
     journeySpecificationExpanded: false,
     journeySpecificationAnchor: null,
     journeyContextTab: 'specification',

@@ -342,12 +342,6 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
 .journey-step.current { flex: 1.7; color: #1c5d99; font-weight: 700; }
 .journey-step.current .journey-step-icon { background: #1c5d99; color: #fff; box-shadow: 0 0 0 4px rgba(28,93,153,.12); }
 .journey-step-label { position: relative; z-index: 1; padding-right: 7px; background: var(--soft); white-space: nowrap; font-size: 12px; }
-.journey-card, .journey-intake { border: 1px solid #d9dfe6; border-radius: 12px; padding: 18px; background: var(--paper, #fff); display: grid; gap: 10px; }
-.journey-card h3, .journey-card p { margin: 0; }
-.journey-card.selected { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(28,93,153,.1); }
-.journey-card .status-component::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.journey-intake textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #aeb8c3; border-radius: 8px; font: inherit; }
-.journey-section-title { margin: 8px 0 0; }
 .journey-next { display: grid; gap: 12px; padding: 14px 0 0; border-top: 1px solid var(--line); }
 .journey-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .journey-action-icon { width: 17px; height: 17px; display: grid; place-items: center; font-size: 15px; line-height: 1; }
