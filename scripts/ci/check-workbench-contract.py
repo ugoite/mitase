@@ -107,6 +107,8 @@ assert "data-scope-create-work" not in HTML
 assert "scope-create-work" not in SCOPE_JS
 assert "action: 'create'" not in SCOPE_JS
 assert "data-create-work" in SPECIFICATIONS_JS
+assert "data-target-suggestion-approved" in SPECIFICATIONS_JS
+assert "approved_ids" in SPECIFICATIONS_JS
 assert "data-review-target-suggestions" in SPECIFICATIONS_JS
 assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
 assert "result.request" not in SPECIFICATIONS_JS
@@ -114,6 +116,8 @@ assert "summary: selected.title" in SPECIFICATIONS_JS
 assert SPECIFICATIONS_JS.count("state.go('work')") == 1
 assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 1
 assert "WORK-SUGGESTION-" not in SERVER_RS
+assert "approved_target_suggestions" in SERVER_RS
+assert "validate_create_work_criterion" in SERVER_RS
 assert "draft_request = Some(request.clone())" not in SERVER_RS
 assert "Describe the change you want to make" not in SERVER_RS
 assert "renderDiff" in WORK_JS

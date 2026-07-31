@@ -34,8 +34,8 @@ use syu_validation::{PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
     AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA,
     CompletionAttempt, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
-    PlanApproval, PlanStatus, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints,
-    WorkOperation, WorkPlan, WorkRequest, WorkSeed,
+    PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt, WORK_REQUEST_SCHEMA,
+    WorkConstraints, WorkOperation, WorkPlan, WorkRequest, WorkSeed,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -67,6 +67,14 @@ pub struct WorkbenchSession {
     /// Rejections are tied to the evidence that was reviewed. A candidate is
     /// eligible again only after its evidence fingerprint changes.
     pub rejected_target_suggestions: BTreeMap<String, String>,
+    pub approved_target_suggestions: Vec<ApprovedTargetSuggestion>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovedTargetSuggestion {
+    pub criterion: SpecAnchor,
+    pub suggestion_id: String,
+    pub evidence_fingerprint: String,
 }
 
 pub struct WorkbenchEngine;
@@ -1273,33 +1281,67 @@ fn filtered_target_suggestions(
     Ok(set)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TargetSuggestionsView {
+    #[serde(flatten)]
+    set: TargetSuggestionSet,
+    approved_ids: Vec<String>,
+}
+
+fn approved_suggestion_ids(
+    set: &TargetSuggestionSet,
+    approvals: &[ApprovedTargetSuggestion],
+) -> Vec<String> {
+    set.suggestions
+        .iter()
+        .filter(|candidate| {
+            approvals.iter().any(|approval| {
+                approval.criterion == set.criterion
+                    && approval.suggestion_id == candidate.id
+                    && approval.evidence_fingerprint == candidate.evidence_fingerprint
+            })
+        })
+        .map(|candidate| candidate.id.clone())
+        .collect()
+}
+
+fn target_suggestions_view(
+    set: TargetSuggestionSet,
+    approvals: &[ApprovedTargetSuggestion],
+) -> TargetSuggestionsView {
+    let approved_ids = approved_suggestion_ids(&set, approvals);
+    TargetSuggestionsView { set, approved_ids }
+}
+
 async fn api_target_suggestions(
     State(service): State<Arc<WorkbenchService>>,
     AxumPath(anchor): AxumPath<String>,
-) -> Result<Json<TargetSuggestionSet>, ApiError> {
+) -> Result<Json<TargetSuggestionsView>, ApiError> {
     let criterion = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!(error))?;
     let snapshot = service.snapshot()?;
-    let rejected = service
-        .session
-        .read()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
-        .rejected_target_suggestions
-        .clone();
-    Ok(Json(filtered_target_suggestions(
-        &snapshot.workspace,
-        &snapshot.index,
-        &criterion,
-        &rejected,
-    )?))
+    let (rejected, approvals) = {
+        let session = service
+            .session
+            .read()
+            .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+        (
+            session.rejected_target_suggestions.clone(),
+            session.approved_target_suggestions.clone(),
+        )
+    };
+    Ok(Json(target_suggestions_view(
+        filtered_target_suggestions(&snapshot.workspace, &snapshot.index, &criterion, &rejected)?,
+        &approvals,
+    )))
 }
 
 async fn api_target_suggestion_reject(
     State(service): State<Arc<WorkbenchService>>,
     AxumPath(anchor): AxumPath<String>,
     Json(command): Json<TargetSuggestionRejectCommand>,
-) -> Result<Json<TargetSuggestionSet>, ApiError> {
+) -> Result<Json<TargetSuggestionsView>, ApiError> {
     let criterion = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!(error))?;
@@ -1318,7 +1360,7 @@ async fn api_target_suggestion_reject(
         .iter()
         .find(|candidate| candidate.id == command.suggestion_id)
         .ok_or_else(|| anyhow::anyhow!("suggestion is not part of the reviewed candidate set"))?;
-    let rejected = {
+    let (rejected, approvals) = {
         let mut session = service
             .session
             .write()
@@ -1326,11 +1368,18 @@ async fn api_target_suggestion_reject(
         session
             .rejected_target_suggestions
             .insert(candidate.id.clone(), candidate.evidence_fingerprint.clone());
-        session.rejected_target_suggestions.clone()
+        session.approved_target_suggestions.retain(|approval| {
+            !(approval.criterion == criterion && approval.suggestion_id == candidate.id)
+        });
+        (
+            session.rejected_target_suggestions.clone(),
+            session.approved_target_suggestions.clone(),
+        )
     };
-    Ok(Json(filtered_target_suggestions(
-        workspace, index, &criterion, &rejected,
-    )?))
+    Ok(Json(target_suggestions_view(
+        filtered_target_suggestions(workspace, index, &criterion, &rejected)?,
+        &approvals,
+    )))
 }
 
 async fn api_target_suggestions_approve(
@@ -1379,7 +1428,25 @@ async fn api_target_suggestions_approve(
     let approved_ids = approved
         .iter()
         .map(|candidate| candidate.id.clone())
-        .collect();
+        .collect::<Vec<_>>();
+    {
+        let mut session = service
+            .session
+            .write()
+            .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+        for candidate in &approved {
+            session.approved_target_suggestions.retain(|approval| {
+                !(approval.criterion == criterion && approval.suggestion_id == candidate.id)
+            });
+            session
+                .approved_target_suggestions
+                .push(ApprovedTargetSuggestion {
+                    criterion: criterion.clone(),
+                    suggestion_id: candidate.id.clone(),
+                    evidence_fingerprint: candidate.evidence_fingerprint.clone(),
+                });
+        }
+    }
     Ok(Json(TargetSuggestionApprovalView {
         approved_ids,
         split_recommendation: split_work_recommendation(&approved, workspace, index),
@@ -2648,6 +2715,25 @@ async fn api_request(
     Ok(Json(project_session(&snapshot, &session)?))
 }
 
+fn validate_create_work_criterion(
+    snapshot: &CachedWorkspaceSnapshot,
+    anchor: &SpecAnchor,
+) -> Result<()> {
+    if anchor.kind != LocalAnchorKind::Criterion {
+        anyhow::bail!("Work must start from an exact requirement criterion");
+    }
+    if !matches!(
+        snapshot.index.anchor(anchor),
+        Some(syu_workspace::AnchorValue::Criterion(_))
+    ) {
+        anyhow::bail!("Work criterion anchor does not resolve to an exact requirement criterion");
+    }
+    if snapshot.index.criterion_status.get(anchor) != Some(&ItemStatus::Implemented) {
+        anyhow::bail!("Work can only start from a criterion in an implemented requirement");
+    }
+    Ok(())
+}
+
 async fn api_journey_action(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<JourneyActionCommand>,
@@ -2663,33 +2749,43 @@ async fn api_journey_action(
             let snapshot = basis(&service, &command.basis)?;
             let anchor = SpecAnchor::from_str(&anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
-            let item_status = snapshot
-                .projection
-                .specifications
-                .specifications
-                .iter()
-                .find(|item| item.id == anchor.item.to_string())
-                .and_then(|item| item.status.as_deref());
-            if item_status != Some("implemented") {
-                return Err(ApiError(
-                    StatusCode::BAD_REQUEST,
-                    anyhow::anyhow!(
-                        "Work can only start from a criterion in an implemented specification"
-                    ),
-                ));
-            }
+            validate_create_work_criterion(&snapshot, &anchor)
+                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
             if summary.trim().is_empty() {
                 return Err(ApiError(
                     StatusCode::BAD_REQUEST,
                     anyhow::anyhow!("provide a work summary before continuing"),
                 ));
             }
+            let current_suggestions =
+                suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
+                    .map(|set| set.suggestions)
+                    .unwrap_or_default();
             let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
             let mut session = service
                 .session
                 .write()
                 .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
             let summary = summary.trim().to_owned();
+            let requested_targets = session
+                .approved_target_suggestions
+                .iter()
+                .filter(|approval| approval.criterion == anchor)
+                .filter_map(|approval| {
+                    current_suggestions.iter().find(|candidate| {
+                        candidate.id == approval.suggestion_id
+                            && candidate.evidence_fingerprint == approval.evidence_fingerprint
+                    })
+                })
+                .map(|candidate| RequestedTarget {
+                    reference: candidate.reference.clone(),
+                    criterion: Some(anchor.clone()),
+                    transition: candidate.transition,
+                })
+                .collect::<Vec<_>>();
+            session
+                .approved_target_suggestions
+                .retain(|approval| approval.criterion != anchor);
             session.work_title = Some(summary.clone());
             session.draft_request = Some(WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
@@ -2704,7 +2800,7 @@ async fn api_journey_action(
                     max_slices: Some(1),
                     ..WorkConstraints::default()
                 },
-                requested_targets: vec![],
+                requested_targets,
             });
             session.plan = None;
             session.selected_slice = None;
@@ -6380,6 +6476,43 @@ mod tests {
                 .expect("approval response");
         assert_eq!(approval.approved_ids, approved_ids);
         assert!(approval.split_recommendation.is_none());
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let persisted: TargetSuggestionsView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("persisted suggestion response");
+        assert_eq!(persisted.approved_ids, approved_ids);
+
+        let mut changed_again = fs::read_to_string(&target_path).expect("changed target source");
+        let next_body_offset = changed_again[unit.span.byte_start..unit.span.byte_end]
+            .find('{')
+            .map(|offset| unit.span.byte_start + offset + 1)
+            .expect("Rust target body after approval");
+        changed_again.insert_str(next_body_offset, "\n// approved evidence changed\n");
+        fs::write(&target_path, changed_again).expect("changed approved target source");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let invalidated: TargetSuggestionsView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("invalidated suggestion response");
+        assert!(!invalidated.approved_ids.contains(&rejected_id));
+        let valid_approved_count = approved_ids.iter().filter(|id| *id != &rejected_id).count();
         assert!(
             service
                 .session
@@ -6406,26 +6539,71 @@ mod tests {
             projection["journey"]["current_step"],
             "select_specification"
         );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Start the approved fixture work"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let request = service
+            .session
+            .read()
+            .expect("target suggestion session")
+            .draft_request
+            .clone()
+            .expect("created work request");
+        assert_eq!(request.requested_targets.len(), valid_approved_count);
+        assert!(request.requested_targets.iter().all(|target| {
+            target.criterion.as_ref()
+                == Some(&"REQ-FIXTURE-001#criterion.behavior".parse().unwrap())
+        }));
+        assert!(
+            service
+                .session
+                .read()
+                .expect("target suggestion session")
+                .approved_target_suggestions
+                .is_empty()
+        );
     }
 
     #[tokio::test]
-    async fn create_work_requires_an_implemented_specification() {
+    async fn create_work_requires_an_exact_implemented_requirement_criterion() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
             .expect("workspace root")
             .join("fixtures/v1/valid-workbench-flow");
-        for status in ["planned", "deprecated"] {
+        for (anchor, status) in [
+            ("POL-FIXTURE-001#rule.behavior", None),
+            ("PHIL-FIXTURE-001#principle.bounded-evidence", None),
+            ("REQ-FIXTURE-001#criterion.missing", None),
+            ("REQ-FIXTURE-001", None),
+            ("REQ-FIXTURE-001#criterion.behavior", Some("planned")),
+            ("REQ-FIXTURE-001#criterion.behavior", Some("deprecated")),
+        ] {
             let temp = tempfile::tempdir().expect("fixture tempdir");
             copy_fixture_tree(&fixture, temp.path());
-            let requirement = temp.path().join("spec/requirement.yaml");
-            let source = fs::read_to_string(&requirement).expect("requirement fixture");
-            fs::write(
-                &requirement,
-                source.replacen("status: implemented", &format!("status: {status}"), 1),
-            )
-            .expect("updated requirement fixture");
+            if let Some(status) = status {
+                let requirement = temp.path().join("spec/requirement.yaml");
+                let source = fs::read_to_string(&requirement).expect("requirement fixture");
+                fs::write(
+                    &requirement,
+                    source.replacen("status: implemented", &format!("status: {status}"), 1),
+                )
+                .expect("updated requirement fixture");
+            }
             initialize_fixture_git(temp.path());
             let server = WorkbenchServer::new(temp.path().to_path_buf());
             let app = server.router();
@@ -6438,7 +6616,7 @@ mod tests {
                 &serde_json::json!({
                     "basis": basis,
                     "action": "create",
-                    "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                    "anchor": anchor,
                     "summary": "Must not start from an inactive specification"
                 }),
             )
@@ -6446,13 +6624,16 @@ mod tests {
             assert_eq!(
                 response.status(),
                 StatusCode::BAD_REQUEST,
-                "status={status}"
+                "anchor={anchor} status={status:?}"
             );
             let (_, _, projection) = projection_and_basis(&app).await;
-            assert!(projection["work"]["request"].is_null(), "status={status}");
+            assert!(
+                projection["work"]["request"].is_null(),
+                "anchor={anchor} status={status:?}"
+            );
             assert_eq!(
-                projection["journey"]["current_step"],
-                "select_specification"
+                projection["journey"]["current_step"], "select_specification",
+                "anchor={anchor} status={status:?}"
             );
         }
     }

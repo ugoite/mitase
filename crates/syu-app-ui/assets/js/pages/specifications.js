@@ -237,12 +237,16 @@ function renderTargetSuggestions(root, state) {
     split.textContent = set.split_recommendation.reason;
     card.append(split);
   }
+  const approvedIds = new Set(set.approved_ids || []);
   (set.suggestions || []).forEach(candidate => {
     const row = document.createElement('div');
     row.className = 'specification-row target-suggestion';
+    const approved = approvedIds.has(candidate.id);
+    if (approved) row.setAttribute('data-target-suggestion-approved', '');
     const selection = document.createElement('input');
     selection.type = 'checkbox';
-    selection.checked = state.targetSuggestionSelection.includes(candidate.id);
+    selection.checked = !approved && state.targetSuggestionSelection.includes(candidate.id);
+    selection.disabled = approved;
     selection.setAttribute('aria-label', `${t('items.suggestions.select')} ${candidate.ref}`);
     selection.addEventListener('change', () => {
       const values = new Set(state.targetSuggestionSelection);
@@ -256,6 +260,7 @@ function renderTargetSuggestions(root, state) {
     const meta = document.createElement('div');
     meta.className = 'meta-line';
     meta.append(status(candidate.confidence), status(candidate.role));
+    if (approved) meta.append(status(t('items.suggestions.approved')));
     const evidence = document.createElement('ul');
     evidence.className = 'compact-list';
     (candidate.evidence || []).forEach(value => {
@@ -291,9 +296,11 @@ function renderTargetSuggestions(root, state) {
         state.targetSuggestionSelection,
       );
       const approved = new Set(result.approved_ids || []);
+      const approvedIds = new Set(set.approved_ids || []);
+      approved.forEach(id => approvedIds.add(id));
       state.targetSuggestions = {
         ...set,
-        suggestions: (set.suggestions || []).filter(candidate => !approved.has(candidate.id)),
+        approved_ids: [...approvedIds],
         split_recommendation: result.split_recommendation,
       };
       state.targetSuggestionSelection = [];
@@ -660,7 +667,10 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
         const reviewSuggestions = button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
             const suggestions = await state.api.readTargetSuggestions(value.anchor);
             state.targetSuggestions = suggestions;
-            state.targetSuggestionSelection = suggestions.suggestions.map(candidate => candidate.id);
+            const approved = new Set(suggestions.approved_ids || []);
+            state.targetSuggestionSelection = suggestions.suggestions
+              .filter(candidate => !approved.has(candidate.id))
+              .map(candidate => candidate.id);
             state.specificationError = null;
         }), 'btn small');
         reviewSuggestions.setAttribute('data-review-target-suggestions', '');

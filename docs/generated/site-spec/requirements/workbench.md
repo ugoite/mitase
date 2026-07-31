@@ -177,7 +177,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
   - **criteria**:
     - **id**: reviewed-target-suggestions
       - **kind**: behavior
-      - **statement**: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates remain in Specifications without creating Work, and budget overflow recommends split work.
+      - **statement**: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates persist against exact criterion evidence and are consumed as WorkRequest targets only when criterion-level Create Work starts, and budget overflow recommends split work.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
   - **bindings**:
@@ -502,7 +502,7 @@ requirements:
     criteria:
       - id: reviewed-target-suggestions
         kind: behavior
-        statement: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates remain in Specifications without creating Work, and budget overflow recommends split work.
+        statement: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates persist against exact criterion evidence and are consumed as WorkRequest targets only when criterion-level Create Work starts, and budget overflow recommends split work.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
     bindings:
       - id: target-suggestion-check
