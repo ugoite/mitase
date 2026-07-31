@@ -27,9 +27,10 @@ use syu_planner::{
 use syu_project_model::{ChangeBaseline, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, CriterionKind,
-    ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy, Policy, Priority,
-    Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument, SpecId, TargetClaim,
+    ArtifactBinding, ArtifactTarget, BindingRole, BoundTargetRef, Contract, ContractKind,
+    Criterion, CriterionKind, ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy,
+    Policy, Priority, RepoPath, Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument,
+    SpecId, TargetClaim,
 };
 use syu_validation::{ChangeStatus, PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
@@ -601,6 +602,10 @@ pub enum EditPatch {
         /// human-selected anchor while it continues to target review.
         #[serde(default)]
         criterion_anchor: Option<String>,
+        /// An exact planned implementation target owned by the Feature. The
+        /// target remains advisory until a human approves its suggestion.
+        #[serde(default)]
+        target: Option<FeatureTargetDraft>,
     },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
@@ -633,6 +638,15 @@ pub struct NewCriterion {
     pub statement: String,
     #[serde(default)]
     pub governed_by: Vec<SpecAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureTargetDraft {
+    pub id: LocalId,
+    pub adapter: String,
+    pub path: String,
+    pub selector: Selector,
 }
 
 /// Typed edit payloads keep item-kind/schema semantics on the server. The
@@ -720,6 +734,8 @@ pub struct TargetSuggestionApprovalCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetSuggestionApprovalView {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<WorkRequest>,
     pub approved_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub split_recommendation: Option<SplitWorkRecommendation>,
@@ -1253,7 +1269,15 @@ fn discovery_term_matches(text: &str, term: &str) -> bool {
 
 fn discovery_query_matches(text: &str, query: &str) -> bool {
     if !query.is_ascii() {
-        return text.contains(query);
+        return text.to_lowercase().contains(&query.to_lowercase());
+    }
+    text.to_ascii_lowercase()
+        .contains(&query.to_ascii_lowercase())
+}
+
+fn discovery_query_exact_matches(text: &str, query: &str) -> bool {
+    if !query.is_ascii() {
+        return text.to_lowercase() == query.to_lowercase();
     }
     let text_tokens = ascii_tokens(text);
     let query_tokens = ascii_tokens(query);
@@ -1348,7 +1372,12 @@ async fn api_specification_candidates(
             } else {
                 for (anchor, kind, text) in &fields {
                     if discovery_query_matches(text, &query_text) {
-                        score += candidate_field_weight(kind);
+                        let exact = discovery_query_exact_matches(text, &query_text);
+                        score += if exact {
+                            candidate_field_weight(kind)
+                        } else {
+                            (candidate_field_weight(kind) / 2).max(1)
+                        };
                         matches.push(CandidateMatch {
                             anchor: anchor.clone(),
                             kind: kind.clone(),
@@ -1356,7 +1385,11 @@ async fn api_specification_candidates(
                         });
                         evidence.push(CandidateEvidence {
                             source: "lexical".into(),
-                            detail: format!("lexical {kind} match"),
+                            detail: if exact {
+                                format!("lexical {kind} match")
+                            } else {
+                                format!("lexical substring {kind} match")
+                            },
                         });
                     }
                 }
@@ -1704,6 +1737,7 @@ async fn api_target_suggestions_approve(
         }
     }
     Ok(Json(TargetSuggestionApprovalView {
+        request: None,
         approved_ids,
         split_recommendation: split_work_recommendation(&approved, workspace, index),
     }))
@@ -1780,11 +1814,17 @@ fn validate_feature_criterion_link(
 ) -> Result<()> {
     let EditPatch::CreateFeature {
         criterion_anchor: Some(anchor),
+        target,
         ..
     } = patch
     else {
         return Ok(());
     };
+    if target.is_none() {
+        anyhow::bail!(
+            "a Feature linked to a Requirement Criterion must declare its exact planned target"
+        );
+    }
     let parsed = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!("invalid feature criterion anchor: {error}"))?;
@@ -2191,17 +2231,53 @@ fn specification_patch_content(
             title,
             summary,
             status,
+            criterion_anchor,
+            target,
             ..
         } => {
             if collection_for_value(&value)? != "features" {
                 anyhow::bail!("candidate destination is not a features document");
             }
+            let bindings = target
+                .as_ref()
+                .map(|target| {
+                    let path = RepoPath::new(target.path.clone())
+                        .map_err(|error| anyhow::anyhow!("invalid Feature target path: {error}"))?;
+                    let claims = criterion_anchor
+                        .as_deref()
+                        .map(|anchor| {
+                            anchor
+                                .parse::<SpecAnchor>()
+                                .map(|criterion| vec![TargetClaim::Satisfies { criterion }])
+                                .map_err(|error| {
+                                    anyhow::anyhow!("invalid Feature target claim: {error}")
+                                })
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    Ok::<_, anyhow::Error>(vec![ArtifactBinding {
+                        id: "implementation".into(),
+                        role: BindingRole::Implementation,
+                        facet: "work".into(),
+                        responsibility: "Implement the planned Feature target.".into(),
+                        owns: vec![],
+                        targets: vec![ArtifactTarget {
+                            id: target.id.clone(),
+                            adapter: target.adapter.clone(),
+                            path,
+                            selector: target.selector.clone(),
+                            claims,
+                        }],
+                    }])
+                })
+                .transpose()?
+                .unwrap_or_default();
             let feature = syu_spec_model::Feature {
                 id: id.clone(),
                 title: title.clone(),
                 summary: summary.clone(),
                 status: status.unwrap_or(ItemStatus::Planned),
-                bindings: vec![],
+                bindings,
                 contracts: vec![],
             };
             specification_sequence(&mut value, "features")?.push(serde_yaml::to_value(feature)?);
@@ -7799,10 +7875,54 @@ mod tests {
                 serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                     .expect("embedded-token response");
             assert!(
-                embedded_token.is_empty(),
-                "{query} must not match a glossary term embedded in a larger word"
+                embedded_token.iter().all(|candidate| {
+                    candidate
+                        .evidence
+                        .iter()
+                        .all(|entry| entry.source != "semantic")
+                }),
+                "{query} must not produce semantic evidence from an embedded token"
             );
         }
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=behav&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let lexical: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("substring candidate response");
+        let lexical_candidate = lexical
+            .iter()
+            .find(|candidate| candidate.item.id == "REQ-FIXTURE-001")
+            .expect("substring query finds behavior");
+        assert!(
+            lexical_candidate
+                .evidence
+                .iter()
+                .any(|entry| { entry.source == "lexical" && entry.detail.contains("substring") })
+        );
+        assert!(
+            matching_discovery_concepts("test")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+        assert!(
+            !matching_discovery_concepts("contest")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+        assert!(
+            !matching_discovery_concepts("invalid")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(
@@ -7836,7 +7956,9 @@ mod tests {
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
 
         let response = app
             .clone()
@@ -8062,6 +8184,14 @@ mod tests {
                 summary: "Created through the same typed wizard.".into(),
                 status: None,
                 criterion_anchor: Some("REQ-FIXTURE-001#criterion.recovery".into()),
+                target: Some(FeatureTargetDraft {
+                    id: "implementation".into(),
+                    adapter: "rust".into(),
+                    path: "src/guided_feature.rs".into(),
+                    selector: Selector::Symbol {
+                        name: "guided_feature".into(),
+                    },
+                }),
             },
             preview_token: None,
         };
@@ -8093,6 +8223,64 @@ mod tests {
             fs::read_to_string(temp.path().join("spec/feature.yaml"))
                 .expect("created feature")
                 .contains("FEAT-FIXTURE-002")
+        );
+        let created_feature = fs::read_to_string(temp.path().join("spec/feature.yaml"))
+            .expect("created feature graph");
+        assert!(created_feature.contains("REQ-FIXTURE-001#criterion.recovery"));
+        assert!(created_feature.contains("guided_feature.rs"));
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let suggestions_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/specifications/REQ-FIXTURE-001%23criterion.recovery/target-suggestions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(suggestions_response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet = serde_json::from_slice(
+            &suggestions_response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes(),
+        )
+        .expect("feature target suggestions");
+        let planned_feature_target = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| candidate.reference.to_string().contains("FEAT-FIXTURE-002"))
+            .expect("persisted feature target suggestion");
+        assert_eq!(
+            planned_feature_target.transition,
+            syu_work_model::TargetTransition::Add
+        );
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        let approve = TargetSuggestionApprovalCommand {
+            basis,
+            suggestion_token: suggestions.suggestion_token,
+            suggestion_ids: vec![planned_feature_target.id.clone()],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/REQ-FIXTURE-001%23criterion.recovery/target-suggestions/approve",
+            &csrf,
+            &approve,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved feature target");
+        assert_eq!(
+            approval.request.as_ref().map(|request| request.operation),
+            Some(WorkOperation::Add)
         );
     }
 

@@ -136,6 +136,12 @@ pub fn suggest_targets(
             if directly_claims {
                 score += 100;
                 evidence.push("The target explicitly claims this criterion.".into());
+                if !current_target {
+                    evidence.push(
+                        "The target is declared in the specification but is not present in the current inventory; review it as an Add candidate."
+                            .into(),
+                    );
+                }
             }
             if planned_missing_target {
                 score += 20;

@@ -137,6 +137,11 @@ async function continueJourneyAfterAuthoring(state, patch) {
   state.journeyCandidateAnchor = criterionAnchor;
   state.journeyCandidates = await state.api.searchSpecificationCandidates(state.journeyQuery, 'requirement');
   state.journeyDiscoveryError = null;
+  if (patch.kind === 'create_feature' && !criterionAnchor) {
+    state.selectedSpecification = patch.id;
+    state.go('specifications');
+    return;
+  }
   if (criterionAnchor) {
     await reviewJourneyTargetSuggestions(state, criterionAnchor);
   } else {

@@ -169,6 +169,19 @@ function createAddCriterionPatch(editor, form) {
   };
 }
 
+function featureSelectorFromForm(form) {
+  const kind = formValue(form, 'target_selector_kind') || 'symbol';
+  const value = String(formValue(form, 'target_selector_value') || '').trim();
+  if (kind === 'file') return { kind: 'file' };
+  if (kind === 'operation') {
+    const [method, ...pathParts] = value.split(/\s+/);
+    return { kind, method: method || 'GET', path: pathParts.join(' ') };
+  }
+  return kind === 'symbol'
+    ? { kind, name: value }
+    : { kind, value };
+}
+
 function createWizardPatch(editor, form) {
   const base = {
     document: formValue(form, 'document'),
@@ -177,11 +190,18 @@ function createWizardPatch(editor, form) {
     status: 'planned',
   };
   if (editor.createKind === 'feature') {
+    const targetPath = String(formValue(form, 'target_path') || '').trim();
     return {
       kind: 'create_feature',
       ...base,
       summary: formValue(form, 'summary'),
       criterion_anchor: formValue(form, 'criterion_anchor') || null,
+      target: targetPath ? {
+        id: formValue(form, 'target_id') || 'implementation',
+        adapter: formValue(form, 'target_adapter') || 'rust',
+        path: targetPath,
+        selector: featureSelectorFromForm(form),
+      } : null,
     };
   }
   return {
@@ -410,9 +430,21 @@ export function renderEditor(root, state) {
         draftValue(editor, draft, 'criterion_anchor', criterionAnchors[0] || ''),
         'criterion_anchor',
         'select',
-        criterionAnchors,
-        true,
+        ['', ...criterionAnchors],
+        criterionAnchors.length > 0,
       ));
+      form.append(field(t('items.field.target_ref'), draftValue(editor, draft, 'target_id', 'implementation'), 'target_id'));
+      form.append(field(t('items.field.adapter'), draftValue(editor, draft, 'target_adapter', 'rust'), 'target_adapter'));
+      form.append(field(t('items.field.path'), draftValue(editor, draft, 'target_path'), 'target_path', 'text', [], criterionAnchors.length > 0));
+      form.append(field(
+        t('items.field.selector_kind'),
+        draftValue(editor, draft, 'target_selector_kind', 'symbol'),
+        'target_selector_kind',
+        'select',
+        ['file', 'symbol', 'operation', 'heading', 'json-pointer', 'marker'],
+        criterionAnchors.length > 0,
+      ));
+      form.append(field(t('items.field.selector_value'), draftValue(editor, draft, 'target_selector_value'), 'target_selector_value'));
     } else {
       form.append(field(t('items.field.description'), draftValue(editor, draft, 'description'), 'description', 'textarea'));
       form.append(field(t('items.field.priority'), draftValue(editor, draft, 'priority', 'medium'), 'priority', 'select', localizedOptions('items.priority', ['low', 'medium', 'high', 'critical'])));
