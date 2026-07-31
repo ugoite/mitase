@@ -56,8 +56,7 @@ function renderWorkspaceIdentity(projection) {
   const workspace = parts.at(-1) || 'Syu';
   const revision = String(snapshot.revision || '').slice(0, 8) || 'unknown';
   document.querySelectorAll('[data-workspace-name]').forEach(node => { node.textContent = workspace; });
-  document.querySelectorAll('[data-workspace-revision]').forEach(node => { node.textContent = `revision ${revision}`; });
-  document.querySelectorAll('[data-workspace-branch]').forEach(node => { node.textContent = `@ ${revision}`; });
+  document.querySelectorAll('[data-workspace-revision]').forEach(node => { node.textContent = `@${revision}`; });
 }
 
 function disableBusyButtons() {

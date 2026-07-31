@@ -41,6 +41,8 @@ fn rendered_workbench_uses_external_module_assets_and_specifications_route() {
     let html = WorkbenchView::new(&projection).render_html();
     assert!(html.contains("type=\"module\" src=\"/assets/js/main.js\""));
     assert!(!html.contains("/assets/projection.js"));
+    assert!(html.contains("class=\"workspace-icon\""));
+    assert!(!html.contains("data-workspace-branch"));
     assert!(html.contains("data-page=\"specifications\""));
     assert!(!html.contains("data-page=\"items\""));
     for token in [
