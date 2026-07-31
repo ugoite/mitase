@@ -18,7 +18,7 @@ philosophies:
         targets:
           - id: architecture
             adapter: markdown
-            path: docs/guide/v1-architecture.md
+            path: docs/understand/model/v1-architecture.md
             selector: { kind: heading, value: Syu v1 architecture }
             claims:
               - kind: documents

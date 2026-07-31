@@ -1,0 +1,7 @@
+{
+  "label": "Editor and integrations",
+  "position": 3,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "workflows/integrations/index" }
+}

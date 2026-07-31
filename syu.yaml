@@ -33,6 +33,12 @@ inventory:
             - Cargo.lock
             - Cargo.toml
             - README.md
+            - editors/vscode/README.md
+            - release-please-config.json
+            - docs
+            - scripts
+            - website/docusaurus.config.js
+            - website/sidebars.js
             - crates/syu-app-ui/assets/js/api.js
             - crates/syu-app-ui/assets/js/components/action.js
             - crates/syu-app-ui/assets/js/components/diagnostic.js
@@ -78,51 +84,51 @@ inventory:
             - crates/syu-workbench-server/src/lib.rs
             - crates/syu-workspace/Cargo.toml
             - crates/syu-workspace/src/lib.rs
-            - docs/generated/site-spec/index.md
-            - docs/generated/site-spec/features/capabilities/core.md
-            - docs/generated/site-spec/features/capabilities/delivery.md
-            - docs/generated/site-spec/features/capabilities/planning.md
-            - docs/generated/site-spec/features/planner.md
-            - docs/generated/site-spec/features/public-entrypoints/agent-delivery.md
-            - docs/generated/site-spec/features/public-entrypoints/code-diagnostics.md
-            - docs/generated/site-spec/features/public-entrypoints/inventory.md
-            - docs/generated/site-spec/features/public-entrypoints/spec-model.md
-            - docs/generated/site-spec/features/public-entrypoints/validation.md
-            - docs/generated/site-spec/features/public-entrypoints/work-planning.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-actions.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-components.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-navigation.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-pages.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-rendering.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-server.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-transport.md
-            - docs/generated/site-spec/features/public-entrypoints/workbench-validation.md
-            - docs/generated/site-spec/features/public-entrypoints/workspace-loading.md
-            - docs/generated/site-spec/features/public-entrypoints/workspace-resolution.md
-            - docs/generated/site-spec/features/workbench/completion-history.md
-            - docs/generated/site-spec/features/workbench/guided-journey.md
-            - docs/generated/site-spec/features/workbench/navigation.md
-            - docs/generated/site-spec/features/workbench/projection.md
-            - docs/generated/site-spec/features/workbench/quality-gates.md
-            - docs/generated/site-spec/features/workbench/scoped-agent.md
-            - docs/generated/site-spec/features/workbench/server.md
-            - docs/generated/site-spec/features/workbench/specification-editor.md
-            - docs/generated/site-spec/features/workbench/target-suggestions.md
-            - docs/generated/site-spec/features/workbench/verification.md
-            - docs/generated/site-spec/features/workbench/work-ui.md
-            - docs/generated/site-spec/philosophies/foundation.md
-            - docs/generated/site-spec/policies/delivery.md
-            - docs/generated/site-spec/requirements/capability-contracts.md
-            - docs/generated/site-spec/requirements/work.md
-            - docs/generated/site-spec/requirements/workbench.md
-            - docs/guide/command-card.md
-            - docs/guide/configuration.md
-            - docs/guide/examples-and-templates.md
-            - docs/guide/existing-repository.md
-            - docs/guide/migration.md
-            - docs/guide/spec-antipatterns.md
-            - docs/guide/vscode-extension.md
-            - docs/guide/workbench.md
+            - docs/reference/specification/index.md
+            - docs/reference/specification/capabilities/core.md
+            - docs/reference/specification/capabilities/delivery.md
+            - docs/reference/specification/capabilities/planning.md
+            - docs/reference/specification/capabilities/planner.md
+            - docs/reference/specification/contracts/agent-delivery.md
+            - docs/reference/specification/contracts/code-diagnostics.md
+            - docs/reference/specification/contracts/inventory.md
+            - docs/reference/specification/contracts/spec-model.md
+            - docs/reference/specification/contracts/validation.md
+            - docs/reference/specification/contracts/work-planning.md
+            - docs/reference/specification/contracts/workbench-actions.md
+            - docs/reference/specification/contracts/workbench-components.md
+            - docs/reference/specification/contracts/workbench-navigation.md
+            - docs/reference/specification/contracts/workbench-pages.md
+            - docs/reference/specification/contracts/workbench-rendering.md
+            - docs/reference/specification/contracts/workbench-server.md
+            - docs/reference/specification/contracts/workbench-transport.md
+            - docs/reference/specification/contracts/workbench-validation.md
+            - docs/reference/specification/contracts/workspace-loading.md
+            - docs/reference/specification/contracts/workspace-resolution.md
+            - docs/reference/specification/workbench/completion-history.md
+            - docs/reference/specification/workbench/guided-journey.md
+            - docs/reference/specification/workbench/navigation.md
+            - docs/reference/specification/workbench/projection.md
+            - docs/reference/specification/workbench/quality-gates.md
+            - docs/reference/specification/workbench/scoped-agent.md
+            - docs/reference/specification/workbench/server.md
+            - docs/reference/specification/workbench/specification-editor.md
+            - docs/reference/specification/workbench/target-suggestions.md
+            - docs/reference/specification/workbench/verification.md
+            - docs/reference/specification/workbench/work-ui.md
+            - docs/reference/specification/foundations/foundation.md
+            - docs/reference/specification/foundations/delivery.md
+            - docs/reference/specification/foundations/capability-contracts.md
+            - docs/reference/specification/foundations/work.md
+            - docs/reference/specification/foundations/workbench.md
+            - docs/workflows/work/command-card.md
+            - docs/workflows/repository/configuration.md
+            - docs/start-here/adopt/examples-and-templates.md
+            - docs/start-here/adopt/existing-repository.md
+            - docs/workflows/repository/migration.md
+            - docs/understand/quality/spec-antipatterns.md
+            - docs/workflows/integrations/vscode-extension.md
+            - docs/workflows/work/workbench.md
             - docs/syu/features/capabilities/core.yaml
             - docs/syu/features/capabilities/delivery.yaml
             - docs/syu/features/capabilities/planning.yaml

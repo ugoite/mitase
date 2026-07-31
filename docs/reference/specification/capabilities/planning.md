@@ -1,0 +1,502 @@
+---
+title: "Syu functional units / Planning"
+description: "Generated reference for docs/syu/features/capabilities/planning.yaml"
+---
+
+> Generated from `docs/syu/features/capabilities/planning.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- capabilities
+
+### Category
+
+- Syu functional units
+
+### Features
+
+- **id**: FEAT-PLANNER-001
+  - **title**: Canonical planning
+  - **summary**: Generate deterministic bounded execution slices from exact work seeds.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: planner
+      - **responsibility**: Generate deterministic bounded work slices.
+      - **targets**:
+        - **id**: canonical-plan
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: plan
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-001#criterion.exact-slice
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.build-profile-scope
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.coherent-cross-language
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.generated-source
+- **id**: FEAT-CONTEXT-001
+  - **title**: Context export
+  - **summary**: Export bounded specification and artifact context for a slice.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: context
+      - **responsibility**: Export the bounded context pack for a canonical slice.
+      - **targets**:
+        - **id**: context-export
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: export_context
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.context-export
+- **id**: FEAT-CONTRACT-001
+  - **title**: Contract closure
+  - **summary**: Close contract participants and guarantees over exact targets.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: contract
+      - **responsibility**: Represent exact contract participants and guarantees.
+      - **targets**:
+        - **id**: contract-model
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: Contract
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
+- **id**: FEAT-VERIFICATION-001
+  - **title**: Verification execution
+  - **summary**: Execute configured verification runners and produce canonical receipts.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: verification
+      - **responsibility**: Execute configured exact verification targets and receipts.
+      - **targets**:
+        - **id**: execute-verification
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: execute_verification
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.verification-execution
+- **id**: FEAT-PLAN-VALIDATION-001
+  - **title**: Plan validation
+  - **summary**: Validate a canonical work plan before execution.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: plan-validation
+      - **responsibility**: Replan and validate an execution plan before running commands.
+      - **targets**:
+        - **id**: canonical-plan-validation
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: canonical_plan_for_execution
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.plan-validation
+- **id**: FEAT-RESULT-VALIDATION-001
+  - **title**: Result validation
+  - **summary**: Validate verification receipts, post-state, and explicit completion evidence against a plan.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: result-validation
+      - **responsibility**: Validate canonical receipts and post-state closure.
+      - **targets**:
+        - **id**: receipt-validation
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: validate_verification_receipt
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.receipt-validation
+        - **id**: completion-evaluation
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: evaluate_completion
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-001#criterion.completion-evidence
+- **id**: FEAT-CLI-001
+  - **title**: CLI orchestration
+  - **summary**: Orchestrate workspace, work, readiness, and validation commands.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: cli
+      - **responsibility**: Orchestrate canonical validation and work commands.
+      - **targets**:
+        - **id**: cli-run
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: run
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
+- **id**: FEAT-LSP-001
+  - **title**: LSP
+  - **summary**: Serve canonical specification navigation and hover information.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: lsp
+      - **responsibility**: Serve canonical specification language-server state.
+      - **targets**:
+        - **id**: lsp-server
+          - **adapter**: rust
+          - **path**: src/lsp/mod.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: run_lsp_server
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.lsp-navigation
+- **id**: FEAT-DOCS-001
+  - **title**: Documentation generation
+  - **summary**: Generate a navigable documentation product from the canonical specification and its guides.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: documentation
+      - **responsibility**: Own the pre-v1 documentation tree as a product surface; replace obsolete information architecture outright without legacy routes or aliases.
+      - **owns**:
+        - **id**: retired-generated-delivery
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/delivery.md
+          - **selector**:
+            - **kind**: file
+        - **id**: retired-generated-public-entrypoints
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/public-entrypoints.md
+          - **selector**:
+            - **kind**: file
+        - **id**: retired-generated-work
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/work.md
+          - **selector**:
+            - **kind**: file
+        - **id**: retired-generated-workbench-features
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/workbench-features.md
+          - **selector**:
+            - **kind**: file
+        - **id**: legacy-guide-getting-started
+          - **adapter**: declared
+          - **path**: docs/guide/getting-started.md
+          - **selector**:
+            - **kind**: file
+        - **id**: legacy-generated-documentation-page
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/features/documentation/docs.md
+          - **selector**:
+            - **kind**: file
+        - **id**: legacy-generated-site-spec-index
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/index.md
+          - **selector**:
+            - **kind**: file
+        - **id**: documentation-tree
+          - **adapter**: declared
+          - **path**: docs
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs
+        - **id**: site-docs-generator
+          - **adapter**: declared
+          - **path**: scripts/generate-site-docs.py
+          - **selector**:
+            - **kind**: file
+        - **id**: site-docs-extras-generator
+          - **adapter**: declared
+          - **path**: scripts/generate-docs-site-extras.py
+          - **selector**:
+            - **kind**: file
+        - **id**: site-docs-freshness-check
+          - **adapter**: declared
+          - **path**: scripts/ci/check-generated-docs-freshness.sh
+          - **selector**:
+            - **kind**: file
+        - **id**: site-docs-coverage-check
+          - **adapter**: declared
+          - **path**: scripts/ci/coverage.sh
+          - **selector**:
+            - **kind**: file
+        - **id**: docs-site-configuration
+          - **adapter**: declared
+          - **path**: website/docusaurus.config.js
+          - **selector**:
+            - **kind**: file
+        - **id**: docs-site-sidebar
+          - **adapter**: declared
+          - **path**: website/sidebars.js
+          - **selector**:
+            - **kind**: file
+        - **id**: repository-readme
+          - **adapter**: declared
+          - **path**: README.md
+          - **selector**:
+            - **kind**: file
+        - **id**: vscode-readme
+          - **adapter**: declared
+          - **path**: editors/vscode/README.md
+          - **selector**:
+            - **kind**: file
+        - **id**: docs-site-homepage
+          - **adapter**: javascript
+          - **path**: website/src/pages/index.js
+          - **selector**:
+            - **kind**: module
+            - **name**: *
+        - **id**: release-please-configuration
+          - **adapter**: declared
+          - **path**: release-please-config.json
+          - **selector**:
+            - **kind**: file
+      - **targets**:
+        - **id**: generated-index
+          - **adapter**: declared
+          - **path**: docs/reference/specification/index.md
+          - **selector**:
+            - **kind**: file
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.docs-generation
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: capabilities
+category: Syu functional units
+features:
+  - id: FEAT-PLANNER-001
+    title: Canonical planning
+    summary: Generate deterministic bounded execution slices from exact work seeds.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: planner
+        responsibility: Generate deterministic bounded work slices.
+        targets:
+          - id: canonical-plan
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: plan }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-001#criterion.exact-slice
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.build-profile-scope
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.generated-source
+
+  - id: FEAT-CONTEXT-001
+    title: Context export
+    summary: Export bounded specification and artifact context for a slice.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: context
+        responsibility: Export the bounded context pack for a canonical slice.
+        targets:
+          - id: context-export
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: export_context }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.context-export
+
+  - id: FEAT-CONTRACT-001
+    title: Contract closure
+    summary: Close contract participants and guarantees over exact targets.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: contract
+        responsibility: Represent exact contract participants and guarantees.
+        targets:
+          - id: contract-model
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: Contract }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.contract-closure }]
+
+  - id: FEAT-VERIFICATION-001
+    title: Verification execution
+    summary: Execute configured verification runners and produce canonical receipts.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: verification
+        responsibility: Execute configured exact verification targets and receipts.
+        targets:
+          - id: execute-verification
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: execute_verification }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.verification-execution
+
+  - id: FEAT-PLAN-VALIDATION-001
+    title: Plan validation
+    summary: Validate a canonical work plan before execution.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: plan-validation
+        responsibility: Replan and validate an execution plan before running commands.
+        targets:
+          - id: canonical-plan-validation
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: canonical_plan_for_execution }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.plan-validation
+
+  - id: FEAT-RESULT-VALIDATION-001
+    title: Result validation
+    summary: Validate verification receipts, post-state, and explicit completion evidence against a plan.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: result-validation
+        responsibility: Validate canonical receipts and post-state closure.
+        targets:
+          - id: receipt-validation
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: validate_verification_receipt }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.receipt-validation
+          - id: completion-evaluation
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: evaluate_completion }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-001#criterion.completion-evidence
+
+  - id: FEAT-CLI-001
+    title: CLI orchestration
+    summary: Orchestrate workspace, work, readiness, and validation commands.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: cli
+        responsibility: Orchestrate canonical validation and work commands.
+        targets:
+          - id: cli-run
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: symbol, name: run }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
+
+  - id: FEAT-LSP-001
+    title: LSP
+    summary: Serve canonical specification navigation and hover information.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: lsp
+        responsibility: Serve canonical specification language-server state.
+        targets:
+          - id: lsp-server
+            adapter: rust
+            path: src/lsp/mod.rs
+            selector: { kind: symbol, name: run_lsp_server }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.lsp-navigation }]
+
+  - id: FEAT-DOCS-001
+    title: Documentation generation
+    summary: Generate a navigable documentation product from the canonical specification and its guides.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: documentation
+        responsibility: Own the pre-v1 documentation tree as a product surface; replace obsolete information architecture outright without legacy routes or aliases.
+        owns:
+          - { id: retired-generated-delivery, adapter: declared, path: docs/generated/site-spec/delivery.md, selector: { kind: file } }
+          - { id: retired-generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
+          - { id: retired-generated-work, adapter: declared, path: docs/generated/site-spec/work.md, selector: { kind: file } }
+          - { id: retired-generated-workbench-features, adapter: declared, path: docs/generated/site-spec/workbench-features.md, selector: { kind: file } }
+          - { id: legacy-guide-getting-started, adapter: declared, path: docs/guide/getting-started.md, selector: { kind: file } }
+          - { id: legacy-generated-documentation-page, adapter: declared, path: docs/generated/site-spec/features/documentation/docs.md, selector: { kind: file } }
+          - { id: legacy-generated-site-spec-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
+          - { id: documentation-tree, adapter: declared, path: docs, selector: { kind: path-prefix, value: docs } }
+          - { id: site-docs-generator, adapter: declared, path: scripts/generate-site-docs.py, selector: { kind: file } }
+          - { id: site-docs-extras-generator, adapter: declared, path: scripts/generate-docs-site-extras.py, selector: { kind: file } }
+          - { id: site-docs-freshness-check, adapter: declared, path: scripts/ci/check-generated-docs-freshness.sh, selector: { kind: file } }
+          - { id: site-docs-coverage-check, adapter: declared, path: scripts/ci/coverage.sh, selector: { kind: file } }
+          - { id: docs-site-configuration, adapter: declared, path: website/docusaurus.config.js, selector: { kind: file } }
+          - { id: docs-site-sidebar, adapter: declared, path: website/sidebars.js, selector: { kind: file } }
+          - { id: repository-readme, adapter: declared, path: README.md, selector: { kind: file } }
+          - { id: vscode-readme, adapter: declared, path: editors/vscode/README.md, selector: { kind: file } }
+          - { id: docs-site-homepage, adapter: javascript, path: website/src/pages/index.js, selector: { kind: module, name: "*" } }
+          - { id: release-please-configuration, adapter: declared, path: release-please-config.json, selector: { kind: file } }
+        targets:
+          - id: generated-index
+            adapter: declared
+            path: docs/reference/specification/index.md
+            selector: { kind: file }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.docs-generation }]
+```

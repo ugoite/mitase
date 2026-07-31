@@ -11,4 +11,4 @@ cargo run -- work export-context --plan plan.yaml --slice invalid-credentials-ba
 
 Only `syu/spec/v1`, `syu/config/v1`, `syu/work-request/v1`, and `syu/work-plan/v1` are accepted. YAML parsing is strict and unknown fields are errors.
 
-See [the v1 architecture](docs/guide/v1-architecture.md).
+See [the v1 architecture](docs/understand/model/v1-architecture.md).
