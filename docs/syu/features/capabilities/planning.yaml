@@ -170,6 +170,8 @@ features:
           - { id: retired-generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
           - { id: retired-generated-work, adapter: declared, path: docs/generated/site-spec/work.md, selector: { kind: file } }
           - { id: retired-generated-workbench-features, adapter: declared, path: docs/generated/site-spec/workbench-features.md, selector: { kind: file } }
+          - { id: legacy-guide-getting-started, adapter: declared, path: docs/guide/getting-started.md, selector: { kind: file } }
+          - { id: legacy-generated-documentation-page, adapter: declared, path: docs/generated/site-spec/features/documentation/docs.md, selector: { kind: file } }
           - { id: generated-feature-capabilities-core, adapter: declared, path: docs/generated/site-spec/features/capabilities/core.md, selector: { kind: file } }
           - { id: generated-feature-capabilities-delivery, adapter: declared, path: docs/generated/site-spec/features/capabilities/delivery.md, selector: { kind: file } }
           - { id: generated-feature-capabilities-planning, adapter: declared, path: docs/generated/site-spec/features/capabilities/planning.md, selector: { kind: file } }
