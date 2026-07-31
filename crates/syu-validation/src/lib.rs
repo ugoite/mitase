@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 pub use readiness::{
     ReadinessAxis, ReadinessAxisId, ReadinessReport, evaluate as evaluate_readiness, required_axes,
 };
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -188,7 +189,8 @@ pub fn phase_for_rule(rule: &str) -> ValidationPhase {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ChangeStatus {
     Added,
     Modified,

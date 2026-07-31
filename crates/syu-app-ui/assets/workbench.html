@@ -283,7 +283,7 @@
               </button>
             </div>
             <div class="toolbar settings-toolbar" data-settings-toolbar="workspace" hidden="">
-              <div class="select"><span>syu/config/v1 · syu.yaml</span><span data-settings-hash>source hash</span></div>
+              <div class="select"><span>syu/config/v1 · syu.yaml</span><span data-settings-hash data-i18n="settings.source_hash">source hash</span></div>
               <button class="btn compact" data-settings-preview aria-label="Preview configuration diff" data-i18n-aria="a11y.preview_config" data-i18n-title="a11y.preview_config" title="Preview configuration diff">
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M3 12s3-6 9-6 9 6 9 6-3 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg></span>
                 <span class="btn-label" data-i18n="common.preview">Preview</span>
@@ -314,8 +314,8 @@
             <div class="canvas white settings-panel" data-settings-page-panel="language">
               <div class="canvas-head"><div><h2 data-i18n="settings.language">Language</h2><p data-i18n="settings.language.description">Choose the language used by navigation, controls, help text, empty states, and accessibility labels.</p></div><div class="actions"><span class="chip green-chip" data-i18n="settings.applies_now">Applies immediately</span></div></div>
               <div class="form">
-                <div class="field"><label for="ui-language" data-i18n="settings.interface_language">Interface language</label><select class="native-select" id="ui-language" data-language-select data-focus-id="ui-language"><option value="en">English</option><option value="ja">日本語</option></select></div>
-                <div class="field"><label for="format-locale" data-i18n="settings.format_locale">Number and date format</label><select class="native-select" id="format-locale"><option data-i18n="settings.follow_interface">Follow interface language</option><option>English (United States)</option><option>日本語 (日本)</option></select></div>
+                <div class="field"><label for="ui-language" data-i18n="settings.interface_language">Interface language</label><select class="native-select" id="ui-language" data-language-select data-focus-id="ui-language"><option value="en" data-i18n="settings.language.en">English</option><option value="ja" data-i18n="settings.language.ja">日本語</option></select></div>
+                <div class="field"><label for="format-locale" data-i18n="settings.format_locale">Number and date format</label><select class="native-select" id="format-locale"><option data-i18n="settings.follow_interface">Follow interface language</option><option data-i18n="settings.format.en_us">English (United States)</option><option data-i18n="settings.format.ja_jp">日本語 (日本)</option></select></div>
                 <div class="toggle-row"><span data-i18n="settings.follow_os">Follow operating system language</span><span class="toggle off" data-preference="follow-os" aria-label="Follow operating system language" data-i18n-aria="settings.follow_os"></span></div>
               </div>
               <div class="notice" data-i18n="settings.language.notice">Technical identifiers, file paths, schema names, enum values, and user-authored specification text are never machine-translated.</div>
@@ -365,7 +365,7 @@
             <div class="canvas white settings-panel" data-settings-page-panel="validation" hidden>
               <div class="canvas-head"><div><h2 data-i18n="settings.validation">Validation</h2><p data-i18n="settings.validation.description">Rules, presets, and changed-file behavior used by canonical validation.</p></div></div>
               <div class="form two-column">
-                <div class="field"><label data-i18n="settings.preset">Preset</label><select class="native-select" data-config-preset><option value="agent-ready">agent-ready</option><option value="strict">strict</option><option value="standard">standard</option></select></div>
+                <div class="field"><label data-i18n="settings.preset">Preset</label><select class="native-select" data-config-preset><option value="agent-ready" data-i18n="settings.preset.agent_ready">agent-ready</option><option value="strict" data-i18n="settings.preset.strict">strict</option><option value="standard" data-i18n="settings.preset.standard">standard</option></select></div>
                 <div class="field">
                   <label data-i18n="settings.baseline_strategy">Baseline strategy</label>
                   <select class="native-select" data-config-baseline-strategy>
