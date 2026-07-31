@@ -39,11 +39,6 @@ function renderFlow(root, steps) {
   root.append(flow);
 }
 
-function selectedBranchChange(branch, state) {
-  const changed = branch?.changed || [];
-  return changed.find(item => item.path === state.selectedScopePath) || changed[0] || null;
-}
-
 function renderPlanRail(rail, work, state) {
   const slices = work?.plan?.slices || [];
   slices.forEach((slice, index) => {
@@ -253,7 +248,6 @@ async function loadBranch(state, range = '') {
   if (scopeResult.status === 'fulfilled') {
     state.projection.scope = scopeResult.value;
     state.scopeRange = scopeResult.value?.branch?.range || range;
-    state.selectedScopePath = scopeResult.value?.branch?.changed?.[0]?.path || null;
   } else {
     state.scopeError = scopeResult.reason?.message || String(scopeResult.reason);
   }
@@ -318,25 +312,6 @@ export function initScope(state) {
     state.scopeDiff = null;
     if (state.selectedScopeMode === 'branch') loadBranch(state, range?.value || state.scopeRange);
     else loadDiff(state);
-  });
-  document.querySelector('[data-scope-create-work]')?.addEventListener('click', () => {
-    const branch = state.projection.scope?.branch;
-    const selected = selectedBranchChange(branch, state);
-    const anchor = selected?.anchors?.[0];
-    if (!anchor) {
-      state.scopeError = t('scope.branch.no_anchor');
-      state.render();
-      return;
-    }
-    state.runAction(
-      () => state.api.runJourneyAction(state.projection, {
-        action: 'create',
-        anchor,
-        summary: t('scope.branch.work_summary').replace('{path}', selected.path),
-      }),
-      () => state.go('work'),
-      t('common.plan'),
-    );
   });
   syncMode(state.selectedScopeMode);
 }

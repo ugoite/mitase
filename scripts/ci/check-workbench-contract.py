@@ -88,6 +88,7 @@ for module in (
     assert module in (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text(), module
 MAIN_JS = (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text()
 WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
+SCOPE_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/scope.js").read_text()
 API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
 I18N_MODULE = (ROOT / "crates/syu-app-ui/assets/js/i18n.js").read_text()
@@ -101,7 +102,31 @@ assert "function disableBusyButtons()" in MAIN_JS
 assert "runJourneyAction" in API_JS
 assert "readScopeDiff" in API_JS
 assert "journey-advanced" in WORK_JS
-assert "journeyQuery" in WORK_JS
+assert "work-start" in WORK_JS
+assert "select_specification" in WORK_JS
+assert "journey.start." not in WORK_JS
+assert "current_step === 'describe'" not in WORK_JS
+assert "journey-intake" not in WORK_JS
+assert "journey-card" not in WORK_JS
+assert "data-scope-create-work" not in HTML
+assert "scope-create-work" not in SCOPE_JS
+assert "action: 'create'" not in SCOPE_JS
+assert "data-create-work" in SPECIFICATIONS_JS
+assert "data-target-suggestion-approved" in SPECIFICATIONS_JS
+assert "approved_ids" in SPECIFICATIONS_JS
+assert "data-review-target-suggestions" in SPECIFICATIONS_JS
+assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
+assert "result.request" not in SPECIFICATIONS_JS
+assert "work.request.summary_from_anchor" in SPECIFICATIONS_JS
+assert SPECIFICATIONS_JS.count("state.go('work')") == 1
+assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 1
+assert "WORK-SUGGESTION-" not in SERVER_RS
+assert "approved_target_suggestions" in SERVER_RS
+assert "validate_create_work_criterion" in SERVER_RS
+assert '"/api/work/request"' not in SERVER_RS
+assert "WorkRequestCommand" not in SERVER_RS
+assert "draft_request = Some(request.clone())" not in SERVER_RS
+assert "Describe the change you want to make" not in SERVER_RS
 assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS

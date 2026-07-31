@@ -79,6 +79,7 @@ pathlib.Path(sys.argv[2]).write_text(
 pathlib.Path(sys.argv[3]).write_text(
     """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
     """let receipt=null;\n"""
+    """let approvedTargetSuggestions=[];\n"""
     """const csrfToken='visual-csrf-token';\n"""
     """window.__SYU_FLOW__=[];\n"""
     """const body=(value,status=200,headers={})=>Promise.resolve({ok:status>=200&&status<300,status,headers:{get:name=>headers[name.toLowerCase()]||null},text:async()=>value==null?'':typeof value==='string'?value:JSON.stringify(value)});\n"""
@@ -95,6 +96,8 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
     """  if(path.includes('/api/scope/branch')) return body({branch:{range:'origin/main...HEAD',state:'ready',reason:null,changed:[{path:'src/lib.rs',status:'modified',owners:['FEAT-VISUAL'],anchors:['REQ-VISUAL#criterion.behavior'],artifact_identities:['rust:src/lib.rs']}],owned:[],unowned:[],affected_items:[]}});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
+    """  if(path.includes('/target-suggestions/approve')) { approvedTargetSuggestions.push('target-visual'); return body({approved_ids:['target-visual'],split_recommendation:null}); }\n"""
+    """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-VISUAL#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'target-visual',rank:1,ref:'rust:src/lib.rs#behavior',confidence:'high',role:'implementation',evidence:['visual smoke evidence'],evidence_fingerprint:'visual-evidence'}],approved_ids:approvedTargetSuggestions,split_recommendation:null});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
     """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
@@ -157,6 +160,15 @@ setTimeout(()=>{
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
 
   (async()=>{
+  const workStart=document.querySelector('[data-page="work"] .work-start');
+  if(!workStart) failures.push('Work did not show the specification-first start state');
+  if(document.querySelector('[data-page="work"] .journey-intake, [data-page="work"] .journey-card')) failures.push('Work still shows the legacy behavior search');
+  const locale=document.documentElement.dataset.locale;
+  if(locale==='ja') {
+    if(workStart?.querySelector('h2')?.textContent!=='作業を作る仕様を選ぶ') failures.push('Japanese initial Work title is not localized');
+    if(workStart?.querySelector('.journey-action-label')?.textContent!=='仕様一覧を開く') failures.push('Japanese initial Work CTA is not localized');
+    if(!workStart?.querySelector('p')?.textContent.includes('仕様一覧から対象を選びます')) failures.push('Japanese initial Work explanation is not localized');
+  }
   window.SyuPreferences.translate('ja');
   await wait(40);
   if(document.documentElement.lang!=='ja') failures.push('Japanese locale did not apply');
@@ -164,15 +176,27 @@ setTimeout(()=>{
   window.SyuPreferences.translate('en');
   await wait(40);
   if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
-  const query=document.querySelector('[data-page="work"] .journey-intake textarea');
-  query.value='s';
-  await click('[data-page="work"] .journey-intake .journey-action');
-  if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
-  if(!document.querySelector('[data-work-specification] [data-journey-preview]')) failures.push('search did not render the specification preview');
-  const previewColumns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
-  if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
-  await click('[data-work-specification] .actions .primary');
-  if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
+  await click('[data-page="work"] .work-start .journey-action');
+  if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
+  const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
+  const selectedCriterion=document.querySelector('[data-page="specifications"] .specification-criterion');
+  const selectedCriterionAnchor=selectedCriterion?.querySelector('strong')?.textContent;
+  const selectedCriterionStatement=selectedCriterion?.querySelector('p')?.textContent;
+  await click('[data-page="specifications"] [data-review-target-suggestions]');
+  if(!document.querySelector('[data-page="specifications"] .target-suggestions')) failures.push('Target Suggestions did not open');
+  await click('[data-page="specifications"] [data-approve-target-suggestions]');
+  if(!visible('[data-page="specifications"]')) failures.push('Target Suggestions approval left Specifications');
+  if(projection.work.request) failures.push('Target Suggestions approval created a WorkRequest');
+  await click('[data-page="specifications"] .target-suggestions .btn.ghost');
+  await click('[data-page="specifications"] [data-review-target-suggestions]');
+  if(!document.querySelector('[data-page="specifications"] [data-target-suggestion-approved]')) failures.push('accepted target suggestion state was not restored');
+  await click('[data-page="specifications"] .target-suggestions .btn.ghost');
+  await click('[data-page="specifications"] [data-create-work]');
+  if(!visible('[data-page="work"]')) failures.push('specification Create Work did not open Work');
+  if(document.querySelector('[data-page="work"] .journey-header h2')?.textContent.startsWith('Change ')) failures.push('Create Work title still has the English Change prefix');
+  if(document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent!==selectedSpecificationTitle) failures.push('related specification does not match the selected specification');
+  if(document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent!==selectedCriterionStatement) failures.push('related criterion does not match the selected criterion');
+  if(document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor!==selectedCriterionAnchor) failures.push('Work seed anchor does not match the selected criterion');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
@@ -234,6 +258,7 @@ setTimeout(()=>{
   if(!document.querySelector('[data-work-slice-detail] .journey-scope-target')) failures.push('Work slices tab did not render targets');
 
   await click('[data-route="scope"]');
+  if(document.querySelector('[data-page="scope"] [data-scope-create-work]')) failures.push('Scope still exposes a Work creation entrypoint');
   await click('[data-scope-mode-button="branch"]');
   if(!document.querySelector('[data-scope-detail] .diff-file')) failures.push('Branch scope did not render diff');
   await click('[data-page="scope"] [data-tab="intent"]');
@@ -263,11 +288,13 @@ setTimeout(()=>{
 HTML
 
 for viewport in 1280,900 760,900; do
-  behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=6000 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
-  if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
-    echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
-    exit 1
-  fi
+  for locale in en ja; do
+    behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=6000 --dump-dom "file://$tmp/workbench.html?page=work&lang=$locale&theme=light")"
+    if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
+      echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
+      exit 1
+    fi
+  done
 done
 
 read -r server_port debug_port < <(python3 - <<'PY'
@@ -417,7 +444,7 @@ async function main() {
   });
   const load = new Promise(resolve => devtools.on('Page.loadEventFired', resolve));
   const pageUrl = new URL(targetUrl);
-  pageUrl.searchParams.set('lang', 'en');
+  pageUrl.searchParams.set('lang', 'ja');
   await devtools.send('Page.navigate', { url: pageUrl.toString() });
   await load;
 
@@ -456,16 +483,35 @@ async function main() {
           await new Promise(resolve => setTimeout(resolve, 100));
         };
 
+        const initialWorkStart = await wait('initial Work start', () => document.querySelector('[data-page="work"] .work-start'));
+        const initialWorkTitle = initialWorkStart?.querySelector('h2')?.textContent || '';
+        const initialWorkCta = initialWorkStart?.querySelector('.journey-action-label')?.textContent || '';
+        const initialWorkExplanation = initialWorkStart?.querySelector('p')?.textContent || '';
         await click('specifications', '[data-route="specifications"]');
-        await click('create', '[data-page="specifications"] .specification-criterion button');
+        const selectedSpecificationTitle = document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent || '';
+        const selectedCriterion = document.querySelector('[data-page="specifications"] .specification-criterion');
+        const selectedCriterionAnchor = selectedCriterion?.querySelector('strong')?.textContent || '';
+        const selectedCriterionStatement = selectedCriterion?.querySelector('p')?.textContent || '';
+        await click('create', '[data-page="specifications"] [data-create-work]');
         await click('prepare', '[data-page="work"] .journey-action.primary');
-        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === 'Approve');
+        const approvalStep = document.documentElement.lang === 'ja' ? '承認' : 'Approve';
+        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === approvalStep);
 
         return {
           flow,
           currentStep: document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') || '',
+          initialWorkTitle,
+          initialWorkCta,
+          initialWorkExplanation,
           specificationTitleCount: document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length,
           specificationCriterionCount: document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length,
+          selectedSpecificationTitle,
+          selectedCriterionAnchor,
+          selectedCriterionStatement,
+          workSpecificationTitle: document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent || '',
+          workSpecificationCriterion: document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent || '',
+          workSpecificationAnchor: document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor || '',
+          workTitle: document.querySelector('[data-page="work"] .journey-header h2')?.textContent || '',
           workPaneSpecificationCount: document.querySelectorAll('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]').length,
           layoutColumns: getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length,
           errors: window.__SYU_BROWSER_ERRORS__ || [],
@@ -481,9 +527,16 @@ async function main() {
   }
   if (
     result.errors.length
-    || result.currentStep !== 'Approve'
+    || result.currentStep !== '承認'
+    || result.initialWorkTitle !== '作業を作る仕様を選ぶ'
+    || result.initialWorkCta !== '仕様一覧を開く'
+    || !result.initialWorkExplanation.includes('仕様一覧から対象を選びます')
     || result.specificationTitleCount !== 1
     || result.specificationCriterionCount !== 1
+    || result.workSpecificationTitle !== result.selectedSpecificationTitle
+    || result.workSpecificationCriterion !== result.selectedCriterionStatement
+    || result.workSpecificationAnchor !== result.selectedCriterionAnchor
+    || result.workTitle.startsWith('Change ')
     || result.workPaneSpecificationCount !== 0
     || result.layoutColumns !== 2
   ) {

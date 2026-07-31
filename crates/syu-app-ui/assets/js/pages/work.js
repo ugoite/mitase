@@ -36,14 +36,6 @@ function actionText(action, kind) {
   return t(`journey.${namespace}.${action?.action || 'unknown'}`);
 }
 
-function statusText(status) {
-  const normalized = String(status || 'planned').toLowerCase();
-  const statuses = new Set(['planned', 'implemented', 'deprecated', 'ready', 'blocked', 'needs-review', 'unknown']);
-  if (statuses.has(normalized)) return localizeEnum('status', normalized);
-  const kinds = new Set(['philosophy', 'policy', 'requirement', 'feature']);
-  return kinds.has(normalized) ? localizeEnum('items', normalized) : status;
-}
-
 async function loadWorkDiff(state, force = false) {
   if (state.scopeDiffLoading || (state.scopeDiff && !force)) return;
   state.scopeDiffLoading = true;
@@ -65,23 +57,6 @@ function openWorkDiff(state, force = false) {
   loadWorkDiff(state, force);
 }
 
-function matchingCandidates(state) {
-  const query = String(state.journeyQuery || '').trim().toLowerCase();
-  const items = state.projection.specifications?.specifications || [];
-  const candidates = [];
-  items.forEach(item => {
-    if (item.kind !== 'requirement' || item.status !== 'implemented' || !item.criteria?.length) return;
-    item.criteria.forEach(criterion => {
-      const searchable = [item.title, item.summary, item.description, criterion.statement]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      if (!query || searchable.includes(query)) candidates.push({ item, criterion });
-    });
-  });
-  return candidates.slice(0, 6);
-}
-
 function run(state, action) {
   return state.runAction(
     () => state.api.runJourneyAction(state.projection, action),
@@ -97,53 +72,25 @@ function run(state, action) {
   );
 }
 
-function renderStart(root, state) {
-  root.append(element('p', 'journey-copy', t('journey.intro')));
-  const form = element('form', 'journey-intake');
-  const label = element('label', null, t('journey.prompt'));
-  const input = document.createElement('textarea');
-  input.rows = 3;
-  input.value = state.journeyQuery || '';
-  input.placeholder = t('journey.placeholder');
-  label.append(input);
-  form.append(label);
-  form.append(button(t('journey.find'), event => {
-    event.preventDefault();
-    state.journeyQuery = input.value;
-    state.render();
-  }, true, '⌕'));
-  form.addEventListener('submit', event => event.preventDefault());
-  root.append(form);
-  if (!String(state.journeyQuery || '').trim()) return;
-  const candidates = matchingCandidates(state);
-  root.append(element('h2', 'journey-section-title', t('journey.choose')));
-  if (!candidates.length) {
-    state.journeyCandidateAnchor = null;
-    root.append(element('p', 'empty-state', t('journey.no_match')));
+function dispatchJourneyAction(state, action) {
+  if (action.action === 'choose_specification') {
+    state.go('specifications');
     return;
   }
-  if (!candidates.some(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)) {
-    state.journeyCandidateAnchor = candidates[0].criterion.anchor;
-  }
-  candidates.forEach(({ item, criterion }) => {
-    const selected = criterion.anchor === state.journeyCandidateAnchor;
-    const card = element('article', `journey-card${selected ? ' selected' : ''}`);
-    card.append(element('h3', null, localizeSpecificationTitle(item)));
-    const meta = element('div', 'meta-line');
-    meta.append(element(
-      'span',
-      `chip status-component status-${item.status || 'planned'}`,
-      statusText(item.status || item.kind),
-    ));
-    if (criterion.kind) meta.append(element('span', 'chip', localizeEnum('criterion.kind', criterion.kind)));
-    card.append(meta);
-    card.append(button(t('journey.preview'), () => {
-      state.journeyCandidateAnchor = criterion.anchor;
-      state.journeyContextTab = 'specification';
-      state.render();
-    }, selected, '◈'));
-    root.append(card);
-  });
+  run(state, { action: action.action });
+}
+
+function renderStart(root, journey, state) {
+  const action = journey?.primary_action;
+  if (!action) return;
+  const empty = element('section', 'context-empty-state work-start');
+  empty.append(
+    element('span', 'context-empty-icon', '◈'),
+    element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
+    element('p', null, actionText(action, 'explanation')),
+    button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
+  );
+  root.append(empty);
 }
 
 function progressIcon(status) {
@@ -484,13 +431,7 @@ function renderScopeDetail(root, journey, state, work) {
 function renderSpecification(root, workspace, journey, state, work) {
   const specification = journey?.related_specification;
   const specificationAnchor = journey?.advanced?.specification_anchor || null;
-  const candidates = journey?.current_step === 'describe' && String(state.journeyQuery || '').trim()
-    ? matchingCandidates(state)
-    : [];
-  const candidate = candidates.find(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)
-    || candidates[0]
-    || null;
-  const contextAnchor = specificationAnchor || candidate?.criterion.anchor || null;
+  const contextAnchor = specificationAnchor;
   if (state.journeySpecificationAnchor !== specificationAnchor) {
     state.journeySpecificationAnchor = specificationAnchor;
     state.journeySpecificationExpanded = false;
@@ -499,12 +440,7 @@ function renderSpecification(root, workspace, journey, state, work) {
     state.journeyContextHistory = [];
     resetContextSource(state);
   }
-  if (!specification && candidate && state.journeyContextItemId !== candidate.item.id) {
-    state.journeyContextItemId = candidate.item.id;
-    state.journeyContextHistory = [];
-    resetContextSource(state);
-  }
-  const hasContext = Boolean(specification || candidate);
+  const hasContext = Boolean(specification);
   const hasScope = Boolean(journey?.approved_scope && work?.plan?.slices?.length);
   const hasWorkInsights = Boolean(work?.request);
   if (!hasScope && state.journeyContextTab === 'scope') state.journeyContextTab = 'specification';
@@ -517,7 +453,6 @@ function renderSpecification(root, workspace, journey, state, work) {
   const header = element('header', 'journey-specification-head');
   const heading = element('div');
   heading.append(element('p', 'eyebrow', t('journey.context')));
-  if (candidate && !specification) heading.append(element('h2', null, t('journey.specification.preview')));
   header.append(heading);
   const toggle = element('button', 'journey-specification-toggle');
   toggle.type = 'button';
@@ -537,6 +472,7 @@ function renderSpecification(root, workspace, journey, state, work) {
 
   const body = element('div', `journey-specification-body${state.journeySpecificationExpanded ? ' expanded' : ''}`);
   body.setAttribute('data-journey-panel', state.journeyContextTab);
+  if (contextAnchor) body.setAttribute('data-work-specification-anchor', contextAnchor);
   if (state.journeyContextTab === 'readiness') {
     renderReadinessPage(state.projection.readiness, body, { state, compact: true });
     root.append(body);
@@ -598,17 +534,8 @@ function renderSpecification(root, workspace, journey, state, work) {
   }
   renderSpecificationDetail(body, state, selected, {
     readOnly: true,
-    hideHeading: Boolean(candidate && !specification),
+    hideHeading: false,
     highlightedAnchor: contextAnchor,
-    action: candidate && !specification ? {
-      label: t('journey.select'),
-      icon: '✓',
-      onClick: () => run(state, {
-        action: 'create',
-        anchor: candidate.criterion.anchor,
-        summary: state.journeyQuery,
-      }),
-    } : null,
     onItem: itemId => {
       if (itemId === state.journeyContextItemId) return;
       state.journeyContextHistory.push(state.journeyContextItemId);
@@ -623,12 +550,8 @@ function renderSpecification(root, workspace, journey, state, work) {
       state.render();
     },
   });
-  if (candidate && !specification) {
-    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
-  } else {
-    body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
-    body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
-  }
+  body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
+  body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
   root.append(body);
 }
 
@@ -720,7 +643,7 @@ export function renderWork(work, state) {
   if (!root) return;
   const content = element('div', 'journey');
   if (state.error) content.append(element('p', 'status-message status-error', state.error.message));
-  if (!journey || journey.current_step === 'describe') renderStart(content, state);
+  if (!journey || journey.current_step === 'select_specification') renderStart(content, journey, state);
   else renderJourney(content, journey, state, work);
   replace(root, content);
   if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state, work);
