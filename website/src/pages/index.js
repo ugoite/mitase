@@ -7,22 +7,22 @@ const layers = [
   {
     title: 'Philosophy',
     description: 'Capture the stable ideals and trade-offs that should survive implementation changes.',
-    to: '/docs/guide/concepts#philosophy'
+    to: '/docs/understand/model/concepts#philosophy'
   },
   {
     title: 'Policy',
     description: 'Turn those ideals into repository-wide rules that contributors can follow consistently.',
-    to: '/docs/guide/concepts#policy'
+    to: '/docs/understand/model/concepts#policy'
   },
   {
     title: 'Requirements',
     description: 'Define concrete obligations that can be verified through tests and repository evidence.',
-    to: '/docs/guide/concepts#requirements'
+    to: '/docs/understand/model/concepts#requirements'
   },
   {
     title: 'Features',
     description: 'Connect implemented behavior back to requirements and forward to the code that proves it exists.',
-    to: '/docs/guide/concepts#features'
+    to: '/docs/understand/model/concepts#features'
   }
 ];
 
@@ -31,55 +31,55 @@ const chooseYourPath = [
     title: 'Getting started',
     description:
       'Choose this if you are new to syu, want the guided first-run path, and do not already know the four-layer model.',
-    to: '/docs/guide/getting-started'
+    to: '/docs/start-here/first-run/getting-started'
   },
   {
     title: 'Quick start',
     description:
       'Stay on the shortest site-local install-to-validate path when you want the fastest route into `syu validate workspace .`.',
-    to: '/docs/guide/getting-started#quick-start-commands'
+    to: '/docs/start-here/first-run/getting-started#quick-start-commands'
   },
   {
     title: 'Tutorial',
     description:
       'Follow the longer repository story when you want more narrative context than a first-run checklist.',
-    to: '/docs/guide/tutorial'
+    to: '/docs/start-here/first-run/tutorial'
   },
   {
     title: 'Editor-first path',
     description:
       'Open the VS Code extension guide when you want diagnostics, spec navigation, and trace lookups before you memorize the CLI.',
-    to: '/docs/guide/vscode-extension'
+    to: '/docs/workflows/integrations/vscode-extension'
   },
   {
     title: 'Migration / upgrade',
     description:
       'Use the release-specific upgrade steps when you already have a syu workspace and need to move between alpha versions safely.',
-    to: '/docs/guide/migration'
+    to: '/docs/workflows/repository/migration'
   },
   {
     title: 'Visual explorer',
     description:
       'Compare template-backed and example-backed paths when you want to see the main shapes before choosing one.',
-    to: '/docs/guide/examples-and-templates'
+    to: '/docs/start-here/adopt/examples-and-templates'
   },
   {
     title: 'Reviewer workflow',
     description:
       'Open the review loop guide when a pull request already exists and you need one concrete path through spec IDs, traced code, and git history.',
-    to: '/docs/guide/reviewer-workflow'
+    to: '/docs/contribute/reviewing/reviewer-workflow'
   },
   {
     title: 'Trace adapter matrix',
     description:
       'Check which built-in languages support symbol validation only versus richer `doc_contains` and strict coverage checks.',
-    to: '/docs/guide/trace-adapter-support'
+    to: '/docs/workflows/integrations/trace-adapter-support'
   },
   {
     title: 'Troubleshooting',
     description:
       'Jump straight to validation and traceability repair guidance when an existing workspace is already blocked.',
-    to: '/docs/guide/troubleshooting'
+    to: '/docs/workflows/repository/troubleshooting'
   }
 ];
 
@@ -87,72 +87,72 @@ const journeys = [
   {
     title: 'Decide repository fit',
     description: 'Read the repository-fit guide before installing when you are still deciding whether syu is the right adoption step.',
-    to: '/docs/guide/getting-started#is-syu-right-for-this-repository'
+    to: '/docs/start-here/first-run/getting-started#is-syu-right-for-this-repository'
   },
   {
     title: 'Avoid spec anti-patterns',
     description:
       'Learn the common bad-but-valid four-layer shapes before a green spec turns into a painful rewrite.',
-    to: '/docs/guide/spec-antipatterns'
+    to: '/docs/understand/quality/spec-antipatterns'
   },
   {
     title: 'Adopt an existing repository',
     description:
       'Phase syu into a repo that already has code, tests, and docs instead of translating the greenfield flow by hand.',
-    to: '/docs/guide/existing-repository'
+    to: '/docs/start-here/adopt/existing-repository'
   },
   {
     title: 'Start a workspace',
     description: 'Scaffold a project, fill in the layered spec, and run validate without guessing the layout.',
-    to: '/docs/guide/getting-started'
+    to: '/docs/start-here/first-run/getting-started'
   },
   {
     title: 'Keep a command card open',
     description:
       'Use one compact docs-site page for the core install, init, validate, browse, and reviewer commands.',
-    to: '/docs/guide/command-card'
+    to: '/docs/workflows/work/command-card'
   },
   {
     title: 'Follow a full tutorial',
     description: 'Build a realistic four-layer example from scratch when you want the full repository story.',
-    to: '/docs/guide/tutorial'
+    to: '/docs/start-here/first-run/tutorial'
   },
   {
     title: 'Troubleshoot a broken workspace',
     description: 'Jump straight to the common validation, traceability, and workflow failure patterns.',
-    to: '/docs/guide/troubleshooting'
+    to: '/docs/workflows/repository/troubleshooting'
   },
   {
     title: 'Upgrade an existing workspace',
     description:
       'Jump straight to the migration guide when a new alpha release changes config, validation defaults, or guide structure.',
-    to: '/docs/guide/migration'
+    to: '/docs/workflows/repository/migration'
   },
   {
     title: 'Stay in VS Code',
     description: 'Run the checked-in editor extension so diagnostics and trace links stay inside your editor.',
-    to: '/docs/guide/vscode-extension'
+    to: '/docs/workflows/integrations/vscode-extension'
   },
   {
     title: 'Tune validation',
     description: 'Review config switches for autofix, planned work, orphan checks, and runtime behavior.',
-    to: '/docs/guide/configuration'
+    to: '/docs/workflows/repository/configuration'
   },
   {
     title: 'Understand trace adapter support',
     description:
       'Compare which languages support rich inspection, which stay pattern-based, and where `doc_contains` is still unavailable.',
-    to: '/docs/guide/trace-adapter-support'
+    to: '/docs/workflows/integrations/trace-adapter-support'
   },
   {
     title: 'Inspect the self-hosted spec',
     description: 'Browse the generated reference pages that explain how this repository uses syu on itself.',
-    to: '/docs/generated/site-spec'
+    to: '/docs/reference/specification'
   },
   {
     title: 'Check the latest report',
     description: 'Read the checked-in validation report to see the repository state without running the CLI first.',
-    to: '/docs/generated/syu-report'
+    to: '/docs/reference/status/validation-report'
   }
 ];
 
@@ -172,21 +172,21 @@ export default function Home() {
             validation output in one place.
           </p>
           <div className="siteHeroActions">
-            <Link className="button button--secondary button--lg" to="/docs/guide/getting-started">
+            <Link className="button button--secondary button--lg" to="/docs/start-here/first-run/getting-started">
               Get started
             </Link>
-            <Link className="button button--secondary button--lg" to="/docs/guide/tutorial">
+            <Link className="button button--secondary button--lg" to="/docs/start-here/first-run/tutorial">
               Follow the tutorial
             </Link>
             <Link
               className="button button--outline button--lg siteHeroOutlineButton"
-              to="/docs/guide/reviewer-workflow"
+              to="/docs/contribute/reviewing/reviewer-workflow"
             >
               Reviewer workflow
             </Link>
             <Link
               className="button button--outline button--lg siteHeroOutlineButton"
-              to="/docs/guide/troubleshooting"
+              to="/docs/workflows/repository/troubleshooting"
             >
               Troubleshoot a workspace
             </Link>
@@ -275,7 +275,7 @@ export default function Home() {
                 content source.
               </p>
             </div>
-            <Link className="button button--primary button--lg" to="/docs/guide/configuration">
+            <Link className="button button--primary button--lg" to="/docs/workflows/repository/configuration">
               Review configuration
             </Link>
           </div>

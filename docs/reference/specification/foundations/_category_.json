@@ -1,0 +1,10 @@
+{
+  "label": "Foundations and rules",
+  "position": 1,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "reference/specification/foundations/index"
+  }
+}

@@ -158,13 +158,13 @@ features:
 
   - id: FEAT-DOCS-001
     title: Documentation generation
-    summary: Keep checked-in guides and generated specification documentation aligned.
+    summary: Generate a navigable documentation product from the canonical specification and its guides.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: documentation
-        responsibility: Maintain the generated specification documentation entrypoint and explicitly retire obsolete generated paths.
+        responsibility: Own the pre-v1 documentation tree as a product surface; replace obsolete information architecture outright without legacy routes or aliases.
         owns:
           - { id: retired-generated-delivery, adapter: declared, path: docs/generated/site-spec/delivery.md, selector: { kind: file } }
           - { id: retired-generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
@@ -173,56 +173,64 @@ features:
           - { id: legacy-guide-getting-started, adapter: declared, path: docs/guide/getting-started.md, selector: { kind: file } }
           - { id: legacy-generated-documentation-page, adapter: declared, path: docs/generated/site-spec/features/documentation/docs.md, selector: { kind: file } }
           - { id: legacy-generated-site-spec-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
-          - { id: generated-feature-capabilities-core, adapter: declared, path: docs/generated/site-spec/features/capabilities/core.md, selector: { kind: file } }
-          - { id: generated-feature-capabilities-delivery, adapter: declared, path: docs/generated/site-spec/features/capabilities/delivery.md, selector: { kind: file } }
-          - { id: generated-feature-capabilities-planning, adapter: declared, path: docs/generated/site-spec/features/capabilities/planning.md, selector: { kind: file } }
-          - { id: generated-feature-planner, adapter: declared, path: docs/generated/site-spec/features/planner.md, selector: { kind: file } }
-          - { id: generated-entrypoint-agent-delivery, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/agent-delivery.md, selector: { kind: file } }
-          - { id: generated-entrypoint-code-diagnostics, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/code-diagnostics.md, selector: { kind: file } }
-          - { id: generated-entrypoint-inventory, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/inventory.md, selector: { kind: file } }
-          - { id: generated-entrypoint-spec-model, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/spec-model.md, selector: { kind: file } }
-          - { id: generated-entrypoint-validation, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/validation.md, selector: { kind: file } }
-          - { id: generated-entrypoint-work-planning, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/work-planning.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-actions, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-actions.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-components, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-components.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-navigation, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-navigation.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-pages, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-pages.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-rendering, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-rendering.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-server, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-server.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-transport, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-transport.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workbench-validation, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workbench-validation.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workspace-loading, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workspace-loading.md, selector: { kind: file } }
-          - { id: generated-entrypoint-workspace-resolution, adapter: declared, path: docs/generated/site-spec/features/public-entrypoints/workspace-resolution.md, selector: { kind: file } }
-          - { id: generated-workbench-completion-history, adapter: declared, path: docs/generated/site-spec/features/workbench/completion-history.md, selector: { kind: file } }
-          - { id: generated-workbench-guided-journey, adapter: declared, path: docs/generated/site-spec/features/workbench/guided-journey.md, selector: { kind: file } }
-          - { id: generated-workbench-navigation, adapter: declared, path: docs/generated/site-spec/features/workbench/navigation.md, selector: { kind: file } }
-          - { id: generated-workbench-projection, adapter: declared, path: docs/generated/site-spec/features/workbench/projection.md, selector: { kind: file } }
-          - { id: generated-workbench-quality-gates, adapter: declared, path: docs/generated/site-spec/features/workbench/quality-gates.md, selector: { kind: file } }
-          - { id: generated-workbench-scoped-agent, adapter: declared, path: docs/generated/site-spec/features/workbench/scoped-agent.md, selector: { kind: file } }
-          - { id: generated-workbench-server, adapter: declared, path: docs/generated/site-spec/features/workbench/server.md, selector: { kind: file } }
-          - { id: generated-workbench-specification-editor, adapter: declared, path: docs/generated/site-spec/features/workbench/specification-editor.md, selector: { kind: file } }
-          - { id: generated-workbench-target-suggestions, adapter: declared, path: docs/generated/site-spec/features/workbench/target-suggestions.md, selector: { kind: file } }
-          - { id: generated-workbench-verification, adapter: declared, path: docs/generated/site-spec/features/workbench/verification.md, selector: { kind: file } }
-          - { id: generated-workbench-work-ui, adapter: declared, path: docs/generated/site-spec/features/workbench/work-ui.md, selector: { kind: file } }
-          - { id: generated-philosophy-foundation, adapter: declared, path: docs/generated/site-spec/philosophies/foundation.md, selector: { kind: file } }
-          - { id: generated-policy-delivery, adapter: declared, path: docs/generated/site-spec/policies/delivery.md, selector: { kind: file } }
-          - { id: generated-requirement-capability-contracts, adapter: declared, path: docs/generated/site-spec/requirements/capability-contracts.md, selector: { kind: file } }
-          - { id: generated-requirement-work, adapter: declared, path: docs/generated/site-spec/requirements/work.md, selector: { kind: file } }
-          - { id: generated-requirement-workbench, adapter: declared, path: docs/generated/site-spec/requirements/workbench.md, selector: { kind: file } }
-          - { id: guide-command-card, adapter: declared, path: docs/guide/command-card.md, selector: { kind: file } }
-          - { id: guide-configuration, adapter: declared, path: docs/guide/configuration.md, selector: { kind: file } }
-          - { id: guide-examples, adapter: declared, path: docs/guide/examples-and-templates.md, selector: { kind: file } }
-          - { id: guide-existing-repository, adapter: declared, path: docs/guide/existing-repository.md, selector: { kind: file } }
-          - { id: guide-migration, adapter: declared, path: docs/guide/migration.md, selector: { kind: file } }
-          - { id: guide-antipatterns, adapter: declared, path: docs/guide/spec-antipatterns.md, selector: { kind: file } }
-          - { id: guide-vscode, adapter: declared, path: docs/guide/vscode-extension.md, selector: { kind: file } }
-          - { id: guide-workbench, adapter: declared, path: docs/guide/workbench.md, selector: { kind: file } }
+          - { id: generated-feature-capabilities-core, adapter: declared, path: docs/reference/specification/capabilities/core.md, selector: { kind: file } }
+          - { id: generated-feature-capabilities-delivery, adapter: declared, path: docs/reference/specification/capabilities/delivery.md, selector: { kind: file } }
+          - { id: generated-feature-capabilities-planning, adapter: declared, path: docs/reference/specification/capabilities/planning.md, selector: { kind: file } }
+          - { id: generated-feature-planner, adapter: declared, path: docs/reference/specification/capabilities/planner.md, selector: { kind: file } }
+          - { id: generated-entrypoint-agent-delivery, adapter: declared, path: docs/reference/specification/contracts/agent-delivery.md, selector: { kind: file } }
+          - { id: generated-entrypoint-code-diagnostics, adapter: declared, path: docs/reference/specification/contracts/code-diagnostics.md, selector: { kind: file } }
+          - { id: generated-entrypoint-inventory, adapter: declared, path: docs/reference/specification/contracts/inventory.md, selector: { kind: file } }
+          - { id: generated-entrypoint-spec-model, adapter: declared, path: docs/reference/specification/contracts/spec-model.md, selector: { kind: file } }
+          - { id: generated-entrypoint-validation, adapter: declared, path: docs/reference/specification/contracts/validation.md, selector: { kind: file } }
+          - { id: generated-entrypoint-work-planning, adapter: declared, path: docs/reference/specification/contracts/work-planning.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-actions, adapter: declared, path: docs/reference/specification/contracts/workbench-actions.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-components, adapter: declared, path: docs/reference/specification/contracts/workbench-components.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-navigation, adapter: declared, path: docs/reference/specification/contracts/workbench-navigation.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-pages, adapter: declared, path: docs/reference/specification/contracts/workbench-pages.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-rendering, adapter: declared, path: docs/reference/specification/contracts/workbench-rendering.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-server, adapter: declared, path: docs/reference/specification/contracts/workbench-server.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-transport, adapter: declared, path: docs/reference/specification/contracts/workbench-transport.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workbench-validation, adapter: declared, path: docs/reference/specification/contracts/workbench-validation.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workspace-loading, adapter: declared, path: docs/reference/specification/contracts/workspace-loading.md, selector: { kind: file } }
+          - { id: generated-entrypoint-workspace-resolution, adapter: declared, path: docs/reference/specification/contracts/workspace-resolution.md, selector: { kind: file } }
+          - { id: generated-workbench-completion-history, adapter: declared, path: docs/reference/specification/workbench/completion-history.md, selector: { kind: file } }
+          - { id: generated-workbench-guided-journey, adapter: declared, path: docs/reference/specification/workbench/guided-journey.md, selector: { kind: file } }
+          - { id: generated-workbench-navigation, adapter: declared, path: docs/reference/specification/workbench/navigation.md, selector: { kind: file } }
+          - { id: generated-workbench-projection, adapter: declared, path: docs/reference/specification/workbench/projection.md, selector: { kind: file } }
+          - { id: generated-workbench-quality-gates, adapter: declared, path: docs/reference/specification/workbench/quality-gates.md, selector: { kind: file } }
+          - { id: generated-workbench-scoped-agent, adapter: declared, path: docs/reference/specification/workbench/scoped-agent.md, selector: { kind: file } }
+          - { id: generated-workbench-server, adapter: declared, path: docs/reference/specification/workbench/server.md, selector: { kind: file } }
+          - { id: generated-workbench-specification-editor, adapter: declared, path: docs/reference/specification/workbench/specification-editor.md, selector: { kind: file } }
+          - { id: generated-workbench-target-suggestions, adapter: declared, path: docs/reference/specification/workbench/target-suggestions.md, selector: { kind: file } }
+          - { id: generated-workbench-verification, adapter: declared, path: docs/reference/specification/workbench/verification.md, selector: { kind: file } }
+          - { id: generated-workbench-work-ui, adapter: declared, path: docs/reference/specification/workbench/work-ui.md, selector: { kind: file } }
+          - { id: generated-philosophy-foundation, adapter: declared, path: docs/reference/specification/foundations/foundation.md, selector: { kind: file } }
+          - { id: generated-policy-delivery, adapter: declared, path: docs/reference/specification/foundations/delivery.md, selector: { kind: file } }
+          - { id: generated-requirement-capability-contracts, adapter: declared, path: docs/reference/specification/foundations/capability-contracts.md, selector: { kind: file } }
+          - { id: generated-requirement-work, adapter: declared, path: docs/reference/specification/foundations/work.md, selector: { kind: file } }
+          - { id: generated-requirement-workbench, adapter: declared, path: docs/reference/specification/foundations/workbench.md, selector: { kind: file } }
+          - { id: guide-command-card, adapter: declared, path: docs/workflows/work/command-card.md, selector: { kind: file } }
+          - { id: guide-configuration, adapter: declared, path: docs/workflows/repository/configuration.md, selector: { kind: file } }
+          - { id: guide-examples, adapter: declared, path: docs/start-here/adopt/examples-and-templates.md, selector: { kind: file } }
+          - { id: guide-existing-repository, adapter: declared, path: docs/start-here/adopt/existing-repository.md, selector: { kind: file } }
+          - { id: guide-migration, adapter: declared, path: docs/workflows/repository/migration.md, selector: { kind: file } }
+          - { id: guide-antipatterns, adapter: declared, path: docs/understand/quality/spec-antipatterns.md, selector: { kind: file } }
+          - { id: guide-vscode, adapter: declared, path: docs/workflows/integrations/vscode-extension.md, selector: { kind: file } }
+          - { id: guide-workbench, adapter: declared, path: docs/workflows/work/workbench.md, selector: { kind: file } }
+          - { id: documentation-tree, adapter: declared, path: docs, selector: { kind: path-prefix, value: docs } }
+          - { id: site-docs-generator, adapter: declared, path: scripts/generate-site-docs.py, selector: { kind: file } }
+          - { id: site-docs-extras-generator, adapter: declared, path: scripts/generate-docs-site-extras.py, selector: { kind: file } }
+          - { id: site-docs-freshness-check, adapter: declared, path: scripts/ci/check-generated-docs-freshness.sh, selector: { kind: file } }
+          - { id: site-docs-coverage-check, adapter: declared, path: scripts/ci/coverage.sh, selector: { kind: file } }
+          - { id: docs-site-configuration, adapter: declared, path: website/docusaurus.config.js, selector: { kind: file } }
+          - { id: docs-site-sidebar, adapter: declared, path: website/sidebars.js, selector: { kind: file } }
           - { id: repository-readme, adapter: declared, path: README.md, selector: { kind: file } }
           - { id: vscode-readme, adapter: declared, path: editors/vscode/README.md, selector: { kind: file } }
           - { id: docs-site-homepage, adapter: javascript, path: website/src/pages/index.js, selector: { kind: module, name: "*" } }
+          - { id: release-please-configuration, adapter: declared, path: release-please-config.json, selector: { kind: file } }
         targets:
           - id: generated-index
             adapter: declared
-            path: docs/generated/site-spec/index.md
+            path: docs/reference/specification/index.md
             selector: { kind: file }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.docs-generation }]

@@ -1,0 +1,7 @@
+{
+  "label": "Adopt an existing repository",
+  "position": 2,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "start-here/adopt/index" }
+}

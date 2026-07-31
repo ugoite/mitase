@@ -16,19 +16,22 @@ write_sha256() {
     return 0
   fi
 
-  echo "sha256sum or shasum is required to snapshot docs/generated" >&2
+  echo "sha256sum or shasum is required to snapshot generated reference docs" >&2
   exit 1
 }
 
 snapshot_generated_docs() {
-  if [[ ! -d docs/generated ]]; then
+  if [[ ! -d docs/reference/specification ]]; then
     printf '__missing__\n'
     return 0
   fi
 
   while IFS= read -r path; do
     write_sha256 "$path"
-  done < <(find docs/generated -type f | LC_ALL=C sort)
+  done < <(find docs/reference/specification -type f | LC_ALL=C sort)
+  if [[ -f docs/reference/status/validation-report.md ]]; then
+    write_sha256 docs/reference/status/validation-report.md
+  fi
 }
 
 check_generated_docs_freshness() {
@@ -48,11 +51,11 @@ check_generated_docs_freshness() {
   snapshot_generated_docs >"$after_snapshot"
 
   if ! cmp -s "$before_snapshot" "$after_snapshot"; then
-    echo "Checked-in generated documentation under docs/generated is stale." >&2
-    echo "Commit the regenerated docs/generated output after reviewing the diff." >&2
-    git --no-pager status --short -- docs/generated >&2
-    git --no-pager diff --stat -- docs/generated >&2
-    git --no-pager diff -- docs/generated >&2
+    echo "Checked-in generated documentation under docs/reference is stale." >&2
+    echo "Commit the regenerated docs/reference output after reviewing the diff." >&2
+    git --no-pager status --short -- docs/reference >&2
+    git --no-pager diff --stat -- docs/reference >&2
+    git --no-pager diff -- docs/reference >&2
     exit 1
   fi
 }

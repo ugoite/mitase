@@ -1,0 +1,7 @@
+{
+  "label": "The specification model",
+  "position": 1,
+  "collapsible": true,
+  "collapsed": false,
+  "link": { "type": "doc", "id": "understand/model/index" }
+}

@@ -1,0 +1,7 @@
+{
+  "label": "Quality and anti-patterns",
+  "position": 2,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "understand/quality/index" }
+}
