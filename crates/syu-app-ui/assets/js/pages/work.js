@@ -321,7 +321,7 @@ function renderStart(root, journey, state) {
     meta.append(element(
       'span',
       `chip status-component status-${item.status || 'planned'}`,
-      statusText(item.status || item.kind),
+      localizeEnum('status', item.status || item.kind),
     ));
     card.append(meta);
     card.append(element('p', 'path', criterion.anchor));
