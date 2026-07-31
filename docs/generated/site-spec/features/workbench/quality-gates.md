@@ -149,6 +149,11 @@ description: "Generated reference for docs/syu/features/workbench/quality-gates.
           - **path**: scripts/ci/check-workbench-contract.py
           - **selector**:
             - **kind**: file
+        - **id**: workbench-i18n-runtime-check
+          - **adapter**: declared
+          - **path**: scripts/ci/check-workbench-i18n.mjs
+          - **selector**:
+            - **kind**: file
         - **id**: workbench-visual-check
           - **adapter**: declared
           - **path**: scripts/ci/workbench-visual.sh
@@ -291,6 +296,10 @@ features:
     - id: workbench-contract-check
       adapter: declared
       path: scripts/ci/check-workbench-contract.py
+      selector: { kind: file }
+    - id: workbench-i18n-runtime-check
+      adapter: declared
+      path: scripts/ci/check-workbench-i18n.mjs
       selector: { kind: file }
     - id: workbench-visual-check
       adapter: declared
