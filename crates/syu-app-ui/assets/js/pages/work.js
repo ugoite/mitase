@@ -84,6 +84,7 @@ async function discoverJourneyCandidates(state, query) {
   const sequence = (state.journeyDiscoverySequence || 0) + 1;
   state.journeyDiscoverySequence = sequence;
   state.journeyQuery = query;
+  state.journeyIntentSearch = true;
   state.journeyCandidateAnchor = null;
   state.journeyCandidates = null;
   state.journeyDiscoveryError = null;
@@ -262,13 +263,17 @@ function dispatchJourneyAction(state, action) {
 
 function renderStart(root, journey, state) {
   const action = journey?.primary_action;
-  if (journey?.current_step === 'select_specification' && action) {
+  if (journey?.current_step === 'select_specification' && action && !state.journeyIntentSearch) {
     const empty = element('section', 'context-empty-state work-start');
     empty.append(
       element('span', 'context-empty-icon', '◈'),
       element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
       element('p', null, actionText(action, 'explanation')),
       button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
+      button(t('journey.action.describe_intent'), () => {
+        state.journeyIntentSearch = true;
+        state.render();
+      }, false, '⌕'),
     );
     root.append(empty);
     return;
@@ -688,7 +693,7 @@ function renderSpecification(root, workspace, journey, state, work) {
     ? (state.projection.specifications?.specifications || [])
       .find(item => item.id === state.journeyCreatedSpecification)
     : null;
-  const candidates = journey?.current_step === 'describe' && String(state.journeyQuery || '').trim()
+  const candidates = String(state.journeyQuery || '').trim()
     ? journeyAnchorCandidates(state)
     : [];
   const candidate = candidates.find(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)

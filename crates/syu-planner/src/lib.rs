@@ -320,17 +320,6 @@ pub fn suggest_targets(
     })
 }
 
-fn claim_anchor(claim: &TargetClaim) -> Option<&SpecAnchor> {
-    match claim {
-        TargetClaim::Satisfies { criterion } | TargetClaim::Verifies { criterion, .. } => {
-            Some(criterion)
-        }
-        TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => Some(anchor),
-        TargetClaim::Enforces { rule } => Some(rule),
-        TargetClaim::GeneratedFrom { .. } | TargetClaim::Exposes { .. } => None,
-    }
-}
-
 fn transition_for_role(role: BindingRole) -> TargetTransition {
     match role {
         BindingRole::Verification => TargetTransition::RunOnly,

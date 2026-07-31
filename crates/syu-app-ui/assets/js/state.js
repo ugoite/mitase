@@ -15,6 +15,7 @@ export function createState(projection) {
     targetSuggestions: null,
     targetSuggestionSelection: [],
     journeyQuery: '',
+    journeyIntentSearch: false,
     journeyCandidates: null,
     journeyDiscoveryLoading: false,
     journeyDiscoveryError: null,

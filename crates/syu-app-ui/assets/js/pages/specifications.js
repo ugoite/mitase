@@ -399,7 +399,7 @@ export function renderTargetSuggestions(root, state) {
     ));
     const features = (state.projection.specifications?.specifications || [])
       .filter(item => item.kind === 'feature'
-        && item.status !== 'deprecated'
+        && item.status === 'planned'
         && (item.bindings || []).some(binding => binding.role === 'implementation'));
     if (features.length) {
       const select = document.createElement('select');
@@ -440,10 +440,7 @@ export function renderTargetSuggestions(root, state) {
       t('items.suggestions.recovery.edit_criterion'),
       '✎',
       () => {
-        state.targetSuggestions = null;
-        state.targetSuggestionSelection = [];
-        state.selectedSpecification = set.criterion.toString().split('#')[0];
-        state.render();
+        openTargetRecoveryCriterionEditor(state, set.criterion);
       },
     ));
     card.append(recovery);
@@ -478,10 +475,38 @@ async function continueTargetRecovery(state, patch) {
   state.specificationPreview = null;
   state.projection = await state.api.readProjection();
   state.specificationError = null;
-  if (patch.criterion_anchor) {
-    state.targetSuggestions = await state.api.readTargetSuggestions(patch.criterion_anchor);
+  const criterionAnchor = patch.criterion_anchor || patch.anchor;
+  if (criterionAnchor) {
+    state.journeyCandidateAnchor = criterionAnchor;
+    state.targetSuggestions = await state.api.readTargetSuggestions(criterionAnchor);
     state.targetSuggestionSelection = [];
   }
+}
+
+function openTargetRecoveryCriterionEditor(state, criterionAnchor) {
+  const itemId = String(criterionAnchor).split('#')[0];
+  const item = (state.projection.specifications?.specifications || [])
+    .find(candidate => candidate.id === itemId && candidate.kind === 'requirement');
+  const criterion = item?.criteria?.find(candidate => candidate.anchor === criterionAnchor);
+  if (!criterion) {
+    state.specificationError = t('items.suggestions.recovery.criterion_missing');
+    state.render();
+    return;
+  }
+  state.specificationEditor = {
+    mode: 'edit',
+    anchor: criterionAnchor,
+    anchorKind: 'criterion',
+    statement: criterion.statement,
+    kind: criterion.kind,
+    appliesTo: (criterion.applies_to || []).join(', '),
+    journey: true,
+    afterApply: continueTargetRecovery,
+  };
+  state.specificationPreview = null;
+  state.targetSuggestions = null;
+  state.targetSuggestionSelection = [];
+  state.render();
 }
 
 export function renderEditor(root, state) {

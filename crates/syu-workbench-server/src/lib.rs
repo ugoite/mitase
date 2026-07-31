@@ -1746,9 +1746,12 @@ async fn api_target_suggestions_approve(
         }
     }
     Ok(Json(TargetSuggestionApprovalView {
+        // Approval records the exact advisory evidence.  WorkRequest creation
+        // remains an explicit journey action so a suggestion can never become
+        // executable scope merely by being displayed or approved.
         request: None,
         approved_ids,
-        split_recommendation: split_work_recommendation(&approved, workspace, index),
+        split_recommendation: None,
     }))
 }
 
@@ -1888,6 +1891,11 @@ fn validate_feature_criterion_link(
             })?;
         if feature.kind != "feature" || feature.status.as_deref() == Some("deprecated") {
             anyhow::bail!("Feature target addition must reference an active Feature");
+        }
+        if feature.status.as_deref() != Some("planned") {
+            anyhow::bail!(
+                "Feature target addition requires a planned Feature; implemented Features need an explicit lifecycle transition"
+            );
         }
     }
     Ok(())
@@ -8302,6 +8310,34 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
+        let implemented_feature_target = StructuredEditCommand {
+            basis,
+            patch: EditPatch::AddFeatureTarget {
+                document: "spec/feature.yaml".into(),
+                feature_id: "FEAT-FIXTURE-001".into(),
+                criterion_anchor: "REQ-FIXTURE-001#criterion.recovery".into(),
+                target: FeatureTargetDraft {
+                    id: "planned-recovery".into(),
+                    adapter: "rust".into(),
+                    path: "src/guided_feature.rs".into(),
+                    selector: Selector::Symbol {
+                        name: "guided_recovery".into(),
+                    },
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &implemented_feature_target,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
         let feature = StructuredEditCommand {
             basis,
             patch: EditPatch::CreateFeature {
@@ -8405,10 +8441,12 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("approved feature target");
+        assert!(approval.request.is_none());
         assert_eq!(
-            approval.request.as_ref().map(|request| request.operation),
-            Some(WorkOperation::Add)
+            approval.approved_ids,
+            vec![planned_feature_target.id.clone()]
         );
+        assert!(service.session.read().unwrap().draft_request.is_none());
     }
 
     #[test]
@@ -8610,11 +8648,6 @@ mod tests {
         );
         let (basis, csrf, _) = projection_and_basis(&app).await;
 
-        let approved_ids = refreshed
-            .suggestions
-            .iter()
-            .map(|candidate| candidate.id.clone())
-            .collect::<Vec<_>>();
         let response = json_mutation(
             &app,
             Method::POST,

@@ -91,15 +91,16 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
-    """  if(path.includes('/api/specifications/candidates')) { const item=projection.specifications.specifications.find(value=>value.kind==='requirement'&&value.criteria?.length); return body(item?[{item,matches:[{anchor:item.criteria[0].anchor,kind:'criterion',text:item.criteria[0].statement}],relevance:['lexical criterion match'],score:1,evidence:[{source:'lexical',detail:'lexical criterion match'},{source:'graph',detail:'one exact criterion anchor'}],stable_anchors:item.criteria.map(criterion=>criterion.anchor)}]:[]); }\n"""
-    """  if(path.includes('/target-suggestions/approve')) { const anchor=payload.criterion; const item=projection.specifications.specifications.find(value=>value.criteria?.some(criterion=>criterion.anchor===anchor)); const criterion=item?.criteria.find(value=>value.anchor===anchor); projection.work.request={summary:'Make the behavior clear',operation:'modify',seed_count:0,requested_target_count:1}; projection.journey={title:'Make the behavior clear',current_step:'review',steps:[],primary_action:{action:'prepare',confirmation_required:false},recovery_action:{action:'cancel',confirmation_required:true},approved_scope:null,evidence:{status:'draft',blockers:[]},related_specification:item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null,advanced:{request_id:'work-visual',plan_id:null,selected_slice_id:null,attempt_id:null,specification_anchor:criterion?.anchor||null}}; return body({request:{summary:'Make the behavior clear'}}); }\n"""
-    """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-FIXTURE-001#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'visual-target',rank:1,ref:'FEAT-FIXTURE-001#binding.implementation/target.behavior',confidence:'high',role:'implementation',evidence:['exact fixture target']}]});\n"""
+    """  if(path.includes('/api/specifications/candidates/preview')) return body({preview_token:'visual-authoring-token',impact:{readiness_before:{status:'blocked'},readiness_after:{status:'blocked'},changed_anchors:[],affected_ownership:[],implementation_targets:[],verification_targets:[],target_suggestions:[],work:{reason:'review exact criterion'}}});\n"""
+    """  if(path.includes('/api/specifications/candidates/apply')) { const patch=payload.patch||{}; if(patch.kind==='add_criterion') { const item=projection.specifications.specifications.find(value=>value.id===patch.requirement_id); const criterion={anchor:`${patch.requirement_id}#criterion.${patch.criterion.id}`,kind:patch.criterion.kind,statement:patch.criterion.statement,governed_by:patch.criterion.governed_by||[]}; item.criteria=[...(item.criteria||[]),criterion]; item.anchors=[...(item.anchors||[]),criterion.anchor]; } return body({}); }\n"""
+    """  if(path.includes('/api/specifications/candidates')) { const query=new URL(path,location.href).searchParams.get('q')||''; if(query==='no-match') return body([]); const item=projection.specifications.specifications.find(value=>value.kind==='requirement'&&value.criteria?.length); return body(item?[{item,matches:[{anchor:item.criteria[0].anchor,kind:'criterion',text:item.criteria[0].statement}],relevance:['lexical criterion match'],score:1,evidence:[{source:'lexical',detail:'lexical criterion match'},{source:'graph',detail:'one exact criterion anchor'}],stable_anchors:item.criteria.map(criterion=>criterion.anchor)}]:[]); }\n"""
+    """  if(path.includes('/target-suggestions/approve')) { approvedTargetSuggestions.push(...(payload.suggestion_ids||['target-visual'])); return body({approved_ids:approvedTargetSuggestions,split_recommendation:null}); }\n"""
+    """  if(path.includes('/target-suggestions')) { const marker='/api/specifications/'; const anchor=decodeURIComponent(path.slice(path.indexOf(marker)+marker.length).split('/target-suggestions')[0]); return body({criterion:anchor,suggestion_token:'visual-suggestion-token',suggestions:[{id:'visual-target',rank:1,ref:'FEAT-FIXTURE-001#binding.implementation/target.behavior',confidence:'high',role:'implementation',evidence:['exact fixture target']} ]}); }\n"""
     """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
     """  if(path.includes('/api/scope/branch')) return body({branch:{range:'origin/main...HEAD',state:'ready',reason:null,changed:[{path:'src/lib.rs',status:'modified',owners:['FEAT-VISUAL'],anchors:['REQ-VISUAL#criterion.behavior'],artifact_identities:['rust:src/lib.rs']}],owned:[],unowned:[],affected_items:[]}});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
-    """  if(path.includes('/target-suggestions/approve')) { approvedTargetSuggestions.push('target-visual'); return body({approved_ids:['target-visual'],split_recommendation:null}); }\n"""
     """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-VISUAL#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'target-visual',rank:1,ref:'rust:src/lib.rs#behavior',confidence:'high',role:'implementation',evidence:['visual smoke evidence'],evidence_fingerprint:'visual-evidence'}],approved_ids:approvedTargetSuggestions,split_recommendation:null});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
@@ -161,8 +162,24 @@ setTimeout(()=>{
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const click=async s=>{const node=document.querySelector(s);if(!node){failures.push(`missing ${s}`);return;}node.click();await wait(80);};
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
+  const setValue=(s,value)=>{const node=document.querySelector(s);if(!node){failures.push(`missing ${s}`);return;}node.value=value;node.dispatchEvent(new Event('input',{bubbles:true}));};
 
   (async()=>{
+  await click('[data-page="work"] .work-start .journey-action:not(.primary)');
+  const noMatchQuery=document.querySelector('[data-page="work"] .journey-intake textarea');
+  if(!noMatchQuery) failures.push('intent search did not open from the specification-first start');
+  else {
+    noMatchQuery.value='no-match';
+    await click('[data-page="work"] .journey-intake .journey-action');
+    if(!document.querySelector('[data-page="work"] .journey-recovery')) failures.push('no-match recovery did not render');
+    await click('[data-page="work"] .journey-recovery .journey-action');
+    setValue('[data-page="work"] .specification-editor input[name="criterion_id"]','browser-recovery');
+    setValue('[data-page="work"] .specification-editor textarea[name="criterion_statement"]','The browser recovery journey has an exact target suggestion.');
+    await click('[data-page="work"] .specification-editor .actions .primary');
+    await click('[data-page="work"] .specification-editor .specification-apply');
+    if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('no-match authoring did not refetch target suggestions');
+    if(!document.querySelector('[data-page="work"] .target-suggestions')?.textContent.includes('browser-recovery')) failures.push('refetched suggestions did not retain the authored Criterion anchor');
+  }
   const query=document.querySelector('[data-page="work"] .journey-intake textarea');
   query.value='behavior';
   await click('[data-page="work"] .journey-intake .journey-action');

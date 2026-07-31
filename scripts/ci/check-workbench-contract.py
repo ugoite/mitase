@@ -105,9 +105,9 @@ assert "journey-advanced" in WORK_JS
 assert "work-start" in WORK_JS
 assert "select_specification" in WORK_JS
 assert "journey.start." not in WORK_JS
-assert "current_step === 'describe'" not in WORK_JS
-assert "journey-intake" not in WORK_JS
-assert "journey-card" not in WORK_JS
+assert "journeyIntentSearch" in WORK_JS
+assert "journey-intake" in WORK_JS
+assert "journey-card" in WORK_JS
 assert "data-scope-create-work" not in HTML
 assert "scope-create-work" not in SCOPE_JS
 assert "action: 'create'" not in SCOPE_JS
@@ -120,12 +120,16 @@ assert "result.request" not in SPECIFICATIONS_JS
 assert "work.request.summary_from_anchor" in SPECIFICATIONS_JS
 assert SPECIFICATIONS_JS.count("state.go('work')") == 1
 assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 1
-assert "WORK-SUGGESTION-" not in SERVER_RS
 assert "approved_target_suggestions" in SERVER_RS
 assert "validate_create_work_criterion" in SERVER_RS
 assert '"/api/work/request"' not in SERVER_RS
 assert "WorkRequestCommand" not in SERVER_RS
-assert "draft_request = Some(request.clone())" not in SERVER_RS
+assert "request: None" in SERVER_RS
+assert "resolve_approved_target_candidates" in SERVER_RS
+assert "operation," in SERVER_RS
+assert "max_added_bytes_per_target" in SERVER_RS
+assert "max_added_lines_per_target" in SERVER_RS
+assert "approve one transition group at a time" in SERVER_RS
 assert "Describe the change you want to make" not in SERVER_RS
 assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
