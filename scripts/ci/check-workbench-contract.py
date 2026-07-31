@@ -56,6 +56,8 @@ for group, icons in parser.tab_icons.items():
     assert len(icons) == len(set(icons)), f"{group} repeats a section-tab icon"
 
 assert re.search(r'class="topbar command-bar"', HTML)
+assert 'data-workspace-branch' not in HTML
+assert re.search(r'class="workspace-name".*class="workspace-icon"', HTML, re.S)
 assert 'class="gear"' not in HTML
 assert '<style' not in HTML
 assert 'HEAD...HEAD' not in HTML and 'HEAD…HEAD' not in HTML
@@ -89,6 +91,8 @@ WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
 API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
 assert "readInlineProjection" in MAIN_JS
+assert "data-workspace-branch" not in MAIN_JS
+assert "`@${revision}`" in MAIN_JS
 assert "establishSession" in MAIN_JS
 assert "}[state.selectedPage]" in MAIN_JS
 assert "function disableBusyButtons()" in MAIN_JS
@@ -103,6 +107,7 @@ assert "async function runBusy" in SPECIFICATIONS_JS
 assert 'data-workbench-status="busy" role="progressbar" aria-live="polite"' in HTML
 assert "workbench-progress-track" in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
+assert ".branch" not in CSS and ".utility" not in CSS
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
     assert token in CSS_COMPACT, f"missing normative CSS token {token}"
 assert "grid-template-columns:repeat(6,1fr)" in CSS_COMPACT
