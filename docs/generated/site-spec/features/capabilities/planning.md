@@ -442,6 +442,22 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
           - **path**: docs/guide/workbench.md
           - **selector**:
             - **kind**: file
+        - **id**: repository-readme
+          - **adapter**: declared
+          - **path**: README.md
+          - **selector**:
+            - **kind**: file
+        - **id**: vscode-readme
+          - **adapter**: declared
+          - **path**: editors/vscode/README.md
+          - **selector**:
+            - **kind**: file
+        - **id**: docs-site-homepage
+          - **adapter**: javascript
+          - **path**: website/src/pages/index.js
+          - **selector**:
+            - **kind**: module
+            - **name**: *
       - **targets**:
         - **id**: generated-index
           - **adapter**: declared
@@ -671,6 +687,9 @@ features:
           - { id: guide-antipatterns, adapter: declared, path: docs/guide/spec-antipatterns.md, selector: { kind: file } }
           - { id: guide-vscode, adapter: declared, path: docs/guide/vscode-extension.md, selector: { kind: file } }
           - { id: guide-workbench, adapter: declared, path: docs/guide/workbench.md, selector: { kind: file } }
+          - { id: repository-readme, adapter: declared, path: README.md, selector: { kind: file } }
+          - { id: vscode-readme, adapter: declared, path: editors/vscode/README.md, selector: { kind: file } }
+          - { id: docs-site-homepage, adapter: javascript, path: website/src/pages/index.js, selector: { kind: module, name: "*" } }
         targets:
           - id: generated-index
             adapter: declared
