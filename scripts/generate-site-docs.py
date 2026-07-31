@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -11,7 +12,30 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SPEC_ROOT = Path("docs/syu")
-OUTPUT_ROOT = REPO_ROOT / "docs" / "generated" / "site-spec"
+OUTPUT_ROOT = REPO_ROOT / "docs" / "reference" / "specification"
+
+CATEGORY_METADATA = {
+    "foundations": {
+        "label": "Foundations and rules",
+        "position": 1,
+        "description": "The principles, policies, and requirements that make the repository's intent explicit.",
+    },
+    "capabilities": {
+        "label": "Capabilities",
+        "position": 2,
+        "description": "The functional units that turn requirements into implemented repository behavior.",
+    },
+    "contracts": {
+        "label": "Public contracts",
+        "position": 3,
+        "description": "The public entrypoints and typed contracts exposed by the self-hosted system.",
+    },
+    "workbench": {
+        "label": "Workbench internals",
+        "position": 4,
+        "description": "The Workbench behaviors that support guided, bounded repository changes.",
+    },
+}
 
 
 def display_name(value: str) -> str:
@@ -91,6 +115,25 @@ def page_title(relative_path: Path, document: dict) -> str:
     return display_name(relative_path.stem)
 
 
+def output_relative_path(relative_path: Path) -> Path:
+    """Map source taxonomy to the reader-facing reference taxonomy."""
+
+    parts = relative_path.parts
+    if parts[0] in {"philosophies", "policies", "requirements"}:
+        output_parts = ("foundations", *parts[1:])
+    elif parts[0] == "features" and len(parts) > 1:
+        section = {
+            "capabilities": "capabilities",
+            "public-entrypoints": "contracts",
+            "workbench": "workbench",
+        }.get(parts[1])
+        output_parts = (section, *parts[2:]) if section else ("capabilities", *parts[1:])
+    else:
+        raise ValueError(f"unsupported specification path: {relative_path}")
+
+    return Path(*output_parts).with_suffix(".md")
+
+
 def resolve_spec_root() -> Path:
     config_path = REPO_ROOT / "syu.yaml"
     default_root = REPO_ROOT / DEFAULT_SPEC_ROOT
@@ -142,7 +185,8 @@ def display_source_path(source_path: Path) -> str:
 
 def write_markdown(source_path: Path, spec_root: Path) -> tuple[str, str]:
     relative_path = source_path.relative_to(spec_root)
-    output_path = OUTPUT_ROOT / relative_path.with_suffix(".md")
+    output_relative = output_relative_path(relative_path)
+    output_path = OUTPUT_ROOT / output_relative
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     raw = source_path.read_text(encoding="utf-8")
@@ -171,11 +215,48 @@ def write_markdown(source_path: Path, spec_root: Path) -> tuple[str, str]:
     lines.extend(["## Source YAML", "", "```yaml", raw.rstrip(), "```", ""])
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
-    route_parts = list(relative_path.with_suffix("").parts)
-    if len(route_parts) >= 2 and route_parts[-1] == route_parts[-2]:
-        route_parts.pop()
-    doc_link = "/".join(route_parts) if route_parts else relative_path.with_suffix("").as_posix()
-    return title, doc_link
+    return title, output_relative.with_suffix("").as_posix()
+
+
+def write_category_metadata(category: str, metadata: dict) -> None:
+    category_path = OUTPUT_ROOT / category
+    category_path.mkdir(parents=True, exist_ok=True)
+    category_path.joinpath("_category_.json").write_text(
+        json.dumps(
+            {
+                "label": metadata["label"],
+                "position": metadata["position"],
+                "collapsible": True,
+                "collapsed": True,
+                "link": {"type": "doc", "id": f"reference/specification/{category}/index"},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_category_index(category: str, entries: list[tuple[str, str]]) -> None:
+    metadata = CATEGORY_METADATA[category]
+    lines = [
+        "---",
+        f'title: "{metadata["label"]}"',
+        f'description: "{metadata["description"]}"',
+        f'sidebar_position: {metadata["position"]}',
+        "---",
+        "",
+        f"# {metadata['label']}",
+        "",
+        metadata["description"],
+        "",
+        "These pages are generated from the canonical YAML under `docs/syu/`.",
+        "",
+    ]
+    for title, doc_link in entries:
+        lines.append(f"- [{title}](./{Path(doc_link).name}.md)")
+    lines.append("")
+    (OUTPUT_ROOT / category / "index.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def write_index(entries: list[tuple[str, str]], spec_root: Path) -> None:
@@ -189,15 +270,43 @@ def write_index(entries: list[tuple[str, str]], spec_root: Path) -> None:
         "",
         f"This section is generated from the YAML source under `{source_root}/`.",
         "",
-        "## Available documents",
+        "## Browse by purpose",
         "",
     ]
 
+    grouped: dict[str, list[tuple[str, str]]] = {category: [] for category in CATEGORY_METADATA}
     for title, doc_link in entries:
-        lines.append(f"- [{title}]({doc_link})")
+        grouped[Path(doc_link).parts[0]].append((title, doc_link))
+
+    for category, metadata in CATEGORY_METADATA.items():
+        lines.append(f"- [{metadata['label']}]({category}/index.md) — {metadata['description']}")
+
+    lines.extend(["", "## Available documents", ""])
+    for category in CATEGORY_METADATA:
+        for title, doc_link in grouped[category]:
+            lines.append(f"- [{title}]({doc_link}.md)")
 
     lines.append("")
     index_path.write_text("\n".join(lines), encoding="utf-8")
+
+    for category, category_entries in grouped.items():
+        write_category_metadata(category, CATEGORY_METADATA[category])
+        write_category_index(category, category_entries)
+
+    (OUTPUT_ROOT / "_category_.json").write_text(
+        json.dumps(
+            {
+                "label": "Specification reference",
+                "position": 1,
+                "collapsible": True,
+                "collapsed": True,
+                "link": {"type": "doc", "id": "reference/specification/index"},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> None:
