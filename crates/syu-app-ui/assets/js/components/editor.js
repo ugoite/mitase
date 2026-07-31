@@ -1,10 +1,12 @@
+import { translate } from '../i18n.js';
+
 export function structuredEditor(value, onSubmit) {
   const form = document.createElement('form');
   const input = document.createElement('textarea');
   input.value = value;
   const submit = document.createElement('button');
   submit.type = 'submit';
-  submit.textContent = 'Apply';
+  submit.textContent = translate('common.apply');
   form.append(input, submit);
   form.addEventListener('submit', event => { event.preventDefault(); onSubmit(input.value); });
   return form;

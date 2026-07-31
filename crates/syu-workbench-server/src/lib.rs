@@ -3564,6 +3564,7 @@ pub struct SliceView {
 pub struct TargetView {
     pub reference: String,
     pub access: String,
+    pub transition: String,
     pub path: String,
 }
 #[derive(Debug, Clone, Serialize)]
@@ -4226,6 +4227,7 @@ fn target_view(target: &syu_work_model::PlannedTarget) -> TargetView {
     TargetView {
         reference: target.reference.to_string(),
         access: format!("{:?}", target.access).to_ascii_lowercase(),
+        transition: format!("{:?}", target.transition).to_ascii_lowercase(),
         path: target.resolved_path.clone(),
     }
 }

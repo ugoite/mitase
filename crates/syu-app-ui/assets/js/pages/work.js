@@ -1,4 +1,4 @@
-import { translate } from '../i18n.js';
+import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 import { renderDiff } from '../components/diff.js';
 import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
 import { renderReadinessPage } from './readiness.js';
@@ -39,9 +39,9 @@ function actionText(action, kind) {
 function statusText(status) {
   const normalized = String(status || 'planned').toLowerCase();
   const statuses = new Set(['planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
-  if (statuses.has(normalized)) return t(`status.${normalized}`);
+  if (statuses.has(normalized)) return localizeEnum('status', normalized);
   const kinds = new Set(['philosophy', 'policy', 'requirement', 'feature']);
-  return kinds.has(normalized) ? t(`items.${normalized}`) : status;
+  return kinds.has(normalized) ? localizeEnum('items', normalized) : status;
 }
 
 async function loadWorkDiff(state, force = false) {
@@ -128,13 +128,14 @@ function renderStart(root, state) {
   candidates.forEach(({ item, criterion }) => {
     const selected = criterion.anchor === state.journeyCandidateAnchor;
     const card = element('article', `journey-card${selected ? ' selected' : ''}`);
-    card.append(element('h3', null, item.title));
+    card.append(element('h3', null, localizeSpecificationTitle(item)));
     const meta = element('div', 'meta-line');
     meta.append(element(
       'span',
       `chip status-component status-${item.status || 'planned'}`,
       statusText(item.status || item.kind),
     ));
+    if (criterion.kind) meta.append(element('span', 'chip', localizeEnum('criterion.kind', criterion.kind)));
     card.append(meta);
     card.append(button(t('journey.preview'), () => {
       state.journeyCandidateAnchor = criterion.anchor;
@@ -356,6 +357,15 @@ function renderJourney(root, journey, state, work) {
   root.append(header);
   renderProgress(root, journey);
 
+  if (work?.request) {
+    const requestMeta = element('div', 'meta-line work-request-meta');
+    requestMeta.append(
+      element('span', 'chip', `${t('work.request.operation')}: ${localizeEnum('operation', work.request.operation)}`),
+      element('span', 'chip', `${t('work.request.seed')}: ${work.request.seed_count}`),
+    );
+    root.append(requestMeta);
+  }
+
   const next = element('section', 'journey-next');
   next.append(element('p', 'journey-copy', actionText(journey.primary_action, 'explanation')));
   const actions = element('div', 'journey-actions');
@@ -454,7 +464,8 @@ function renderScopeDetail(root, journey, state, work) {
     targetButton.append(
       element('span', 'journey-scope-target-icon', '↔'),
       element('strong', null, target.path),
-      element('span', 'chip blue-chip', t('journey.scope.editable')),
+      element('span', 'chip blue-chip', localizeEnum('target.access', target.access || 'editable')),
+      ...(target.transition ? [element('span', 'chip', localizeEnum('target.transition', target.transition))] : []),
     );
     targetButton.addEventListener('click', () => {
       state.journeyContextTarget = target;
@@ -656,7 +667,8 @@ function renderWorkSlices(work, state) {
     row.append(
       element('span', 'journey-scope-target-icon', '↔'),
       element('strong', null, target.path),
-      element('span', 'chip blue-chip', t('work.context.editable')),
+      element('span', 'chip blue-chip', localizeEnum('target.access', target.access || 'editable')),
+      ...(target.transition ? [element('span', 'chip', localizeEnum('target.transition', target.transition))] : []),
     );
     row.addEventListener('click', () => {
       state.journeyContextTarget = target;
