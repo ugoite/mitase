@@ -59,9 +59,6 @@ function renderWorkspaceIdentity(projection) {
   document.querySelectorAll('[data-workspace-revision]').forEach(node => {
     node.textContent = translate('workspace.revision').replace('{revision}', revision);
   });
-  document.querySelectorAll('[data-workspace-branch]').forEach(node => {
-    node.textContent = translate('workspace.branch').replace('{revision}', revision);
-  });
 }
 
 function disableBusyButtons() {
