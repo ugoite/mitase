@@ -286,6 +286,7 @@ export function renderTargetSuggestions(root, state) {
   if (!set) return;
   const card = document.createElement('section');
   card.className = 'card target-suggestions';
+  card.dataset.criterion = String(set.criterion || '');
   const head = document.createElement('div');
   head.className = 'canvas-head';
   const heading = document.createElement('h3');

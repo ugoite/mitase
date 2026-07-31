@@ -169,7 +169,7 @@ setTimeout(()=>{
   const noMatchQuery=document.querySelector('[data-page="work"] .journey-intake textarea');
   if(!noMatchQuery) failures.push('intent search did not open from the specification-first start');
   else {
-    noMatchQuery.value='no-match';
+    setValue('[data-page="work"] .journey-intake textarea','no-match');
     await click('[data-page="work"] .journey-intake .journey-action');
     if(!document.querySelector('[data-page="work"] .journey-recovery')) failures.push('no-match recovery did not render');
     await click('[data-page="work"] .journey-recovery .journey-action');
@@ -178,10 +178,9 @@ setTimeout(()=>{
     await click('[data-page="work"] .specification-editor .actions .primary');
     await click('[data-page="work"] .specification-editor .specification-apply');
     if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('no-match authoring did not refetch target suggestions');
-    if(!document.querySelector('[data-page="work"] .target-suggestions')?.textContent.includes('browser-recovery')) failures.push('refetched suggestions did not retain the authored Criterion anchor');
+    if(!document.querySelector('[data-page="work"] .target-suggestions')?.dataset.criterion.includes('browser-recovery')) failures.push('refetched suggestions did not retain the authored Criterion anchor');
   }
-  const query=document.querySelector('[data-page="work"] .journey-intake textarea');
-  query.value='behavior';
+  setValue('[data-page="work"] .journey-intake textarea','behavior');
   await click('[data-page="work"] .journey-intake .journey-action');
   await click('[data-page="work"] .journey-card .journey-action');
   if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
