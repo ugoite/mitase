@@ -90,9 +90,11 @@ MAIN_JS = (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text()
 WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
 API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
+I18N_MODULE = (ROOT / "crates/syu-app-ui/assets/js/i18n.js").read_text()
+SERVER_RS = (ROOT / "crates/syu-workbench-server/src/lib.rs").read_text()
 assert "readInlineProjection" in MAIN_JS
 assert "data-workspace-branch" not in MAIN_JS
-assert "`@${revision}`" in MAIN_JS
+assert "translate('workspace.revision')" in MAIN_JS
 assert "establishSession" in MAIN_JS
 assert "}[state.selectedPage]" in MAIN_JS
 assert "function disableBusyButtons()" in MAIN_JS
@@ -104,6 +106,34 @@ assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
+assert "localizeEnum" in I18N_MODULE
+assert "SyuPreferences?.lookup" in I18N_MODULE
+assert "localizeSpecificationTitle" in I18N_MODULE
+assert "presentation_title_key" in I18N_MODULE or "presentation_title_key" in SERVER_RS
+assert "localizedOptions('criterion.kind'" in SPECIFICATIONS_JS
+assert "localizeEnum('operation'" in WORK_JS
+assert "localizeEnum('target.access'" in WORK_JS
+assert "localizeSpecificationTitle" in SPECIFICATIONS_JS
+assert "item.textContent = option" not in SPECIFICATIONS_JS
+assert "pub access: TargetAccessMode" in SERVER_RS
+assert "pub transition: TargetTransition" in SERVER_RS
+assert 'access: format!("{:?}"' not in SERVER_RS
+assert 'transition: format!("{:?}"' not in SERVER_RS
+assert "presentation_title_key: builtin_presentation_title_key" in SERVER_RS
+for key in (
+    "criterion.kind.behavior",
+    "criterion.kind.quality",
+    "criterion.kind.security",
+    "operation.add",
+    "operation.modify",
+    "operation.remove",
+    "target.access.editable",
+    "target.transition.modify",
+    "target.access.generated",
+    "specification.title.REQ-CAPABILITY-001",
+):
+    assert key in EN and key in JA, f"missing semantic localization key: {key}"
+    assert EN[key] != JA[key], f"semantic localization is unchanged: {key}"
 assert 'data-workbench-status="busy" role="progressbar" aria-live="polite"' in HTML
 assert "workbench-progress-track" in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)

@@ -114,7 +114,7 @@ mod tests {
         assert!(
             WORKBENCH_CSS.contains("[data-settings-layer-panel][hidden]{display:none!important}")
         );
-        assert!(WORKBENCH_MAIN_JS.contains("`@${revision}`"));
+        assert!(WORKBENCH_MAIN_JS.contains("translate('workspace.revision')"));
     }
 
     #[test]
