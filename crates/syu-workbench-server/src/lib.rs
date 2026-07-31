@@ -1429,6 +1429,22 @@ async fn api_target_suggestions_approve(
             split_recommendation: Some(split_recommendation),
         }));
     }
+    let mut transition_groups = BTreeMap::<String, Vec<String>>::new();
+    for candidate in &approved {
+        transition_groups
+            .entry(format!("{:?}", candidate.transition))
+            .or_default()
+            .push(candidate.id.clone());
+    }
+    if transition_groups.len() > 1 {
+        return Ok(Json(TargetSuggestionApprovalView {
+            approved_ids: vec![],
+            split_recommendation: Some(SplitWorkRecommendation {
+                reason: "Selected targets use incompatible transitions; approve one transition group at a time.".into(),
+                suggested_groups: transition_groups.into_values().collect(),
+            }),
+        }));
+    }
     {
         let mut session = service
             .session
@@ -6188,7 +6204,6 @@ mod tests {
         AgentRun,
         syu_work_model::AgentTargetDigest,
     ) {
-        let (basis, csrf, _) = projection_and_basis(app).await;
         let (feature, binding, criterion) = match target_id {
             "behavior" => ("FEAT-FIXTURE-001", "implementation", "behavior"),
             "added-symbol" => ("FEAT-LIFECYCLE-ADD-SYMBOL-001", "lifecycle", "add-symbol"),
@@ -6237,6 +6252,21 @@ mod tests {
                 transition,
             }],
         };
+        start_lifecycle_agent_with_request(app, target, request).await
+    }
+
+    async fn start_lifecycle_agent_with_request(
+        app: &Router,
+        target: BoundTargetRef,
+        request: WorkRequest,
+    ) -> (
+        MutationBasis,
+        String,
+        String,
+        AgentRun,
+        syu_work_model::AgentTargetDigest,
+    ) {
+        let (basis, csrf, _) = projection_and_basis(app).await;
         let response = json_mutation(
             app,
             Method::POST,
@@ -6306,6 +6336,375 @@ mod tests {
             .expect("lifecycle target digest")
             .clone();
         (basis, csrf, slice, run, digest)
+    }
+
+    #[tokio::test]
+    async fn planned_remove_target_flows_from_suggestion_to_finalization() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("lifecycle suggestion tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("fixture config");
+        fs::write(
+            config_path,
+            config.replace("target: off", "target: traceable"),
+        )
+        .expect("enable readiness");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-FIXTURE-001%23criterion.remove-symbol/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove target suggestions");
+        let candidate = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .reference
+                    .to_string()
+                    .contains("FEAT-LIFECYCLE-REMOVE-SYMBOL-001")
+            })
+            .expect("planned remove suggestion");
+        assert_eq!(
+            candidate.transition,
+            syu_work_model::TargetTransition::Remove
+        );
+        assert_eq!(
+            candidate.lifecycle,
+            syu_work_model::TargetLifecycle::EnsureAbsent
+        );
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        assert!(
+            server
+                .service
+                .session
+                .read()
+                .unwrap()
+                .draft_request
+                .is_none()
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: suggestions.suggestion_token,
+                suggestion_ids: vec![candidate.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove suggestion approval");
+        let request = approval.request.expect("approved remove request");
+        assert_eq!(request.operation, syu_work_model::WorkOperation::Remove);
+        let target = request.requested_targets[0].reference.clone();
+        let (basis, csrf, slice, run, target_digest) =
+            start_lifecycle_agent_with_request(&app, target.clone(), request).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/patch",
+            &csrf,
+            &AgentPatchCommand {
+                basis,
+                run_id: run.run_id.clone(),
+                patch: AgentPatch {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    run_id: run.run_id.clone(),
+                    expected_workspace_fingerprint: run
+                        .context
+                        .context
+                        .basis
+                        .workspace_fingerprint
+                        .clone(),
+                    writes: vec![syu_work_model::AgentTargetWrite::Remove {
+                        target: target_digest.reference.clone(),
+                        expected_excerpt_hash: target_digest.excerpt_hash.clone(),
+                    }],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (post_basis, post_csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/verify",
+            &post_csrf,
+            &SliceCommand {
+                basis: post_basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let attempt: CompletionAttempt =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove completion attempt");
+        assert_eq!(
+            attempt.report.status,
+            syu_work_model::CompletionStatus::Complete
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/preview",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis.clone(),
+                attempt_id: attempt.attempt_id.clone(),
+                preview_token: None,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: FinalizationPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove finalization preview");
+        assert_eq!(preview.status, syu_work_model::CompletionStatus::Complete);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/apply",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis,
+                attempt_id: attempt.attempt_id,
+                preview_token: Some(preview.preview_token),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn planned_verification_add_runs_its_exact_runner_before_finalization() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("verification add tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        let feature_path = temp.path().join("spec/feature.yaml");
+        let mut feature = fs::read_to_string(&feature_path).expect("feature spec");
+        feature = feature.replacen(
+            "  - id: FEAT-LIFECYCLE-REMOVE-SYMBOL-001",
+            concat!(
+                "  - id: FEAT-LIFECYCLE-ADD-VERIFICATION-001\n",
+                "    title: Add an exact verification test\n",
+                "    summary: A planned verification target is written before it runs.\n",
+                "    status: planned\n",
+                "    bindings:\n",
+                "      - id: implementation\n",
+                "        role: implementation\n",
+                "        facet: work\n",
+                "        responsibility: Keep the existing implementation target connected to the verification proof.\n",
+                "        targets:\n",
+                "          - id: implementation\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: behavior }\n",
+                "            claims:\n",
+                "              - kind: satisfies\n",
+                "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                "      - id: verification\n",
+                "        role: verification\n",
+                "        facet: verification\n",
+                "        responsibility: Prove the add transition with its exact runner.\n",
+                "        targets:\n",
+                "          - id: added-verification\n",
+                "            adapter: rust\n",
+                "            path: tests/behavior.rs\n",
+                "            selector: { kind: symbol, name: added_verification_lifecycle_stays_valid }\n",
+                "            claims:\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                "                covers: [FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]\n",
+                "                runner: { runner: cargo-test, arguments: { package: workbench-flow-fixture, test: added_verification_lifecycle_stays_valid } }\n",
+                "  - id: FEAT-LIFECYCLE-REMOVE-SYMBOL-001"
+            ),
+            1,
+        );
+        fs::write(feature_path, feature).expect("verification feature");
+        let requirement_path = temp.path().join("spec/requirement.yaml");
+        let mut requirement = fs::read_to_string(&requirement_path).expect("requirement spec");
+        requirement = requirement.replacen(
+            "covers: [FEAT-LIFECYCLE-ADD-SYMBOL-001#binding.lifecycle/target.added-symbol]",
+            "covers: [FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]",
+            1,
+        );
+        fs::write(requirement_path, requirement).expect("verification requirement");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add suggestions");
+        let candidate = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .reference
+                    .to_string()
+                    .contains("FEAT-LIFECYCLE-ADD-VERIFICATION-001")
+            })
+            .expect("planned verification add suggestion");
+        assert_eq!(candidate.transition, syu_work_model::TargetTransition::Add);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: suggestions.suggestion_token,
+                suggestion_ids: vec![candidate.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add approval");
+        let request = approval.request.expect("verification add request");
+        assert_eq!(request.operation, syu_work_model::WorkOperation::Add);
+        let target = request.requested_targets[0].reference.clone();
+        let (basis, csrf, slice, run, target_digest) =
+            start_lifecycle_agent_with_request(&app, target.clone(), request).await;
+        assert_eq!(
+            target_digest.transition,
+            syu_work_model::TargetTransition::Add
+        );
+        assert_eq!(
+            target_digest.access,
+            syu_work_model::TargetAccessMode::Editable
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/patch",
+            &csrf,
+            &AgentPatchCommand {
+                basis,
+                run_id: run.run_id.clone(),
+                patch: AgentPatch {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    run_id: run.run_id.clone(),
+                    expected_workspace_fingerprint: run
+                        .context
+                        .context
+                        .basis
+                        .workspace_fingerprint
+                        .clone(),
+                    writes: vec![syu_work_model::AgentTargetWrite::AddToFile {
+                        target: target_digest.reference.clone(),
+                        expected_path_hash: target_digest
+                            .container_content_hash
+                            .clone()
+                            .expect("verification container digest"),
+                        content: "\n#[test]\nfn added_verification_lifecycle_stays_valid() {\n    assert!(workbench_flow_fixture::behavior());\n}\n".into(),
+                    }],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (post_basis, post_csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/verify",
+            &post_csrf,
+            &SliceCommand {
+                basis: post_basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let attempt: CompletionAttempt =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add attempt");
+        assert_eq!(
+            attempt.report.status,
+            syu_work_model::CompletionStatus::Complete
+        );
+        let receipt = attempt.receipt.as_ref().expect("verification add receipt");
+        assert!(receipt.executions.iter().any(|execution| {
+            execution.target == target
+                && execution.proof.identity == "added_verification_lifecycle_stays_valid"
+        }));
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/preview",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis.clone(),
+                attempt_id: attempt.attempt_id.clone(),
+                preview_token: None,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: FinalizationPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add preview");
+        assert_eq!(preview.status, syu_work_model::CompletionStatus::Complete);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/apply",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis,
+                attempt_id: attempt.attempt_id,
+                preview_token: Some(preview.preview_token),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -6524,6 +6923,59 @@ mod tests {
                     })
                     .expect("finalized absent target readiness subject");
                 assert!(removed_subject.ready, "{removed_subject:?}");
+
+                // Readiness must reject a forged finalization record even
+                // when its post-state fingerprint still matches. The
+                // attempt, approval, exact Remove slice, and receipt proof
+                // are the durable closure, not this top-level JSON alone.
+                let store = DeliveryStore::for_workspace(temp.path()).expect("evidence store");
+                let finalization_path =
+                    fs::read_dir(store.root().join("completion/v1/finalizations"))
+                        .expect("finalization directory")
+                        .flatten()
+                        .map(|entry| entry.path())
+                        .find(|path| {
+                            path.extension().and_then(|value| value.to_str()) == Some("json")
+                        })
+                        .expect("finalization evidence");
+                let mut forged: serde_json::Value = serde_json::from_slice(
+                    &fs::read(&finalization_path).expect("read finalization evidence"),
+                )
+                .expect("parse finalization evidence");
+                forged["lifecycle_proofs"][0]["transition"] = serde_json::json!("add");
+                fs::write(
+                    &finalization_path,
+                    serde_json::to_vec_pretty(&forged).expect("serialize forged evidence"),
+                )
+                .expect("forge finalization evidence");
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("forged-evidence readiness");
+                let forged_subject = readiness
+                    .axes
+                    .get("seedability")
+                    .and_then(|axis| {
+                        axis.subjects.iter().find(|subject| {
+                            subject.id.contains("criterion.remove-symbol")
+                                && subject.id.contains("removed-symbol")
+                        })
+                    })
+                    .expect("forged finalized absent target subject");
+                assert!(!forged_subject.ready, "{forged_subject:?}");
 
                 let source = temp.path().join("src/removable.rs");
                 let mut restored = fs::read_to_string(&source).expect("removed source");
@@ -7107,7 +7559,7 @@ mod tests {
             &csrf,
             &TargetSuggestionApprovalCommand {
                 basis: basis.clone(),
-                suggestion_token: refreshed.suggestion_token,
+                suggestion_token: refreshed.suggestion_token.clone(),
                 suggestion_ids: approved_ids.clone(),
             },
         )
@@ -7116,8 +7568,32 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("approval response");
-        assert_eq!(approval.approved_ids, approved_ids);
-        assert!(approval.split_recommendation.is_none());
+        let split = approval
+            .split_recommendation
+            .expect("mixed transitions require separate approval groups");
+        assert!(split.suggested_groups.len() >= 2);
+        let mut persisted_approved_ids = Vec::new();
+        for group in split.suggested_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: refreshed.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let homogeneous: TargetSuggestionApprovalView =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("homogeneous approval response");
+            assert!(homogeneous.split_recommendation.is_none());
+            persisted_approved_ids.extend(group);
+        }
+        assert_eq!(persisted_approved_ids, approved_ids);
         let response = app
             .clone()
             .oneshot(
@@ -7131,7 +7607,7 @@ mod tests {
         let persisted: TargetSuggestionsView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("persisted suggestion response");
-        assert_eq!(persisted.approved_ids, approved_ids);
+        assert_eq!(persisted.approved_ids, persisted_approved_ids);
 
         let mut changed_again = fs::read_to_string(&target_path).expect("changed target source");
         let next_body_offset = changed_again[unit.span.byte_start..unit.span.byte_end]
@@ -7154,7 +7630,10 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("invalidated suggestion response");
         assert!(!invalidated.approved_ids.contains(&rejected_id));
-        let valid_approved_count = approved_ids.iter().filter(|id| *id != &rejected_id).count();
+        let valid_approved_count = persisted_approved_ids
+            .iter()
+            .filter(|id| *id != &rejected_id)
+            .count();
         assert!(
             service
                 .session

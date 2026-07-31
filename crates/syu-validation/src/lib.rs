@@ -610,6 +610,10 @@ fn current_readonly_fingerprint(
                     target.excerpt_hash = resolved.excerpt_hash;
                 }
                 None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
+                None if target.access == syu_work_model::TargetAccessMode::RunOnly
+                    && target.transition == syu_work_model::TargetTransition::Add
+                    && index.item_status.get(&target.reference.binding.item)
+                        == Some(&syu_spec_model::ItemStatus::Planned) => {}
                 None => {
                     // Preserve a deterministic mismatch for a missing stable
                     // readonly/run-only target. Ensure-absent transitions are
@@ -3892,7 +3896,10 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                                 | syu_work_model::TargetAccessMode::RunOnly
                         )
                         && lifecycle_transition_shares_path(slice, target)
-                        && resolved.excerpt_hash == target.excerpt_hash
+                        && (resolved.excerpt_hash == target.excerpt_hash
+                            || (target.access == syu_work_model::TargetAccessMode::RunOnly
+                                && target.content_hash.is_empty()
+                                && target.excerpt_hash.is_empty()))
                         && resolved.path.to_string_lossy() == target.resolved_path
                         && resolved.description == target.resolved_selector.description
                         && resolved.symbols == target.resolved_selector.symbols
@@ -4063,6 +4070,16 @@ fn lifecycle_transition_shares_path(
     })
 }
 
+fn run_only_target_is_post_state_add(
+    slice: &ExecutionSlice,
+    target: &syu_work_model::PlannedTarget,
+) -> bool {
+    target.access == syu_work_model::TargetAccessMode::RunOnly
+        && target.content_hash.is_empty()
+        && target.excerpt_hash.is_empty()
+        && lifecycle_transition_shares_path(slice, target)
+}
+
 fn target_budget_bytes(target: &syu_work_model::PlannedTarget) -> usize {
     target
         .budget_bytes
@@ -4084,7 +4101,10 @@ fn validate_slice_scope(
     let guarded_targets = slice
         .verification_targets
         .iter()
-        .filter(|target| target.access == syu_work_model::TargetAccessMode::RunOnly)
+        .filter(|target| {
+            target.access == syu_work_model::TargetAccessMode::RunOnly
+                && !run_only_target_is_post_state_add(slice, target)
+        })
         .chain(
             slice
                 .readonly_context
@@ -4110,9 +4130,10 @@ fn validate_slice_scope(
             let readonly_hit = guarded_targets
                 .iter()
                 .any(|target| target_matches_changed_file_path(ctx, target, file));
-            let editable_hit = editable_targets
-                .iter()
-                .any(|target| editable_target_matches_hunkless_change(ctx, target, file));
+            let editable_hit = editable_targets.iter().any(|target| {
+                editable_target_matches_hunkless_change(ctx, target, file)
+                    || editable_add_target_matches_file(target, file)
+            });
             let generated_hit = generated_targets.iter().any(|target| {
                 target_matches_changed_file_path(ctx, target, file)
                     && generated_target_has_changed_source(ctx, slice, target, files)
@@ -4145,7 +4166,10 @@ fn validate_slice_scope(
             let readonly_hit = guarded_targets
                 .iter()
                 .any(|target| target_overlaps_change(ctx, target, file, &hunk));
-            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
+            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk)
+                || editable_targets
+                    .iter()
+                    .any(|target| editable_add_target_matches_file(target, file));
             let generated_hit = generated_targets.iter().any(|target| {
                 target_overlaps_change(ctx, target, file, &hunk)
                     && generated_target_has_changed_source(ctx, slice, target, files)
@@ -4196,6 +4220,19 @@ fn generated_target_has_changed_source(
                 })
                 .is_some_and(|target| planned_target_changed(ctx, target, files))
         })
+}
+
+fn editable_add_target_matches_file(
+    target: &syu_work_model::PlannedTarget,
+    file: &ChangedFile,
+) -> bool {
+    target.transition == syu_work_model::TargetTransition::Add
+        && target.content_hash.is_empty()
+        && target.excerpt_hash.is_empty()
+        && file
+            .new_path
+            .as_ref()
+            .is_some_and(|path| path.to_string_lossy() == target.resolved_path)
 }
 
 fn target_matches_changed_file_path(

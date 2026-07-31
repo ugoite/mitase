@@ -1062,6 +1062,7 @@ fn rollback_error(error: anyhow::Error, rollback: PatchRollback) -> anyhow::Erro
 }
 
 fn remove_created_dirs(created_dirs: &[PathBuf]) -> Result<()> {
+    let mut errors = Vec::new();
     for directory in created_dirs.iter().rev() {
         match fs::remove_dir(directory) {
             Ok(()) => {}
@@ -1070,16 +1071,24 @@ fn remove_created_dirs(created_dirs: &[PathBuf]) -> Result<()> {
                     error.kind(),
                     std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
                 ) => {}
-            Err(error) => return Err(error.into()),
+            Err(error) => errors.push(format!("{}: {error}", directory.display())),
         }
     }
-    Ok(())
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "failed to remove created directories: {}",
+            errors.join("; ")
+        ))
+    }
 }
 
 fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
+    let mut errors = Vec::new();
     for file in rollback.files.iter().rev() {
-        match &file.original {
-            Some(content) => {
+        let result = match &file.original {
+            Some(content) => (|| -> Result<()> {
                 let parent = file.path.parent().context("target path has no parent")?;
                 fs::create_dir_all(parent)?;
                 if file.path.exists() {
@@ -1100,15 +1109,26 @@ fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
                 if let Some(permissions) = &file.permissions {
                     fs::set_permissions(&file.path, permissions.clone())?;
                 }
-            }
+                Ok(())
+            })(),
             None => match fs::remove_file(&file.path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.into()),
             },
+        };
+        if let Err(error) = result {
+            errors.push(format!("{}: {error}", file.path.display()));
         }
     }
-    remove_created_dirs(&rollback.created_dirs)
+    if let Err(error) = remove_created_dirs(&rollback.created_dirs) {
+        errors.push(error.to_string());
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("rollback errors: {}", errors.join("; ")))
+    }
 }
 
 fn append_patch_event(
@@ -1235,5 +1255,33 @@ mod tests {
         assert!(apply_file_mutations(&create).is_err());
         assert!(!blocking_parent.join("nested").exists());
         assert!(!target.exists());
+    }
+
+    #[test]
+    fn rollback_attempts_later_files_after_an_earlier_restore_error() {
+        let temp = tempfile::tempdir().expect("rollback tempdir");
+        let blocking_parent = temp.path().join("blocking");
+        fs::write(&blocking_parent, "not a directory").expect("blocking file");
+        let failed = blocking_parent.join("nested/file.txt");
+        let later = temp.path().join("later.txt");
+        fs::write(&later, "after\n").expect("later file");
+        let rollback = PatchRollback {
+            files: vec![
+                FileRollback {
+                    path: later.clone(),
+                    original: Some(b"before\n".to_vec()),
+                    permissions: None,
+                },
+                FileRollback {
+                    path: failed,
+                    original: Some(b"before\n".to_vec()),
+                    permissions: None,
+                },
+            ],
+            created_dirs: vec![],
+        };
+
+        assert!(restore_rollback(&rollback).is_err());
+        assert_eq!(fs::read_to_string(later).unwrap(), "before\n");
     }
 }

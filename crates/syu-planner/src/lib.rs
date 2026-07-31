@@ -106,16 +106,17 @@ pub fn suggest_targets(
             continue;
         }
         for target in &binding.targets {
-            if target.lifecycle == ArtifactTargetLifecycle::Absent {
-                continue;
-            }
             let reference = BoundTargetRef {
                 binding: binding_anchor.clone(),
                 target_id: target.id.clone(),
             };
             let current_target = index.target_to_artifact.contains_key(&reference);
+            let artifact_exists = index.all_target_to_artifact.contains_key(&reference);
+            let planned_item =
+                index.item_status.get(&binding_anchor.item) == Some(&ItemStatus::Planned);
             let planned_missing_target = !current_target
-                && index.item_status.get(&binding_anchor.item) == Some(&ItemStatus::Planned);
+                && target.lifecycle != ArtifactTargetLifecycle::Absent
+                && planned_item;
             let mut score = 0usize;
             let mut evidence = Vec::new();
             let directly_claims = target.claims.iter().any(|claim| match claim {
@@ -128,6 +129,16 @@ pub fn suggest_targets(
                 }
                 _ => false,
             });
+            let planned_remove_target = target.lifecycle == ArtifactTargetLifecycle::Absent
+                && artifact_exists
+                && planned_item
+                && directly_claims;
+            if target.lifecycle == ArtifactTargetLifecycle::Absent && !planned_remove_target {
+                continue;
+            }
+            if !current_target && !planned_missing_target && !planned_remove_target {
+                continue;
+            }
             if directly_claims {
                 score += 100;
                 evidence.push("The target explicitly claims this criterion.".into());
@@ -136,6 +147,13 @@ pub fn suggest_targets(
                 score += 20;
                 evidence.push(
                     "This planned target is missing from the current inventory and requires explicit Add approval."
+                        .into(),
+                );
+            }
+            if planned_remove_target {
+                score += 20;
+                evidence.push(
+                    "This planned absent target resolves to a current artifact and requires explicit Remove approval (ensure-absent)."
                         .into(),
                 );
             }
@@ -198,11 +216,12 @@ pub fn suggest_targets(
             if score == 0 {
                 continue;
             }
-            let transition = transition_for_role(binding.role);
-            let transition = if planned_missing_target {
+            let transition = if planned_remove_target {
+                TargetTransition::Remove
+            } else if planned_missing_target {
                 TargetTransition::Add
             } else {
-                transition
+                transition_for_role(binding.role)
             };
             let lifecycle = match transition {
                 TargetTransition::Add => TargetLifecycle::EnsurePresent,
@@ -222,6 +241,7 @@ pub fn suggest_targets(
             let artifact_digest = index
                 .target_to_artifact
                 .get(&reference)
+                .or_else(|| index.all_target_to_artifact.get(&reference))
                 .and_then(|identity| {
                     index
                         .artifact_units
@@ -2209,27 +2229,49 @@ fn criterion_verification_targets(
     // older binding-level index is intentionally not used here: a verification
     // binding may contain tests for several criteria, and expanding the whole
     // binding would make an unrelated test part of this slice.
-    for reference in index
-        .criteria_to_verification_targets
-        .get(criterion)
+    let requested_add = requested_transitions
         .into_iter()
-        .flatten()
-    {
+        .flat_map(|transitions| transitions.values())
+        .any(|transition| *transition == TargetTransition::Add)
+        || requested.is_some_and(|value| {
+            requested_transitions.and_then(|transitions| transitions.get(value.reference()))
+                == Some(&TargetTransition::Add)
+        });
+    let verification_refs = if requested_add {
+        index
+            .all_criteria_to_verification_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+    } else {
+        index
+            .criteria_to_verification_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+    };
+    for reference in verification_refs {
         let Some(binding) = index.bindings.get(&reference.binding) else {
             continue;
         };
         let Some(target) = index.target(reference) else {
             continue;
         };
-        if requested_transitions
-            .and_then(|map| map.get(reference))
-            .is_some()
-        {
+        let requested_ref = requested.map(|value| value.reference());
+        let requested_transition = requested_transitions.and_then(|map| map.get(reference));
+        let exact_target = requested_ref == Some(reference)
+            || requested_transitions.is_some_and(|map| map.contains_key(reference));
+        let requested_verification_add = exact_target
+            && requested_transition == Some(&TargetTransition::Add)
+            && binding.role == BindingRole::Verification;
+        if requested_transition.is_some() && !requested_verification_add {
             continue;
         }
-        let requested_ref = requested.map(|value| value.reference());
-        let exact_target = requested_ref == Some(reference);
-        let policy = if exact_target {
+        let policy = if requested_verification_add {
+            target_policy(TargetTransition::RunOnly)
+        } else if exact_target {
             requested_policy
         } else {
             target_policy(TargetTransition::RunOnly)
@@ -2514,7 +2556,13 @@ fn one_target(
         || (target.lifecycle == ArtifactTargetLifecycle::Absent
             && (index.all_target_to_artifact.contains_key(reference)
                 || resolve_target_in_workspace(workspace, target).is_ok()));
-    if !matches!(options.policy.transition, TargetTransition::Add) && !has_active_artifact {
+    let planned_missing_target = !has_active_artifact
+        && target.lifecycle != ArtifactTargetLifecycle::Absent
+        && index.item_status.get(&reference.binding.item) == Some(&ItemStatus::Planned);
+    if !matches!(options.policy.transition, TargetTransition::Add)
+        && !has_active_artifact
+        && !(options.policy.transition == TargetTransition::RunOnly && planned_missing_target)
+    {
         let mut d = Diagnostic::error(
             "SYU-TARGET-002",
             format!(
@@ -2665,6 +2713,20 @@ fn one_target(
                 blockers.push(d);
                 vec![]
             }
+            TargetTransition::RunOnly if planned_missing_target => {
+                vec![declared_target_plan(
+                    reference,
+                    binding,
+                    target,
+                    DeclaredTargetPlanOptions {
+                        policy: options.policy,
+                        reason: options.reason,
+                        add_budget_bytes: 0,
+                        add_budget_lines: 0,
+                        container_content_hash: None,
+                    },
+                )]
+            }
             TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
                 let mut d = Diagnostic::error(
                     "SYU-TARGET-002",
@@ -2809,10 +2871,40 @@ fn validate_target_access_uniqueness(
     verification: &[PlannedTarget],
     readonly: &[PlannedTarget],
 ) {
-    let mut seen = BTreeMap::<BoundTargetRef, TargetAccessMode>::new();
-    for target in editable.iter().chain(verification).chain(readonly) {
-        if let Some(access) = seen.insert(target.reference.clone(), target.access)
-            && access != target.access
+    for target in verification {
+        if editable.iter().any(|editable| {
+            editable.reference == target.reference
+                && editable.transition == TargetTransition::Add
+                && target.transition == TargetTransition::RunOnly
+                && target.verification_claim.is_some()
+        }) {
+            // A newly added exact verification target is intentionally both
+            // editable (the post-state write) and run-only (the test that
+            // executes after that write). These are two phases of one
+            // approved target identity, not an ambiguous scope expansion.
+            continue;
+        }
+        if editable
+            .iter()
+            .any(|editable| editable.reference == target.reference)
+        {
+            let mut d = Diagnostic::error(
+                "SYU-WORK-001",
+                format!(
+                    "requested target appears with multiple access modes: {}",
+                    target.reference
+                ),
+                "work-plan",
+            );
+            d.target = Some(target.reference.clone());
+            blockers.push(d);
+        }
+    }
+    for target in readonly {
+        if editable
+            .iter()
+            .chain(verification)
+            .any(|other| other.reference == target.reference)
         {
             let mut d = Diagnostic::error(
                 "SYU-WORK-001",
@@ -3320,7 +3412,7 @@ fn build_context_pack(
                 }
                 None => {
                     match target.transition {
-                        TargetTransition::Add => {
+                        TargetTransition::Add | TargetTransition::RunOnly => {
                             artifact_context.push(ArtifactContextEntry::IntendedTarget(
                                 IntendedTargetContext {
                                     reference: target.reference.clone(),
@@ -3630,6 +3722,126 @@ mod tests {
                 .evidence
                 .iter()
                 .any(|item| item.contains("planned target"))
+        );
+    }
+
+    #[test]
+    fn planned_absent_exact_target_is_a_remove_suggestion_when_artifact_exists() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace(
+                "          - id: handler-missing\n",
+                concat!(
+                    "          - id: handler-remove\n",
+                    "            adapter: rust\n",
+                    "            path: src/handler.rs\n",
+                    "            selector: { kind: symbol, name: handler }\n",
+                    "            lifecycle: absent\n",
+                    "            claims:\n",
+                    "              - kind: satisfies\n",
+                    "                criterion: REQ-TEST-001#criterion.test\n",
+                    "          - id: handler-missing\n",
+                ),
+            )
+            .replace("status: implemented", "status: planned");
+        fs::write(feature_path, feature).expect("remove target spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let candidate = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| candidate.reference.target_id.to_string() == "handler-remove")
+            .expect("planned remove suggestion");
+        assert_eq!(candidate.transition, TargetTransition::Remove);
+        assert_eq!(candidate.lifecycle, TargetLifecycle::EnsureAbsent);
+        assert_eq!(candidate.path, "src/handler.rs");
+        assert!(candidate.existing_file);
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item.contains("ensure-absent"))
+        );
+    }
+
+    #[test]
+    fn requested_add_verification_target_is_repeated_as_post_state_run_only() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("    status: implemented", "    status: planned")
+            .replace("        role: implementation", "        role: verification")
+            .replace(
+                "            claims: []\n",
+                concat!(
+                    "            claims:\n",
+                    "              - kind: verifies\n",
+                    "                criterion: REQ-TEST-001#criterion.test\n",
+                    "                covers: []\n",
+                    "                runner: { runner: cargo-test, arguments: { package: sample, test: added_handler } }\n",
+                ),
+            );
+        fs::write(feature_path, feature).expect("verification target spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let reference: BoundTargetRef = "FEAT-TEST-001#binding.impl/target.handler-missing"
+            .parse()
+            .unwrap();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-VERIFICATION-ADD".into(),
+            summary: "Add a verification test".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(512),
+                max_added_lines_per_target: Some(32),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget {
+                reference,
+                criterion: Some(criterion),
+                transition: TargetTransition::Add,
+            }],
+        };
+
+        let plan = plan(&request, &workspace, &index, "rev-verification-add").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
+        let slice = plan.slices.first().expect("verification add slice");
+        assert!(slice.editable_targets.iter().any(|target| {
+            target.reference.target_id.to_string() == "handler-missing"
+                && target.transition == TargetTransition::Add
+                && target.access == TargetAccessMode::Editable
+        }));
+        let verification = slice
+            .verification_targets
+            .iter()
+            .find(|target| target.reference.target_id.to_string() == "handler-missing")
+            .expect("new test is also a verification target");
+        assert_eq!(verification.access, TargetAccessMode::RunOnly);
+        assert_eq!(verification.transition, TargetTransition::RunOnly);
+        assert_eq!(
+            verification.verification_claim.as_ref().unwrap().criterion,
+            "REQ-TEST-001#criterion.test".parse().unwrap()
         );
     }
 
