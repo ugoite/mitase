@@ -451,7 +451,8 @@ async function main() {
         const selectedCriterionStatement = selectedCriterion?.querySelector('p')?.textContent || '';
         await click('create', '[data-page="specifications"] [data-create-work]');
         await click('prepare', '[data-page="work"] .journey-action.primary');
-        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === 'Approve');
+        const approvalStep = document.documentElement.lang === 'ja' ? '承認' : 'Approve';
+        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === approvalStep);
 
         return {
           flow,
