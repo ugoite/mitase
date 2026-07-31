@@ -186,7 +186,7 @@ def is_test_path(path: Path) -> bool:
 
 def is_generated_path(path: Path) -> bool:
     raw = path.as_posix()
-    return raw.startswith("docs/generated/") or raw.startswith("target/") or "/generated/" in raw
+    return raw.startswith("docs/reference/specification/") or raw.startswith("target/") or "/generated/" in raw
 
 def ignored_task_coverage_lines(path: Path) -> set[int]:
     if path.as_posix() != "src/command/task.rs":

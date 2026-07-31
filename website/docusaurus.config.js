@@ -40,36 +40,44 @@ const config = {
     navbar: {
       title: 'syu',
       items: [
-        { to: '/docs/guide/getting-started', label: 'Getting started', position: 'left' },
-        { to: '/docs/guide/concepts', label: 'Concepts', position: 'left' },
-        { to: '/docs/generated/site-spec', label: 'Spec reference', position: 'left' },
-        { to: '/docs/generated/syu-report', label: 'Validation report', position: 'left' },
+        { to: '/docs/start-here', label: 'Start here', position: 'left' },
+        { to: '/docs/understand', label: 'Understand', position: 'left' },
+        { to: '/docs/reference/specification', label: 'Specification reference', position: 'left' },
+        { to: '/docs/reference/status', label: 'Repository status', position: 'left' },
         { href: 'https://github.com/ugoite/syu', label: 'GitHub', position: 'right' }
       ]
+    },
+    docs: {
+      sidebar: {
+        autoCollapseCategories: true,
+        hideable: true
+      }
     },
     footer: {
       style: 'dark',
       links: [
         {
-          title: 'Guides',
+          title: 'Start here',
           items: [
-            { label: 'Getting started', to: '/docs/guide/getting-started' },
-            { label: 'Concepts', to: '/docs/guide/concepts' },
-            { label: 'Configuration', to: '/docs/guide/configuration' }
+            { label: 'Getting started', to: '/docs/start-here/first-run/getting-started' },
+            { label: 'Tutorial', to: '/docs/start-here/first-run/tutorial' },
+            { label: 'Adopt an existing repository', to: '/docs/start-here/adopt' }
           ]
         },
         {
-          title: 'Repository workflow',
+          title: 'Workflows',
           items: [
-            { label: 'Validation report', to: '/docs/generated/syu-report' },
+            { label: 'Configuration', to: '/docs/workflows/repository/configuration' },
+            { label: 'Plan and execute work', to: '/docs/workflows/work' },
+            { label: 'Contribute', to: '/docs/contribute' }
+          ]
+        },
+        {
+          title: 'Reference',
+          items: [
+            { label: 'Specification reference', to: '/docs/reference/specification' },
+            { label: 'Validation report', to: '/docs/reference/status/validation-report' },
             { label: 'Contributing', href: 'https://github.com/ugoite/syu/blob/main/CONTRIBUTING.md' }
-          ]
-        },
-        {
-          title: 'Self-hosted spec',
-          items: [
-            { label: 'Reference index', to: '/docs/generated/site-spec' },
-            { label: 'Docs feature', to: '/docs/generated/site-spec/features/documentation/docs' }
           ]
         }
       ]

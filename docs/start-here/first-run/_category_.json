@@ -1,0 +1,7 @@
+{
+  "label": "First run",
+  "position": 1,
+  "collapsible": true,
+  "collapsed": false,
+  "link": { "type": "doc", "id": "start-here/first-run/index" }
+}

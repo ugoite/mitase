@@ -1,0 +1,7 @@
+{
+  "label": "Project decisions",
+  "position": 7,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "project/index" }
+}

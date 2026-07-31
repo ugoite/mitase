@@ -1,0 +1,10 @@
+{
+  "label": "Public contracts",
+  "position": 3,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "reference/specification/contracts/index"
+  }
+}
