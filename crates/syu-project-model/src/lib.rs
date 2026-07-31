@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt;
 use syu_spec_model::{RepoPath, SpecAnchor};
 
 pub const CONFIG_SCHEMA: &str = "syu/config/v1";
@@ -58,6 +59,20 @@ pub enum ReadinessLevel {
     WorkReady,
     Verifiable,
     ClosedLoop,
+}
+
+impl fmt::Display for ReadinessLevel {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            Self::Off => "off",
+            Self::Traceable => "traceable",
+            Self::Seedable => "seedable",
+            Self::WorkReady => "work-ready",
+            Self::Verifiable => "verifiable",
+            Self::ClosedLoop => "closed-loop",
+        };
+        formatter.write_str(label)
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -218,6 +218,7 @@ inventory:
             - fixtures/v1/valid-web-app/spec/requirement.yaml
             - fixtures/v1/valid-web-app/syu.yaml
             - scripts/ci/check-workbench-contract.py
+            - scripts/ci/check-workbench-i18n.mjs
             - scripts/ci/installed-binary-smoke.sh
             - scripts/ci/quality-gates.sh
             - scripts/ci/workbench-visual.sh
