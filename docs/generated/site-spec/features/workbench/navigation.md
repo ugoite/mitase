@@ -164,6 +164,12 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
           - **selector**:
             - **kind**: module
             - **name**: *
+        - **id**: assets-i18n-script
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/i18n.js
+          - **selector**:
+            - **kind**: module
+            - **name**: *
         - **id**: assets-main-module
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/main.js
@@ -383,6 +389,12 @@ features:
     - id: assets-js-i18n-module
       adapter: javascript
       path: crates/syu-app-ui/assets/js/i18n.js
+      selector:
+        kind: module
+        name: '*'
+    - id: assets-i18n-script
+      adapter: javascript
+      path: crates/syu-app-ui/assets/i18n.js
       selector:
         kind: module
         name: '*'
