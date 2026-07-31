@@ -1,4 +1,4 @@
-(() => {
+function initializePreferences() {
   'use strict';
   const one = (selector, root = document) => root.querySelector(selector);
   const all = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -119,4 +119,6 @@
   addEventListener('languagechange', () => { if (preferences.followOs) translate((navigator.language || 'en').toLowerCase().startsWith('ja') ? 'ja' : 'en'); });
   applyPreferences();
   setLayer(params().get('settingsLayer') || 'application', false);
-})();
+}
+
+initializePreferences();
