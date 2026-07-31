@@ -247,7 +247,7 @@ setTimeout(()=>{
   if(!document.querySelector('[data-work-specification] [data-journey-panel="diff"] .diff-file')) failures.push('implementation did not open the diff panel');
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
-  if(JSON.stringify(window.__SYU_FLOW__)!=='["prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  if(JSON.stringify(window.__SYU_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
   if(!document.querySelector('[data-page="work"] .journey-advanced')) failures.push('advanced completion evidence missing');
   await click('[data-page="work"] [data-tab="slices"]');
   if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('Work slices tab did not open');
