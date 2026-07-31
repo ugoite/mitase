@@ -118,6 +118,7 @@ export async function startWorkbench() {
     if (!state.busy) restoreBusyButtons();
     render(state);
   };
+  document.addEventListener('syu:locale', () => state.render());
   initSpecifications(state);
   initReadiness(state);
   initDiagnostics(state);

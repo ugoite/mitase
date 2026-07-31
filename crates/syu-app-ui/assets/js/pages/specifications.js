@@ -17,7 +17,7 @@ function status(text) {
   const node = document.createElement('span');
   const normalized = String(text || 'planned').toLowerCase().replace(/\s+/g, '-');
   node.className = `chip status-component status-${normalized}`;
-  const translatedStatuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
+  const translatedStatuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'binary', 'planned', 'implemented', 'deprecated', 'ready', 'blocked', 'needs-review', 'unknown']);
   const label = translatedStatuses.has(normalized)
     ? localizeEnum('status', normalized)
     : ['philosophy', 'policy', 'requirement', 'feature'].includes(normalized)

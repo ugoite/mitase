@@ -12,8 +12,12 @@
   let dateFormatter = new Intl.DateTimeFormat('en');
   let preferences = (() => { try { return JSON.parse(localStorage.getItem('syu.applicationPreferences') || '{}'); } catch { return {}; } })();
 
+  function lookup(key) {
+    return window.SYU_I18N[locale]?.[key];
+  }
+
   function required(key) {
-    const value = window.SYU_I18N[locale]?.[key];
+    const value = lookup(key);
     if (value === undefined) throw new Error(`Missing ${locale} translation: ${key}`);
     return value;
   }
@@ -93,7 +97,7 @@
     }
   }
 
-  window.SyuPreferences = { translate, theme: applyTheme, settingsLayer: setLayer, settingsPage: setPage, t: required, formatNumber: value => numberFormatter.format(value), formatDate: value => dateFormatter.format(value) };
+  window.SyuPreferences = { translate, theme: applyTheme, settingsLayer: setLayer, settingsPage: setPage, t: required, lookup, formatNumber: value => numberFormatter.format(value), formatDate: value => dateFormatter.format(value) };
   translate(params().get('lang') || localStorage.getItem('syu.locale') || osLanguage);
   applyTheme(params().get('theme') || localStorage.getItem('syu.theme') || 'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (themePreference === 'system') applyTheme('system'); });

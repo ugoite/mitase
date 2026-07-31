@@ -2,6 +2,10 @@ export function translate(key) {
   return window.SyuPreferences?.t?.(key) || key;
 }
 
+function lookup(key) {
+  return window.SyuPreferences?.lookup?.(key);
+}
+
 function normalizedEnum(value) {
   return String(value || 'unknown')
     .trim()
@@ -17,8 +21,8 @@ function normalizedEnum(value) {
 export function localizeEnum(namespace, value, fallback = value) {
   const normalized = normalizedEnum(value);
   const key = `${namespace}.${normalized}`;
-  const translated = translate(key);
-  return translated === key ? (fallback ?? value) : translated;
+  const translated = lookup(key);
+  return translated === undefined ? (fallback ?? value) : translated;
 }
 
 /**
@@ -26,8 +30,8 @@ export function localizeEnum(namespace, value, fallback = value) {
  * titles remain user-authored source text and are never machine-translated.
  */
 export function localizeSpecificationTitle(item) {
-  if (!item?.id) return item?.title || '';
-  const key = `specification.title.${item.id}`;
-  const translated = translate(key);
-  return translated === key ? (item.title || '') : translated;
+  const key = item?.presentation_title_key;
+  if (!key) return item?.title || '';
+  const translated = lookup(key);
+  return translated === undefined ? (item.title || '') : translated;
 }

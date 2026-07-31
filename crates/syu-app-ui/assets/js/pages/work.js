@@ -38,7 +38,7 @@ function actionText(action, kind) {
 
 function statusText(status) {
   const normalized = String(status || 'planned').toLowerCase();
-  const statuses = new Set(['planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
+  const statuses = new Set(['planned', 'implemented', 'deprecated', 'ready', 'blocked', 'needs-review', 'unknown']);
   if (statuses.has(normalized)) return localizeEnum('status', normalized);
   const kinds = new Set(['philosophy', 'policy', 'requirement', 'feature']);
   return kinds.has(normalized) ? localizeEnum('items', normalized) : status;

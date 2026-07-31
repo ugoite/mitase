@@ -691,6 +691,8 @@
   "status.deprecated": "Deprecated",
   "status.ready": "Ready",
   "status.blocked": "Blocked",
+  "status.needs_review": "Needs review",
+  "status.binary": "Binary",
   "status.unknown": "Unknown",
   "diagnostics.technical": "Technical details",
   "diagnostics.family.schema": "Configuration is invalid",

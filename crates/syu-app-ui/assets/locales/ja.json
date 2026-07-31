@@ -691,6 +691,8 @@
   "status.deprecated": "廃止予定",
   "status.ready": "準備完了",
   "status.blocked": "要対応",
+  "status.needs_review": "要確認",
+  "status.binary": "バイナリ",
   "status.unknown": "不明",
   "diagnostics.technical": "技術的な詳細",
   "diagnostics.family.schema": "設定ファイルに問題があります",
