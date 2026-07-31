@@ -2269,6 +2269,18 @@ fn criterion_verification_targets(
         if requested_transition.is_some() && !requested_verification_add {
             continue;
         }
+        let missing_target = !index.target_to_artifact.contains_key(reference)
+            && target.lifecycle != ArtifactTargetLifecycle::Absent;
+        if requested_add && missing_target && !requested_verification_add {
+            blockers.push(Diagnostic::error(
+                "SYU-WORK-014",
+                format!(
+                    "verification target {reference} is planned but missing; approve its exact Add target before including it in the slice"
+                ),
+                target.path.to_string_lossy(),
+            ));
+            continue;
+        }
         let policy = if requested_verification_add {
             target_policy(TargetTransition::RunOnly)
         } else if exact_target {
@@ -3843,6 +3855,78 @@ mod tests {
             verification.verification_claim.as_ref().unwrap().criterion,
             "REQ-TEST-001#criterion.test".parse().unwrap()
         );
+    }
+
+    #[test]
+    fn implementation_add_does_not_pull_unapproved_missing_verification_target() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let mut feature = fs::read_to_string(&feature_path).expect("feature spec");
+        feature.push_str(concat!(
+            "\n  - id: FEAT-TEST-VERIFICATION-001\n",
+            "    title: Planned verification\n",
+            "    summary: Add a verification target only after its exact approval.\n",
+            "    status: planned\n",
+            "    bindings:\n",
+            "      - id: verification\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the test criterion.\n",
+            "        targets:\n",
+            "          - id: missing-test\n",
+            "            adapter: rust\n",
+            "            path: tests/behavior.rs\n",
+            "            selector: { kind: symbol, name: missing_test }\n",
+            "            claims:\n",
+            "              - kind: verifies\n",
+            "                criterion: REQ-TEST-001#criterion.test\n",
+            "                covers: [FEAT-TEST-001#binding.impl/target.handler-present]\n",
+            "                runner: { runner: cargo-test, arguments: { package: sample, test: missing_test } }\n",
+        ));
+        fs::write(feature_path, feature).expect("verification feature spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn existing_handler() {}\n",
+        )
+        .expect("existing container");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-UNAPPROVED-VERIFICATION".into(),
+            summary: "Add the implementation target".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(512),
+                max_added_lines_per_target: Some(32),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
+                    .parse()
+                    .unwrap(),
+                criterion: Some(criterion),
+                transition: TargetTransition::Add,
+            }],
+        };
+
+        let plan = plan(&request, &workspace, &index, "rev-unapproved-verification").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked, "{plan:?}");
+        assert!(plan.slices.iter().all(|slice| {
+            slice
+                .verification_targets
+                .iter()
+                .all(|target| target.reference.target_id.to_string() != "missing-test")
+        }));
+        assert!(plan.slices.iter().any(|slice| {
+            slice
+                .blockers
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-014")
+        }));
     }
 
     #[test]

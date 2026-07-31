@@ -4421,12 +4421,12 @@ fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
         "verification",
         "closed_loop",
     ];
-    let required_axes = match report.target.as_str() {
-        "traceable" => TRACEABLE_AXES,
-        "seedable" => SEEDABLE_AXES,
-        "work-ready" => WORK_READY_AXES,
-        "verifiable" => VERIFIABLE_AXES,
-        "closed-loop" => CLOSED_LOOP_AXES,
+    let required_axes = match report.target {
+        ReadinessLevel::Traceable => TRACEABLE_AXES,
+        ReadinessLevel::Seedable => SEEDABLE_AXES,
+        ReadinessLevel::WorkReady => WORK_READY_AXES,
+        ReadinessLevel::Verifiable => VERIFIABLE_AXES,
+        ReadinessLevel::ClosedLoop => CLOSED_LOOP_AXES,
         _ => &[],
     };
     let blocker_details = required_axes
@@ -6923,6 +6923,82 @@ mod tests {
                     })
                     .expect("finalized absent target readiness subject");
                 assert!(removed_subject.ready, "{removed_subject:?}");
+
+                // Absence evidence is durable across the commit that records
+                // finalization. It must not be tied to the exact HEAD or
+                // workspace fingerprint that existed immediately after the
+                // lifecycle write.
+                for args in [
+                    vec!["add", "-A"],
+                    vec!["commit", "-qm", "record finalized absence"],
+                ] {
+                    assert!(
+                        Command::new("git")
+                            .args(args)
+                            .current_dir(temp.path())
+                            .status()
+                            .expect("record finalized absence commit")
+                            .success()
+                    );
+                }
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("post-commit readiness");
+                assert_eq!(readiness.status, "Ready", "{readiness:?}");
+
+                // An unrelated, valid commit must also leave the historical
+                // lifecycle proof usable. Only the current exact absence
+                // obligation is relevant to this readiness decision.
+                let unrelated = temp.path().join("src/unrelated.rs");
+                let unrelated_content =
+                    fs::read_to_string(&unrelated).expect("unrelated fixture source");
+                fs::write(&unrelated, unrelated_content.replace("false", "true"))
+                    .expect("unrelated approved change");
+                for args in [
+                    vec!["add", "src/unrelated.rs"],
+                    vec!["commit", "-qm", "record unrelated approved change"],
+                ] {
+                    assert!(
+                        Command::new("git")
+                            .args(args)
+                            .current_dir(temp.path())
+                            .status()
+                            .expect("record unrelated change commit")
+                            .success()
+                    );
+                }
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("unrelated-change readiness");
+                assert_eq!(readiness.status, "Ready", "{readiness:?}");
 
                 // Readiness must reject a forged finalization record even
                 // when its post-state fingerprint still matches. The

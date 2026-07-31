@@ -1019,13 +1019,9 @@ fn finalized_absent_targets(
         workspace.root.join(root)
     };
     let finalizations = root.join("completion/v1/finalizations");
-    let current_fingerprint = workspace.try_fingerprint().ok();
     let attempts = json_files_recursive(&root.join("completion/v1/attempts"));
     let approvals = json_files_recursive(&root.join("completion/v1/approvals"));
     let finalizations = json_files_recursive(&finalizations);
-    if current_fingerprint.is_none() {
-        return BTreeSet::new();
-    }
     let mut targets = BTreeSet::new();
     for path in finalizations {
         let Ok(bytes) = fs::read(&path) else {
@@ -1035,7 +1031,7 @@ fn finalized_absent_targets(
             continue;
         };
         if receipt.schema != FINALIZATION_RECEIPT_SCHEMA
-            || current_fingerprint.as_deref() != Some(receipt.post_workspace_fingerprint.as_str())
+            || receipt.post_workspace_fingerprint.is_empty()
         {
             continue;
         }
@@ -1063,7 +1059,6 @@ fn finalized_absent_targets(
         if verification.schema != VERIFICATION_RECEIPT_SCHEMA
             || verification.plan_digest != receipt.plan_digest
             || verification.slice_id != receipt.slice_id
-            || verification.revision != revision
             || verification.workspace_fingerprint != receipt.pre_workspace_fingerprint
             || verification.lifecycle_proofs != receipt.lifecycle_proofs
             || verification
@@ -1083,7 +1078,9 @@ fn finalized_absent_targets(
         if approval.schema != PLAN_APPROVAL_SCHEMA
             || approval.plan_digest != approval.plan.canonical_digest
             || approval.plan_digest != work_plan_digest(&approval.plan)
-            || approval.plan.basis.revision != revision
+            || approval.revision != approval.plan.basis.revision
+            || verification.revision != approval.revision
+            || !revision_is_ancestor(&workspace.root, &approval.revision, revision)
         {
             continue;
         }
@@ -1125,8 +1122,7 @@ fn finalized_absent_targets(
                 || proof.lifecycle != TargetLifecycle::EnsureAbsent
                 || proof.before_content_hash != target.content_hash
                 || !proof.after_content_hash.is_empty()
-                || index.all_target_to_artifact.contains_key(&proof.reference)
-                || index.target_to_artifact.contains_key(&proof.reference)
+                || !current_absence_obligation_matches(index, target)
             {
                 valid = false;
                 break;
@@ -1138,6 +1134,79 @@ fn finalized_absent_targets(
         }
     }
     targets
+}
+
+/// A durable absence proof remains useful across commits and unrelated
+/// workspace changes, but only while the current specification still carries
+/// the same exact obligation. The target reference alone is not enough: a
+/// reused reference with a different path or binding role must not inherit the
+/// old proof.
+fn current_absence_obligation_matches(
+    index: &SpecIndex,
+    approved_target: &syu_work_model::PlannedTarget,
+) -> bool {
+    let Some(binding) = index.bindings.get(&approved_target.reference.binding) else {
+        return false;
+    };
+    if binding.role != approved_target.role {
+        return false;
+    }
+    let Some(target) = binding
+        .targets
+        .iter()
+        .find(|target| target.id == approved_target.reference.target_id)
+    else {
+        return false;
+    };
+    target.lifecycle == syu_spec_model::ArtifactTargetLifecycle::Absent
+        && target.path.to_string_lossy() == approved_target.resolved_path
+        && selector_matches_resolved_target(&target.selector, &approved_target.resolved_selector)
+        && !index
+            .all_target_to_artifact
+            .contains_key(&approved_target.reference)
+        && !index
+            .target_to_artifact
+            .contains_key(&approved_target.reference)
+}
+
+fn selector_matches_resolved_target(
+    selector: &syu_spec_model::ExactSelector,
+    resolved: &syu_work_model::ResolvedSelector,
+) -> bool {
+    match selector {
+        syu_spec_model::ExactSelector::File => {
+            resolved.description == "file" && resolved.symbols.is_empty()
+        }
+        syu_spec_model::ExactSelector::Symbol { name } => {
+            resolved.description == format!("symbol {name}") && resolved.symbols == [name.clone()]
+        }
+        syu_spec_model::ExactSelector::Operation { method, path } => {
+            resolved.description == format!("operation {} {path}", method.to_ascii_uppercase())
+                && resolved.symbols.is_empty()
+        }
+        syu_spec_model::ExactSelector::Heading { value } => {
+            resolved.description == format!("heading {value}") && resolved.symbols.is_empty()
+        }
+        syu_spec_model::ExactSelector::JsonPointer { value } => {
+            resolved.description == format!("json pointer {value}") && resolved.symbols.is_empty()
+        }
+        syu_spec_model::ExactSelector::Marker { value } => {
+            resolved.description == format!("marker {value}") && resolved.symbols.is_empty()
+        }
+    }
+}
+
+fn revision_is_ancestor(root: &Path, ancestor: &str, descendant: &str) -> bool {
+    Command::new("git")
+        .args([
+            "-C",
+            root.to_string_lossy().as_ref(),
+            "merge-base",
+            "--is-ancestor",
+        ])
+        .args([ancestor, descendant])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn implemented_feature_subjects(
