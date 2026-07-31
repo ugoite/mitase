@@ -21,7 +21,8 @@ use std::{fs, path::Path};
 use syu_delivery::DeliveryStore;
 use syu_diagnostics::{Severity, ValidationPhase, ValidationResult};
 use syu_planner::{
-    SplitWorkRecommendation, TargetSuggestionSet, plan, split_work_recommendation, suggest_targets,
+    SplitWorkRecommendation, TargetSuggestion, TargetSuggestionSet, plan,
+    split_work_recommendation, suggest_targets,
 };
 use syu_project_model::{ChangeBaseline, ValidationPreset};
 use syu_spec_model::format_sha256;
@@ -206,7 +207,6 @@ impl WorkbenchServer {
             .route("/api/scope/branch", get(api_branch_scope))
             .route("/api/scope/diff", get(api_scope_diff))
             .route("/api/source", get(api_source))
-            .route("/api/work/request", post(api_request))
             .route("/api/work/action", post(api_journey_action))
             .route("/api/work/plan", post(api_plan))
             .route("/api/work/validate", post(api_validate))
@@ -427,13 +427,6 @@ pub struct MutationBasis {
     pub expected_workspace_fingerprint: String,
     pub expected_source_hash: String,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkRequestCommand {
-    pub basis: MutationBasis,
-    pub request: WorkRequest,
-}
-
 /// The browser and native WebView use one user-facing action boundary.  The
 /// low-level planner and delivery APIs remain server implementation details.
 #[derive(Debug, Clone, Deserialize)]
@@ -2695,26 +2688,6 @@ async fn api_source(
         is_excerpt: false,
     }))
 }
-async fn api_request(
-    State(service): State<Arc<WorkbenchService>>,
-    Json(command): Json<WorkRequestCommand>,
-) -> Result<Json<WorkspaceProjection>, ApiError> {
-    let snapshot = basis(&service, &command.basis)?;
-    let mut session = service
-        .session
-        .write()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-    session.work_title = Some(command.request.summary.trim().to_owned());
-    session.draft_request = Some(command.request);
-    session.plan = None;
-    session.selected_slice = None;
-    session.context_pack = None;
-    session.verification_receipt = None;
-    session.agent_run = None;
-    session.last_validation = None;
-    Ok(Json(project_session(&snapshot, &session)?))
-}
-
 fn validate_create_work_criterion(
     snapshot: &CachedWorkspaceSnapshot,
     anchor: &SpecAnchor,
@@ -2732,6 +2705,29 @@ fn validate_create_work_criterion(
         anyhow::bail!("Work can only start from a criterion in an implemented requirement");
     }
     Ok(())
+}
+
+fn resolve_requested_targets(
+    anchor: &SpecAnchor,
+    suggestions: Result<Vec<TargetSuggestion>>,
+    approvals: &[ApprovedTargetSuggestion],
+) -> Result<Vec<RequestedTarget>> {
+    let suggestions = suggestions?;
+    Ok(approvals
+        .iter()
+        .filter(|approval| approval.criterion == *anchor)
+        .filter_map(|approval| {
+            suggestions.iter().find(|candidate| {
+                candidate.id == approval.suggestion_id
+                    && candidate.evidence_fingerprint == approval.evidence_fingerprint
+            })
+        })
+        .map(|candidate| RequestedTarget {
+            reference: candidate.reference.clone(),
+            criterion: Some(anchor.clone()),
+            transition: candidate.transition,
+        })
+        .collect())
 }
 
 async fn api_journey_action(
@@ -2757,42 +2753,27 @@ async fn api_journey_action(
                     anyhow::anyhow!("provide a work summary before continuing"),
                 ));
             }
-            let current_suggestions =
-                suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
-                    .map(|set| set.suggestions)
-                    .unwrap_or_default();
-            let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-            let mut session = service
+            let approvals = service
                 .session
-                .write()
-                .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+                .read()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+                .approved_target_suggestions
+                .clone();
+            let requested_targets = resolve_requested_targets(
+                &anchor,
+                suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
+                    .map(|set| set.suggestions),
+                &approvals,
+            )
+            .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
             let summary = summary.trim().to_owned();
-            let requested_targets = session
-                .approved_target_suggestions
-                .iter()
-                .filter(|approval| approval.criterion == anchor)
-                .filter_map(|approval| {
-                    current_suggestions.iter().find(|candidate| {
-                        candidate.id == approval.suggestion_id
-                            && candidate.evidence_fingerprint == approval.evidence_fingerprint
-                    })
-                })
-                .map(|candidate| RequestedTarget {
-                    reference: candidate.reference.clone(),
-                    criterion: Some(anchor.clone()),
-                    transition: candidate.transition,
-                })
-                .collect::<Vec<_>>();
-            session
-                .approved_target_suggestions
-                .retain(|approval| approval.criterion != anchor);
-            session.work_title = Some(summary.clone());
-            session.draft_request = Some(WorkRequest {
+            let request = WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: store.new_id("work"),
                 summary,
                 operation: WorkOperation::Modify,
-                seeds: vec![WorkSeed::Anchor(anchor)],
+                seeds: vec![WorkSeed::Anchor(anchor.clone())],
                 // A guided journey has one executable change boundary.  Plans
                 // with several isolated slices need separate worktrees, so do
                 // not silently pick and execute their first slice here.
@@ -2801,7 +2782,22 @@ async fn api_journey_action(
                     ..WorkConstraints::default()
                 },
                 requested_targets,
-            });
+            };
+            let mut session = service
+                .session
+                .write()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+            if session.approved_target_suggestions != approvals {
+                return Err(ApiError(
+                    StatusCode::CONFLICT,
+                    anyhow::anyhow!("target suggestions changed; review the refreshed evidence"),
+                ));
+            }
+            session
+                .approved_target_suggestions
+                .retain(|approval| approval.criterion != anchor);
+            session.work_title = Some(request.summary.clone());
+            session.draft_request = Some(request);
             session.plan = None;
             session.selected_slice = None;
             session.context_pack = None;
@@ -5357,6 +5353,7 @@ mod tests {
     use http::{Request, StatusCode};
     use http_body_util::BodyExt;
     use std::sync::OnceLock;
+    use syu_work_model::TargetTransition;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::sync::{Mutex, MutexGuard};
@@ -5693,8 +5690,6 @@ mod tests {
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
 
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
-        let (basis, csrf, _) = projection_and_basis(&app).await;
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-FIXTURE-POST-STATE".into(),
@@ -5706,21 +5701,10 @@ mod tests {
             constraints: Default::default(),
             requested_targets: vec![],
         };
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand {
-                basis: basis.clone(),
-                request,
-            },
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let response_body = response.into_body().collect().await.unwrap().to_bytes();
-        let request_projection: serde_json::Value =
-            serde_json::from_slice(&response_body).expect("request projection");
+        let app = WorkbenchServer::new(temp.path().to_path_buf())
+            .with_request(request)
+            .router();
+        let (basis, csrf, request_projection) = projection_and_basis(&app).await;
         assert!(request_projection["work"]["request"].is_object());
         assert!(request_projection["work"]["plan"].is_null());
 
@@ -5838,8 +5822,6 @@ mod tests {
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
-        let (basis, csrf, _) = projection_and_basis(&app).await;
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-FIXTURE-AGENT".into(),
@@ -5851,18 +5833,10 @@ mod tests {
             constraints: Default::default(),
             requested_targets: vec![],
         };
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand {
-                basis: basis.clone(),
-                request,
-            },
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        let app = WorkbenchServer::new(temp.path().to_path_buf())
+            .with_request(request)
+            .router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
         let plan: WorkPlan =
@@ -6058,7 +6032,8 @@ mod tests {
         assert_eq!(projection["work"]["agent"]["status"], "blocked");
         assert!(projection["work"]["agent_events"].as_array().unwrap().len() >= 5);
 
-        let restarted = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let restarted_server = WorkbenchServer::new(temp.path().to_path_buf());
+        let restarted = restarted_server.router();
         let projection = restarted
             .clone()
             .oneshot(
@@ -6074,32 +6049,42 @@ mod tests {
                 .expect("restarted agent projection");
         assert_eq!(projection["work"]["agent"]["status"], "blocked");
 
-        let (basis, csrf, _) = projection_and_basis(&restarted).await;
-        let response = json_mutation(
-            &restarted,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand {
-                basis,
-                request: WorkRequest {
-                    schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
-                    id: "WORK-FIXTURE-NEXT".into(),
-                    summary: "a subsequent work request".into(),
-                    operation: syu_work_model::WorkOperation::Modify,
-                    seeds: vec![syu_work_model::WorkSeed::Anchor(
-                        "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-                    )],
-                    constraints: Default::default(),
-                    requested_targets: vec![],
-                },
-            },
+        {
+            let mut session = restarted_server
+                .service
+                .session
+                .write()
+                .expect("restarted session lock");
+            session.work_title = Some("a subsequent work request".into());
+            session.draft_request = Some(WorkRequest {
+                schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+                id: "WORK-FIXTURE-NEXT".into(),
+                summary: "a subsequent work request".into(),
+                operation: syu_work_model::WorkOperation::Modify,
+                seeds: vec![syu_work_model::WorkSeed::Anchor(
+                    "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                )],
+                constraints: Default::default(),
+                requested_targets: vec![],
+            });
+        }
+        let projection: serde_json::Value = serde_json::from_slice(
+            &restarted
+                .oneshot(
+                    Request::builder()
+                        .uri("/api/projection")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes(),
         )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let projection: serde_json::Value =
-            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
-                .expect("subsequent request projection");
+        .expect("subsequent request projection");
         assert!(projection["work"]["agent"].is_null());
     }
 
@@ -6321,6 +6306,63 @@ mod tests {
                 .expect("created feature")
                 .contains("FEAT-FIXTURE-002")
         );
+    }
+
+    #[test]
+    fn approved_target_resolution_fails_closed_and_filters_stale_evidence() {
+        let anchor: SpecAnchor = "REQ-FIXTURE-001#criterion.behavior".parse().unwrap();
+        let target_reference: BoundTargetRef =
+            "FEAT-FIXTURE-001#binding.implementation/target.behavior"
+                .parse()
+                .unwrap();
+        let suggestions = vec![
+            TargetSuggestion {
+                id: "target-current".into(),
+                rank: 1,
+                reference: target_reference.clone(),
+                role: BindingRole::Implementation,
+                transition: TargetTransition::Modify,
+                confidence: syu_planner::SuggestionConfidence::High,
+                evidence: vec!["current evidence".into()],
+                evidence_fingerprint: "current-fingerprint".into(),
+            },
+            TargetSuggestion {
+                id: "target-stale".into(),
+                rank: 2,
+                reference: target_reference,
+                role: BindingRole::Implementation,
+                transition: TargetTransition::Modify,
+                confidence: syu_planner::SuggestionConfidence::High,
+                evidence: vec!["new evidence".into()],
+                evidence_fingerprint: "new-fingerprint".into(),
+            },
+        ];
+        let approvals = vec![
+            ApprovedTargetSuggestion {
+                criterion: anchor.clone(),
+                suggestion_id: "target-current".into(),
+                evidence_fingerprint: "current-fingerprint".into(),
+            },
+            ApprovedTargetSuggestion {
+                criterion: anchor.clone(),
+                suggestion_id: "target-stale".into(),
+                evidence_fingerprint: "old-fingerprint".into(),
+            },
+        ];
+        let requested = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
+            .expect("matching target resolution");
+        assert_eq!(requested.len(), 1);
+        assert_eq!(
+            requested[0].reference.to_string(),
+            "FEAT-FIXTURE-001#binding.implementation/target.behavior"
+        );
+        let error = resolve_requested_targets(
+            &anchor,
+            Err(anyhow::anyhow!("target suggestion recalculation failed")),
+            &approvals,
+        )
+        .expect_err("suggestion errors must not become empty targets");
+        assert_eq!(error.to_string(), "target suggestion recalculation failed");
     }
 
     #[tokio::test]
@@ -6894,35 +6936,32 @@ mod tests {
         );
         assert!(projection["journey"]["related_specification"].is_null());
 
-        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
-            "expected_revision": projection["snapshot"]["revision"],
-            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
-            "expected_source_hash": projection["snapshot"]["source_hash"]
-        }))
-        .expect("cancelled basis");
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand {
-                basis,
-                request: WorkRequest {
-                    schema: WORK_REQUEST_SCHEMA.into(),
-                    id: "WORK-MULTIPLE-CRITERIA".into(),
-                    summary: "Change several fixture criteria".into(),
-                    operation: WorkOperation::Modify,
-                    seeds: vec![
-                        WorkSeed::Anchor("REQ-FIXTURE-001#criterion.behavior".parse().unwrap()),
-                        WorkSeed::Anchor("REQ-FIXTURE-001#criterion.other".parse().unwrap()),
-                    ],
-                    constraints: WorkConstraints::default(),
-                    requested_targets: vec![],
-                },
-            },
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        {
+            let mut session = service.session.write().expect("journey session lock");
+            session.work_title = Some("Change several fixture criteria".into());
+            session.draft_request = Some(WorkRequest {
+                schema: WORK_REQUEST_SCHEMA.into(),
+                id: "WORK-MULTIPLE-CRITERIA".into(),
+                summary: "Change several fixture criteria".into(),
+                operation: WorkOperation::Modify,
+                seeds: vec![
+                    WorkSeed::Anchor("REQ-FIXTURE-001#criterion.behavior".parse().unwrap()),
+                    WorkSeed::Anchor("REQ-FIXTURE-001#criterion.other".parse().unwrap()),
+                ],
+                constraints: WorkConstraints::default(),
+                requested_targets: vec![],
+            });
+        }
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         let projection: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("multiple criteria projection");
@@ -6940,8 +6979,6 @@ mod tests {
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
-        let (basis, csrf, _) = projection_and_basis(&app).await;
         let request = WorkRequest {
             schema: WORK_REQUEST_SCHEMA.into(),
             id: "WORK-BLOCKED-JOURNEY".into(),
@@ -6956,18 +6993,10 @@ mod tests {
             },
             requested_targets: vec![],
         };
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand {
-                basis: basis.clone(),
-                request,
-            },
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        let app = WorkbenchServer::new(temp.path().to_path_buf())
+            .with_request(request)
+            .router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
 
         let response = json_mutation(
             &app,
@@ -7198,8 +7227,6 @@ mod tests {
     #[tokio::test]
     async fn workbench_work_session_flow() {
         let _workspace_lock = workspace_test_lock().await;
-        let app = WorkbenchServer::new(workspace_root()).router();
-        let (basis, csrf, _) = projection_and_basis(&app).await;
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-WORKBENCH-SESSION".into(),
@@ -7211,15 +7238,11 @@ mod tests {
             constraints: Default::default(),
             requested_targets: vec![],
         };
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand { basis, request },
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        let app = WorkbenchServer::new(workspace_root())
+            .with_request(request)
+            .router();
+        let (_, _, projection) = projection_and_basis(&app).await;
+        assert!(projection["work"]["request"].is_object());
     }
 
     #[test]

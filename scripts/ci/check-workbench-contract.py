@@ -118,6 +118,8 @@ assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") ==
 assert "WORK-SUGGESTION-" not in SERVER_RS
 assert "approved_target_suggestions" in SERVER_RS
 assert "validate_create_work_criterion" in SERVER_RS
+assert '"/api/work/request"' not in SERVER_RS
+assert "WorkRequestCommand" not in SERVER_RS
 assert "draft_request = Some(request.clone())" not in SERVER_RS
 assert "Describe the change you want to make" not in SERVER_RS
 assert "renderDiff" in WORK_JS
