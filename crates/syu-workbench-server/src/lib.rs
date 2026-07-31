@@ -2735,20 +2735,35 @@ fn resolve_requested_targets(
     suggestions: Result<Vec<TargetSuggestion>>,
     approvals: &[ApprovedTargetSuggestion],
 ) -> Result<Vec<RequestedTarget>> {
+    Ok(
+        resolve_approved_target_candidates(anchor, suggestions, approvals)?
+            .into_iter()
+            .map(|candidate| RequestedTarget {
+                reference: candidate.reference,
+                criterion: Some(anchor.clone()),
+                transition: candidate.transition,
+            })
+            .collect(),
+    )
+}
+
+fn resolve_approved_target_candidates(
+    anchor: &SpecAnchor,
+    suggestions: Result<Vec<TargetSuggestion>>,
+    approvals: &[ApprovedTargetSuggestion],
+) -> Result<Vec<TargetSuggestion>> {
     let suggestions = suggestions?;
     Ok(approvals
         .iter()
         .filter(|approval| approval.criterion == *anchor)
         .filter_map(|approval| {
-            suggestions.iter().find(|candidate| {
-                candidate.id == approval.suggestion_id
-                    && candidate.evidence_fingerprint == approval.evidence_fingerprint
-            })
-        })
-        .map(|candidate| RequestedTarget {
-            reference: candidate.reference.clone(),
-            criterion: Some(anchor.clone()),
-            transition: candidate.transition,
+            suggestions
+                .iter()
+                .find(|candidate| {
+                    candidate.id == approval.suggestion_id
+                        && candidate.evidence_fingerprint == approval.evidence_fingerprint
+                })
+                .cloned()
         })
         .collect())
 }
@@ -2782,26 +2797,50 @@ async fn api_journey_action(
                 .map_err(|_| anyhow::anyhow!("workbench session lock"))?
                 .approved_target_suggestions
                 .clone();
-            let requested_targets = resolve_requested_targets(
-                &anchor,
-                suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
-                    .map(|set| set.suggestions),
-                &approvals,
-            )
-            .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let suggestions = suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
+                .map(|set| set.suggestions)
+                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let approved_candidates =
+                resolve_approved_target_candidates(&anchor, Ok(suggestions.clone()), &approvals)
+                    .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let requested_targets = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
+                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let operation = match approved_candidates
+                .first()
+                .map(|candidate| candidate.transition)
+            {
+                Some(TargetTransition::Add) => WorkOperation::Add,
+                Some(TargetTransition::Remove) => WorkOperation::Remove,
+                _ => WorkOperation::Modify,
+            };
+            let max_added_bytes_per_target = approved_candidates
+                .iter()
+                .filter_map(|candidate| candidate.budget_bytes)
+                .max();
+            let max_added_lines_per_target = approved_candidates
+                .iter()
+                .filter_map(|candidate| candidate.budget_lines)
+                .max();
             let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
             let summary = summary.trim().to_owned();
+            let seeds = if requested_targets.is_empty() {
+                vec![WorkSeed::Anchor(anchor.clone())]
+            } else {
+                vec![]
+            };
             let request = WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: store.new_id("work"),
                 summary,
-                operation: WorkOperation::Modify,
-                seeds: vec![WorkSeed::Anchor(anchor.clone())],
+                operation,
+                seeds,
                 // A guided journey has one executable change boundary.  Plans
                 // with several isolated slices need separate worktrees, so do
                 // not silently pick and execute their first slice here.
                 constraints: WorkConstraints {
                     max_slices: Some(1),
+                    max_added_bytes_per_target,
+                    max_added_lines_per_target,
                     ..WorkConstraints::default()
                 },
                 requested_targets,
@@ -6194,6 +6233,7 @@ mod tests {
     }
 
     async fn start_lifecycle_agent(
+        server: &WorkbenchServer,
         app: &Router,
         target_id: &str,
         transition: syu_work_model::TargetTransition,
@@ -6252,10 +6292,11 @@ mod tests {
                 transition,
             }],
         };
-        start_lifecycle_agent_with_request(app, target, request).await
+        start_lifecycle_agent_with_request(server, app, target, request).await
     }
 
     async fn start_lifecycle_agent_with_request(
+        server: &WorkbenchServer,
         app: &Router,
         target: BoundTargetRef,
         request: WorkRequest,
@@ -6266,19 +6307,10 @@ mod tests {
         AgentRun,
         syu_work_model::AgentTargetDigest,
     ) {
+        if let Ok(mut session) = server.service.session.write() {
+            session.draft_request = Some(request);
+        }
         let (basis, csrf, _) = projection_and_basis(app).await;
-        let response = json_mutation(
-            app,
-            Method::POST,
-            "/api/work/request",
-            &csrf,
-            &WorkRequestCommand {
-                basis: basis.clone(),
-                request,
-            },
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
         let response = json_mutation(app, Method::POST, "/api/work/plan", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
         let plan: WorkPlan =
@@ -6336,6 +6368,37 @@ mod tests {
             .expect("lifecycle target digest")
             .clone();
         (basis, csrf, slice, run, digest)
+    }
+
+    async fn create_approved_work_request(
+        server: &WorkbenchServer,
+        anchor: &str,
+        summary: &str,
+    ) -> WorkRequest {
+        let app = server.router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": anchor,
+                "summary": summary,
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        server
+            .service
+            .session
+            .read()
+            .expect("workbench session lock")
+            .draft_request
+            .clone()
+            .expect("created work request")
     }
 
     #[tokio::test]
@@ -6418,11 +6481,17 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("remove suggestion approval");
-        let request = approval.request.expect("approved remove request");
+        assert_eq!(approval.approved_ids, vec![candidate.id.clone()]);
+        let request = create_approved_work_request(
+            &server,
+            "REQ-FIXTURE-001#criterion.remove-symbol",
+            "remove the approved symbol",
+        )
+        .await;
         assert_eq!(request.operation, syu_work_model::WorkOperation::Remove);
         let target = request.requested_targets[0].reference.clone();
         let (basis, csrf, slice, run, target_digest) =
-            start_lifecycle_agent_with_request(&app, target.clone(), request).await;
+            start_lifecycle_agent_with_request(&server, &app, target.clone(), request).await;
         let response = json_mutation(
             &app,
             Method::POST,
@@ -6607,11 +6676,17 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("verification add approval");
-        let request = approval.request.expect("verification add request");
+        assert_eq!(approval.approved_ids, vec![candidate.id.clone()]);
+        let request = create_approved_work_request(
+            &server,
+            "REQ-FIXTURE-001#criterion.add-symbol",
+            "add the approved verification target",
+        )
+        .await;
         assert_eq!(request.operation, syu_work_model::WorkOperation::Add);
         let target = request.requested_targets[0].reference.clone();
         let (basis, csrf, slice, run, target_digest) =
-            start_lifecycle_agent_with_request(&app, target.clone(), request).await;
+            start_lifecycle_agent_with_request(&server, &app, target.clone(), request).await;
         assert_eq!(
             target_digest.transition,
             syu_work_model::TargetTransition::Add
@@ -6755,9 +6830,10 @@ mod tests {
                 .expect("enable readiness for remove-symbol lifecycle");
             }
             initialize_fixture_git(temp.path());
-            let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+            let server = WorkbenchServer::new(temp.path().to_path_buf());
+            let app = server.router();
             let (basis, csrf, slice, run, target) =
-                start_lifecycle_agent(&app, target_id, transition).await;
+                start_lifecycle_agent(&server, &app, target_id, transition).await;
             assert_eq!(target.transition, transition, "{description}");
             let write = match target_id {
                 "behavior" => syu_work_model::AgentTargetWrite::Replace {
@@ -7137,8 +7213,10 @@ mod tests {
             let temp = tempfile::tempdir().expect("lifecycle precondition fixture tempdir");
             copy_fixture_tree(&fixture, temp.path());
             initialize_fixture_git(temp.path());
-            let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
-            let (_, _, _, run, target) = start_lifecycle_agent(&app, target_id, transition).await;
+            let server = WorkbenchServer::new(temp.path().to_path_buf());
+            let app = server.router();
+            let (_, _, _, run, target) =
+                start_lifecycle_agent(&server, &app, target_id, transition).await;
 
             let changed_path = temp.path().join(path);
             if target_id == "added-symbol" {
@@ -7450,6 +7528,12 @@ mod tests {
                 reference: target_reference.clone(),
                 role: BindingRole::Implementation,
                 transition: TargetTransition::Modify,
+                lifecycle: syu_work_model::TargetLifecycle::Stable,
+                path: "src/lib.rs".into(),
+                selector: "behavior".into(),
+                existing_file: true,
+                budget_bytes: None,
+                budget_lines: None,
                 confidence: syu_planner::SuggestionConfidence::High,
                 evidence: vec!["current evidence".into()],
                 evidence_fingerprint: "current-fingerprint".into(),
@@ -7460,6 +7544,12 @@ mod tests {
                 reference: target_reference,
                 role: BindingRole::Implementation,
                 transition: TargetTransition::Modify,
+                lifecycle: syu_work_model::TargetLifecycle::Stable,
+                path: "src/lib.rs".into(),
+                selector: "behavior".into(),
+                existing_file: true,
+                budget_bytes: None,
+                budget_lines: None,
                 confidence: syu_planner::SuggestionConfidence::High,
                 evidence: vec!["new evidence".into()],
                 evidence_fingerprint: "new-fingerprint".into(),
@@ -7669,7 +7759,11 @@ mod tests {
             assert!(homogeneous.split_recommendation.is_none());
             persisted_approved_ids.extend(group);
         }
-        assert_eq!(persisted_approved_ids, approved_ids);
+        let mut expected_approved_ids = approved_ids.clone();
+        expected_approved_ids.sort();
+        let mut actual_approved_ids = persisted_approved_ids.clone();
+        actual_approved_ids.sort();
+        assert_eq!(actual_approved_ids, expected_approved_ids);
         let response = app
             .clone()
             .oneshot(
@@ -7683,7 +7777,9 @@ mod tests {
         let persisted: TargetSuggestionsView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("persisted suggestion response");
-        assert_eq!(persisted.approved_ids, persisted_approved_ids);
+        let mut persisted_view_ids = persisted.approved_ids.clone();
+        persisted_view_ids.sort();
+        assert_eq!(persisted_view_ids, actual_approved_ids);
 
         let mut changed_again = fs::read_to_string(&target_path).expect("changed target source");
         let next_body_offset = changed_again[unit.span.byte_start..unit.span.byte_end]
@@ -7898,7 +7994,13 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("planned add approval");
-        let request = approval.request.expect("approved Add request");
+        assert_eq!(approval.approved_ids, vec![add.id.clone()]);
+        let request = create_approved_work_request(
+            &server,
+            "REQ-FIXTURE-001#criterion.add-symbol",
+            "add the approved target",
+        )
+        .await;
         assert_eq!(request.constraints.max_added_bytes_per_target, Some(512));
         assert_eq!(request.constraints.max_added_lines_per_target, Some(32));
         assert_eq!(request.requested_targets.len(), 1);
