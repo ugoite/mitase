@@ -2704,7 +2704,7 @@ async fn api_journey_action(
             if summary.trim().is_empty() {
                 return Err(ApiError(
                     StatusCode::BAD_REQUEST,
-                    anyhow::anyhow!("describe the change before continuing"),
+                    anyhow::anyhow!("provide a work summary before continuing"),
                 ));
             }
             let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
@@ -4163,8 +4163,8 @@ fn project_with_index(
 fn empty_journey() -> WorkJourneyView {
     WorkJourneyView {
         title: "Choose a specification to create Work".into(),
-        current_step: "describe".into(),
-        steps: journey_steps("describe"),
+        current_step: "select_specification".into(),
+        steps: journey_steps("select_specification"),
         primary_action: JourneyActionView {
             action: "choose_specification".into(),
             label: "Open Specifications".into(),
@@ -4188,7 +4188,7 @@ fn empty_journey() -> WorkJourneyView {
 
 fn journey_steps(current: &str) -> Vec<JourneyStepView> {
     let ids = [
-        ("describe", "Describe"),
+        ("select_specification", "Select specification"),
         ("review", "Review"),
         ("approve", "Approve"),
         ("implement", "Implement"),
@@ -6436,7 +6436,19 @@ mod tests {
         let server = WorkbenchServer::new(temp.path().to_path_buf());
         let service = server.service.clone();
         let app = server.router();
-        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let (basis, csrf, initial_projection) = projection_and_basis(&app).await;
+        assert_eq!(
+            initial_projection["journey"]["current_step"],
+            "select_specification"
+        );
+        assert_eq!(
+            initial_projection["journey"]["steps"][0]["id"],
+            "select_specification"
+        );
+        assert_eq!(
+            initial_projection["journey"]["primary_action"]["action"],
+            "choose_specification"
+        );
         let response = json_mutation(
             &app,
             Method::POST,
@@ -6656,7 +6668,10 @@ mod tests {
         let projection: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("cancelled projection");
-        assert_eq!(projection["journey"]["current_step"], "describe");
+        assert_eq!(
+            projection["journey"]["current_step"],
+            "select_specification"
+        );
         assert!(projection["journey"]["related_specification"].is_null());
 
         let basis: MutationBasis = serde_json::from_value(serde_json::json!({

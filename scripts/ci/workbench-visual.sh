@@ -136,8 +136,15 @@ setTimeout(()=>{
   if(document.querySelector('[data-page="work"] .journey-intake, [data-page="work"] .journey-card')) failures.push('Work still shows the legacy behavior search');
   await click('[data-page="work"] .work-start .journey-action');
   if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
-  await click('[data-page="specifications"] .specification-criterion .btn.small');
+  const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
+  const selectedCriterion=document.querySelector('[data-page="specifications"] .specification-criterion');
+  const selectedCriterionAnchor=selectedCriterion?.querySelector('strong')?.textContent;
+  const selectedCriterionStatement=selectedCriterion?.querySelector('p')?.textContent;
+  await click('[data-page="specifications"] [data-create-work]');
   if(!visible('[data-page="work"]')) failures.push('specification Create Work did not open Work');
+  if(document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent!==selectedSpecificationTitle) failures.push('related specification does not match the selected specification');
+  if(document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent!==selectedCriterionStatement) failures.push('related criterion does not match the selected criterion');
+  if(document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor!==selectedCriterionAnchor) failures.push('Work seed anchor does not match the selected criterion');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
@@ -194,6 +201,7 @@ setTimeout(()=>{
   if(!document.querySelector('[data-work-slice-detail] .journey-scope-target')) failures.push('Work slices tab did not render targets');
 
   await click('[data-route="scope"]');
+  if(document.querySelector('[data-page="scope"] [data-scope-create-work]')) failures.push('Scope still exposes a Work creation entrypoint');
   await click('[data-scope-mode-button="branch"]');
   if(!document.querySelector('[data-scope-detail] .diff-file')) failures.push('Branch scope did not render diff');
   await click('[data-page="scope"] [data-tab="intent"]');
@@ -417,7 +425,11 @@ async function main() {
         };
 
         await click('specifications', '[data-route="specifications"]');
-        await click('create', '[data-page="specifications"] .specification-criterion button');
+        const selectedSpecificationTitle = document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent || '';
+        const selectedCriterion = document.querySelector('[data-page="specifications"] .specification-criterion');
+        const selectedCriterionAnchor = selectedCriterion?.querySelector('strong')?.textContent || '';
+        const selectedCriterionStatement = selectedCriterion?.querySelector('p')?.textContent || '';
+        await click('create', '[data-page="specifications"] [data-create-work]');
         await click('prepare', '[data-page="work"] .journey-action.primary');
         await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === 'Approve');
 
@@ -426,6 +438,12 @@ async function main() {
           currentStep: document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') || '',
           specificationTitleCount: document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length,
           specificationCriterionCount: document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length,
+          selectedSpecificationTitle,
+          selectedCriterionAnchor,
+          selectedCriterionStatement,
+          workSpecificationTitle: document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent || '',
+          workSpecificationCriterion: document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent || '',
+          workSpecificationAnchor: document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor || '',
           workPaneSpecificationCount: document.querySelectorAll('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]').length,
           layoutColumns: getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length,
           errors: window.__SYU_BROWSER_ERRORS__ || [],
@@ -444,6 +462,9 @@ async function main() {
     || result.currentStep !== 'Approve'
     || result.specificationTitleCount !== 1
     || result.specificationCriterionCount !== 1
+    || result.workSpecificationTitle !== result.selectedSpecificationTitle
+    || result.workSpecificationCriterion !== result.selectedCriterionStatement
+    || result.workSpecificationAnchor !== result.selectedCriterionAnchor
     || result.workPaneSpecificationCount !== 0
     || result.layoutColumns !== 2
   ) {

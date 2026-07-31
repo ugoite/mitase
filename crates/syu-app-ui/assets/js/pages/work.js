@@ -72,13 +72,23 @@ function run(state, action) {
   );
 }
 
-function renderStart(root, state) {
+function dispatchJourneyAction(state, action) {
+  if (action.action === 'choose_specification') {
+    state.go('specifications');
+    return;
+  }
+  run(state, { action: action.action });
+}
+
+function renderStart(root, journey, state) {
+  const action = journey?.primary_action;
+  if (!action) return;
   const empty = element('section', 'context-empty-state work-start');
   empty.append(
     element('span', 'context-empty-icon', '◈'),
-    element('h2', null, t('journey.start.title')),
-    element('p', null, t('journey.start.description')),
-    button(t('journey.start.action'), () => state.go('specifications'), true, '→'),
+    element('h2', null, journey.title),
+    element('p', null, actionText(action, 'explanation')),
+    button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
   );
   root.append(empty);
 }
@@ -452,6 +462,7 @@ function renderSpecification(root, workspace, journey, state, work) {
 
   const body = element('div', `journey-specification-body${state.journeySpecificationExpanded ? ' expanded' : ''}`);
   body.setAttribute('data-journey-panel', state.journeyContextTab);
+  if (contextAnchor) body.setAttribute('data-work-specification-anchor', contextAnchor);
   if (state.journeyContextTab === 'readiness') {
     renderReadinessPage(state.projection.readiness, body, { state, compact: true });
     root.append(body);
@@ -621,7 +632,7 @@ export function renderWork(work, state) {
   if (!root) return;
   const content = element('div', 'journey');
   if (state.error) content.append(element('p', 'status-message status-error', state.error.message));
-  if (!journey || journey.current_step === 'describe') renderStart(content, state);
+  if (!journey || journey.current_step === 'select_specification') renderStart(content, journey, state);
   else renderJourney(content, journey, state, work);
   replace(root, content);
   if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state, work);

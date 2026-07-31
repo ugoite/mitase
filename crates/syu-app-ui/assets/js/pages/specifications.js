@@ -645,14 +645,17 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       text.append(anchor, statement);
       row.append(text);
       if (!readOnly && kind === 'criterion' && selected.status === 'implemented') {
-        row.append(button(t('items.create_work'), '→', () => state.runAction(
+        const createWork = button(t('items.create_work'), '→', () => state.runAction(
           () => state.api.runJourneyAction(state.projection, {
             action: 'create',
             anchor: value.anchor,
             summary: `Change ${selected.title}`,
           }),
           () => { state.selectedSlice = null; state.go('work'); },
-        ), 'btn small'));
+        ), 'btn small');
+        createWork.setAttribute('data-create-work', '');
+        createWork.setAttribute('data-create-work-anchor', value.anchor);
+        row.append(createWork);
       }
       if (!readOnly && kind === 'criterion') {
         row.append(button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {

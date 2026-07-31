@@ -86,6 +86,7 @@ for module in (
     assert module in (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text(), module
 MAIN_JS = (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text()
 WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
+SCOPE_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/scope.js").read_text()
 API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
 assert "readInlineProjection" in MAIN_JS
@@ -96,9 +97,15 @@ assert "runJourneyAction" in API_JS
 assert "readScopeDiff" in API_JS
 assert "journey-advanced" in WORK_JS
 assert "work-start" in WORK_JS
-assert "journey.start.action" in WORK_JS
+assert "select_specification" in WORK_JS
+assert "journey.start." not in WORK_JS
+assert "current_step === 'describe'" not in WORK_JS
 assert "journey-intake" not in WORK_JS
 assert "journey-card" not in WORK_JS
+assert "data-scope-create-work" not in HTML
+assert "scope-create-work" not in SCOPE_JS
+assert "action: 'create'" not in SCOPE_JS
+assert "data-create-work" in SPECIFICATIONS_JS
 assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
