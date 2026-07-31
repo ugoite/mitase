@@ -94,6 +94,8 @@ mod tests {
         }
         assert!(!html.contains("<style"));
         assert!(!html.contains("class=\"gear\""));
+        assert!(html.contains("class=\"workspace-icon\""));
+        assert!(!html.contains("data-workspace-branch"));
         assert!(html.contains("/assets/workbench.css"));
         assert!(html.contains("type=\"module\" src=\"/assets/js/main.js\""));
         for banned in [
@@ -112,6 +114,7 @@ mod tests {
         assert!(
             WORKBENCH_CSS.contains("[data-settings-layer-panel][hidden]{display:none!important}")
         );
+        assert!(WORKBENCH_MAIN_JS.contains("translate('workspace.revision')"));
     }
 
     #[test]

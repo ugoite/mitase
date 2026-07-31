@@ -1,4 +1,4 @@
-import { translate } from '../i18n.js';
+import { localizeEnum, translate } from '../i18n.js';
 
 const t = key => translate(key);
 
@@ -11,8 +11,8 @@ function element(tag, className, text) {
 
 function statusLabel(status) {
   const normalized = String(status || 'modified').toLowerCase();
-  const statuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked']);
-  return statuses.has(normalized) ? t(`status.${normalized}`) : status;
+  const statuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'binary']);
+  return statuses.has(normalized) ? localizeEnum('status', normalized) : status;
 }
 
 function diffLine(line) {

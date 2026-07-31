@@ -56,6 +56,8 @@ for group, icons in parser.tab_icons.items():
     assert len(icons) == len(set(icons)), f"{group} repeats a section-tab icon"
 
 assert re.search(r'class="topbar command-bar"', HTML)
+assert 'data-workspace-branch' not in HTML
+assert re.search(r'class="workspace-name".*class="workspace-icon"', HTML, re.S)
 assert 'class="gear"' not in HTML
 assert '<style' not in HTML
 assert 'HEAD...HEAD' not in HTML and 'HEAD…HEAD' not in HTML
@@ -89,8 +91,11 @@ WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
 SCOPE_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/scope.js").read_text()
 API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
+I18N_MODULE = (ROOT / "crates/syu-app-ui/assets/js/i18n.js").read_text()
 SERVER_RS = (ROOT / "crates/syu-workbench-server/src/lib.rs").read_text()
 assert "readInlineProjection" in MAIN_JS
+assert "data-workspace-branch" not in MAIN_JS
+assert "translate('workspace.revision')" in MAIN_JS
 assert "establishSession" in MAIN_JS
 assert "}[state.selectedPage]" in MAIN_JS
 assert "function disableBusyButtons()" in MAIN_JS
@@ -112,7 +117,7 @@ assert "approved_ids" in SPECIFICATIONS_JS
 assert "data-review-target-suggestions" in SPECIFICATIONS_JS
 assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
 assert "result.request" not in SPECIFICATIONS_JS
-assert "summary: selected.title" in SPECIFICATIONS_JS
+assert "work.request.summary_from_anchor" in SPECIFICATIONS_JS
 assert SPECIFICATIONS_JS.count("state.go('work')") == 1
 assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 1
 assert "WORK-SUGGESTION-" not in SERVER_RS
@@ -126,9 +131,38 @@ assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
+assert "localizeEnum" in I18N_MODULE
+assert "SyuPreferences?.lookup" in I18N_MODULE
+assert "localizeSpecificationTitle" in I18N_MODULE
+assert "presentation_title_key" in I18N_MODULE or "presentation_title_key" in SERVER_RS
+assert "localizedOptions('criterion.kind'" in SPECIFICATIONS_JS
+assert "localizeEnum('operation'" in WORK_JS
+assert "localizeEnum('target.access'" in WORK_JS
+assert "localizeSpecificationTitle" in SPECIFICATIONS_JS
+assert "item.textContent = option" not in SPECIFICATIONS_JS
+assert "pub access: TargetAccessMode" in SERVER_RS
+assert "pub transition: TargetTransition" in SERVER_RS
+assert 'access: format!("{:?}"' not in SERVER_RS
+assert 'transition: format!("{:?}"' not in SERVER_RS
+assert "presentation_title_key: builtin_presentation_title_key" in SERVER_RS
+for key in (
+    "criterion.kind.behavior",
+    "criterion.kind.quality",
+    "criterion.kind.security",
+    "operation.add",
+    "operation.modify",
+    "operation.remove",
+    "target.access.editable",
+    "target.transition.modify",
+    "target.access.generated",
+    "specification.title.REQ-CAPABILITY-001",
+):
+    assert key in EN and key in JA, f"missing semantic localization key: {key}"
+    assert EN[key] != JA[key], f"semantic localization is unchanged: {key}"
 assert 'data-workbench-status="busy" role="progressbar" aria-live="polite"' in HTML
 assert "workbench-progress-track" in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
+assert ".branch" not in CSS and ".utility" not in CSS
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
     assert token in CSS_COMPACT, f"missing normative CSS token {token}"
 assert "grid-template-columns:repeat(6,1fr)" in CSS_COMPACT

@@ -1,4 +1,4 @@
-import { translate } from '../i18n.js';
+import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 import { renderDiff } from '../components/diff.js';
 import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
 import { renderReadinessPage } from './readiness.js';
@@ -304,6 +304,15 @@ function renderJourney(root, journey, state, work) {
   root.append(header);
   renderProgress(root, journey);
 
+  if (work?.request) {
+    const requestMeta = element('div', 'meta-line work-request-meta');
+    requestMeta.append(
+      element('span', 'chip', `${t('work.request.operation')}: ${localizeEnum('operation', work.request.operation)}`),
+      element('span', 'chip', `${t('work.request.seed')}: ${work.request.seed_count}`),
+    );
+    root.append(requestMeta);
+  }
+
   const next = element('section', 'journey-next');
   next.append(element('p', 'journey-copy', actionText(journey.primary_action, 'explanation')));
   const actions = element('div', 'journey-actions');
@@ -402,7 +411,8 @@ function renderScopeDetail(root, journey, state, work) {
     targetButton.append(
       element('span', 'journey-scope-target-icon', '↔'),
       element('strong', null, target.path),
-      element('span', 'chip blue-chip', t('journey.scope.editable')),
+      element('span', 'chip blue-chip', localizeEnum('target.access', target.access || 'editable')),
+      ...(target.transition ? [element('span', 'chip', localizeEnum('target.transition', target.transition))] : []),
     );
     targetButton.addEventListener('click', () => {
       state.journeyContextTarget = target;
@@ -580,7 +590,8 @@ function renderWorkSlices(work, state) {
     row.append(
       element('span', 'journey-scope-target-icon', '↔'),
       element('strong', null, target.path),
-      element('span', 'chip blue-chip', t('work.context.editable')),
+      element('span', 'chip blue-chip', localizeEnum('target.access', target.access || 'editable')),
+      ...(target.transition ? [element('span', 'chip', localizeEnum('target.transition', target.transition))] : []),
     );
     row.addEventListener('click', () => {
       state.journeyContextTarget = target;

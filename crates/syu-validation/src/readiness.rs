@@ -35,7 +35,7 @@ pub struct ReadinessAxis {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReadinessReport {
-    pub target: String,
+    pub target: ReadinessLevel,
     pub inventory: ReadinessAxis,
     pub ownership: ReadinessAxis,
     pub seedability: ReadinessAxis,
@@ -773,7 +773,7 @@ pub fn evaluate(
         "structurally-verifiable"
     };
     Ok(ReadinessReport {
-        target: readiness_label(workspace.config.validation.readiness.target).into(),
+        target: workspace.config.validation.readiness.target,
         inventory,
         ownership,
         seedability: axis_from_subjects(seed_subjects),
@@ -1319,17 +1319,6 @@ fn collect_git_paths(
         );
     }
     Ok(())
-}
-
-fn readiness_label(level: ReadinessLevel) -> &'static str {
-    match level {
-        ReadinessLevel::Off => "off",
-        ReadinessLevel::Traceable => "traceable",
-        ReadinessLevel::Seedable => "seedable",
-        ReadinessLevel::WorkReady => "work-ready",
-        ReadinessLevel::Verifiable => "verifiable",
-        ReadinessLevel::ClosedLoop => "closed-loop",
-    }
 }
 
 fn scope_level(

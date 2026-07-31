@@ -5,6 +5,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 python3 scripts/ci/check-workbench-contract.py
+node scripts/ci/check-workbench-i18n.mjs
 
 chrome="${CHROME_BIN:-}"
 if [[ -z "$chrome" ]]; then
@@ -45,8 +46,33 @@ cargo run --quiet -- workbench project \
 
 python3 - <<'PY' "$tmp/projection.json" "$tmp/state.html" "$tmp/api-mock.js"
 import pathlib, sys
+import json
 
-projection = pathlib.Path(sys.argv[1]).read_text().replace('<', '\\u003c')
+projection_data = json.loads(pathlib.Path(sys.argv[1]).read_text())
+projection_data['specifications']['specifications'].append({
+    'id': 'REQ-CAPABILITY-001',
+    'kind': 'requirement',
+    'path': 'spec/requirement.yaml',
+    'source_hash': 'visual-capability-hash',
+    'title': 'Canonical capability behavior',
+    'presentation_title_key': 'specification.title.REQ-CAPABILITY-001',
+    'summary': 'A built-in capability contract used by the Workbench smoke.',
+    'description': 'A built-in capability contract used by the Workbench smoke.',
+    'status': 'implemented',
+    'priority': 'critical',
+    'principles': [],
+    'rules': [],
+    'criteria': [{
+        'anchor': 'REQ-CAPABILITY-001#criterion.behavior',
+        'kind': 'behavior',
+        'statement': 'The capability has an exact behavior boundary.',
+        'governed_by': [],
+    }],
+    'bindings': [],
+    'contracts': [],
+    'anchors': ['REQ-CAPABILITY-001#criterion.behavior'],
+})
+projection = json.dumps(projection_data).replace('<', '\\u003c')
 pathlib.Path(sys.argv[2]).write_text(
     f'<script type="application/json" id="syu-projection">{projection}</script>'
 )
@@ -76,7 +102,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
     """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
     """    if(action==='create') { const item=projection.specifications.specifications.find(candidate=>candidate.criteria?.some(criterion=>criterion.anchor===payload.anchor)); const criterion=item?.criteria.find(candidate=>candidate.anchor===payload.anchor); projection.journey.related_specification=item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null; projection.journey.advanced={specification_anchor:criterion?.anchor||null}; projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
-    """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
+    """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'run-only',transition:'run-only',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
     """    else if(action==='approve') journey('implement','start','approved');\n"""
     """    else if(action==='start') { projection.work.agent={run_id:'agent-visual-flow',status:'active'}; journey('verify','verify','in_progress'); }\n"""
     """    else if(action==='verify') { projection.work.agent.status='completed'; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',demonstrated:['REQ-VISUAL#criterion.behavior'],finalized:false},previous:[]}; journey('complete','finalize','ready'); }\n"""
@@ -143,6 +169,13 @@ setTimeout(()=>{
     if(workStart?.querySelector('.journey-action-label')?.textContent!=='仕様一覧を開く') failures.push('Japanese initial Work CTA is not localized');
     if(!workStart?.querySelector('p')?.textContent.includes('仕様一覧から対象を選びます')) failures.push('Japanese initial Work explanation is not localized');
   }
+  window.SyuPreferences.translate('ja');
+  await wait(40);
+  if(document.documentElement.lang!=='ja') failures.push('Japanese locale did not apply');
+  if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='作業') failures.push('already-rendered Work page did not rerender in Japanese');
+  window.SyuPreferences.translate('en');
+  await wait(40);
+  if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
   await click('[data-page="work"] .work-start .journey-action');
   if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
   const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
@@ -199,6 +232,11 @@ setTimeout(()=>{
   }
   window.confirm=()=>true;
   await click('[data-page="work"] .journey-action.primary');
+  window.SyuPreferences.translate('ja');
+  await wait(40);
+  if(!document.querySelector('[data-page="work"]')?.textContent.includes('実行のみ')) failures.push('run-only target metadata did not localize');
+  window.SyuPreferences.translate('en');
+  await wait(40);
   await click('[data-page="work"] .journey-count.interactive');
   if(!document.querySelector('[data-work-specification] [data-journey-panel="scope"]')) failures.push('scope count did not open the scope panel');
   const scopeTarget=document.querySelector('[data-work-specification] [data-scope-target]');

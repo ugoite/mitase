@@ -1,6 +1,6 @@
 import { renderDiff } from '../components/diff.js';
 import { renderDiagnostics } from './diagnostics.js';
-import { translate } from '../i18n.js';
+import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 
 const t = key => translate(key);
 
@@ -20,9 +20,9 @@ function emptyState(icon, title, description, tone = '') {
 }
 
 function translatedStatus(status) {
-  const key = `status.${String(status || 'unknown').toLowerCase()}`;
-  const value = t(key);
-  return value === key ? status : value;
+  const normalized = String(status || 'unknown').toLowerCase();
+  const value = localizeEnum('status', normalized);
+  return value === normalized ? localizeEnum('items', normalized) : value;
 }
 
 function renderFlow(root, steps) {
@@ -119,7 +119,8 @@ function renderPlanChange(root, work, state) {
     row.append(
       element('span', 'scope-change-icon success', '↔'),
       element('strong', null, target.path),
-      element('span', 'chip blue-chip', t('work.context.editable')),
+      element('span', 'chip blue-chip', localizeEnum('target.access', target.access || 'editable')),
+      ...(target.transition ? [element('span', 'chip', localizeEnum('target.transition', target.transition))] : []),
     );
     card.append(row);
   });
@@ -161,7 +162,7 @@ function renderReference(root, branch, work, state) {
     const card = element('section', 'scope-detail-card');
     card.append(
       element('span', `chip status-${item.status || 'planned'}`, translatedStatus(item.status)),
-      element('h2', null, item.title),
+      element('h2', null, localizeSpecificationTitle(item)),
       element('p', null, item.summary || item.description || ''),
     );
     root.append(card);

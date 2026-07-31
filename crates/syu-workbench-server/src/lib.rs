@@ -24,19 +24,20 @@ use syu_planner::{
     SplitWorkRecommendation, TargetSuggestion, TargetSuggestionSet, plan,
     split_work_recommendation, suggest_targets,
 };
-use syu_project_model::{ChangeBaseline, ValidationPreset};
+use syu_project_model::{ChangeBaseline, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
     ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, CriterionKind,
     ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy, Policy, Priority,
     Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument, SpecId, TargetClaim,
 };
-use syu_validation::{PlanValidationMode, ValidationContext, validate};
+use syu_validation::{ChangeStatus, PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
     AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA,
-    CompletionAttempt, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
-    PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt, WORK_REQUEST_SCHEMA,
-    WorkConstraints, WorkOperation, WorkPlan, WorkRequest, WorkSeed,
+    CompletionAttempt, CompletionStatus, FinalizationPreview, FinalizationReceipt,
+    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, TargetAccessMode,
+    TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints, WorkOperation,
+    WorkPlan, WorkRequest, WorkSeed,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -2252,7 +2253,7 @@ pub struct ScopeDiffView {
 #[derive(Debug, Clone, Serialize)]
 pub struct ScopeDiffFileView {
     pub path: String,
-    pub status: String,
+    pub status: ChangeStatus,
     pub additions: usize,
     pub deletions: usize,
     pub patch: String,
@@ -2353,7 +2354,7 @@ fn scope_diff_view(
             .count();
         files.push(ScopeDiffFileView {
             path,
-            status: format!("{:?}", changed_file.status).to_ascii_lowercase(),
+            status: changed_file.status,
             additions,
             deletions,
             patch,
@@ -2906,7 +2907,9 @@ async fn api_journey_action(
             };
             let attempt_id = completion_history(&snapshot.workspace)?
                 .current_for(&plan_digest, &slice_id)
-                .filter(|attempt| attempt.status == "complete" && !attempt.finalized)
+                .filter(|attempt| {
+                    attempt.status == CompletionStatus::Complete && !attempt.finalized
+                })
                 .map(|attempt| attempt.attempt_id.clone())
                 .ok_or_else(|| anyhow::anyhow!("there is no completed work ready to finish"))?;
             let Json(preview) = api_finalize_preview(
@@ -3606,7 +3609,7 @@ pub struct CompletionAttemptView {
     pub attempt_id: String,
     pub plan_digest: String,
     pub slice_id: String,
-    pub status: String,
+    pub status: CompletionStatus,
     pub demonstrated: Vec<String>,
     pub blockers: Vec<syu_work_model::CompletionBlocker>,
     pub next_action: Option<String>,
@@ -3615,7 +3618,7 @@ pub struct CompletionAttemptView {
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkRequestView {
     pub summary: String,
-    pub operation: String,
+    pub operation: WorkOperation,
     pub seed_count: usize,
     pub requested_target_count: usize,
 }
@@ -3623,7 +3626,7 @@ pub struct WorkRequestView {
 pub struct PlanView {
     pub id: String,
     pub digest: String,
-    pub status: String,
+    pub status: PlanStatus,
     pub slices: Vec<SliceView>,
 }
 #[derive(Debug, Clone, Serialize)]
@@ -3634,7 +3637,8 @@ pub struct SliceView {
 #[derive(Debug, Clone, Serialize)]
 pub struct TargetView {
     pub reference: String,
-    pub access: String,
+    pub access: TargetAccessMode,
+    pub transition: TargetTransition,
     pub path: String,
 }
 #[derive(Debug, Clone, Serialize)]
@@ -3648,7 +3652,7 @@ pub struct ContextPackView {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadinessView {
-    pub target: String,
+    pub target: ReadinessLevel,
     pub status: String,
     pub blocking_subjects: usize,
     pub axes: BTreeMap<String, syu_validation::ReadinessAxis>,
@@ -3957,6 +3961,8 @@ pub struct ItemSummary {
     pub path: String,
     pub source_hash: String,
     pub title: String,
+    #[serde(default)]
+    pub presentation_title_key: Option<String>,
     pub summary: String,
     pub description: Option<String>,
     pub status: Option<String>,
@@ -3985,7 +3991,7 @@ pub struct BranchScopeView {
 #[derive(Debug, Clone, Serialize)]
 pub struct BranchChangedTargetView {
     pub path: String,
-    pub status: String,
+    pub status: ChangeStatus,
     pub owners: Vec<String>,
     pub anchors: Vec<String>,
     pub artifact_identities: Vec<String>,
@@ -4029,7 +4035,7 @@ pub struct RuleSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CriterionSummary {
     pub anchor: String,
-    pub kind: String,
+    pub kind: CriterionKind,
     pub statement: String,
     pub governed_by: Vec<String>,
 }
@@ -4288,7 +4294,7 @@ fn journey_steps(current: &str) -> Vec<JourneyStepView> {
 fn request_view(request: &WorkRequest) -> WorkRequestView {
     WorkRequestView {
         summary: request.summary.clone(),
-        operation: format!("{:?}", request.operation).to_ascii_lowercase(),
+        operation: request.operation,
         seed_count: request.seeds.len(),
         requested_target_count: request.requested_targets.len(),
     }
@@ -4297,7 +4303,8 @@ fn request_view(request: &WorkRequest) -> WorkRequestView {
 fn target_view(target: &syu_work_model::PlannedTarget) -> TargetView {
     TargetView {
         reference: target.reference.to_string(),
-        access: format!("{:?}", target.access).to_ascii_lowercase(),
+        access: target.access,
+        transition: target.transition,
         path: target.resolved_path.clone(),
     }
 }
@@ -4306,7 +4313,7 @@ fn plan_view(plan: &WorkPlan) -> PlanView {
     PlanView {
         id: plan.id.clone(),
         digest: plan.canonical_digest.clone(),
-        status: format!("{:?}", plan.status).to_ascii_lowercase(),
+        status: plan.status,
         slices: plan
             .slices
             .iter()
@@ -4339,7 +4346,7 @@ fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView
             attempt_id: attempt.attempt_id,
             plan_digest: attempt.plan_digest,
             slice_id: attempt.slice_id,
-            status: format!("{:?}", attempt.report.status).to_ascii_lowercase(),
+            status: attempt.report.status,
             demonstrated: attempt
                 .report
                 .demonstrated
@@ -4380,7 +4387,7 @@ fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
         .collect::<Vec<_>>();
     let has_subjects = axes.values().any(|axis| axis.required > 0);
     ReadinessView {
-        target: report.target.clone(),
+        target: report.target,
         status: if !has_subjects {
             "Blocked".into()
         } else if blocker_details.is_empty() {
@@ -4397,7 +4404,7 @@ fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
 
 fn readiness_not_run(config: &syu_project_model::ProjectConfig) -> ReadinessView {
     ReadinessView {
-        target: format!("{:?}", config.validation.readiness.target).to_ascii_lowercase(),
+        target: config.validation.readiness.target,
         status: "Not run".into(),
         blocking_subjects: 0,
         axes: BTreeMap::new(),
@@ -4481,7 +4488,7 @@ fn project_session(
         .work
         .plan
         .as_ref()
-        .is_some_and(|plan| plan.status == "ready")
+        .is_some_and(|plan| plan.status == PlanStatus::Ready)
         && plan_validated
         && slice_selected
         && session.plan.as_ref().is_some_and(|plan| {
@@ -4610,7 +4617,7 @@ fn journey_view(
             advanced,
         });
     };
-    if plan.status != "ready" || plan.slices.len() != 1 {
+    if plan.status != PlanStatus::Ready || plan.slices.len() != 1 {
         let (summary, message, next_action) = if plan.slices.len() > 1 {
             (
                 "The proposed change needs separate focused steps.",
@@ -4722,7 +4729,7 @@ fn journey_view(
             advanced,
         });
     }
-    if completed.is_some_and(|attempt| attempt.status == "complete") {
+    if completed.is_some_and(|attempt| attempt.status == CompletionStatus::Complete) {
         return Ok(WorkJourneyView {
             title,
             title_key: None,
@@ -4983,7 +4990,7 @@ pub fn branch_scope_view(
         affected_ids.extend(owners.iter().cloned());
         changed.push(BranchChangedTargetView {
             path,
-            status: format!("{:?}", file.status).to_ascii_lowercase(),
+            status: file.status,
             owners: owners.into_iter().collect(),
             anchors: anchors.into_iter().collect(),
             unresolved_reason: (artifact_identities.is_empty() && target_refs.is_empty())
@@ -5039,6 +5046,7 @@ fn item_summary_from_philosophy(
         path: path.into(),
         source_hash: source_hash.into(),
         title: item.title.clone(),
+        presentation_title_key: builtin_presentation_title_key(&item.id, &item.title),
         summary: item.summary.clone(),
         description: None,
         status: None,
@@ -5074,6 +5082,7 @@ fn item_summary_from_policy(
         path: path.into(),
         source_hash: source_hash.into(),
         title: item.title.clone(),
+        presentation_title_key: builtin_presentation_title_key(&item.id, &item.title),
         summary: item.summary.clone(),
         description: (!item.description.is_empty()).then(|| item.description.clone()),
         status: None,
@@ -5105,6 +5114,7 @@ fn item_summary_from_requirement(
         path: path.into(),
         source_hash: source_hash.into(),
         title: item.title.clone(),
+        presentation_title_key: builtin_presentation_title_key(&item.id, &item.title),
         summary: item.description.clone(),
         description: Some(item.description.clone()),
         status: Some(status_label(item.status).into()),
@@ -5136,6 +5146,7 @@ fn item_summary_from_feature(
         path: path.into(),
         source_hash: source_hash.into(),
         title: item.title.clone(),
+        presentation_title_key: builtin_presentation_title_key(&item.id, &item.title),
         summary: item.summary.clone(),
         description: None,
         status: Some(status_label(item.status).into()),
@@ -5157,6 +5168,11 @@ fn content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     format_sha256(hasher.finalize())
+}
+
+fn builtin_presentation_title_key(id: &SpecId, title: &str) -> Option<String> {
+    (id.to_string() == "REQ-CAPABILITY-001" && title == "Canonical capability behavior")
+        .then(|| "specification.title.REQ-CAPABILITY-001".into())
 }
 
 fn anchors_for(index: &syu_workspace::SpecIndex, item: &syu_spec_model::SpecId) -> Vec<String> {
@@ -5195,7 +5211,7 @@ fn rule_summary(item: &syu_spec_model::SpecId, rule: &Rule) -> RuleSummary {
 fn criterion_summary(item: &syu_spec_model::SpecId, criterion: &Criterion) -> CriterionSummary {
     CriterionSummary {
         anchor: anchor_string(item, LocalAnchorKind::Criterion, &criterion.id),
-        kind: format!("{:?}", criterion.kind).to_ascii_lowercase(),
+        kind: criterion.kind,
         statement: criterion.statement.clone(),
         governed_by: criterion
             .governed_by
@@ -5397,6 +5413,40 @@ mod tests {
         assert_eq!(view.files[0].additions, 2);
         assert_eq!(view.files[0].deletions, 1);
         assert!(view.files[0].patch.contains("+added"));
+    }
+
+    #[test]
+    fn semantic_projection_uses_serde_enum_labels_and_exact_builtin_title_identity() {
+        let target = TargetView {
+            reference: "FEAT-X#binding.impl/target.code".into(),
+            access: TargetAccessMode::RunOnly,
+            transition: TargetTransition::RunOnly,
+            path: "src/lib.rs".into(),
+        };
+        let target_json = serde_json::to_value(target).expect("target view JSON");
+        assert_eq!(target_json["access"], "run-only");
+        assert_eq!(target_json["transition"], "run-only");
+
+        let readiness = serde_json::to_value(ReadinessView {
+            target: ReadinessLevel::WorkReady,
+            status: "Ready".into(),
+            blocking_subjects: 0,
+            axes: BTreeMap::new(),
+            blockers: vec![],
+            execution_state: "not-run".into(),
+        })
+        .expect("readiness view JSON");
+        assert_eq!(readiness["target"], "work-ready");
+
+        let id = SpecId::from("REQ-CAPABILITY-001");
+        assert_eq!(
+            builtin_presentation_title_key(&id, "Canonical capability behavior"),
+            Some("specification.title.REQ-CAPABILITY-001".into())
+        );
+        assert_eq!(
+            builtin_presentation_title_key(&id, "User-edited capability title"),
+            None
+        );
     }
 
     #[tokio::test]
@@ -7263,7 +7313,7 @@ mod tests {
             attempt_id: id.into(),
             plan_digest: plan_digest.into(),
             slice_id: slice_id.into(),
-            status: "complete".into(),
+            status: CompletionStatus::Complete,
             demonstrated: vec![],
             blockers: vec![],
             next_action: None,
