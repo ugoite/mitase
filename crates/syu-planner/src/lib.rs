@@ -2559,9 +2559,9 @@ fn one_target(
     let planned_missing_target = !has_active_artifact
         && target.lifecycle != ArtifactTargetLifecycle::Absent
         && index.item_status.get(&reference.binding.item) == Some(&ItemStatus::Planned);
-    if !matches!(options.policy.transition, TargetTransition::Add)
-        && !has_active_artifact
-        && !(options.policy.transition == TargetTransition::RunOnly && planned_missing_target)
+    if !(matches!(options.policy.transition, TargetTransition::Add)
+        || has_active_artifact
+        || (options.policy.transition == TargetTransition::RunOnly && planned_missing_target))
     {
         let mut d = Diagnostic::error(
             "SYU-TARGET-002",
