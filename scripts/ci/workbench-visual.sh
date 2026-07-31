@@ -445,7 +445,7 @@ async function main() {
           await new Promise(resolve => setTimeout(resolve, 100));
         };
 
-        const initialWorkStart = document.querySelector('[data-page="work"] .work-start');
+        const initialWorkStart = await wait('initial Work start', () => document.querySelector('[data-page="work"] .work-start'));
         const initialWorkTitle = initialWorkStart?.querySelector('h2')?.textContent || '';
         const initialWorkCta = initialWorkStart?.querySelector('.journey-action-label')?.textContent || '';
         const initialWorkExplanation = initialWorkStart?.querySelector('p')?.textContent || '';
