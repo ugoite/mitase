@@ -191,6 +191,7 @@ setTimeout(()=>{
   if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('candidate did not open target suggestion review');
   if(projection.work.request) failures.push('target suggestion display created a draft WorkRequest');
   await click('[data-page="work"] .target-suggestions .primary');
+  await click('[data-page="work"] [data-create-work-from-suggestions]');
   if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');

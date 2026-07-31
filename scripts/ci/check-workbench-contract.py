@@ -118,8 +118,9 @@ assert "data-review-target-suggestions" in SPECIFICATIONS_JS
 assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
 assert "result.request" not in SPECIFICATIONS_JS
 assert "work.request.summary_from_anchor" in SPECIFICATIONS_JS
-assert SPECIFICATIONS_JS.count("state.go('work')") == 1
-assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 1
+assert SPECIFICATIONS_JS.count("state.go('work')") == 2
+assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 2
+assert "data-create-work-from-suggestions" in SPECIFICATIONS_JS
 assert "approved_target_suggestions" in SERVER_RS
 assert "validate_create_work_criterion" in SERVER_RS
 assert '"/api/work/request"' not in SERVER_RS

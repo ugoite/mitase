@@ -467,6 +467,23 @@ export function renderTargetSuggestions(root, state) {
     approve.setAttribute('data-approve-target-suggestions', '');
     approve.disabled = !state.targetSuggestionSelection.length;
     card.append(approve);
+    if (state.journeyIntentSearch && approvedIds.size) {
+      const createWork = button(t('items.create_work'), '→', () => state.runAction(
+        () => state.api.runJourneyAction(state.projection, {
+          action: 'create',
+          anchor: set.criterion,
+          summary: `${t('work.request.summary_from_anchor').replace('{anchor}', set.criterion)}`,
+        }),
+        () => {
+          state.targetSuggestions = null;
+          state.targetSuggestionSelection = [];
+          state.selectedSlice = null;
+          state.go('work');
+        },
+      ), 'btn primary');
+      createWork.setAttribute('data-create-work-from-suggestions', '');
+      card.append(createWork);
+    }
   }
   root.append(card);
 }
