@@ -526,6 +526,7 @@
   "journey.created_requirement": "Requirement created. Review its exact criterion and target suggestions before planning.",
   "journey.created_feature_linked": "Feature created and linked to the selected Requirement criterion. Review target suggestions before planning.",
   "journey.preview": "View",
+  "journey.specification.preview": "Specification preview",
   "journey.select": "Select",
   "journey.review": "Review this behavior",
   "journey.scope": "Change boundary",

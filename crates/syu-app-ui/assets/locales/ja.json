@@ -526,6 +526,7 @@
   "journey.created_requirement": "Requirementを作成しました。計画の前に、正確なCriterionと対象候補を確認してください。",
   "journey.created_feature_linked": "Featureを作成し、選択したRequirement Criterionへリンクしました。計画の前に対象候補を確認してください。",
   "journey.preview": "表示",
+  "journey.specification.preview": "仕様のプレビュー",
   "journey.select": "選択",
   "journey.review": "この振る舞いを確認",
   "journey.scope": "変更範囲",
