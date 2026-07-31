@@ -1,5 +1,9 @@
 use assert_cmd::Command;
-use std::{fs, path::Path, process::Command as ProcessCommand};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command as ProcessCommand,
+};
 use syu_work_model::WorkPlan;
 use tempfile::tempdir;
 
@@ -22,14 +26,14 @@ fn current_workspace_validates_and_reports_configured_readiness() {
 
 #[test]
 fn generated_spec_reference_covers_every_source_document() {
-    let index = fs::read_to_string("docs/generated/site-spec/index.md").expect("generated index");
+    let index =
+        fs::read_to_string("docs/reference/specification/index.md").expect("generated index");
     let mut sources = Vec::new();
     collect_spec_yaml_files(Path::new("docs/syu"), &mut sources);
     for source in sources {
         let relative = source.strip_prefix("docs/syu").expect("spec source path");
-        let generated = Path::new("docs/generated/site-spec")
-            .join(relative)
-            .with_extension("md");
+        let generated =
+            Path::new("docs/reference/specification").join(generated_spec_path(relative));
         let page = fs::read_to_string(&generated)
             .unwrap_or_else(|error| panic!("read {}: {error}", generated.display()));
         let source_display = source.to_string_lossy();
@@ -38,12 +42,43 @@ fn generated_spec_reference_covers_every_source_document() {
             "{} does not identify its canonical source",
             generated.display()
         );
-        let doc_link = relative.with_extension("").to_string_lossy().into_owned();
+        let doc_link = generated_spec_path(relative)
+            .with_extension("")
+            .to_string_lossy()
+            .into_owned();
         assert!(
-            index.contains(&format!("({doc_link})")),
+            index.contains(&format!("({doc_link}.md)")),
             "generated index does not link {doc_link}"
         );
     }
+}
+
+fn generated_spec_path(relative: &Path) -> PathBuf {
+    let parts: Vec<_> = relative.components().collect();
+    let section = match parts.as_slice() {
+        [first, ..]
+            if first.as_os_str() == "philosophies"
+                || first.as_os_str() == "policies"
+                || first.as_os_str() == "requirements" =>
+        {
+            "foundations"
+        }
+        [first, second, ..]
+            if first.as_os_str() == "features" && second.as_os_str() == "public-entrypoints" =>
+        {
+            "contracts"
+        }
+        [first, second, ..]
+            if first.as_os_str() == "features" && second.as_os_str() == "workbench" =>
+        {
+            "workbench"
+        }
+        [first, ..] if first.as_os_str() == "features" => "capabilities",
+        _ => panic!("unsupported specification path: {}", relative.display()),
+    };
+    PathBuf::from(section)
+        .join(relative.file_name().expect("spec filename"))
+        .with_extension("md")
 }
 
 fn collect_spec_yaml_files(directory: &Path, files: &mut Vec<std::path::PathBuf>) {

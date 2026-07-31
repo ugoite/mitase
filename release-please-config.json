@@ -33,7 +33,7 @@
         },
         {
           "type": "generic",
-          "file": "docs/guide/getting-started.md",
+          "file": "docs/start-here/first-run/getting-started.md",
           "replacers": [
             {
               "search": "# x-release-please-start-version\nRELEASE=v(?<version>.*)\n# x-release-please-end",
@@ -43,7 +43,7 @@
         },
         {
           "type": "generic",
-          "file": "docs/guide/configuration.md",
+          "file": "docs/workflows/repository/configuration.md",
           "replacers": [
             {
               "search": "# x-release-please-start-version\nversion: (?<version>.*)\n# x-release-please-end",
@@ -53,7 +53,7 @@
         },
         {
           "type": "generic",
-          "file": "docs/guide/existing-repository.md",
+          "file": "docs/start-here/adopt/existing-repository.md",
           "replacers": [
             {
               "search": "# x-release-please-start-version\nversion: (?<version>.*)\n# x-release-please-end",
