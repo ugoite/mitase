@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
 use serde::Serialize;
-use std::collections::BTreeSet;
 use std::process::Command;
+use std::{collections::BTreeSet, fs, path::PathBuf};
 use syu_project_model::{ProjectConfig, ReadinessLevel};
 use syu_spec_model::{BoundTargetRef, ItemStatus, OwnershipSelector, SpecAnchor};
 use syu_work_model::{
-    PlanStatus, RequestedTarget, TargetTransition, VerificationClaimRef, VerificationReceipt,
-    WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest, WorkSeed,
+    FinalizationReceipt, PlanStatus, RequestedTarget, TargetLifecycle, TargetTransition,
+    VerificationClaimRef, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest,
+    WorkSeed,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -226,6 +227,7 @@ pub fn evaluate(
     let inventory = axis_from_subjects(inventory_subjects);
 
     let criteria = implemented_criteria(workspace, index)?;
+    let finalized_absent_targets = finalized_absent_targets(workspace);
     let ownership_required = criteria
         .iter()
         .flat_map(|criterion| {
@@ -353,11 +355,7 @@ pub fn evaluate(
 
     for criterion in &criteria {
         let scope_id = criterion_scope(criterion);
-        let implementation_targets = index
-            .criteria_to_implementation_targets
-            .get(criterion)
-            .cloned()
-            .unwrap_or_default();
+        let implementation_targets = implementation_obligations(index, criterion);
         let verification_targets = index
             .criteria_to_verification_targets
             .get(criterion)
@@ -379,24 +377,36 @@ pub fn evaluate(
             ));
         } else {
             for target_ref in &implementation_targets {
+                let absent = target_is_absent(index, target_ref);
+                let absence_ready = absent
+                    && !index.all_target_to_artifact.contains_key(target_ref)
+                    && finalized_absent_targets.contains(target_ref);
                 let exact = index.target_to_artifact.contains_key(target_ref);
-                let target_plan_ready = plan_ready
-                    && plan.as_ref().is_ok_and(|plan| {
-                        plan.slices.iter().any(|slice| {
-                            slice
-                                .editable_targets
-                                .iter()
-                                .any(|target| &target.reference == target_ref)
-                                && !slice.verification_targets.is_empty()
+                let target_plan_ready = if absent {
+                    absence_ready
+                } else {
+                    plan_ready
+                        && plan.as_ref().is_ok_and(|plan| {
+                            plan.slices.iter().any(|slice| {
+                                slice
+                                    .editable_targets
+                                    .iter()
+                                    .any(|target| &target.reference == target_ref)
+                                    && !slice.verification_targets.is_empty()
+                            })
                         })
-                    });
+                };
                 let mut seed_blockers = Vec::new();
-                if !exact {
+                if absent && !absence_ready {
+                    seed_blockers.push(
+                        "absent implementation target requires a finalized lifecycle proof".into(),
+                    );
+                } else if !absent && !exact {
                     seed_blockers.push(
                         "implementation target does not resolve to one exact artifact".into(),
                     );
                 }
-                if !target_plan_ready {
+                if !target_plan_ready && !absence_ready {
                     seed_blockers.push(if !plan_ready {
                         plan.as_ref()
                             .err()
@@ -451,12 +461,17 @@ pub fn evaluate(
                 }
                 if required_level >= ReadinessLevel::ClosedLoop {
                     let closed_id = format!("{target_subject}/closed-loop");
+                    let absence_closed = absence_ready && verification_ready;
                     let mut closed = subject(
                         closed_id.clone(),
                         scope_id.clone(),
                         required_level,
-                        false,
-                        if !execute_verification {
+                        absence_closed,
+                        if absence_closed {
+                            ""
+                        } else if absence_ready && !verification_ready {
+                            "verification closure is not exact"
+                        } else if !execute_verification {
                             "verification execution was not run"
                         } else if !work_ready {
                             "structural verification closure is not ready"
@@ -464,7 +479,8 @@ pub fn evaluate(
                             "canonical receipt and post-state validation have not passed"
                         },
                     );
-                    if execute_verification
+                    if !absence_ready
+                        && execute_verification
                         && work_ready
                         && let Ok(plan) = &plan
                     {
@@ -902,10 +918,93 @@ fn implemented_criteria(workspace: &SpecWorkspace, index: &SpecIndex) -> Result<
     Ok(criteria.into_iter().collect())
 }
 
+fn implementation_obligations(index: &SpecIndex, criterion: &SpecAnchor) -> Vec<BoundTargetRef> {
+    index
+        .all_criteria_to_implementation_targets
+        .get(criterion)
+        .into_iter()
+        .flatten()
+        .filter(|target| {
+            index.bindings.get(&target.binding).is_some_and(|binding| {
+                index
+                    .item_status
+                    .get(&target.binding.item)
+                    .is_none_or(|status| *status != ItemStatus::Planned)
+                    && binding
+                        .targets
+                        .iter()
+                        .any(|candidate| candidate.id == target.target_id)
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+fn target_is_absent(index: &SpecIndex, target: &BoundTargetRef) -> bool {
+    index
+        .bindings
+        .get(&target.binding)
+        .and_then(|binding| {
+            binding
+                .targets
+                .iter()
+                .find(|candidate| candidate.id == target.target_id)
+        })
+        .is_some_and(|candidate| {
+            candidate.lifecycle == syu_spec_model::ArtifactTargetLifecycle::Absent
+        })
+}
+
+fn finalized_absent_targets(workspace: &SpecWorkspace) -> BTreeSet<BoundTargetRef> {
+    let Ok(output) = Command::new("git")
+        .args(["rev-parse", "--git-path", "syu"])
+        .current_dir(&workspace.root)
+        .output()
+    else {
+        return BTreeSet::new();
+    };
+    if !output.status.success() {
+        return BTreeSet::new();
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let root = PathBuf::from(raw);
+    let root = if root.is_absolute() {
+        root
+    } else {
+        workspace.root.join(root)
+    };
+    let finalizations = root.join("completion/v1/finalizations");
+    let Ok(entries) = fs::read_dir(finalizations) else {
+        return BTreeSet::new();
+    };
+    let mut targets = BTreeSet::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(receipt) = serde_json::from_slice::<FinalizationReceipt>(&bytes) else {
+            continue;
+        };
+        for proof in receipt.lifecycle_proofs {
+            if proof.lifecycle == TargetLifecycle::EnsureAbsent
+                && proof.after_content_hash.is_empty()
+            {
+                targets.insert(proof.reference);
+            }
+        }
+    }
+    targets
+}
+
 fn implemented_feature_subjects(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
 ) -> Vec<ReadinessSubject> {
+    let finalized_absent_targets = finalized_absent_targets(workspace);
     workspace
         .documents
         .iter()
@@ -936,6 +1035,18 @@ fn implemented_feature_subjects(
                         binding: anchor.clone(),
                         target_id: target.id.clone(),
                     };
+                    if target.lifecycle == syu_spec_model::ArtifactTargetLifecycle::Absent {
+                        if index.all_target_to_artifact.contains_key(&reference) {
+                            blockers.push(format!(
+                                "{reference} is declared absent but still resolves in the workspace"
+                            ));
+                        } else if !finalized_absent_targets.contains(&reference) {
+                            blockers.push(format!(
+                                "{reference} has no finalized absence lifecycle proof"
+                            ));
+                        }
+                        continue;
+                    }
                     if !index.target_to_artifact.contains_key(&reference) {
                         blockers.push(format!("{reference} is not an exact implementation target"));
                     }

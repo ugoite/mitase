@@ -172,7 +172,6 @@ pub struct PlannedTarget {
     pub artifact_identity: Option<String>,
     pub transition: TargetTransition,
     #[serde(default)]
-    #[serde(skip_serializing_if = "is_stable_target_lifecycle")]
     pub lifecycle: TargetLifecycle,
     pub access: TargetAccessMode,
     pub resolved_path: String,
@@ -452,6 +451,7 @@ pub struct AgentTargetDigest {
     pub access: TargetAccessMode,
     pub transition: TargetTransition,
     #[serde(default)]
+    #[serde(skip_serializing_if = "is_stable_target_lifecycle")]
     pub lifecycle: TargetLifecycle,
     pub content_hash: String,
     pub excerpt_hash: String,

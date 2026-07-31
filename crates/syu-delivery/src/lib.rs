@@ -784,6 +784,7 @@ fn atomic_write(path: &Path, content: impl AsRef<[u8]>) -> Result<()> {
 mod tests {
     use super::*;
     use std::{fs, process::Command};
+    use syu_work_model::{AgentContextPack, AgentTargetDigest};
     use syu_work_model::{
         AgentPatchRecord, AgentTargetChange, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
         CompletionReport, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
@@ -1110,6 +1111,130 @@ mod tests {
         )
         .unwrap();
         assert_eq!(store.agent_events("run-legacy").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn legacy_run_started_event_preserves_digest_and_run_reconstruction() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let slice = &plan.slices[0];
+        let planned = slice
+            .editable_targets
+            .first()
+            .expect("fixture editable target");
+        let context =
+            syu_planner::export_context(&plan, &slice.id, &workspace, &index, &revision).unwrap();
+        let run = AgentRun {
+            schema: syu_work_model::AGENT_RUN_SCHEMA.into(),
+            run_id: "run-legacy-started".into(),
+            approval_id: "approval-legacy-started".into(),
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: slice.id.clone(),
+            status: AgentRunStatus::Active,
+            context: AgentContextPack {
+                schema: "syu/agent-context/v1".into(),
+                plan_digest: plan.canonical_digest.clone(),
+                slice_id: slice.id.clone(),
+                context,
+                budget: slice.budget.clone(),
+                editable_targets: vec![AgentTargetDigest {
+                    reference: planned.reference.clone(),
+                    path: planned.resolved_path.clone(),
+                    access: planned.access,
+                    transition: planned.transition,
+                    lifecycle: planned.lifecycle,
+                    content_hash: planned.content_hash.clone(),
+                    excerpt_hash: planned.excerpt_hash.clone(),
+                    container_content_hash: planned.container_content_hash.clone(),
+                    line_start: planned.line_start,
+                    line_end: planned.line_end,
+                    budget_bytes: planned.budget_bytes,
+                    budget_lines: planned.budget_lines,
+                }],
+                verification_targets: vec![],
+                readonly_targets: vec![],
+            },
+            created_at: "1".into(),
+        };
+        let event = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-legacy-started".into(),
+            event_digest: String::new(),
+            run_id: run.run_id.clone(),
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+            created_at: "1".into(),
+            event: AgentEventKind::RunStarted {
+                run: Box::new(run.clone()),
+            },
+        };
+        let mut legacy_event = serde_json::to_value(&event).unwrap();
+        let target = &mut legacy_event["event"]["run"]["context"]["editable_targets"][0];
+        target.as_object_mut().unwrap().remove("lifecycle");
+        target
+            .as_object_mut()
+            .unwrap()
+            .remove("container_content_hash");
+        legacy_event["event_digest"] = "".into();
+        let mut legacy_event_struct: LegacyAgentEvent =
+            serde_json::from_value(legacy_event.clone()).unwrap();
+        legacy_event_struct.event_digest.clear();
+        legacy_event["event_digest"] = DeliveryStore::digest(&legacy_event_struct).unwrap().into();
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let event_path = store.agent_event_path(&event);
+        fs::create_dir_all(event_path.parent().unwrap()).unwrap();
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&legacy_event).unwrap(),
+        )
+        .unwrap();
+
+        let events = store.agent_events(&run.run_id).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(store.agent_run(&run.run_id).unwrap(), run);
+
+        legacy_event["event"]["run"]["status"] = "completed".into();
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&legacy_event).unwrap(),
+        )
+        .unwrap();
+        assert!(store.agent_events(&run.run_id).is_err());
+    }
+
+    #[test]
+    fn legacy_work_plan_and_approval_keep_the_v1_canonical_digest() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let approval = fixture_approval(&workspace, &plan, &revision);
+        let mut legacy_plan = serde_json::to_value(&plan).unwrap();
+        assert!(
+            legacy_plan["slices"][0]["editable_targets"][0]
+                .get("lifecycle")
+                .is_some()
+        );
+        legacy_plan["canonical_digest"] = "".into();
+        let mut parsed: syu_work_model::WorkPlan = serde_json::from_value(legacy_plan).unwrap();
+        assert_eq!(
+            syu_work_model::work_plan_digest(&parsed),
+            plan.canonical_digest
+        );
+        parsed.canonical_digest = plan.canonical_digest.clone();
+
+        let mut legacy_approval = serde_json::to_value(&approval).unwrap();
+        legacy_approval["plan"] = serde_json::to_value(&parsed).unwrap();
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        store.ensure().unwrap();
+        let path = store.approval_path(&approval.plan_digest);
+        fs::write(&path, serde_json::to_vec_pretty(&legacy_approval).unwrap()).unwrap();
+        assert_eq!(store.approval(&approval.plan_digest).unwrap().plan, parsed);
     }
 
     #[test]

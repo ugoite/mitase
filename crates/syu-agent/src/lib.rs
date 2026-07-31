@@ -898,6 +898,7 @@ struct FileMutation {
     updated: Option<Vec<u8>>,
 }
 
+#[derive(Debug, Clone)]
 struct FileRollback {
     path: PathBuf,
     original: Option<Vec<u8>>,
@@ -933,7 +934,10 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Patch
         let Some(content) = &mutation.updated else {
             continue;
         };
-        let parent = path.parent().context("target path has no parent")?;
+        let parent = match path.parent().context("target path has no parent") {
+            Ok(parent) => parent,
+            Err(error) => return Err(cleanup_preparation_error(error, &created_dirs)),
+        };
         let mut missing = Vec::new();
         let mut cursor = parent.to_path_buf();
         while !cursor.exists() {
@@ -944,24 +948,47 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Patch
         }
         missing.reverse();
         created_dirs.extend(missing);
-        fs::create_dir_all(parent)?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        file.write_all(content)?;
-        file.as_file().sync_all()?;
+        if let Err(error) = fs::create_dir_all(parent) {
+            return Err(cleanup_preparation_error(error.into(), &created_dirs));
+        }
+        let mut file = match tempfile::NamedTempFile::new_in(parent) {
+            Ok(file) => file,
+            Err(error) => return Err(cleanup_preparation_error(error.into(), &created_dirs)),
+        };
+        if let Err(error) = file.write_all(content) {
+            return Err(cleanup_preparation_error(error.into(), &created_dirs));
+        }
+        if let Err(error) = file.as_file().sync_all() {
+            return Err(cleanup_preparation_error(error.into(), &created_dirs));
+        }
         temporary.push((path.clone(), file));
     }
     let mut temporary = temporary.into_iter().collect::<BTreeMap<_, _>>();
     let mut applied = Vec::new();
     for (path, mutation) in files {
-        if file_state(path)? != mutation.original {
-            restore_rollback(&PatchRollback {
-                files: applied,
-                created_dirs: created_dirs.clone(),
-            })?;
-            bail!(
-                "target {} changed while the patch was being applied",
-                path.display()
-            );
+        let current = match file_state(path) {
+            Ok(current) => current,
+            Err(error) => {
+                return Err(rollback_error(
+                    error,
+                    PatchRollback {
+                        files: applied,
+                        created_dirs: created_dirs.clone(),
+                    },
+                ));
+            }
+        };
+        if current != mutation.original {
+            return Err(rollback_error(
+                anyhow::anyhow!(
+                    "target {} changed while the patch was being applied",
+                    path.display()
+                ),
+                PatchRollback {
+                    files: applied,
+                    created_dirs: created_dirs.clone(),
+                },
+            ));
         }
         let result = match (&mutation.original, &mutation.updated) {
             (Some(_), Some(_)) => {
@@ -984,28 +1011,69 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Patch
             (None, None) => unreachable!("every patch mutation changes a file"),
         };
         if let Err(error) = result {
-            restore_rollback(&PatchRollback {
-                files: applied,
-                created_dirs: created_dirs.clone(),
-            })?;
-            return Err(error);
+            return Err(rollback_error(
+                error,
+                PatchRollback {
+                    files: applied,
+                    created_dirs: created_dirs.clone(),
+                },
+            ));
         }
         let permissions = original_permissions.get(path).cloned().flatten();
-        if mutation.updated.is_some()
-            && let Some(permissions) = &permissions
-        {
-            fs::set_permissions(path, permissions.clone())?;
-        }
-        applied.push(FileRollback {
+        let file_rollback = FileRollback {
             path: path.clone(),
             original: mutation.original.clone(),
-            permissions,
-        });
+            permissions: permissions.clone(),
+        };
+        if mutation.updated.is_some()
+            && let Some(permissions) = &permissions
+            && let Err(error) = fs::set_permissions(path, permissions.clone())
+        {
+            let mut files_to_restore = applied;
+            files_to_restore.push(file_rollback);
+            return Err(rollback_error(
+                error.into(),
+                PatchRollback {
+                    files: files_to_restore,
+                    created_dirs: created_dirs.clone(),
+                },
+            ));
+        }
+        applied.push(file_rollback);
     }
     Ok(PatchRollback {
         files: applied,
         created_dirs,
     })
+}
+
+fn cleanup_preparation_error(error: anyhow::Error, created_dirs: &[PathBuf]) -> anyhow::Error {
+    match remove_created_dirs(created_dirs) {
+        Ok(()) => error,
+        Err(cleanup) => anyhow::anyhow!("{error}; preparation cleanup failed: {cleanup}"),
+    }
+}
+
+fn rollback_error(error: anyhow::Error, rollback: PatchRollback) -> anyhow::Error {
+    match restore_rollback(&rollback) {
+        Ok(()) => error,
+        Err(restore) => anyhow::anyhow!("{error}; rollback failed: {restore}"),
+    }
+}
+
+fn remove_created_dirs(created_dirs: &[PathBuf]) -> Result<()> {
+    for directory in created_dirs.iter().rev() {
+        match fs::remove_dir(directory) {
+            Ok(()) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                ) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
@@ -1040,18 +1108,7 @@ fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
             },
         }
     }
-    for directory in rollback.created_dirs.iter().rev() {
-        match fs::remove_dir(directory) {
-            Ok(()) => {}
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
-                ) => {}
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Ok(())
+    remove_created_dirs(&rollback.created_dirs)
 }
 
 fn append_patch_event(
@@ -1158,5 +1215,25 @@ mod tests {
         restore_rollback(&rollback).expect("restore create");
         assert!(!created.exists());
         assert!(!temp.path().join("new").exists());
+    }
+
+    #[test]
+    fn preparation_failure_removes_new_directories() {
+        let temp = tempfile::tempdir().expect("preparation tempdir");
+        let blocking_parent = temp.path().join("blocking");
+        fs::write(&blocking_parent, "not a directory").expect("blocking file");
+        let target = blocking_parent.join("nested/file.txt");
+        let mut create = BTreeMap::new();
+        create.insert(
+            target.clone(),
+            FileMutation {
+                original: None,
+                updated: Some(b"created\n".to_vec()),
+            },
+        );
+
+        assert!(apply_file_mutations(&create).is_err());
+        assert!(!blocking_parent.join("nested").exists());
+        assert!(!target.exists());
     }
 }

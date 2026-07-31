@@ -4387,11 +4387,41 @@ fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
         ("verification".into(), report.verification.clone()),
         ("closed_loop".into(), report.closed_loop.clone()),
     ]);
-    let blocker_details = axes
-        .values()
+    const TRACEABLE_AXES: &[&str] = &["inventory", "ownership"];
+    const SEEDABLE_AXES: &[&str] = &["inventory", "ownership", "seedability"];
+    const WORK_READY_AXES: &[&str] = &["inventory", "ownership", "seedability", "workability"];
+    const VERIFIABLE_AXES: &[&str] = &[
+        "inventory",
+        "ownership",
+        "seedability",
+        "workability",
+        "verification",
+    ];
+    const CLOSED_LOOP_AXES: &[&str] = &[
+        "inventory",
+        "ownership",
+        "seedability",
+        "workability",
+        "verification",
+        "closed_loop",
+    ];
+    let required_axes = match report.target.as_str() {
+        "traceable" => TRACEABLE_AXES,
+        "seedable" => SEEDABLE_AXES,
+        "work-ready" => WORK_READY_AXES,
+        "verifiable" => VERIFIABLE_AXES,
+        "closed-loop" => CLOSED_LOOP_AXES,
+        _ => &[],
+    };
+    let blocker_details = required_axes
+        .iter()
+        .filter_map(|axis| axes.get(*axis))
         .flat_map(|axis| axis.blockers.clone())
         .collect::<Vec<_>>();
-    let has_subjects = axes.values().any(|axis| axis.required > 0);
+    let has_subjects = required_axes
+        .iter()
+        .filter_map(|axis| axes.get(*axis))
+        .any(|axis| axis.required > 0);
     ReadinessView {
         target: report.target,
         status: if !has_subjects {
@@ -6463,6 +6493,77 @@ mod tests {
                 serde_json::from_slice(&body).expect("lifecycle finalization receipt");
             assert_eq!(finalization.lifecycle_proofs.len(), 1, "{description}");
             assert_eq!(finalization.lifecycle_proofs[0].reference, target.reference);
+            if target_id == "removed-symbol" {
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(readiness.status(), StatusCode::OK, "{description}");
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("post-finalization readiness");
+                assert_eq!(readiness.status, "Ready", "{readiness:?}");
+                let removed_subject = readiness
+                    .axes
+                    .get("seedability")
+                    .and_then(|axis| {
+                        axis.subjects.iter().find(|subject| {
+                            subject.id.contains("criterion.remove-symbol")
+                                && subject.id.contains("removed-symbol")
+                        })
+                    })
+                    .expect("finalized absent target readiness subject");
+                assert!(removed_subject.ready, "{removed_subject:?}");
+
+                let source = temp.path().join("src/removable.rs");
+                let mut restored = fs::read_to_string(&source).expect("removed source");
+                restored.push_str("\npub fn remove_me() {}\n");
+                fs::write(&source, restored).expect("restore removed target");
+                let readiness = app
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(readiness.status(), StatusCode::OK, "{description}");
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("restored-target readiness");
+                let restored_subject = readiness
+                    .axes
+                    .get("seedability")
+                    .and_then(|axis| {
+                        axis.subjects.iter().find(|subject| {
+                            subject.id.contains("criterion.remove-symbol")
+                                && subject.id.contains("removed-symbol")
+                        })
+                    })
+                    .expect("restored target readiness subject");
+                assert!(!restored_subject.ready, "{restored_subject:?}");
+                assert!(
+                    restored_subject
+                        .blockers
+                        .iter()
+                        .any(|blocker| blocker.contains("finalized lifecycle proof"))
+                );
+            }
         }
     }
 
