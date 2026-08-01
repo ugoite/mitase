@@ -456,7 +456,22 @@ fn suggestion_budget(suggestions: &[TargetSuggestion], index: &SpecIndex) -> Sug
     let mut budget = SuggestionBudget::default();
     for candidate in suggestions {
         match candidate.transition {
-            TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove => {
+            TargetTransition::Add => {
+                if candidate.role == BindingRole::Verification {
+                    // A planned verification Add is represented in the plan
+                    // twice: once for the post-write target and once for the
+                    // RunOnly verification phase.
+                    budget.verification_targets += 1;
+                }
+                if let Some(target) = index.target(&candidate.reference) {
+                    editable_paths.insert(target.path.clone());
+                    budget.editable_symbols += match target.selector {
+                        Selector::Symbol { .. } => 1,
+                        _ => 0,
+                    };
+                }
+            }
+            TargetTransition::Modify | TargetTransition::Remove => {
                 if let Some(target) = index.target(&candidate.reference) {
                     editable_paths.insert(target.path.clone());
                     budget.editable_symbols += match target.selector {
@@ -4029,6 +4044,46 @@ mod tests {
         assert_eq!(adds[1].budget_bytes, Some(512));
         let split = split_work_recommendation(&adds, &workspace, &index)
             .expect("lifecycle candidates require a split");
+        assert_eq!(split.suggested_groups.len(), 2);
+        assert!(split.suggested_groups.iter().all(|group| group.len() == 1));
+    }
+
+    #[test]
+    fn verification_add_targets_count_the_post_write_run_only_phase() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("status: implemented", "status: planned")
+            .replace(
+                "            claims: []\n",
+                "            claims: []\n      - id: verification\n        role: verification\n        facet: checks\n        responsibility: Verify the planned targets.\n        targets:\n          - id: verify-one\n            adapter: rust\n            path: tests/verify.rs\n            selector: { kind: symbol, name: verify_one }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n          - id: verify-two\n            adapter: rust\n            path: tests/verify.rs\n            selector: { kind: symbol, name: verify_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n",
+            );
+        fs::write(feature_path, feature).expect("verification Add targets");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let mut workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        workspace.config.work.slicing.max_verification_targets = 1;
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let verification_adds = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| {
+                candidate.transition == TargetTransition::Add
+                    && candidate.role == BindingRole::Verification
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert_eq!(verification_adds.len(), 2);
+        let split = split_work_recommendation(&verification_adds, &workspace, &index)
+            .expect("verification Add phases require a split");
         assert_eq!(split.suggested_groups.len(), 2);
         assert!(split.suggested_groups.iter().all(|group| group.len() == 1));
     }

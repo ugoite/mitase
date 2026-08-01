@@ -2839,6 +2839,19 @@ async fn api_journey_action(
                     .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
             ensure_homogeneous_approved_transitions(&approved_candidates)
                 .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+            if let Some(split_recommendation) = split_work_recommendation(
+                &approved_candidates,
+                &snapshot.workspace,
+                &snapshot.index,
+            ) {
+                return Err(ApiError(
+                    StatusCode::CONFLICT,
+                    anyhow::anyhow!(
+                        "approved target group exceeds slicing budget: {}",
+                        split_recommendation.reason
+                    ),
+                ));
+            }
             validate_create_work_criterion(&snapshot, &anchor, &approved_candidates)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
             let requested_targets = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
@@ -8060,6 +8073,12 @@ mod tests {
                 .len(),
             2
         );
+        let split_groups = bulk_approval
+            .split_recommendation
+            .as_ref()
+            .expect("budget split recommendation")
+            .suggested_groups
+            .clone();
         assert!(
             service
                 .session
@@ -8069,6 +8088,43 @@ mod tests {
                 .is_empty(),
             "over-budget bulk approval must not persist any candidate"
         );
+        for group in &split_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: suggestions.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.add-symbol",
+                "summary": "reject accumulated over-budget groups"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        service
+            .session
+            .write()
+            .unwrap()
+            .approved_target_suggestions
+            .clear();
         fs::write(&config_path, config).expect("restore slicing budget");
 
         let response = app
