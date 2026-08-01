@@ -53,6 +53,12 @@ description: "Generated reference for docs/syu/features/workbench/server.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
+      - **owns**:
+        - **id**: workbench-server-source-file
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: file
 
 ## Source YAML
 
@@ -90,4 +96,9 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
+    owns:
+    - id: workbench-server-source-file
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: file }
 ```
