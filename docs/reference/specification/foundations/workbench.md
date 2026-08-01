@@ -348,13 +348,13 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-011
   - **title**: Scoped agent evidence
-  - **description**: Workbench exposes the approved agent boundary and its server-owned execution evidence.
+  - **description**: Workbench exposes the approved agent boundary and its server-owned execution evidence, including lifecycle proofs for approved target creation and deletion.
   - **priority**: critical
   - **status**: implemented
   - **criteria**:
     - **id**: scoped-agent
       - **kind**: security
-      - **statement**: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
+      - **statement**: Workbench can start a scoped agent only for an approved slice, applies only its exact Modify, Add, or Remove transitions, and shows accepted, rejected, blocked, and expansion events.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-013
@@ -637,13 +637,13 @@ requirements:
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-011
     title: Scoped agent evidence
-    description: Workbench exposes the approved agent boundary and its server-owned execution evidence.
+    description: Workbench exposes the approved agent boundary and its server-owned execution evidence, including lifecycle proofs for approved target creation and deletion.
     priority: critical
     status: implemented
     criteria:
       - id: scoped-agent
         kind: security
-        statement: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
+        statement: Workbench can start a scoped agent only for an approved slice, applies only its exact Modify, Add, or Remove transitions, and shows accepted, rejected, blocked, and expansion events.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-013
     title: Guided non-programmer journey

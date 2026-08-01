@@ -19,6 +19,14 @@ pub const AGENT_RUN_SCHEMA: &str = "syu/agent-run/v1";
 pub const AGENT_PATCH_SCHEMA: &str = "syu/agent-patch/v1";
 pub const AGENT_EVENT_SCHEMA: &str = "syu/agent-event/v1";
 
+fn is_stable_target_lifecycle(value: &TargetLifecycle) -> bool {
+    matches!(value, TargetLifecycle::Stable)
+}
+
+fn is_empty_vec<T>(value: &[T]) -> bool {
+    value.is_empty()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WorkOperation {
@@ -89,10 +97,11 @@ impl RequestedTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum TargetTransition {
     Add,
+    #[default]
     Modify,
     Remove,
     RunOnly,
@@ -169,6 +178,12 @@ pub struct PlannedTarget {
     pub resolved_selector: ResolvedSelector,
     pub content_hash: String,
     pub excerpt_hash: String,
+    /// For an intended semantic target, the approved hash of the existing
+    /// containing file. File creation intentionally has no container hash.
+    /// This keeps an Add operation from silently applying to a file that
+    /// changed after the plan was approved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_content_hash: Option<String>,
     pub adapter: String,
     pub facet: String,
     pub role: BindingRole,
@@ -435,8 +450,13 @@ pub struct AgentTargetDigest {
     pub path: String,
     pub access: TargetAccessMode,
     pub transition: TargetTransition,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_stable_target_lifecycle")]
+    pub lifecycle: TargetLifecycle,
     pub content_hash: String,
     pub excerpt_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_content_hash: Option<String>,
     pub line_start: usize,
     pub line_end: usize,
     pub budget_bytes: usize,
@@ -467,6 +487,35 @@ pub enum AgentTargetWrite {
         target: BoundTargetRef,
         expected_excerpt_hash: String,
         content: String,
+    },
+    /// Add one exact semantic target to an existing approved file. The
+    /// container digest binds the insertion to the reviewed file state.
+    AddToFile {
+        #[serde(rename = "ref")]
+        target: BoundTargetRef,
+        expected_path_hash: String,
+        content: String,
+    },
+    /// Create one approved file that did not exist when the plan was
+    /// approved. Existing paths are always rejected rather than overwritten.
+    CreateFile {
+        #[serde(rename = "ref")]
+        target: BoundTargetRef,
+        content: String,
+    },
+    /// Remove one exact semantic target while proving its reviewed excerpt is
+    /// still current.
+    Remove {
+        #[serde(rename = "ref")]
+        target: BoundTargetRef,
+        expected_excerpt_hash: String,
+    },
+    /// Remove one approved file while proving its reviewed full-file digest is
+    /// still current.
+    RemoveFile {
+        #[serde(rename = "ref")]
+        target: BoundTargetRef,
+        expected_content_hash: String,
     },
 }
 
@@ -531,12 +580,26 @@ pub struct AgentPatchRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct AgentTargetChange {
+pub struct TargetLifecycleProof {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    #[serde(default)]
+    pub transition: TargetTransition,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_stable_target_lifecycle")]
+    pub lifecycle: TargetLifecycle,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub before_content_hash: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub after_content_hash: String,
     pub before_excerpt_hash: String,
     pub after_excerpt_hash: String,
 }
+
+/// Agent patches retain exactly the same lifecycle proof that completion and
+/// finalization use, so the execution event and durable closure evidence stay
+/// connected.
+pub type AgentTargetChange = TargetLifecycleProof;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -572,6 +635,9 @@ pub struct VerificationReceipt {
     pub started_at: String,
     pub completed_at: String,
     pub executions: Vec<VerificationExecution>,
+    /// Exact lifecycle proof for every editable target in the completed slice.
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
+    pub lifecycle_proofs: Vec<TargetLifecycleProof>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -750,6 +816,10 @@ pub struct FinalizationReceipt {
     pub post_workspace_fingerprint: String,
     pub promoted_items: Vec<SpecItemRef>,
     pub changed_files: Vec<String>,
+    /// The validated target lifecycle evidence preserved from the completion
+    /// receipt that authorized this finalization.
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
+    pub lifecycle_proofs: Vec<TargetLifecycleProof>,
     pub completed_at: String,
 }
 
@@ -757,6 +827,32 @@ pub struct FinalizationReceipt {
 /// the guarded execution boundary used by post-state plan validation;
 /// editable source and derived generated content are deliberately omitted.
 pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
+    readonly_targets_fingerprint_excluding_paths(slices, &std::collections::BTreeSet::new())
+}
+
+/// Lifecycle writes may legitimately change the containing file of a readonly
+/// context target (for example, adding a new symbol beside an existing one).
+/// Excluding only those approved paths keeps the readonly guard strict for all
+/// unrelated targets while allowing the plan's own Add/Remove transition.
+pub fn readonly_targets_fingerprint_for_execution(slices: &[ExecutionSlice]) -> String {
+    let lifecycle_paths = slices
+        .iter()
+        .flat_map(|slice| slice.editable_targets.iter())
+        .filter(|target| {
+            matches!(
+                target.transition,
+                TargetTransition::Add | TargetTransition::Remove
+            )
+        })
+        .map(|target| target.resolved_path.clone())
+        .collect();
+    readonly_targets_fingerprint_excluding_paths(slices, &lifecycle_paths)
+}
+
+fn readonly_targets_fingerprint_excluding_paths(
+    slices: &[ExecutionSlice],
+    excluded_paths: &std::collections::BTreeSet<String>,
+) -> String {
     let mut hash = Sha256::new();
     for slice in slices {
         hash.update(slice.id.as_bytes());
@@ -768,7 +864,7 @@ pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
                 matches!(
                     target.access,
                     TargetAccessMode::Readonly | TargetAccessMode::RunOnly
-                )
+                ) && !excluded_paths.contains(&target.resolved_path)
             })
         {
             hash.update(target.reference.to_string().as_bytes());
