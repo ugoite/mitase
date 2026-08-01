@@ -16,17 +16,18 @@ use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactTarget, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, OwnershipSelector,
-    RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim, VerificationRunnerRef,
+    ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
+    LocalAnchorKind, OwnershipSelector, RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument,
+    TargetClaim, VerificationRunnerRef,
 };
 use syu_work_model::{
     COMPLETION_REPORT_SCHEMA, CompletionBlocker, CompletionCheck, CompletionCheckEvidence,
     CompletionCriterionEvidence, CompletionReport, CompletionStatus, ExactTestEvidence,
     ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
-    VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure, VerificationAttemptResult,
-    VerificationAttemptStatus, VerificationClaimRef, VerificationExecution,
-    VerificationExecutionAttempt, VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan,
-    readonly_targets_fingerprint, work_plan_digest,
+    TargetTransition, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure,
+    VerificationAttemptResult, VerificationAttemptStatus, VerificationClaimRef,
+    VerificationExecution, VerificationExecutionAttempt, VerificationReceipt, WORK_PLAN_SCHEMA,
+    WorkPlan, readonly_targets_fingerprint_for_execution, work_plan_digest,
 };
 use syu_workspace::{
     AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
@@ -508,7 +509,7 @@ pub fn canonical_plan_for_execution(
     if submitted.basis.spec_fingerprint != workspace.spec_fingerprint()? {
         bail!("plan specification basis is stale");
     }
-    if submitted.basis.ownership_fingerprint != index.ownership_fingerprint() {
+    if submitted.basis.ownership_fingerprint != lifecycle_ownership_fingerprint(index, submitted) {
         bail!("plan ownership basis is stale");
     }
     if submitted.basis.readonly_fingerprint
@@ -520,7 +521,9 @@ pub fn canonical_plan_for_execution(
         bail!("plan canonical digest is tampered");
     }
     let current_fingerprint = workspace.try_fingerprint()?;
-    if submitted.basis.workspace_fingerprint == current_fingerprint {
+    if submitted.basis.workspace_fingerprint == current_fingerprint
+        && !plan_has_lifecycle_transition(submitted)
+    {
         let mut canonical = canonical_plan(&submitted.request, workspace, index, revision)?;
         canonical.basis = submitted.basis.clone();
         canonical.canonical_digest = work_plan_digest(&canonical);
@@ -551,6 +554,35 @@ pub fn canonical_plan_for_execution(
     Ok(submitted.clone())
 }
 
+fn lifecycle_ownership_fingerprint(index: &SpecIndex, plan: &WorkPlan) -> String {
+    index.ownership_fingerprint_excluding(
+        &plan
+            .slices
+            .iter()
+            .flat_map(|slice| slice.editable_targets.iter())
+            .filter(|target| {
+                matches!(
+                    target.transition,
+                    TargetTransition::Add | TargetTransition::Remove
+                )
+            })
+            .map(|target| target.reference.clone())
+            .collect(),
+    )
+}
+
+fn plan_has_lifecycle_transition(plan: &WorkPlan) -> bool {
+    plan.slices
+        .iter()
+        .flat_map(|slice| &slice.editable_targets)
+        .any(|target| {
+            matches!(
+                target.transition,
+                TargetTransition::Add | TargetTransition::Remove
+            )
+        })
+}
+
 fn current_readonly_fingerprint(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
@@ -578,6 +610,10 @@ fn current_readonly_fingerprint(
                     target.excerpt_hash = resolved.excerpt_hash;
                 }
                 None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
+                None if target.access == syu_work_model::TargetAccessMode::RunOnly
+                    && target.transition == syu_work_model::TargetTransition::Add
+                    && index.item_status.get(&target.reference.binding.item)
+                        == Some(&syu_spec_model::ItemStatus::Planned) => {}
                 None => {
                     // Preserve a deterministic mismatch for a missing stable
                     // readonly/run-only target. Ensure-absent transitions are
@@ -588,7 +624,7 @@ fn current_readonly_fingerprint(
             }
         }
     }
-    readonly_targets_fingerprint(&slices)
+    readonly_targets_fingerprint_for_execution(&slices)
 }
 
 fn resolve_planned_target_for_workspace(
@@ -785,11 +821,10 @@ pub fn execute_verification(
         )?;
         let mut implementation_digests = BTreeMap::new();
         for covered in covers {
-            let covered_target = index
-                .target(covered)
-                .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
-            let resolved = syu_workspace::resolve_target_in_workspace(workspace, covered_target)?;
-            implementation_digests.insert(covered.clone(), resolved.content_hash);
+            implementation_digests.insert(
+                covered.clone(),
+                implementation_digest_for_receipt(workspace, index, slice, covered)?,
+            );
         }
         let verification = syu_workspace::resolve_target_in_workspace(workspace, target)?;
         executions.push(VerificationExecution {
@@ -816,6 +851,7 @@ pub fn execute_verification(
         started_at,
         completed_at: epoch_seconds(),
         executions,
+        lifecycle_proofs: target_lifecycle_proofs(workspace, index, slice)?,
     };
     validate_verification_receipt(workspace, index, &plan, slice_id, &receipt, revision)?;
     Ok(receipt)
@@ -941,6 +977,9 @@ pub fn validate_verification_receipt(
     {
         bail!("verification receipt basis is stale or does not match the selected slice");
     }
+    if receipt.lifecycle_proofs != target_lifecycle_proofs(workspace, index, slice)? {
+        bail!("verification receipt lifecycle proof is stale or incomplete");
+    }
     let expected = slice
         .verification_targets
         .iter()
@@ -1015,11 +1054,8 @@ pub fn validate_verification_receipt(
             bail!("verification target digest is stale");
         }
         for covered in covers {
-            let covered_target = index
-                .target(covered)
-                .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
-            let resolved = syu_workspace::resolve_target_in_workspace(workspace, covered_target)?;
-            if execution.implementation_digests.get(covered) != Some(&resolved.content_hash) {
+            let digest = implementation_digest_for_receipt(workspace, index, slice, covered)?;
+            if execution.implementation_digests.get(covered) != Some(&digest) {
                 bail!("verification implementation digest is stale");
             }
         }
@@ -1038,6 +1074,72 @@ pub fn validate_verification_receipt(
         }
     }
     Ok(())
+}
+
+/// Produce durable proof that every editable target reached the lifecycle
+/// state approved by the selected slice. The before hashes come from the
+/// immutable plan; the after hashes come from the candidate workspace used by
+/// verification and finalization.
+fn target_lifecycle_proofs(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    slice: &ExecutionSlice,
+) -> Result<Vec<syu_work_model::TargetLifecycleProof>> {
+    let mut proofs = Vec::with_capacity(slice.editable_targets.len());
+    for target in &slice.editable_targets {
+        let current = resolve_planned_target_for_workspace(workspace, index, target);
+        let proof = match (target.lifecycle, current) {
+            (TargetLifecycle::EnsureAbsent, None) => syu_work_model::TargetLifecycleProof {
+                reference: target.reference.clone(),
+                transition: target.transition,
+                lifecycle: target.lifecycle,
+                before_content_hash: target.content_hash.clone(),
+                after_content_hash: String::new(),
+                before_excerpt_hash: target.excerpt_hash.clone(),
+                after_excerpt_hash: String::new(),
+            },
+            (TargetLifecycle::EnsureAbsent, Some(_)) => {
+                bail!("target {} remains after verification", target.reference)
+            }
+            (_, Some(resolved)) => syu_work_model::TargetLifecycleProof {
+                reference: target.reference.clone(),
+                transition: target.transition,
+                lifecycle: target.lifecycle,
+                before_content_hash: target.content_hash.clone(),
+                after_content_hash: resolved.content_hash,
+                before_excerpt_hash: target.excerpt_hash.clone(),
+                after_excerpt_hash: resolved.excerpt_hash,
+            },
+            (_, None) => bail!("target {} is absent after verification", target.reference),
+        };
+        proofs.push(proof);
+    }
+    Ok(proofs)
+}
+
+fn implementation_digest_for_receipt(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    slice: &ExecutionSlice,
+    covered: &BoundTargetRef,
+) -> Result<String> {
+    let lifecycle = slice
+        .editable_targets
+        .iter()
+        .find(|target| target.reference == *covered);
+    let declared = index
+        .target(covered)
+        .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
+    let resolved = syu_workspace::resolve_target_in_workspace(workspace, declared).ok();
+    if lifecycle.is_some_and(|target| target.lifecycle == TargetLifecycle::EnsureAbsent) {
+        if resolved.is_some() {
+            bail!("covered removal target {covered} remains in the workspace");
+        }
+        return Ok(String::new());
+    }
+    resolved
+        .map(|target| target.content_hash)
+        .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))
 }
 
 /// Evaluate the complete post-change closure for one execution slice.
@@ -1346,6 +1448,14 @@ fn readiness_regression_blockers(
     };
     let before = evaluate_readiness(&basis.workspace, &basis.index, &plan.basis.revision, false)?;
     let after = evaluate_readiness(workspace, index, current_revision, false)?;
+    let approved_removed_inventory = plan
+        .slices
+        .iter()
+        .flat_map(|slice| slice.editable_targets.iter())
+        .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
+        .filter_map(|target| basis.index.all_target_to_artifact.get(&target.reference))
+        .map(|identity| format!("inventory:{identity}"))
+        .collect::<BTreeSet<_>>();
     let axes = [
         ("inventory", &before.inventory, &after.inventory),
         ("ownership", &before.ownership, &after.ownership),
@@ -1369,6 +1479,7 @@ fn readiness_regression_blockers(
             .collect::<BTreeSet<_>>();
         let regressed = before_ready
             .difference(&after_ready)
+            .filter(|subject| name != "inventory" || !approved_removed_inventory.contains(*subject))
             .cloned()
             .collect::<Vec<_>>();
         if !regressed.is_empty() {
@@ -1710,7 +1821,7 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 .then(|| baseline.as_ref().map(|baseline| &baseline.index))
                 .flatten()
                 .unwrap_or(ctx.index);
-            let owned = index
+            let mut owned = index
                 .artifact_owners
                 .get(&unit.identity)
                 .cloned()
@@ -1736,6 +1847,18 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         })
                         .collect::<Vec<_>>()
                 });
+            if owned.is_empty() && from_baseline {
+                // Ownership migrations are part of the current specification boundary. A
+                // changed artifact that was unowned in the baseline must be checked against
+                // the current exact owner before it is rejected; otherwise a code change and
+                // its first explicit ownership binding can never land atomically.
+                owned = ctx
+                    .index
+                    .artifact_owners
+                    .get(&unit.identity)
+                    .cloned()
+                    .unwrap_or_default();
+            }
             let owners = Some(owned.as_slice());
             // Cargo build scripts are compiler-owned entrypoints. Their semantic inventory
             // includes historical helper symbols so branch diffs can be compared across
@@ -2576,6 +2699,9 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                             local_id: binding.id.clone(),
                         };
                         for target in &binding.targets {
+                            if target.lifecycle == syu_spec_model::ArtifactTargetLifecycle::Absent {
+                                continue;
+                            }
                             let target_ref = BoundTargetRef {
                                 binding: binding_anchor.clone(),
                                 target_id: target.id.clone(),
@@ -3194,6 +3320,21 @@ fn check_kind(
 }
 
 fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    // Planned items are an advisory catalog, not current ownership. Their
+    // exact targets can intentionally be absent until an approved Add plan
+    // creates them; result validation later proves the planned lifecycle.
+    let advisory_absent_targets = ctx
+        .index
+        .bindings
+        .iter()
+        .filter(|(anchor, _)| ctx.index.item_status.get(&anchor.item) == Some(&ItemStatus::Planned))
+        .flat_map(|(anchor, binding)| {
+            binding.targets.iter().map(|target| BoundTargetRef {
+                binding: anchor.clone(),
+                target_id: target.id.clone(),
+            })
+        })
+        .collect::<BTreeSet<_>>();
     let allowed_absent_targets = ctx
         .work_plan
         .into_iter()
@@ -3335,28 +3476,31 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 binding: anchor.clone(),
                 target_id: target.id.clone(),
             };
-            if ctx.plan_mode == PlanValidationMode::PostState
-                && allowed_absent_targets.contains(&target_ref)
-                && ctx.index.target(&target_ref).is_some()
-            {
-                push(
-                    out,
-                    "SYU-WORK-011",
-                    format!("removed target declaration still exists: {target_ref}"),
-                    target.path.to_string_lossy(),
-                    Some(anchor.clone()),
-                );
-            }
-            if let Err(e) = resolve_target_in_workspace(ctx.workspace, target)
-                && !allowed_absent_targets.contains(&target_ref)
-            {
-                push(
-                    out,
-                    "SYU-TARGET-002",
-                    e.to_string(),
-                    target.path.to_string_lossy(),
-                    Some(anchor.clone()),
-                );
+            let advisory = advisory_absent_targets.contains(&target_ref);
+            match resolve_target_in_workspace(ctx.workspace, target) {
+                Ok(_) if target.lifecycle == ArtifactTargetLifecycle::Absent && !advisory => {
+                    push(
+                        out,
+                        "SYU-TARGET-002",
+                        "target is declared absent but still resolves in the workspace",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                Err(e)
+                    if target.lifecycle == ArtifactTargetLifecycle::Present
+                        && !allowed_absent_targets.contains(&target_ref)
+                        && !advisory =>
+                {
+                    push(
+                        out,
+                        "SYU-TARGET-002",
+                        e.to_string(),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                _ => {}
             }
         }
     }
@@ -3522,7 +3666,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    if plan.basis.ownership_fingerprint != ctx.index.ownership_fingerprint() {
+    if plan.basis.ownership_fingerprint != lifecycle_ownership_fingerprint(ctx.index, plan) {
         push(
             out,
             "SYU-WORK-009",
@@ -3546,8 +3690,9 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
     // its revision still names HEAD.  Prefer the live indexed workspace when
     // its fingerprint is the submitted basis; reconstructing HEAD here would
     // incorrectly compare a valid dirty-tree plan with an older filesystem.
-    let current_workspace_is_basis =
-        plan.basis.workspace_fingerprint == ctx.workspace.try_fingerprint().unwrap_or_default();
+    let current_workspace_is_basis = plan.basis.workspace_fingerprint
+        == ctx.workspace.try_fingerprint().unwrap_or_default()
+        && !plan_has_lifecycle_transition(plan);
     if basis_workspace.is_none() && !current_workspace_is_basis && !allow_post_state {
         push(
             out,
@@ -3757,6 +3902,23 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 Some(resolved)
                     if allow_post_state
                         && target.lifecycle == TargetLifecycle::Stable
+                        && matches!(
+                            target.access,
+                            syu_work_model::TargetAccessMode::Readonly
+                                | syu_work_model::TargetAccessMode::RunOnly
+                        )
+                        && lifecycle_transition_shares_path(slice, target)
+                        && (resolved.excerpt_hash == target.excerpt_hash
+                            || (target.access == syu_work_model::TargetAccessMode::RunOnly
+                                && target.content_hash.is_empty()
+                                && target.excerpt_hash.is_empty()))
+                        && resolved.path.to_string_lossy() == target.resolved_path
+                        && resolved.description == target.resolved_selector.description
+                        && resolved.symbols == target.resolved_selector.symbols
+                        && planned_target_metadata_matches(ctx, target) => {}
+                Some(resolved)
+                    if allow_post_state
+                        && target.lifecycle == TargetLifecycle::Stable
                         && target.access == syu_work_model::TargetAccessMode::Generated
                         && ctx.changed_files.is_some_and(|files| {
                             generated_target_has_changed_source(ctx, slice, target, files)
@@ -3825,31 +3987,22 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         );
                     }
                 }
-                syu_work_model::CompletionCheck::TargetAbsent { target } => {
-                    if allow_post_state && ctx.index.target(target).is_some() {
-                        push(
-                            out,
-                            "SYU-WORK-011",
-                            format!("removed target declaration still exists: {target}"),
-                            "work-plan",
-                            Some(target.binding.clone()),
-                        );
-                    } else if ctx
+                syu_work_model::CompletionCheck::TargetAbsent { target }
+                    if ctx
                         .index
                         .target(target)
                         .and_then(|declared| {
                             resolve_target_in_workspace(ctx.workspace, declared).ok()
                         })
-                        .is_some()
-                    {
-                        push(
-                            out,
-                            "SYU-WORK-011",
-                            format!("expected removed target still exists: {target}"),
-                            "work-plan",
-                            Some(target.binding.clone()),
-                        );
-                    }
+                        .is_some() =>
+                {
+                    push(
+                        out,
+                        "SYU-WORK-011",
+                        format!("expected removed target still exists: {target}"),
+                        "work-plan",
+                        Some(target.binding.clone()),
+                    );
                 }
                 _ => {}
             }
@@ -3917,6 +4070,28 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
     }
 }
 
+fn lifecycle_transition_shares_path(
+    slice: &ExecutionSlice,
+    target: &syu_work_model::PlannedTarget,
+) -> bool {
+    slice.editable_targets.iter().any(|editable| {
+        matches!(
+            editable.transition,
+            TargetTransition::Add | TargetTransition::Remove
+        ) && editable.resolved_path == target.resolved_path
+    })
+}
+
+fn run_only_target_is_post_state_add(
+    slice: &ExecutionSlice,
+    target: &syu_work_model::PlannedTarget,
+) -> bool {
+    target.access == syu_work_model::TargetAccessMode::RunOnly
+        && target.content_hash.is_empty()
+        && target.excerpt_hash.is_empty()
+        && lifecycle_transition_shares_path(slice, target)
+}
+
 fn target_budget_bytes(target: &syu_work_model::PlannedTarget) -> usize {
     target
         .budget_bytes
@@ -3938,7 +4113,10 @@ fn validate_slice_scope(
     let guarded_targets = slice
         .verification_targets
         .iter()
-        .filter(|target| target.access == syu_work_model::TargetAccessMode::RunOnly)
+        .filter(|target| {
+            target.access == syu_work_model::TargetAccessMode::RunOnly
+                && !run_only_target_is_post_state_add(slice, target)
+        })
         .chain(
             slice
                 .readonly_context
@@ -3964,9 +4142,10 @@ fn validate_slice_scope(
             let readonly_hit = guarded_targets
                 .iter()
                 .any(|target| target_matches_changed_file_path(ctx, target, file));
-            let editable_hit = editable_targets
-                .iter()
-                .any(|target| editable_target_matches_hunkless_change(ctx, target, file));
+            let editable_hit = editable_targets.iter().any(|target| {
+                editable_target_matches_hunkless_change(ctx, target, file)
+                    || editable_add_target_matches_file(target, file)
+            });
             let generated_hit = generated_targets.iter().any(|target| {
                 target_matches_changed_file_path(ctx, target, file)
                     && generated_target_has_changed_source(ctx, slice, target, files)
@@ -3999,7 +4178,10 @@ fn validate_slice_scope(
             let readonly_hit = guarded_targets
                 .iter()
                 .any(|target| target_overlaps_change(ctx, target, file, &hunk));
-            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
+            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk)
+                || editable_targets
+                    .iter()
+                    .any(|target| editable_add_target_matches_file(target, file));
             let generated_hit = generated_targets.iter().any(|target| {
                 target_overlaps_change(ctx, target, file, &hunk)
                     && generated_target_has_changed_source(ctx, slice, target, files)
@@ -4050,6 +4232,19 @@ fn generated_target_has_changed_source(
                 })
                 .is_some_and(|target| planned_target_changed(ctx, target, files))
         })
+}
+
+fn editable_add_target_matches_file(
+    target: &syu_work_model::PlannedTarget,
+    file: &ChangedFile,
+) -> bool {
+    target.transition == syu_work_model::TargetTransition::Add
+        && target.content_hash.is_empty()
+        && target.excerpt_hash.is_empty()
+        && file
+            .new_path
+            .as_ref()
+            .is_some_and(|path| path.to_string_lossy() == target.resolved_path)
 }
 
 fn target_matches_changed_file_path(
@@ -4633,6 +4828,7 @@ mod tests {
             },
             content_hash: "sha256:0".to_string(),
             excerpt_hash: "sha256:0".to_string(),
+            container_content_hash: None,
             adapter: "rust".to_string(),
             facet: "ui".to_string(),
             role: BindingRole::Implementation,
@@ -4861,7 +5057,7 @@ requirements:
         copy_dir(&workbench_fixture_root(), tempdir.path());
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    true\n}\n\npub fn ungoverned() {}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    true\n}\n\npub fn ungoverned() {}\n",
         )
         .unwrap();
         let mut workspace = SpecWorkspace::load(tempdir.path()).unwrap();
@@ -4897,7 +5093,7 @@ requirements:
         let plan = fixture_execution_plan(tempdir.path(), &revision);
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
         )
         .unwrap();
 
@@ -4916,7 +5112,7 @@ requirements:
         let mut plan = fixture_execution_plan(tempdir.path(), &revision);
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
         )
         .unwrap();
         plan.basis.revision = "missing-basis-revision".into();
@@ -4943,7 +5139,7 @@ requirements:
         let plan = fixture_execution_plan(tempdir.path(), &revision);
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
         )
         .unwrap();
 
@@ -4972,7 +5168,7 @@ requirements:
         let plan = fixture_execution_plan(tempdir.path(), &revision);
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
         )
         .unwrap();
 
@@ -5096,6 +5292,7 @@ requirements:
                 method: "get".into(),
                 path: "/users".into(),
             },
+            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
             claims: vec![],
         };
         let resolved = syu_workspace::resolve_target(tempdir.path(), &declared).unwrap();
@@ -5411,6 +5608,7 @@ requirements:
             selector: syu_spec_model::ExactSelector::Symbol {
                 name: "exact_test_execution_requires_match".into(),
             },
+            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
             claims: vec![],
         };
         let arguments = BTreeMap::from([(
@@ -5593,6 +5791,7 @@ requirements:
             started_at: "0".into(),
             completed_at: "1".into(),
             executions: vec![],
+            lifecycle_proofs: vec![],
         };
         let report = evaluate_completion(&workspace, &index, &plan, &receipt).expect("report");
         assert_eq!(report.status, CompletionStatus::Blocked);
@@ -5645,7 +5844,7 @@ requirements:
             .expect("verification slice");
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    true && (1 == 1)\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    true && (1 == 1)\n}\n",
         )
         .expect("post-state edit");
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
@@ -5685,7 +5884,7 @@ requirements:
         assert_eq!(plan.status, syu_work_model::PlanStatus::Ready);
         fs::write(
             tempdir.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    false\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    false\n}\n",
         )
         .unwrap();
         let workspace = SpecWorkspace::load(tempdir.path()).unwrap();

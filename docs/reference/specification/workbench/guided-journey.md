@@ -57,6 +57,8 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-013#criterion.guided-journey
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
         - **id**: journey-source
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -76,6 +78,26 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-013#criterion.guided-journey
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
+        - **id**: journey-discovery
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: discoverJourneyCandidates
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
+        - **id**: journey-target-suggestions
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: reviewJourneyTargetSuggestions
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
     - **id**: journey-verification
       - **role**: verification
       - **facet**: workbench-journey
@@ -148,6 +170,8 @@ features:
         criterion: REQ-WORKBENCH-013#criterion.guided-journey
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
     - id: journey-source
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -164,6 +188,22 @@ features:
         criterion: REQ-WORKBENCH-013#criterion.guided-journey
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
+    - id: journey-discovery
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: discoverJourneyCandidates }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
+    - id: journey-target-suggestions
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: reviewJourneyTargetSuggestions }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
   - id: journey-verification
     role: verification
     facet: workbench-journey
