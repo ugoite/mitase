@@ -80,6 +80,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
     """let receipt=null;\n"""
     """let approvedTargetSuggestions=[];\n"""
+    """let nestedPatches=[]; window.__SYU_NESTED_PATCHES__=nestedPatches;\n"""
     """const csrfToken='visual-csrf-token';\n"""
     """window.__SYU_FLOW__=[];\n"""
     """const body=(value,status=200,headers={})=>Promise.resolve({ok:status>=200&&status<300,status,headers:{get:name=>headers[name.toLowerCase()]||null},text:async()=>value==null?'':typeof value==='string'?value:JSON.stringify(value)});\n"""
@@ -91,6 +92,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/specifications/candidates/preview')) { nestedPatches.push(payload.patch); return body({preview_token:'visual-preview-token',old_hash:'visual-old-hash',new_hash:'visual-new-hash',workspace_fingerprint:'visual-fingerprint',impact:{readiness_before:{status:'ready'},readiness_after:{status:'ready'},changed_anchors:[],affected_ownership:[],implementation_targets:[],verification_targets:[],target_suggestions:[]}},200,{'x-syu-csrf-token':csrfToken}); }\n"""
     """  if(path.includes('/api/specifications/') && path.includes('/trace')) { const itemId=decodeURIComponent(path.split('/api/specifications/')[1].split('/')[0]); const related={specification:itemId==='REQ-AUTH-001'?[{item_id:'FEAT-AUTH-001',kind:'feature',title:'Authentication feature',presentation_title_key:null}]:[],implementation:[{item_id:'FEAT-AUTH-001',target:{reference:'FEAT-AUTH-001#binding.backend/target.handler',path:'src/handlers.rs',selector:{kind:'symbol',name:'handler'},adapter:'rust',claims:[]}}],verification:[]}; return body({root_item_id:itemId,revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',source_hash:'visual-source-hash',mode:path.includes('mode=exact')?'exact':'readable',nodes:[],edges:[],related,closures:[],truncated:false,hidden_node_count:0,hidden_edge_count:0}); }\n"""
     """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
@@ -179,6 +181,39 @@ setTimeout(()=>{
   if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
   await click('[data-page="work"] .work-start .journey-action');
   if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
+  const detailTabs=document.querySelector('[data-page="specifications"] .specification-detail-tabs');
+  const detailTabButtons=[...(detailTabs?.querySelectorAll('[role="tab"]')||[])];
+  if(detailTabButtons.length!==3) failures.push('Specification detail tabs are incomplete');
+  else {
+    detailTabButtons[0].focus();
+    detailTabs.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+    await wait(40);
+    if(!document.querySelector('[data-page="specifications"] [data-detail-tab="trace"][aria-selected="true"]')) failures.push('detail ArrowRight did not select Trace');
+    if(document.activeElement?.dataset.detailTab!=='trace') failures.push('detail ArrowRight did not move focus');
+    document.querySelector('[data-page="specifications"] .specification-detail-tabs').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
+    await wait(40);
+    if(!document.querySelector('[data-page="specifications"] [data-detail-tab="evidence"][aria-selected="true"]')) failures.push('detail End did not select Evidence');
+    document.querySelector('[data-page="specifications"] .specification-detail-tabs').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+    await wait(40);
+    const bindingEdit=document.querySelector('[data-page="specifications"] .specification-detail-binding .spec-detail-anchor-head .btn');
+    if(!bindingEdit) failures.push('typed binding editor is missing');
+    else {
+      bindingEdit.click();
+      await wait(40);
+      const facet=document.querySelector('[data-page="specifications"] .specification-editor input[name="facet"]');
+      if(!facet) failures.push('typed binding facet field is missing');
+      else {
+        facet.value='visual-edited';
+        facet.dispatchEvent(new Event('input',{bubbles:true}));
+        document.querySelector('[data-page="specifications"] .specification-editor').requestSubmit();
+        await wait(100);
+        const patch=window.__SYU_NESTED_PATCHES__?.[0];
+        if(!patch || patch.edit?.entity!=='binding' || patch.edit?.binding?.anchor) failures.push('browser did not send the typed binding payload');
+      }
+      document.querySelector('[data-page="specifications"] .specification-editor .canvas-head button')?.click();
+      await wait(40);
+    }
+  }
   const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
   const selectedCriterion=document.querySelector('[data-page="specifications"] .specification-criterion');
   const selectedCriterionAnchor=selectedCriterion?.querySelector('strong')?.textContent;
@@ -228,6 +263,14 @@ setTimeout(()=>{
         relatedCode.click();
         await wait(80);
         if(!document.querySelector('[data-work-specification] .source-code')) failures.push('related source excerpt did not render');
+        const sourceReference=relatedCode.dataset.sourceTarget;
+        const sourceClose=document.querySelector('[data-work-specification] .specification-source-inspector .source-inspector-head button');
+        if(!sourceClose) failures.push('source inspector close control is missing');
+        else {
+          sourceClose.click();
+          await wait(80);
+          if(document.activeElement?.dataset.sourceTarget!==sourceReference) failures.push('source inspector did not restore trigger focus');
+        }
       }
     }
   }

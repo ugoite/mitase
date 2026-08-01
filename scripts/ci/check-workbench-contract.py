@@ -145,6 +145,16 @@ assert "pub transition: TargetTransition" in SERVER_RS
 assert 'access: format!("{:?}"' not in SERVER_RS
 assert 'transition: format!("{:?}"' not in SERVER_RS
 assert "presentation_title_key: builtin_presentation_title_key" in SERVER_RS
+assert "Box::leak" not in SERVER_RS
+assert "kind: String" in SERVER_RS and "lane: String" in SERVER_RS
+assert "candidate_count.saturating_sub(visible.len())" in SERVER_RS
+for entity in ("binding", "ownership", "target", "claim", "contract"):
+    assert f"entity: '{entity}'" in SPECIFICATIONS_JS, f"missing typed {entity} edit"
+assert "selector_kind" in SPECIFICATIONS_JS
+assert "claim_kind" in SPECIFICATIONS_JS
+assert "runtime_timestamp" in SPECIFICATIONS_JS and "runtime_receipt" in SPECIFICATIONS_JS
+assert "ArrowRight" in SPECIFICATIONS_JS and "event.key === 'Home'" in SPECIFICATIONS_JS
+assert "specificationSourceFocusKey" in SPECIFICATIONS_JS
 for key in (
     "criterion.kind.behavior",
     "criterion.kind.quality",

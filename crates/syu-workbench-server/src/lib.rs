@@ -1442,10 +1442,10 @@ fn specification_trace_view(
             &mut nodes,
             item.id.clone(),
             TraceNodeSpec {
-                kind: "item",
+                kind: "item".into(),
                 label: item.title.clone(),
                 secondary_label: Some(item.kind.clone()),
-                lane: "specification",
+                lane: "specification".into(),
                 source_target: None,
                 item_id: Some(item.id.clone()),
                 metadata: BTreeMap::new(),
@@ -1532,10 +1532,10 @@ fn specification_trace_view(
                     &mut nodes,
                     ownership_id.clone(),
                     TraceNodeSpec {
-                        kind: "ownership",
+                        kind: "ownership".into(),
                         label: ownership.id.to_string(),
                         secondary_label: Some("owned scope".into()),
-                        lane: "implementation",
+                        lane: "implementation".into(),
                         source_target: None,
                         item_id: Some(item.id.clone()),
                         metadata,
@@ -1624,7 +1624,7 @@ fn specification_trace_view(
     let reachable = trace_reachable(&root.id, &edges, depth);
     let ordered = nodes
         .values()
-        .filter(|node| reachable.contains(&node.id) && node.kind != "claim")
+        .filter(|node| reachable.contains(&node.id) && (mode == "exact" || node.kind != "claim"))
         .map(|node| node.id.clone())
         .collect::<Vec<_>>();
     let mut ordered = ordered;
@@ -1634,21 +1634,20 @@ fn specification_trace_view(
             .then_with(|| nodes[left].kind.cmp(&nodes[right].kind))
             .then_with(|| left.cmp(right))
     });
-    let hidden_node_count = ordered.len().saturating_sub(node_budget);
+    let candidate_count = ordered.len();
     let mut visible = ordered
         .into_iter()
         .take(node_budget)
         .collect::<BTreeSet<_>>();
-    visible.insert(root.id.clone());
-    if mode == "exact" {
-        for node in nodes.values().filter(|node| node.kind == "claim") {
-            if edges.values().any(|edge| {
-                edge.relation == "claim" && edge.to == node.id && visible.contains(&edge.from)
-            }) {
-                visible.insert(node.id.clone());
-            }
+    if !visible.contains(&root.id) {
+        if visible.len() >= node_budget
+            && let Some(evicted) = visible.iter().find(|id| id.as_str() != root.id).cloned()
+        {
+            visible.remove(&evicted);
         }
+        visible.insert(root.id.clone());
     }
+    let hidden_node_count = candidate_count.saturating_sub(visible.len());
     let mut visible_nodes = visible
         .iter()
         .filter_map(|id| nodes.remove(id))
@@ -1765,10 +1764,10 @@ fn specification_related(items: &[ItemSummary], root: &ItemSummary) -> TraceRela
 }
 
 struct TraceNodeSpec {
-    kind: &'static str,
+    kind: String,
     label: String,
     secondary_label: Option<String>,
-    lane: &'static str,
+    lane: String,
     source_target: Option<String>,
     item_id: Option<String>,
     metadata: BTreeMap<String, String>,
@@ -1777,10 +1776,10 @@ struct TraceNodeSpec {
 fn trace_node(nodes: &mut BTreeMap<String, TraceNodeView>, id: String, spec: TraceNodeSpec) {
     nodes.entry(id.clone()).or_insert_with(|| TraceNodeView {
         id,
-        kind: spec.kind.into(),
+        kind: spec.kind,
         label: spec.label,
         secondary_label: spec.secondary_label,
-        lane: spec.lane.into(),
+        lane: spec.lane,
         stable_order: 0,
         source_target: spec.source_target,
         item_id: spec.item_id,
@@ -1880,10 +1879,10 @@ fn add_anchor_trace_node(
         nodes,
         anchor,
         TraceNodeSpec {
-            kind: Box::leak(kind.into_boxed_str()),
+            kind,
             label,
             secondary_label,
-            lane: Box::leak(lane.to_string().into_boxed_str()),
+            lane: lane.into(),
             source_target: None,
             item_id,
             metadata,
@@ -1928,10 +1927,10 @@ fn add_target_trace_node(
         nodes,
         target.reference.clone(),
         TraceNodeSpec {
-            kind: Box::leak(kind.to_string().into_boxed_str()),
+            kind: kind.into(),
             label: selector_label(&target.selector),
             secondary_label: Some(target.path.clone()),
-            lane: Box::leak(lane.to_string().into_boxed_str()),
+            lane: lane.into(),
             source_target: Some(target.reference.clone()),
             item_id: Some(root.id.clone()),
             metadata,
@@ -2042,13 +2041,13 @@ fn add_claim_trace(
             nodes,
             claim_node.clone(),
             TraceNodeSpec {
-                kind: "claim",
+                kind: "claim".into(),
                 label: destinations
                     .first()
                     .map(|(_, _, label)| (*label).to_string())
                     .unwrap_or_else(|| "claim".into()),
                 secondary_label: Some("exact canonical claim".into()),
-                lane: "specification",
+                lane: "specification".into(),
                 source_target: None,
                 item_id: None,
                 metadata,
@@ -6671,6 +6670,21 @@ mod tests {
         assert!(first.edges.iter().any(|edge| edge.exact_claim.is_some()));
         assert_eq!(first.closures.len(), 1);
         assert_eq!(first.closures[0].state, "declaration-only");
+        for mode in ["readable", "exact"] {
+            let bounded = specification_trace_view(
+                &projection,
+                &index,
+                root,
+                &SpecificationTraceQuery {
+                    depth: Some(8),
+                    mode: Some(mode.into()),
+                    node_budget: Some(8),
+                    edge_budget: Some(8),
+                },
+            );
+            assert!(bounded.nodes.len() <= 8, "{mode} node budget exceeded");
+            assert!(bounded.edges.len() <= 8, "{mode} edge budget exceeded");
+        }
     }
 
     #[test]
@@ -6792,6 +6806,188 @@ mod tests {
             } => binding.id.clone(),
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn typed_nested_edit_round_trip_covers_all_entity_variants() {
+        let fixture = workspace_root().join("fixtures/v1/valid-web-app");
+        let workspace = SpecWorkspace::load(fixture).expect("trace fixture loads");
+
+        let feature_loaded = workspace
+            .documents
+            .iter()
+            .find(|loaded| matches!(loaded.document, SpecDocument::Features { .. }))
+            .expect("feature document");
+        let (feature_id, binding, target, claim_binding, claim_target, ownership, contract) =
+            match &feature_loaded.document {
+                SpecDocument::Features { features, .. } => {
+                    let feature = features.first().expect("feature");
+                    let binding = feature
+                        .bindings
+                        .iter()
+                        .find(|binding| binding.id.to_string() == "schema")
+                        .expect("schema binding");
+                    let claim_target = feature
+                        .bindings
+                        .iter()
+                        .find(|binding| binding.id.to_string() == "ui")
+                        .and_then(|binding| binding.targets.first())
+                        .expect("claim target");
+                    let claim_binding = feature
+                        .bindings
+                        .iter()
+                        .find(|binding| binding.id.to_string() == "ui")
+                        .expect("claim binding");
+                    (
+                        feature.id.clone(),
+                        binding.clone(),
+                        binding.targets.first().expect("contract target").clone(),
+                        claim_binding.clone(),
+                        claim_target.clone(),
+                        binding.owns.first().expect("ownership scope").clone(),
+                        feature.contracts.first().expect("contract").clone(),
+                    )
+                }
+                _ => unreachable!(),
+            };
+        let feature_path =
+            specification_path(&workspace, &feature_id.to_string()).expect("feature path");
+
+        let ownership_edit = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Ownership {
+                operation: NestedEditOperation::Upsert,
+                binding_id: binding.id.clone(),
+                ownership: OwnershipScope {
+                    adapter: "openapi-edited".into(),
+                    ..ownership.clone()
+                },
+            },
+        };
+        let ownership_content =
+            specification_patch_content(&workspace, &feature_path, &ownership_edit)
+                .expect("ownership upsert");
+        assert!(ownership_content.contains("openapi-edited"));
+        let ownership_delete = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Ownership {
+                operation: NestedEditOperation::Delete,
+                binding_id: binding.id.clone(),
+                ownership,
+            },
+        };
+        let ownership_deleted =
+            specification_patch_content(&workspace, &feature_path, &ownership_delete)
+                .expect("ownership delete");
+        assert!(!ownership_deleted.contains("openapi-source"));
+
+        let target_edit = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Target {
+                operation: NestedEditOperation::Upsert,
+                binding_id: binding.id.clone(),
+                target: syu_spec_model::ArtifactTarget {
+                    path: syu_spec_model::RepoPath::new("openapi-v2.yaml")
+                        .expect("repository path"),
+                    ..target.clone()
+                },
+            },
+        };
+        assert!(
+            specification_patch_content(&workspace, &feature_path, &target_edit)
+                .expect("target selector/path update")
+                .contains("openapi-v2.yaml")
+        );
+
+        let claim = TargetClaim::Documents {
+            anchor: "REQ-AUTH-001#criterion.invalid-credentials"
+                .parse()
+                .expect("claim anchor"),
+        };
+        let claim_edit = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Claim {
+                operation: NestedEditOperation::Upsert,
+                binding_id: claim_binding.id.clone(),
+                target_id: claim_target.id.clone(),
+                claim_index: claim_target.claims.len(),
+                claim: claim.clone(),
+            },
+        };
+        let claim_content = specification_patch_content(&workspace, &feature_path, &claim_edit)
+            .expect("claim create");
+        assert!(claim_content.contains("documents"));
+        let claim_delete = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Claim {
+                operation: NestedEditOperation::Delete,
+                binding_id: claim_binding.id.clone(),
+                target_id: claim_target.id.clone(),
+                claim_index: 0,
+                claim: claim_target.claims.first().expect("existing claim").clone(),
+            },
+        };
+        let claim_deleted = specification_patch_content(&workspace, &feature_path, &claim_delete)
+            .expect("claim delete");
+        let claim_deleted_doc: SpecDocument =
+            serde_yaml::from_str(&claim_deleted).expect("claim delete document");
+        let remaining_claims = match claim_deleted_doc {
+            SpecDocument::Features { features, .. } => features
+                .into_iter()
+                .flat_map(|feature| feature.bindings)
+                .find(|candidate| candidate.id == claim_binding.id)
+                .and_then(|candidate| {
+                    candidate
+                        .targets
+                        .into_iter()
+                        .find(|candidate| candidate.id == claim_target.id)
+                })
+                .map(|candidate| candidate.claims)
+                .expect("claim target after delete"),
+            _ => unreachable!(),
+        };
+        assert!(remaining_claims.is_empty());
+
+        let contract_edit = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Contract {
+                operation: NestedEditOperation::Upsert,
+                contract: Contract {
+                    guarantees: vec![
+                        "REQ-AUTH-001#criterion.invalid-credentials"
+                            .parse()
+                            .expect("guarantee"),
+                    ],
+                    ..contract.clone()
+                },
+            },
+        };
+        assert!(
+            specification_patch_content(&workspace, &feature_path, &contract_edit)
+                .expect("contract update")
+                .contains("invalid-credentials")
+        );
+        let contract_delete = EditPatch::Nested {
+            item_id: feature_id.to_string(),
+            edit: NestedEdit::Contract {
+                operation: NestedEditOperation::Delete,
+                contract,
+            },
+        };
+        let contract_deleted =
+            specification_patch_content(&workspace, &feature_path, &contract_delete)
+                .expect("contract delete");
+        assert!(!contract_deleted.contains("login-http"));
+
+        let malformed = serde_json::from_value::<NestedEdit>(serde_json::json!({
+            "entity": "claim",
+            "operation": "upsert",
+            "binding_id": "schema",
+            "target_id": "operation",
+            "claim_index": 0,
+            "claim": { "kind": "satisfies", "criterion": "REQ-AUTH-001#criterion.invalid-credentials", "unexpected": true }
+        }));
+        assert!(malformed.is_err(), "unknown claim fields must be rejected");
     }
 
     #[tokio::test]

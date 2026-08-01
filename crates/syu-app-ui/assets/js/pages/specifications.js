@@ -145,6 +145,33 @@ function targetPatchModel(target) {
   };
 }
 
+function ownershipPatchModel(ownership) {
+  return {
+    id: ownership.id,
+    adapter: ownership.adapter,
+    path: ownership.path,
+    selector: ownership.selector,
+    supports: ownership.supports || [],
+  };
+}
+
+function claimPatchModel(claim) {
+  return JSON.parse(JSON.stringify(claim || { kind: 'satisfies', criterion: '' }));
+}
+
+function contractPatchModel(contract) {
+  return {
+    id: localIdFromAnchor(contract.anchor),
+    kind: contract.kind,
+    source: contract.source,
+    participants: (contract.participants || []).map(participant => ({
+      target: participant.binding,
+      role: participant.role,
+    })),
+    guarantees: contract.guarantees || [],
+  };
+}
+
 function bindingPatchModel(binding) {
   return {
     id: localIdFromAnchor(binding.anchor),
@@ -156,38 +183,112 @@ function bindingPatchModel(binding) {
   };
 }
 
+function commaValues(value) {
+  return String(value || '').split(',').map(entry => entry.trim()).filter(Boolean);
+}
+
+function lineValues(value) {
+  return String(value || '').split('\n').map(entry => entry.trim()).filter(Boolean);
+}
+
+function selectorFromDraft(draft, ownership = false) {
+  const kind = String(draft.selector_kind || (ownership ? 'file' : 'file'));
+  if (kind === 'file') return { kind };
+  if (kind === 'symbol') return { kind, name: draft.selector_name || '' };
+  if (kind === 'operation') return { kind, method: draft.selector_method || '', path: draft.selector_path || '' };
+  return { kind, value: draft.selector_value || '' };
+}
+
+function selectorDraft(selector, ownership = false) {
+  const value = selector || { kind: 'file' };
+  return {
+    selector_kind: value.kind || (ownership ? 'file' : 'file'),
+    selector_name: value.name || '',
+    selector_method: value.method || '',
+    selector_path: value.path || '',
+    selector_value: value.value || '',
+  };
+}
+
+function claimFromDraft(draft) {
+  const kind = String(draft.claim_kind || 'satisfies');
+  if (kind === 'satisfies') return { kind, criterion: draft.criterion || '' };
+  if (kind === 'verifies') {
+    let argumentsValue = {};
+    try { argumentsValue = JSON.parse(draft.runner_arguments || '{}'); } catch { argumentsValue = {}; }
+    return {
+      kind,
+      criterion: draft.criterion || '',
+      covers: commaValues(draft.covers).map(value => value),
+      runner: { runner: draft.runner || '', arguments: argumentsValue },
+    };
+  }
+  if (kind === 'documents' || kind === 'evidences') return { kind, anchor: draft.anchor || '' };
+  if (kind === 'enforces') return { kind, rule: draft.rule || '' };
+  if (kind === 'generated-from') return { kind, targets: commaValues(draft.targets) };
+  return { kind: 'exposes', target: draft.target || '' };
+}
+
 function createNestedPatch(editor, form) {
   const draft = Object.fromEntries(new FormData(form).entries());
   editor.draft = draft;
-  if (editor.entity === 'binding') {
-    return {
-      kind: 'nested',
-      item_id: editor.itemId,
-      edit: {
-        entity: 'binding',
-        operation: 'upsert',
-        binding: {
-          ...editor.binding,
-          role: draft.role,
-          facet: draft.facet,
-          responsibility: draft.responsibility,
-        },
-      },
-    };
+  const operation = editor.operation || 'upsert';
+  const edit = { entity: editor.entity, operation };
+  if (editor.entity === 'binding') edit.binding = {
+    ...editor.binding,
+    id: draft.id || editor.binding?.id,
+    role: draft.role,
+    facet: draft.facet,
+    responsibility: draft.responsibility,
+    owns: editor.binding?.owns || [],
+    targets: editor.binding?.targets || [],
+  };
+  if (editor.entity === 'ownership') edit.ownership = {
+    ...editor.ownership,
+    id: draft.id || editor.ownership?.id,
+    adapter: draft.adapter,
+    path: draft.path,
+    selector: selectorFromDraft(draft, true),
+    supports: commaValues(draft.supports),
+  };
+  if (editor.entity === 'target') edit.target = {
+    ...editor.target,
+    id: draft.id || editor.target?.id,
+    adapter: draft.adapter,
+    path: draft.path,
+    selector: selectorFromDraft(draft),
+    claims: editor.target?.claims || [],
+  };
+  if (editor.entity === 'claim') edit.claim = claimFromDraft(draft);
+  if (editor.entity === 'contract') edit.contract = {
+    ...editor.contract,
+    id: draft.id || editor.contract?.id,
+    kind: draft.contract_kind,
+    source: draft.source,
+    participants: lineValues(draft.participants).map(value => {
+      const [target, role = 'participant'] = value.split('|').map(entry => entry.trim());
+      return { target, role };
+    }),
+    guarantees: commaValues(draft.guarantees),
+  };
+  if (editor.entity === 'ownership' || editor.entity === 'target' || editor.entity === 'claim') {
+    edit.binding_id = editor.bindingId;
+  }
+  if (editor.entity === 'claim') {
+    edit.target_id = editor.targetId;
+    edit.claim_index = editor.claimIndex;
+  }
+  if (operation === 'delete') {
+    if (editor.entity === 'binding') edit.binding = editor.binding;
+    if (editor.entity === 'ownership') edit.ownership = editor.ownership;
+    if (editor.entity === 'target') edit.target = editor.target;
+    if (editor.entity === 'claim') edit.claim = editor.claim;
+    if (editor.entity === 'contract') edit.contract = editor.contract;
   }
   return {
     kind: 'nested',
     item_id: editor.itemId,
-    edit: {
-      entity: 'target',
-      operation: 'upsert',
-      binding_id: editor.bindingId,
-      target: {
-        ...editor.target,
-        adapter: draft.adapter,
-        path: draft.path,
-      },
-    },
+    edit,
   };
 }
 
@@ -205,6 +306,96 @@ function patchFromForm(editor, state, form) {
 
 function draftValue(editor, draft, name, fallback = '') {
   return Object.prototype.hasOwnProperty.call(draft, name) ? draft[name] : fallback;
+}
+
+function appendSelectorEditor(form, editor, draft, selector, ownership = false) {
+  const values = { ...selectorDraft(selector, ownership), ...draft };
+  const kinds = ownership
+    ? ['file', 'module', 'path-prefix']
+    : ['file', 'symbol', 'operation', 'heading', 'json-pointer', 'marker'];
+  const selectorKind = field(t('items.detail.selector_kind'), values.selector_kind, 'selector_kind', 'select', kinds);
+  const name = field(t('items.detail.selector_name'), values.selector_name, 'selector_name');
+  const method = field(t('items.detail.selector_method'), values.selector_method, 'selector_method');
+  const path = field(t('items.detail.selector_path'), values.selector_path, 'selector_path');
+  const value = field(t('items.detail.selector_value'), values.selector_value, 'selector_value');
+  const refresh = () => {
+    const kind = selectorKind.querySelector('[name="selector_kind"]').value;
+    name.hidden = !['symbol', 'module'].includes(kind);
+    method.hidden = kind !== 'operation';
+    path.hidden = kind !== 'operation';
+    value.hidden = kind === 'file' || kind === 'symbol' || kind === 'module' || kind === 'operation';
+  };
+  selectorKind.querySelector('[name="selector_kind"]').addEventListener('change', refresh);
+  form.append(selectorKind, name, method, path, value);
+  refresh();
+}
+
+function appendNestedEditorFields(form, editor) {
+  const draft = editor.draft || {};
+  if (editor.operation === 'delete') {
+    const warning = document.createElement('p');
+    warning.className = 'notice warn';
+    warning.textContent = t('items.detail.delete_confirmation');
+    form.append(warning);
+    return;
+  }
+  if (editor.entity === 'binding') {
+    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', editor.binding?.id), 'id'));
+    form.append(field(t('items.detail.role'), draftValue(editor, draft, 'role', editor.binding?.role || 'implementation'), 'role', 'select', localizedOptions('target.role', ['implementation', 'verification', 'documentation', 'enforcement', 'contract-source', 'configuration', 'generated', 'migration', 'operation', 'evidence'])));
+    form.append(field(t('items.detail.facet'), draftValue(editor, draft, 'facet', editor.binding?.facet), 'facet'));
+    form.append(field(t('items.detail.responsibility'), draftValue(editor, draft, 'responsibility', editor.binding?.responsibility), 'responsibility', 'textarea'));
+    return;
+  }
+  if (editor.entity === 'ownership') {
+    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', editor.ownership?.id), 'id'));
+    form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.ownership?.adapter), 'adapter'));
+    form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.ownership?.path), 'path'));
+    form.append(field(t('items.detail.supports'), draftValue(editor, draft, 'supports', (editor.ownership?.supports || []).join(', ')), 'supports'));
+    appendSelectorEditor(form, editor, draft, editor.ownership?.selector, true);
+    return;
+  }
+  if (editor.entity === 'target') {
+    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', editor.target?.id), 'id'));
+    form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.target?.adapter), 'adapter'));
+    form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.target?.path), 'path'));
+    appendSelectorEditor(form, editor, draft, editor.target?.selector);
+    return;
+  }
+  if (editor.entity === 'claim') {
+    const claim = editor.claim || {};
+    const kind = draftValue(editor, draft, 'claim_kind', claim.kind || 'satisfies');
+    const kindField = field(t('items.detail.claim_kind'), kind, 'claim_kind', 'select', ['satisfies', 'verifies', 'documents', 'enforces', 'generated-from', 'exposes', 'evidences']);
+    const criterion = field(t('items.detail.criterion'), draftValue(editor, draft, 'criterion', claim.criterion), 'criterion');
+    const covers = field(t('items.detail.covers'), draftValue(editor, draft, 'covers', (claim.covers || []).join(', ')), 'covers');
+    const runner = field(t('items.detail.runner'), draftValue(editor, draft, 'runner', claim.runner?.runner), 'runner');
+    const runnerArguments = field(t('items.detail.runner_arguments'), draftValue(editor, draft, 'runner_arguments', JSON.stringify(claim.runner?.arguments || {})), 'runner_arguments', 'textarea');
+    const anchor = field(t('items.detail.anchor'), draftValue(editor, draft, 'anchor', claim.anchor), 'anchor');
+    const rule = field(t('items.detail.rule'), draftValue(editor, draft, 'rule', claim.rule), 'rule');
+    const targets = field(t('items.detail.targets'), draftValue(editor, draft, 'targets', (claim.targets || []).join(', ')), 'targets');
+    const target = field(t('items.detail.target'), draftValue(editor, draft, 'target', claim.target), 'target');
+    const refresh = () => {
+      const selected = kindField.querySelector('[name="claim_kind"]').value;
+      criterion.hidden = !['satisfies', 'verifies'].includes(selected);
+      [covers, runner, runnerArguments].forEach(node => { node.hidden = selected !== 'verifies'; });
+      [anchor].forEach(node => { node.hidden = !['documents', 'evidences'].includes(selected); });
+      rule.hidden = selected !== 'enforces';
+      targets.hidden = selected !== 'generated-from';
+      target.hidden = selected !== 'exposes';
+    };
+    kindField.querySelector('[name="claim_kind"]').addEventListener('change', refresh);
+    form.append(kindField, criterion, covers, runner, runnerArguments, anchor, rule, targets, target);
+    refresh();
+    return;
+  }
+  if (editor.entity === 'contract') {
+    const contract = editor.contract || {};
+    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', contract.id), 'id'));
+    form.append(field(t('items.detail.contract_kind'), draftValue(editor, draft, 'contract_kind', contract.kind || 'custom'), 'contract_kind', 'select', ['http', 'event', 'function', 'schema', 'cli', 'file', 'custom']));
+    form.append(field(t('items.detail.source'), draftValue(editor, draft, 'source', contract.source), 'source'));
+    const participants = (contract.participants || []).map(participant => `${participant.target || participant.binding}|${participant.role}`).join('\n');
+    form.append(field(t('items.detail.participants'), draftValue(editor, draft, 'participants', participants), 'participants', 'textarea'));
+    form.append(field(t('items.detail.guarantees'), draftValue(editor, draft, 'guarantees', (contract.guarantees || []).join(', ')), 'guarantees'));
+  }
 }
 
 function createAnchorPatch(editor, form) {
@@ -442,23 +633,7 @@ function renderEditor(root, state) {
       form.append(governance);
     }
   } else if (editor.mode === 'nested') {
-    const draft = editor.draft || {};
-    if (editor.entity === 'binding') {
-      form.append(field(t('items.detail.role'), draftValue(editor, draft, 'role', editor.binding.role), 'role', 'select', localizedOptions('target.role', ['implementation', 'verification', 'documentation', 'enforcement', 'contract-source', 'configuration', 'generated', 'migration', 'operation', 'evidence'])));
-      form.append(field(t('items.detail.facet'), draftValue(editor, draft, 'facet', editor.binding.facet), 'facet'));
-      form.append(field(t('items.detail.responsibility'), draftValue(editor, draft, 'responsibility', editor.binding.responsibility), 'responsibility', 'textarea'));
-      const preserved = document.createElement('p');
-      preserved.className = 'spec-detail-empty';
-      preserved.textContent = t('items.advanced.preserved');
-      form.append(preserved);
-    } else {
-      form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.target.adapter), 'adapter'));
-      form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.target.path), 'path'));
-      const preserved = document.createElement('p');
-      preserved.className = 'spec-detail-empty';
-      preserved.textContent = t('items.advanced.preserved');
-      form.append(preserved);
-    }
+    appendNestedEditorFields(form, editor);
   } else if (editor.anchor) {
     const draft = editor.draft || {};
     form.append(field(t('items.field.statement'), draftValue(editor, draft, 'statement', editor.statement), 'statement', 'textarea'));
@@ -652,16 +827,36 @@ function claimLabel(claim) {
   return `${claim.kind || 'claim'} · ${JSON.stringify(claim)}`;
 }
 
+function beginNestedEditor(state, config) {
+  state.specificationEditor = {
+    mode: 'nested',
+    operation: 'upsert',
+    ...config,
+  };
+  state.specificationPreview = null;
+  state.specificationError = null;
+  state.render();
+}
+
+function beginNestedDelete(state, config) {
+  beginNestedEditor(state, { ...config, operation: 'delete' });
+}
+
 function renderInformation(root, state, selected, onItem, onTarget, options = {}) {
   const counts = selected.bindings || [];
   const targets = counts.flatMap(binding => binding.targets || []);
   const verificationTargets = targets.filter(target => target.claims?.some(claim => claim.kind === 'verifies'));
   root.append(detailCard(t('items.detail.basic'), [
     detailLabel(t('items.detail.kind'), selected.kind),
+    detailLabel(t('items.detail.title'), selected.title),
+    detailLabel(t('items.detail.presentation_title_key'), selected.presentation_title_key),
     detailLabel(t('items.detail.status'), selected.status),
     detailLabel(t('items.detail.priority'), selected.priority),
+    detailLabel(t('items.detail.summary'), selected.summary),
+    detailLabel(t('items.detail.description'), selected.description),
     detailLabel(t('items.detail.source'), selected.path),
     detailLabel(t('items.detail.source_hash'), selected.source_hash),
+    detailList(t('items.detail.anchors'), selected.anchors),
     detailLabel(t('items.detail.count.criteria'), selected.criteria?.length || 0),
     detailLabel(t('items.detail.count.bindings'), selected.bindings?.length || 0),
     detailLabel(t('items.detail.count.targets'), targets.length),
@@ -757,6 +952,10 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
   const bindingHeading = document.createElement('h3');
   bindingHeading.textContent = t('items.detail.bindings');
   bindingCard.append(bindingHeading);
+  if (!options.readOnly) bindingHeading.append(button(t('items.detail.add_binding'), '+', () => beginNestedEditor(state, {
+    entity: 'binding', itemId: selected.id,
+    binding: { id: '', role: 'implementation', facet: '', responsibility: '', owns: [], targets: [] },
+  }), 'btn small ghost'));
   if (!selected.bindings?.length) {
     const empty = document.createElement('p');
     empty.className = 'spec-detail-empty';
@@ -771,22 +970,42 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
     const bindingHead = document.createElement('div');
     bindingHead.className = 'spec-detail-anchor-head';
     bindingHead.append(bindingTitle);
-    if (!options.readOnly) bindingHead.append(button(t('common.edit'), '✎', () => {
-      state.specificationEditor = {
-        mode: 'nested',
-        entity: 'binding',
-        itemId: selected.id,
-        binding: bindingPatchModel(binding),
-      };
-      state.specificationPreview = null;
-      state.render();
-    }, 'btn small ghost'));
+    if (!options.readOnly) {
+      bindingHead.append(button(t('common.edit'), '✎', () => beginNestedEditor(state, {
+        entity: 'binding', itemId: selected.id, binding: bindingPatchModel(binding),
+      }), 'btn small ghost'));
+      bindingHead.append(button(t('common.delete'), '×', () => beginNestedDelete(state, {
+        entity: 'binding', itemId: selected.id, binding: bindingPatchModel(binding),
+      }), 'btn small ghost'));
+    }
     bindingSection.append(bindingHead, detailCard('', [
       detailLabel(t('items.detail.role'), binding.role),
       detailLabel(t('items.detail.facet'), binding.facet),
       detailLabel(t('items.detail.responsibility'), binding.responsibility),
-      detailList(t('items.detail.owns'), (binding.owns || []).map(scope => `${scope.id} · ${scope.adapter} · ${scope.path} · ${JSON.stringify(scope.selector)} · supports ${(scope.supports || []).join(', ') || '—'}`)),
     ], 'specification-detail-inline-card'));
+    const ownerships = document.createElement('div');
+    ownerships.className = 'specification-detail-ownerships';
+    const ownershipHead = document.createElement('div');
+    ownershipHead.className = 'spec-detail-anchor-head';
+    ownershipHead.append(Object.assign(document.createElement('strong'), { textContent: t('items.detail.owns') }));
+    if (!options.readOnly) ownershipHead.append(button(t('items.detail.add_ownership'), '+', () => beginNestedEditor(state, {
+      entity: 'ownership', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor),
+      ownership: { id: '', adapter: '', path: '', selector: { kind: 'file' }, supports: [] },
+    }), 'btn small ghost'));
+    ownerships.append(ownershipHead);
+    if (!(binding.owns || []).length) ownerships.append(Object.assign(document.createElement('p'), { className: 'spec-detail-empty', textContent: t('items.detail.empty') }));
+    (binding.owns || []).forEach(scope => {
+      const row = document.createElement('div');
+      row.className = 'specification-detail-ownership';
+      row.append(detailLabel(t('items.detail.id'), scope.id), detailLabel(t('items.detail.adapter'), scope.adapter), detailLabel(t('items.detail.path'), scope.path), detailLabel(t('items.detail.selector'), JSON.stringify(scope.selector)), detailList(t('items.detail.supports'), scope.supports));
+      if (!options.readOnly) row.append(button(t('common.edit'), '✎', () => beginNestedEditor(state, {
+        entity: 'ownership', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), ownership: ownershipPatchModel(scope),
+      }), 'btn small ghost'), button(t('common.delete'), '×', () => beginNestedDelete(state, {
+        entity: 'ownership', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), ownership: ownershipPatchModel(scope),
+      }), 'btn small ghost'));
+      ownerships.append(row);
+    });
+    bindingSection.append(ownerships);
     const targetList = document.createElement('div');
     targetList.className = 'specification-detail-targets';
     if (!binding.targets?.length) {
@@ -803,18 +1022,16 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
       const targetRef = document.createElement('code');
       targetRef.textContent = target.reference;
       const open = button(t('items.detail.open_source'), '⌘', () => onTarget(target), 'btn small ghost');
+      open.dataset.sourceTarget = target.reference;
       targetHead.append(targetRef, open);
-      if (!options.readOnly) targetHead.append(button(t('common.edit'), '✎', () => {
-        state.specificationEditor = {
-          mode: 'nested',
-          entity: 'target',
-          itemId: selected.id,
-          bindingId: localIdFromAnchor(binding.anchor),
-          target: targetPatchModel(target),
-        };
-        state.specificationPreview = null;
-        state.render();
-      }, 'btn small ghost'));
+      if (!options.readOnly) {
+        targetHead.append(button(t('common.edit'), '✎', () => beginNestedEditor(state, {
+          entity: 'target', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), target: targetPatchModel(target),
+        }), 'btn small ghost'));
+        targetHead.append(button(t('common.delete'), '×', () => beginNestedDelete(state, {
+          entity: 'target', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), target: targetPatchModel(target),
+        }), 'btn small ghost'));
+      }
       targetCard.append(targetHead);
       const targetFields = document.createElement('dl');
       targetFields.className = 'spec-detail-fields compact';
@@ -825,8 +1042,27 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
         detailList(t('items.detail.claims'), (target.claims || []).map(claimLabel)),
       );
       targetCard.append(targetFields);
+      if (!options.readOnly) targetCard.append(button(t('items.detail.add_claim'), '+', () => beginNestedEditor(state, {
+        entity: 'claim', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), targetId: localIdFromAnchor(target.reference),
+        claimIndex: (target.claims || []).length, claim: { kind: 'satisfies', criterion: '' },
+      }), 'btn small ghost'));
+      (target.claims || []).forEach((claim, claimIndex) => {
+        if (options.readOnly) return;
+        targetCard.append(button(`${t('common.edit')} ${claimLabel(claim)}`, '✎', () => beginNestedEditor(state, {
+          entity: 'claim', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), targetId: localIdFromAnchor(target.reference),
+          claimIndex, claim: claimPatchModel(claim),
+        }), 'btn small ghost'));
+        targetCard.append(button(`${t('common.delete')} ${claimLabel(claim)}`, '×', () => beginNestedDelete(state, {
+          entity: 'claim', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor), targetId: localIdFromAnchor(target.reference),
+          claimIndex, claim: claimPatchModel(claim),
+        }), 'btn small ghost'));
+      });
       targetList.append(targetCard);
     });
+    if (!options.readOnly) bindingSection.append(button(t('items.detail.add_target'), '+', () => beginNestedEditor(state, {
+      entity: 'target', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor),
+      target: { id: '', adapter: '', path: '', selector: { kind: 'file' }, claims: [] },
+    }), 'btn small ghost'));
     bindingSection.append(targetList);
     bindingCard.append(bindingSection);
   });
@@ -837,6 +1073,10 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
   const contractsHeading = document.createElement('h3');
   contractsHeading.textContent = t('items.detail.contracts');
   contracts.append(contractsHeading);
+  if (!options.readOnly) contractsHeading.append(button(t('items.detail.add_contract'), '+', () => beginNestedEditor(state, {
+    entity: 'contract', itemId: selected.id,
+    contract: { id: '', kind: 'custom', source: '', participants: [], guarantees: [] },
+  }), 'btn small ghost'));
   if (!selected.contracts?.length) {
     const empty = document.createElement('p');
     empty.className = 'spec-detail-empty';
@@ -856,6 +1096,14 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
       detailList('guarantees', contract.guarantees),
     );
     card.append(fields);
+    if (!options.readOnly) card.append(
+      button(t('common.edit'), '✎', () => beginNestedEditor(state, {
+        entity: 'contract', itemId: selected.id, contract: contractPatchModel(contract),
+      }), 'btn small ghost'),
+      button(t('common.delete'), '×', () => beginNestedDelete(state, {
+        entity: 'contract', itemId: selected.id, contract: contractPatchModel(contract),
+      }), 'btn small ghost'),
+    );
     contracts.append(card);
   });
   root.append(contracts);
@@ -908,12 +1156,14 @@ function renderRelatedFromTrace(root, state, selected, onItem, onTarget) {
       return;
     }
     const target = entry.target;
-    list.append(button(
+    const targetButton = button(
       target.path || target.reference,
       state.relatedKind === 'verification' ? '✓' : '⌘',
       () => onTarget(target),
       `related-row ${state.relatedKind}`,
-    ));
+    );
+    targetButton.dataset.sourceTarget = target.reference;
+    list.append(targetButton);
   });
   section.append(list);
   root.append(section);
@@ -924,6 +1174,7 @@ function traceNodeButton(state, node, onSelect) {
   buttonNode.type = 'button';
   buttonNode.className = `trace-node trace-node-${node.kind}${state.specificationTraceNode === node.id ? ' is-selected' : ''}`;
   buttonNode.dataset.traceNode = node.id;
+  if (node.source_target) buttonNode.dataset.sourceTarget = node.source_target;
   buttonNode.setAttribute('aria-label', `${t('items.detail.inspect_node')}: ${node.label}`);
   const kind = document.createElement('span');
   kind.className = 'trace-node-kind';
@@ -1065,10 +1316,15 @@ function renderEvidence(root, state, selected) {
     card.append(detailList(t('items.detail.declared_implementation'), closure.implementation_targets));
     card.append(detailList(t('items.detail.declared_verification'), closure.verification_targets));
     card.append(detailLabel(t('items.detail.runtime_status'), closure.runtime_status));
-    const note = document.createElement('p');
-    note.className = 'spec-detail-evidence-note';
-    note.textContent = t('items.detail.runtime_unavailable');
-    card.append(note);
+    card.append(detailLabel(t('items.detail.runtime_timestamp'), closure.runtime_timestamp || t('items.detail.not_available')));
+    card.append(detailLabel(t('items.detail.runtime_revision'), closure.runtime_revision || t('items.detail.not_available')));
+    card.append(detailLabel(t('items.detail.runtime_receipt'), closure.runtime_receipt || t('items.detail.not_available')));
+    if (closure.runtime_status === 'unavailable') {
+      const note = document.createElement('p');
+      note.className = 'spec-detail-evidence-note';
+      note.textContent = t('items.detail.runtime_unavailable');
+      card.append(note);
+    }
     if (closure.reasons?.length) card.append(detailList(t('items.detail.reasons'), closure.reasons));
     root.append(card);
   });
@@ -1086,12 +1342,19 @@ function renderSourceInspector(root, state, onClose) {
   head.className = 'source-inspector-head';
   head.append(Object.assign(document.createElement('h3'), { textContent: target.reference }));
   head.append(button(t('items.back'), '×', () => {
+    const focusKey = state.specificationSourceFocusKey || target.reference;
     state.specificationSourceTarget = null;
     state.specificationSource = null;
     state.specificationTraceNode = null;
+    state.specificationSourceFocusKey = focusKey;
     onClose?.();
     syncSpecificationLocation(state);
     state.render();
+    setTimeout(() => {
+      const control = [...document.querySelectorAll('[data-source-target]')]
+        .find(node => node.dataset.sourceTarget === focusKey);
+      control?.focus();
+    }, 0);
   }, 'btn small ghost'));
   root.append(head);
   const details = document.createElement('dl');
@@ -1180,24 +1443,42 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   const tabs = document.createElement('div');
   tabs.className = 'specification-detail-tabs';
   tabs.setAttribute('role', 'tablist');
+  const selectDetailTab = (tabName, focus = false) => {
+    state.specificationDetailTab = tabName;
+    state.specificationTraceNode = null;
+    state.specificationSourceTarget = null;
+    syncSpecificationLocation(state);
+    state.render();
+    if (focus) setTimeout(() => document.querySelector(`[data-detail-tab="${tabName}"]`)?.focus(), 0);
+  };
   SPECIFICATION_DETAIL_TABS.forEach(tabName => {
     const tab = document.createElement('button');
     tab.type = 'button';
     tab.className = `tab${state.specificationDetailTab === tabName ? ' active' : ''}`;
     tab.id = `specification-detail-tab-${tabName}`;
+    tab.dataset.detailTab = tabName;
     tab.setAttribute('role', 'tab');
     tab.setAttribute('aria-selected', String(state.specificationDetailTab === tabName));
     tab.setAttribute('aria-controls', `specification-detail-panel-${tabName}`);
     tab.tabIndex = state.specificationDetailTab === tabName ? 0 : -1;
     tab.textContent = t(`items.detail.${tabName}`);
-    tab.addEventListener('click', () => {
-      state.specificationDetailTab = tabName;
-      state.specificationTraceNode = null;
-      state.specificationSourceTarget = null;
-      syncSpecificationLocation(state);
-      state.render();
-    });
+    tab.addEventListener('click', () => selectDetailTab(tabName));
     tabs.append(tab);
+  });
+  tabs.addEventListener('keydown', event => {
+    const current = SPECIFICATION_DETAIL_TABS.indexOf(state.specificationDetailTab);
+    if (current < 0) return;
+    const delta = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    const next = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? SPECIFICATION_DETAIL_TABS.length - 1
+        : delta === undefined
+          ? -1
+          : (current + delta + SPECIFICATION_DETAIL_TABS.length) % SPECIFICATION_DETAIL_TABS.length;
+    if (next < 0) return;
+    event.preventDefault();
+    selectDetailTab(SPECIFICATION_DETAIL_TABS[next], true);
   });
   main.append(tabs);
   const body = document.createElement('div');
@@ -1220,15 +1501,20 @@ function renderSpecificationWorkspace(root, state, selected, options) {
     syncSpecificationLocation(state);
     state.render();
   });
+  const rememberTarget = target => {
+    state.specificationSourceFocusKey = target?.reference || null;
+    onTarget(target);
+  };
   if (state.specificationDetailTab === 'information') {
-    renderInformation(body, state, selected, onItem, onTarget, options);
-    renderRelatedFromTrace(body, state, selected, onItem, onTarget);
+    renderInformation(body, state, selected, onItem, rememberTarget, options);
+    renderRelatedFromTrace(body, state, selected, onItem, rememberTarget);
     if (!options.readOnly) renderTargetSuggestions(body, state);
   }
   else if (state.specificationDetailTab === 'trace') {
     renderTrace(body, state, selected, node => {
       state.specificationTraceNode = node.id;
       state.specificationSourceTarget = node.source_target ? specificationTarget(state, node.source_target) : null;
+      if (node.source_target) state.specificationSourceFocusKey = node.source_target;
       if (node.item_id && node.item_id !== selected.id && node.kind === 'item') state.selectedSpecification = node.item_id;
       syncSpecificationLocation(state);
       state.render();

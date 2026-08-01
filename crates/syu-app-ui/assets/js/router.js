@@ -115,6 +115,7 @@ export function bindRouter(state, onRoute) {
       state.specificationTrace = null;
       state.specificationTraceRoot = null;
       state.specificationSourceTarget = null;
+      state.specificationSourceFocusKey = null;
       state.specificationSource = null;
       state.specificationSourceFull = false;
     }

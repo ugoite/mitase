@@ -17,6 +17,7 @@ export function createState(projection) {
     specificationPreview: null,
     specificationError: null,
     specificationSourceTarget: null,
+    specificationSourceFocusKey: null,
     specificationSource: null,
     specificationSourceFull: false,
     targetSuggestions: null,
