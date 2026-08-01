@@ -71,6 +71,107 @@ description: "Generated reference for docs/syu/features/workbench/specification-
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
+        - **id**: specification-nested-edit
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: nested_patch_content
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.typed-nested-specification-edit
+        - **id**: specification-detail-trace
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: specification_trace_view
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.canonical-detail-trace
+        - **id**: specification-detail-workspace
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderSpecificationWorkspace
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.canonical-detail-trace
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
+        - **id**: specification-detail-router
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: bindRouter
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
+    - **id**: detail-verification
+      - **role**: verification
+      - **facet**: verification
+      - **responsibility**: Verify canonical detail trace, typed nested edits, and browser detail contracts.
+      - **targets**:
+        - **id**: detail-trace-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.canonical-detail-trace
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-trace
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-workspace
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-workspace
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
+        - **id**: detail-nested-edit-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.typed-nested-specification-edit
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-nested-edit
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps
+        - **id**: detail-browser-contract-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::workbench_accessible_navigation
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-router
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_accessible_navigation
       - **owns**:
         - **id**: spec-model-module
           - **adapter**: rust
@@ -183,6 +284,91 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+    - id: specification-nested-edit
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: nested_patch_content
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.typed-nested-specification-edit
+    - id: specification-detail-trace
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: specification_trace_view
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
+    - id: specification-detail-workspace
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: symbol
+        name: renderSpecificationWorkspace
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
+    - id: specification-detail-router
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/router.js
+      selector:
+        kind: symbol
+        name: bindRouter
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
+  - id: detail-verification
+    role: verification
+    facet: verification
+    responsibility: Verify canonical detail trace, typed nested edits, and browser detail contracts.
+    targets:
+    - id: detail-trace-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
+        covers:
+        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-trace
+        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-workspace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
+        covers:
+        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-workspace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
+    - id: detail-nested-edit-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-014#criterion.typed-nested-specification-edit
+        covers:
+        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-nested-edit
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps } }
+    - id: detail-browser-contract-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: tests::workbench_accessible_navigation
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
+        covers:
+        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-router
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
     owns:
     - id: spec-model-module
       adapter: rust

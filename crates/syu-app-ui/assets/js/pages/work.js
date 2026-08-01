@@ -1,6 +1,6 @@
 import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 import { renderDiff } from '../components/diff.js';
-import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
+import { renderSpecificationDetail } from './specifications.js';
 import { renderReadinessPage } from './readiness.js';
 import { renderDiagnostics } from './diagnostics.js';
 
@@ -501,15 +501,7 @@ function renderSpecification(root, workspace, journey, state, work) {
     root.append(body);
     return;
   }
-  if (state.journeyContextTarget) {
-    state.specificationSourceTarget = state.journeyContextTarget;
-    renderSourceDetail(body, state, state.journeyContextTarget, () => {
-      resetContextSource(state);
-      state.render();
-    });
-    root.append(body);
-    return;
-  }
+  if (state.journeyContextTarget) state.specificationSourceTarget = state.journeyContextTarget;
   if (state.journeyContextTab === 'scope') {
     renderScopeDetail(body, journey, state, work);
     root.append(body);
@@ -549,9 +541,16 @@ function renderSpecification(root, workspace, journey, state, work) {
       state.specificationSourceFull = false;
       state.render();
     },
+    onSourceClose: () => {
+      resetContextSource(state);
+    },
   });
-  body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
-  body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
+  if (candidate && !specification) {
+    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
+  } else {
+    body.querySelector('.specification-detail-head h2')?.setAttribute('data-work-specification-title', '');
+    body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
+  }
   root.append(body);
 }
 

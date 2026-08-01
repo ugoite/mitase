@@ -104,14 +104,19 @@ export function bindRouter(state, onRoute) {
     }
     if (page === 'specifications') {
       const item = parameters.get('item');
-      if (item) state.selectedSpecification = item;
+      state.selectedSpecification = item || null;
       const detailTab = parameters.get('detailTab');
-      if (SPECIFICATION_DETAIL_TABS.includes(detailTab)) state.specificationDetailTab = detailTab;
+      state.specificationDetailTab = SPECIFICATION_DETAIL_TABS.includes(detailTab) ? detailTab : 'information';
       const traceMode = parameters.get('traceMode');
-      if (traceMode === 'exact' || traceMode === 'readable') state.specificationTraceMode = traceMode;
-      const depth = Number.parseInt(parameters.get('depth') || '3', 10);
-      state.specificationTraceDepth = Number.isFinite(depth) ? Math.max(1, Math.min(depth, 8)) : 3;
-      state.specificationTraceNode = parameters.get('node');
+      state.specificationTraceMode = traceMode === 'exact' ? 'exact' : 'readable';
+      const depth = Number.parseInt(parameters.get('depth') || '1', 10);
+      state.specificationTraceDepth = Number.isFinite(depth) ? Math.max(1, Math.min(depth, 8)) : 1;
+      state.specificationTraceNode = parameters.get('node') || null;
+      state.specificationTrace = null;
+      state.specificationTraceRoot = null;
+      state.specificationSourceTarget = null;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
     }
     onRoute?.(state.selectedPage);
   };

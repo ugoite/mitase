@@ -131,10 +131,72 @@ function createItemPatch(item, form) {
   return { kind: 'specification', item_id: item.id, fields };
 }
 
+function localIdFromAnchor(anchor) {
+  return String(anchor || '').split('.').pop();
+}
+
+function targetPatchModel(target) {
+  return {
+    id: localIdFromAnchor(String(target.reference || '').split('/target.').pop()),
+    adapter: target.adapter,
+    path: target.path,
+    selector: target.selector,
+    claims: target.claims || [],
+  };
+}
+
+function bindingPatchModel(binding) {
+  return {
+    id: localIdFromAnchor(binding.anchor),
+    role: String(binding.role || '').replaceAll('_', '-'),
+    facet: binding.facet,
+    responsibility: binding.responsibility,
+    owns: binding.owns || [],
+    targets: (binding.targets || []).map(targetPatchModel),
+  };
+}
+
+function createNestedPatch(editor, form) {
+  const draft = Object.fromEntries(new FormData(form).entries());
+  editor.draft = draft;
+  if (editor.entity === 'binding') {
+    return {
+      kind: 'nested',
+      item_id: editor.itemId,
+      edit: {
+        entity: 'binding',
+        operation: 'upsert',
+        binding: {
+          ...editor.binding,
+          role: draft.role,
+          facet: draft.facet,
+          responsibility: draft.responsibility,
+        },
+      },
+    };
+  }
+  return {
+    kind: 'nested',
+    item_id: editor.itemId,
+    edit: {
+      entity: 'target',
+      operation: 'upsert',
+      binding_id: editor.bindingId,
+      target: {
+        ...editor.target,
+        adapter: draft.adapter,
+        path: draft.path,
+      },
+    },
+  };
+}
+
 function patchFromForm(editor, state, form) {
   const draft = Object.fromEntries(new FormData(form).entries());
   editor.draft = draft;
-  return editor.mode === 'create'
+  return editor.mode === 'nested'
+    ? createNestedPatch(editor, form)
+    : editor.mode === 'create'
     ? createWizardPatch(editor, draft)
     : editor.anchor
       ? createAnchorPatch(editor, draft)
@@ -379,6 +441,24 @@ function renderEditor(root, state) {
       governance.append(governanceText);
       form.append(governance);
     }
+  } else if (editor.mode === 'nested') {
+    const draft = editor.draft || {};
+    if (editor.entity === 'binding') {
+      form.append(field(t('items.detail.role'), draftValue(editor, draft, 'role', editor.binding.role), 'role', 'select', localizedOptions('target.role', ['implementation', 'verification', 'documentation', 'enforcement', 'contract-source', 'configuration', 'generated', 'migration', 'operation', 'evidence'])));
+      form.append(field(t('items.detail.facet'), draftValue(editor, draft, 'facet', editor.binding.facet), 'facet'));
+      form.append(field(t('items.detail.responsibility'), draftValue(editor, draft, 'responsibility', editor.binding.responsibility), 'responsibility', 'textarea'));
+      const preserved = document.createElement('p');
+      preserved.className = 'spec-detail-empty';
+      preserved.textContent = t('items.advanced.preserved');
+      form.append(preserved);
+    } else {
+      form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.target.adapter), 'adapter'));
+      form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.target.path), 'path'));
+      const preserved = document.createElement('p');
+      preserved.className = 'spec-detail-empty';
+      preserved.textContent = t('items.advanced.preserved');
+      form.append(preserved);
+    }
   } else if (editor.anchor) {
     const draft = editor.draft || {};
     form.append(field(t('items.field.statement'), draftValue(editor, draft, 'statement', editor.statement), 'statement', 'textarea'));
@@ -482,124 +562,6 @@ function renderEditor(root, state) {
   root.append(form);
 }
 
-function relatedTargets(state, selected) {
-  ensureSpecificationTrace(state, selected);
-  const trace = state.specificationTrace;
-  if (!trace || trace.error || trace.root_item_id !== selected.id) return [];
-  const criteria = new Set((selected.criteria || []).map(value => value.anchor));
-  const items = state.projection?.specifications?.specifications || [];
-  const related = [];
-  const seen = new Set();
-  trace.edges
-    .filter(edge => ['satisfies', 'verifies', 'covers'].includes(edge.relation))
-    .forEach(edge => {
-      const targetReference = edge.relation === 'covers'
-        ? edge.to
-        : edge.from.includes('#claim.')
-        ? edge.from.slice(0, edge.from.indexOf('#claim.'))
-        : edge.from;
-      const target = specificationTarget(state, targetReference);
-      if (!target) return;
-      const item = items.find(candidate => candidate.id === target.itemId);
-      if (!item) return;
-      if (item.id !== selected.id && !criteria.has(edge.to) && edge.relation !== 'covers') return;
-      const kind = edge.relation === 'verifies' ? 'verifies' : 'satisfies';
-      const key = `${kind}:${targetReference}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const binding = { anchor: target.bindingAnchor };
-      related.push({
-        item,
-        binding,
-        target,
-        claim: { kind, criterion: edge.relation === 'covers' ? [...criteria][0] : edge.to },
-      });
-    });
-  return related;
-}
-
-function renderRelated(root, state, selected, onItem, onTarget) {
-  const entries = relatedTargets(state, selected);
-  const selectedCriteria = new Set((selected.criteria || []).map(value => value.anchor));
-  allTargets(state.projection).filter(entry => entry.item.id === selected.id).forEach(entry => {
-    (entry.target.claims || []).forEach(claim => { if (claim.criterion) selectedCriteria.add(claim.criterion); });
-  });
-  if (!entries.length) return;
-  const related = {
-    specification: [],
-    implementation: [],
-    verification: [],
-  };
-  const seenItems = new Set();
-  const seenTargets = new Set();
-  entries.forEach(({ item, binding, target, claim }) => {
-    if (item.id !== selected.id && !seenItems.has(item.id)) {
-      seenItems.add(item.id);
-      related.specification.push({ item });
-    }
-    if (item.id !== selected.id && !selectedCriteria.has(claim.criterion)) return;
-    const kind = claim.kind === 'verifies' ? 'verification' : 'implementation';
-    const reference = target.reference || `${binding.anchor}/target.${target.id}`;
-    if (seenTargets.has(`${kind}:${reference}`)) return;
-    seenTargets.add(`${kind}:${reference}`);
-    related[kind].push({ item, target: { ...target, reference } });
-  });
-  const availableKinds = Object.keys(related).filter(kind => related[kind].length);
-  if (!availableKinds.length) return;
-  if (!availableKinds.includes(state.relatedKind)) state.relatedKind = availableKinds[0];
-
-  const section = document.createElement('section');
-  section.className = 'specification-related';
-  section.append(Object.assign(document.createElement('h3'), { textContent: t('items.related') }));
-  const chooser = document.createElement('label');
-  chooser.className = 'related-chooser';
-  const chooserLabel = document.createElement('span');
-  chooserLabel.textContent = t('items.related.choose');
-  const select = document.createElement('select');
-  select.className = 'native-select';
-  availableKinds.forEach(kind => {
-    const option = document.createElement('option');
-    const icon = kind === 'specification' ? '◆' : kind === 'verification' ? '✓' : '⌘';
-    option.value = kind;
-    option.textContent = `${icon} ${t(`items.related.${kind}`)} · ${related[kind].length}`;
-    option.selected = kind === state.relatedKind;
-    select.append(option);
-  });
-  select.addEventListener('change', () => {
-    state.relatedKind = select.value;
-    state.render();
-  });
-  chooser.append(chooserLabel, select);
-  section.append(chooser);
-
-  const list = document.createElement('div');
-  list.className = 'related-list';
-  related[state.relatedKind].forEach(entry => {
-    if (state.relatedKind === 'specification') {
-      list.append(button(
-        localizeSpecificationTitle(entry.item),
-        entry.item.kind === 'feature' ? '◆' : '◈',
-        () => onItem(entry.item.id),
-        'related-row specification',
-      ));
-      return;
-    }
-    const target = entry.target;
-    const targetName = target.selector?.name || target.path || target.reference;
-    const label = target.path && targetName !== target.path
-      ? `${targetName} · ${target.path}`
-      : targetName;
-    list.append(button(
-      label,
-      state.relatedKind === 'verification' ? '✓' : '⌘',
-      () => onTarget(target),
-      `related-row ${state.relatedKind}`,
-    ));
-  });
-  section.append(list);
-  root.append(section);
-}
-
 function specificationTarget(state, reference) {
   return (state.projection?.specifications?.specifications || [])
     .flatMap(item => (item.bindings || []).flatMap(binding => (binding.targets || []).map(target => ({
@@ -679,13 +641,18 @@ function detailCard(title, fields, className = '') {
 }
 
 function claimLabel(claim) {
-  if (claim.kind === 'verifies') return `verifies ${claim.criterion || ''}`;
+  if (claim.kind === 'verifies') return `verifies ${claim.criterion || ''} · covers ${(claim.covers || []).join(', ') || '—'}`;
   if (claim.kind === 'satisfies') return `satisfies ${claim.criterion || ''}`;
   if (claim.kind === 'covers') return `covers ${(claim.targets || []).join(', ')}`;
-  return claim.kind || 'claim';
+  if (claim.kind === 'documents') return `documents ${claim.anchor || '—'}`;
+  if (claim.kind === 'enforces') return `enforces ${claim.rule || '—'}`;
+  if (claim.kind === 'generated-from') return `generated from ${(claim.targets || []).join(', ') || '—'}`;
+  if (claim.kind === 'exposes') return `exposes ${claim.target || '—'}`;
+  if (claim.kind === 'evidences') return `evidences ${claim.anchor || '—'}`;
+  return `${claim.kind || 'claim'} · ${JSON.stringify(claim)}`;
 }
 
-function renderInformation(root, state, selected, onItem, onTarget) {
+function renderInformation(root, state, selected, onItem, onTarget, options = {}) {
   const counts = selected.bindings || [];
   const targets = counts.flatMap(binding => binding.targets || []);
   const verificationTargets = targets.filter(target => target.claims?.some(claim => claim.kind === 'verifies'));
@@ -733,6 +700,32 @@ function renderInformation(root, state, selected, onItem, onTarget) {
       const statement = document.createElement('p');
       statement.textContent = value.statement;
       row.append(statement);
+      if (!options.readOnly && kind === 'criterion' && selected.status === 'implemented') {
+        const createWork = button(t('items.create_work'), '→', () => state.runAction(
+          () => state.api.runJourneyAction(state.projection, {
+            action: 'create',
+            anchor: value.anchor,
+            summary: `${t('work.request.summary_from_anchor').replace('{anchor}', localizeSpecificationTitle(selected))}`,
+          }),
+          () => { state.selectedSlice = null; state.go('work'); },
+        ), 'btn small');
+        createWork.setAttribute('data-create-work', '');
+        createWork.setAttribute('data-create-work-anchor', value.anchor);
+        row.append(createWork);
+      }
+      if (!options.readOnly && kind === 'criterion') {
+        const reviewSuggestions = button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
+          const suggestions = await state.api.readTargetSuggestions(value.anchor);
+          state.targetSuggestions = suggestions;
+          const approved = new Set(suggestions.approved_ids || []);
+          state.targetSuggestionSelection = (suggestions.suggestions || [])
+            .filter(candidate => !approved.has(candidate.id))
+            .map(candidate => candidate.id);
+          state.specificationError = null;
+        }), 'btn small');
+        reviewSuggestions.setAttribute('data-review-target-suggestions', '');
+        row.append(reviewSuggestions);
+      }
       const fields = document.createElement('dl');
       fields.className = 'spec-detail-fields compact';
       if (kind === 'principle') fields.append(detailList('applies_to', value.applies_to));
@@ -768,11 +761,24 @@ function renderInformation(root, state, selected, onItem, onTarget) {
     bindingSection.className = 'specification-detail-binding';
     const bindingTitle = document.createElement('code');
     bindingTitle.textContent = binding.anchor;
-    bindingSection.append(bindingTitle, detailCard('', [
+    const bindingHead = document.createElement('div');
+    bindingHead.className = 'spec-detail-anchor-head';
+    bindingHead.append(bindingTitle);
+    if (!options.readOnly) bindingHead.append(button(t('common.edit'), '✎', () => {
+      state.specificationEditor = {
+        mode: 'nested',
+        entity: 'binding',
+        itemId: selected.id,
+        binding: bindingPatchModel(binding),
+      };
+      state.specificationPreview = null;
+      state.render();
+    }, 'btn small ghost'));
+    bindingSection.append(bindingHead, detailCard('', [
       detailLabel(t('items.detail.role'), binding.role),
       detailLabel(t('items.detail.facet'), binding.facet),
       detailLabel(t('items.detail.responsibility'), binding.responsibility),
-      detailList(t('items.detail.owns'), (binding.owns || []).map(scope => `${scope.id} · ${scope.path}`)),
+      detailList(t('items.detail.owns'), (binding.owns || []).map(scope => `${scope.id} · ${scope.adapter} · ${scope.path} · ${JSON.stringify(scope.selector)} · supports ${(scope.supports || []).join(', ') || '—'}`)),
     ], 'specification-detail-inline-card'));
     const targetList = document.createElement('div');
     targetList.className = 'specification-detail-targets';
@@ -791,6 +797,17 @@ function renderInformation(root, state, selected, onItem, onTarget) {
       targetRef.textContent = target.reference;
       const open = button(t('items.detail.open_source'), '⌘', () => onTarget(target), 'btn small ghost');
       targetHead.append(targetRef, open);
+      if (!options.readOnly) targetHead.append(button(t('common.edit'), '✎', () => {
+        state.specificationEditor = {
+          mode: 'nested',
+          entity: 'target',
+          itemId: selected.id,
+          bindingId: localIdFromAnchor(binding.anchor),
+          target: targetPatchModel(target),
+        };
+        state.specificationPreview = null;
+        state.render();
+      }, 'btn small ghost'));
       targetCard.append(targetHead);
       const targetFields = document.createElement('dl');
       targetFields.className = 'spec-detail-fields compact';
@@ -923,10 +940,11 @@ function renderTrace(root, state, selected, onSelect) {
     graph.append(column);
   });
   root.append(graph);
-  if (trace.truncated) {
+  if (trace.truncated || trace.hidden_edge_count) {
     const notice = document.createElement('p');
     notice.className = 'notice warn';
-    notice.textContent = t('items.detail.hidden').replace('{count}', String(trace.hidden_node_count));
+    const hidden = (trace.hidden_node_count || 0) + (trace.hidden_edge_count || 0);
+    notice.textContent = t('items.detail.hidden').replace('{count}', String(hidden));
     root.append(notice);
   }
   const edges = document.createElement('section');
@@ -936,7 +954,17 @@ function renderTrace(root, state, selected, onSelect) {
   list.className = 'trace-edge-list';
   trace.edges.forEach(edge => {
     const item = document.createElement('li');
-    item.textContent = `${edge.from} → ${edge.display_label} → ${edge.to}`;
+    const edgeButton = document.createElement('button');
+    edgeButton.type = 'button';
+    edgeButton.className = 'trace-edge';
+    edgeButton.textContent = `${edge.from} → ${edge.display_label} → ${edge.to}`;
+    edgeButton.setAttribute('aria-label', `${edge.from} ${edge.display_label} ${edge.to}`);
+    edgeButton.addEventListener('click', () => {
+      const node = trace.nodes.find(candidate => candidate.id === edge.to)
+        || trace.nodes.find(candidate => candidate.id === edge.from);
+      if (node) onSelect(node);
+    });
+    item.append(edgeButton);
     list.append(item);
   });
   if (!trace.edges.length) list.append(Object.assign(document.createElement('li'), { textContent: t('items.detail.trace_empty') }));
@@ -969,8 +997,9 @@ function renderEvidence(root, state, selected) {
     stateChip.textContent = closureLabel(closure.state);
     heading.append(' ', stateChip);
     card.append(heading);
-    card.append(detailList(t('items.detail.target_definition'), closure.implementation_targets));
-    card.append(detailList(t('items.detail.latest_run'), closure.verification_targets));
+    card.append(detailList(t('items.detail.declared_implementation'), closure.implementation_targets));
+    card.append(detailList(t('items.detail.declared_verification'), closure.verification_targets));
+    card.append(detailLabel(t('items.detail.runtime_status'), closure.runtime_status));
     const note = document.createElement('p');
     note.className = 'spec-detail-evidence-note';
     note.textContent = t('items.detail.runtime_unavailable');
@@ -981,7 +1010,7 @@ function renderEvidence(root, state, selected) {
   if (!(trace.closures || []).length) root.append(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: t('items.detail.trace_empty') }));
 }
 
-function renderSourceInspector(root, state) {
+function renderSourceInspector(root, state, onClose) {
   root.className = 'canvas specification-source-inspector';
   const target = state.specificationSourceTarget;
   if (!target) {
@@ -995,6 +1024,7 @@ function renderSourceInspector(root, state) {
     state.specificationSourceTarget = null;
     state.specificationSource = null;
     state.specificationTraceNode = null;
+    onClose?.();
     syncSpecificationLocation(state);
     state.render();
   }, 'btn small ghost'));
@@ -1049,7 +1079,8 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   const head = document.createElement('div');
   head.className = 'canvas-head specification-detail-head';
   const title = document.createElement('div');
-  title.append(Object.assign(document.createElement('h2'), { textContent: selected.title }));
+  const heading = Object.assign(document.createElement('h2'), { textContent: localizeSpecificationTitle(selected) });
+  title.append(heading);
   const meta = document.createElement('div');
   meta.className = 'meta-line';
   meta.append(status(selected.status || selected.kind));
@@ -1060,12 +1091,22 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   const actions = document.createElement('div');
   actions.className = 'actions';
   actions.append(button(t('items.detail.copy_ref'), '⧉', () => navigator.clipboard?.writeText(selected.id), 'btn small'));
+  if (options.action) actions.append(button(
+    options.action.label,
+    options.action.icon || '→',
+    options.action.onClick,
+    options.action.className || 'btn small primary',
+  ));
   if (!options.readOnly) actions.append(button(t('common.edit'), '✎', () => {
     state.specificationEditor = { mode: 'edit', itemId: selected.id };
     state.specificationPreview = null;
     state.render();
   }, 'btn small primary'));
-  head.append(actions);
+  if (actions.childElementCount) head.append(actions);
+  if (options.hideHeading) {
+    head.hidden = true;
+    head.setAttribute('aria-hidden', 'true');
+  }
   main.append(head);
   const description = document.createElement('p');
   description.className = 'specification-summary';
@@ -1078,8 +1119,11 @@ function renderSpecificationWorkspace(root, state, selected, options) {
     const tab = document.createElement('button');
     tab.type = 'button';
     tab.className = `tab${state.specificationDetailTab === tabName ? ' active' : ''}`;
+    tab.id = `specification-detail-tab-${tabName}`;
     tab.setAttribute('role', 'tab');
     tab.setAttribute('aria-selected', String(state.specificationDetailTab === tabName));
+    tab.setAttribute('aria-controls', `specification-detail-panel-${tabName}`);
+    tab.tabIndex = state.specificationDetailTab === tabName ? 0 : -1;
     tab.textContent = t(`items.detail.${tabName}`);
     tab.addEventListener('click', () => {
       state.specificationDetailTab = tabName;
@@ -1093,21 +1137,28 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   main.append(tabs);
   const body = document.createElement('div');
   body.className = 'specification-detail-tab-body';
-  const onItem = itemId => {
+  body.id = `specification-detail-panel-${state.specificationDetailTab}`;
+  body.setAttribute('role', 'tabpanel');
+  body.setAttribute('aria-labelledby', `specification-detail-tab-${state.specificationDetailTab}`);
+  body.tabIndex = 0;
+  const onItem = options.onItem || (itemId => {
     state.selectedSpecification = itemId;
     state.specificationTrace = null;
     state.specificationTraceRoot = null;
     state.specificationSourceTarget = null;
     syncSpecificationLocation(state);
     state.render();
-  };
-  const onTarget = target => {
+  });
+  const onTarget = options.onTarget || (target => {
     state.specificationTraceNode = target.reference;
     state.specificationSourceTarget = target;
     syncSpecificationLocation(state);
     state.render();
-  };
-  if (state.specificationDetailTab === 'information') renderInformation(body, state, selected, onItem, onTarget);
+  });
+  if (state.specificationDetailTab === 'information') {
+    renderInformation(body, state, selected, onItem, onTarget, options);
+    if (!options.readOnly) renderTargetSuggestions(body, state);
+  }
   else if (state.specificationDetailTab === 'trace') {
     renderTrace(body, state, selected, node => {
       state.specificationTraceNode = node.id;
@@ -1122,190 +1173,14 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   if (state.specificationSourceTarget) {
     const inspector = document.createElement('aside');
     inspector.className = 'canvas specification-detail-inspector';
-    renderSourceInspector(inspector, state);
+    renderSourceInspector(inspector, state, options.onSourceClose);
     shell.append(inspector);
   }
   root.append(shell);
 }
 
 export function renderSpecificationDetail(root, state, selected, options = {}) {
-  if (options.detailWorkspace) {
-    renderSpecificationWorkspace(root, state, selected, options);
-    return;
-  }
-  const readOnly = Boolean(options.readOnly);
-  const onItem = options.onItem || (itemId => {
-    state.selectedSpecification = itemId;
-    state.specificationSourceTarget = null;
-    state.specificationSource = null;
-    state.specificationSourceFull = false;
-    state.render();
-  });
-  const onTarget = options.onTarget || (target => {
-    state.specificationSourceTarget = target;
-    state.specificationSource = null;
-    state.specificationSourceFull = false;
-    state.render();
-  });
-  const head = document.createElement('div');
-  head.className = 'canvas-head';
-  const title = document.createElement('div');
-  const heading = document.createElement('h2');
-  heading.textContent = localizeSpecificationTitle(selected);
-  title.append(heading);
-  const meta = document.createElement('div');
-  meta.className = 'meta-line';
-  meta.append(status(selected.status || selected.kind));
-  const id = document.createElement('span');
-  id.className = 'chip';
-  id.textContent = selected.id;
-  meta.append(id);
-  title.append(meta);
-  if (!options.hideHeading) head.append(title);
-  if (!readOnly || options.action) {
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    if (options.action) {
-      actions.append(button(
-        options.action.label,
-        options.action.icon || '→',
-        options.action.onClick,
-        options.action.className || 'btn small primary',
-      ));
-    }
-    if (!readOnly) {
-      actions.append(button(t('common.edit'), '✎', () => {
-        state.specificationEditor = { mode: 'edit', itemId: selected.id };
-        state.specificationPreview = null;
-        state.targetSuggestions = null;
-        state.targetSuggestionSelection = [];
-        state.render();
-      }, 'btn small'));
-    }
-    head.append(actions);
-  }
-  if (head.childElementCount) root.append(head);
-  if (selected.summary || selected.description) {
-    const summary = document.createElement('p');
-    summary.className = 'specification-summary';
-    summary.textContent = selected.summary || selected.description;
-    root.append(summary);
-  }
-  const groups = [
-    ['principles', selected.principles || [], 'principle'],
-    ['rules', selected.rules || [], 'rule'],
-    ['criteria', selected.criteria || [], 'criterion'],
-  ];
-  groups.filter(([, values]) => values.length).forEach(([label, values, kind]) => {
-    const card = document.createElement('section');
-    card.className = 'card specification-group';
-    const heading = document.createElement('h3');
-    heading.textContent = t(`items.${label}`);
-    card.append(heading);
-    values.forEach(value => {
-      const row = document.createElement('div');
-      row.className = `specification-row${kind === 'criterion' ? ' specification-criterion' : ''}${value.anchor === options.highlightedAnchor ? ' is-highlighted' : ''}`;
-      const text = document.createElement('div');
-      const anchor = document.createElement('strong');
-      anchor.textContent = value.anchor;
-      const statement = document.createElement('p');
-      statement.textContent = value.statement;
-      text.append(anchor, statement);
-      row.append(text);
-      if (kind === 'criterion' && value.kind) row.append(enumChip('criterion.kind', value.kind));
-      if (!readOnly && kind === 'criterion' && selected.status === 'implemented') {
-        const createWork = button(t('items.create_work'), '→', () => state.runAction(
-          () => state.api.runJourneyAction(state.projection, {
-            action: 'create',
-            anchor: value.anchor,
-            summary: `${t('work.request.summary_from_anchor').replace('{anchor}', localizeSpecificationTitle(selected))}`,
-          }),
-          () => { state.selectedSlice = null; state.go('work'); },
-        ), 'btn small');
-        createWork.setAttribute('data-create-work', '');
-        createWork.setAttribute('data-create-work-anchor', value.anchor);
-        row.append(createWork);
-      }
-      if (!readOnly && kind === 'criterion') {
-        const reviewSuggestions = button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
-            const suggestions = await state.api.readTargetSuggestions(value.anchor);
-            state.targetSuggestions = suggestions;
-            const approved = new Set(suggestions.approved_ids || []);
-            state.targetSuggestionSelection = suggestions.suggestions
-              .filter(candidate => !approved.has(candidate.id))
-              .map(candidate => candidate.id);
-            state.specificationError = null;
-        }), 'btn small');
-        reviewSuggestions.setAttribute('data-review-target-suggestions', '');
-        row.append(reviewSuggestions);
-      }
-      if (!readOnly) row.append(button(t('common.edit'), '✎', () => {
-        state.specificationEditor = {
-          mode: 'edit',
-          anchor: value.anchor,
-          anchorKind: kind,
-          statement: value.statement,
-          kind: value.kind,
-          appliesTo: (value.applies_to || []).join(', '),
-        };
-        state.specificationPreview = null;
-        state.targetSuggestions = null;
-        state.targetSuggestionSelection = [];
-        state.render();
-      }, 'btn small ghost'));
-      card.append(row);
-    });
-    root.append(card);
-  });
-  renderRelated(root, state, selected, onItem, onTarget);
-  if (!readOnly) renderTargetSuggestions(root, state);
-  const advanced = document.createElement('details');
-  const summary = document.createElement('summary');
-  summary.textContent = t('common.advanced');
-  advanced.append(summary);
-  const path = document.createElement('p');
-  path.className = 'path';
-  path.textContent = selected.path;
-  advanced.append(path);
-  const anchors = document.createElement('p');
-  anchors.textContent = `${t('items.bindings')}: ${(selected.anchors || []).join(', ') || '—'}`;
-  advanced.append(anchors);
-  if (!readOnly) root.append(advanced);
-}
-
-export function renderSourceDetail(root, state, target, onBack) {
-  const head = document.createElement('div');
-  head.className = 'canvas-head source-head';
-  head.append(button(t('items.back'), '←', onBack, 'btn small ghost'));
-  const title = document.createElement('div');
-  title.append(Object.assign(document.createElement('h2'), { textContent: t('items.open_code') }));
-  head.append(title);
-  const full = Boolean(state.specificationSourceFull);
-  head.append(button(full ? t('items.show_excerpt') : t('items.show_file'), full ? '↙' : '↗', () => {
-    state.specificationSourceFull = !full;
-    state.specificationSource = null;
-    state.render();
-  }, 'btn small ghost'));
-  root.append(head);
-  const key = `${target.reference}:${full ? 'file' : 'excerpt'}`;
-  if (state.specificationSource?.key === key) {
-    appendSource(root, state.specificationSource.value);
-    return;
-  }
-  const loading = document.createElement('p');
-  loading.className = 'empty-state';
-  loading.textContent = t('common.loading');
-  root.append(loading);
-  const request = full ? state.api.readSource(target.path) : state.api.readTargetSource(target.reference);
-  request.then(value => {
-    if (state.specificationSourceTarget?.reference !== target.reference || Boolean(state.specificationSourceFull) !== full) return;
-    state.specificationSource = { key, value };
-    state.render();
-  }).catch(() => {
-    if (state.specificationSourceTarget?.reference !== target.reference) return;
-    state.specificationSource = { key, value: null };
-    state.render();
-  });
+  renderSpecificationWorkspace(root, state, selected, options);
 }
 
 function appendSource(root, source) {
@@ -1438,6 +1313,6 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
     state.selectedSpecification = selected.id;
     if (changed && !new URL(location.href).searchParams.has('item')) syncSpecificationLocation(state, false);
   }
-  renderSpecificationDetail(root, state, selected, { detailWorkspace: true });
+  renderSpecificationDetail(root, state, selected);
   return entries;
 }

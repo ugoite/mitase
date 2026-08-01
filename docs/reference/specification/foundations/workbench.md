@@ -373,6 +373,32 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **statement**: After one exact criterion is selected, Workbench renders the linked specification detail in a read-only split or collapsed narrow-screen context and lets people move between the requirement, feature, exact implementation, and verification evidence without leaving the work journey.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
+- **id**: REQ-WORKBENCH-014
+  - **title**: Canonical specification detail workspace
+  - **description**: The specification detail surface is one bounded, server-owned workspace for canonical trace, evidence, and typed nested edits.
+  - **priority**: critical
+  - **status**: implemented
+  - **criteria**:
+    - **id**: canonical-detail-trace
+      - **kind**: behavior
+      - **statement**: Specification detail renders a deterministic bounded neighbourhood from the server-owned SpecIndex, preserving readable and exact canonical facts without browser-side claim joins or closure inference.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: typed-nested-specification-edit
+      - **kind**: behavior
+      - **statement**: Binding, ownership, target, claim, and contract changes use typed nested operations with the same basis, preview, stale rejection, and impact invalidation as top-level edits.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: declaration-runtime-evidence
+      - **kind**: behavior
+      - **statement**: Evidence distinguishes declared implementation and verification targets from item-scoped runtime status and never labels declaration-only facts as a completed run.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: detail-deep-link
+      - **kind**: quality
+      - **statement**: Detail tabs, trace mode/depth, and inspected targets round-trip through URL state with keyboard and narrow-layout semantics.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -658,5 +684,27 @@ requirements:
       - id: linked-specification-context
         kind: behavior
         statement: After one exact criterion is selected, Workbench renders the linked specification detail in a read-only split or collapsed narrow-screen context and lets people move between the requirement, feature, exact implementation, and verification evidence without leaving the work journey.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-014
+    title: Canonical specification detail workspace
+    description: The specification detail surface is one bounded, server-owned workspace for canonical trace, evidence, and typed nested edits.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: canonical-detail-trace
+        kind: behavior
+        statement: Specification detail renders a deterministic bounded neighbourhood from the server-owned SpecIndex, preserving readable and exact canonical facts without browser-side claim joins or closure inference.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: typed-nested-specification-edit
+        kind: behavior
+        statement: Binding, ownership, target, claim, and contract changes use typed nested operations with the same basis, preview, stale rejection, and impact invalidation as top-level edits.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: declaration-runtime-evidence
+        kind: behavior
+        statement: Evidence distinguishes declared implementation and verification targets from item-scoped runtime status and never labels declaration-only facts as a completed run.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: detail-deep-link
+        kind: quality
+        statement: Detail tabs, trace mode/depth, and inspected targets round-trip through URL state with keyboard and narrow-layout semantics.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```

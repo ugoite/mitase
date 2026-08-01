@@ -579,6 +579,10 @@ pub enum EditPatch {
         anchor: String,
         fields: AnchorPatchFields,
     },
+    /// Typed nested edits are the only supported way to change bindings,
+    /// ownership scopes, targets, claims, or contracts.  The payload is
+    /// intentionally schema-shaped; arbitrary YAML maps are not accepted.
+    Nested { item_id: String, edit: NestedEdit },
     CreateRequirement {
         document: String,
         id: SpecId,
@@ -600,6 +604,43 @@ pub enum EditPatch {
     Config {
         config: Box<syu_project_model::ProjectConfig>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "entity", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NestedEdit {
+    Binding {
+        operation: NestedEditOperation,
+        binding: ArtifactBinding,
+    },
+    Ownership {
+        operation: NestedEditOperation,
+        binding_id: LocalId,
+        ownership: OwnershipScope,
+    },
+    Target {
+        operation: NestedEditOperation,
+        binding_id: LocalId,
+        target: syu_spec_model::ArtifactTarget,
+    },
+    Claim {
+        operation: NestedEditOperation,
+        binding_id: LocalId,
+        target_id: LocalId,
+        claim_index: usize,
+        claim: TargetClaim,
+    },
+    Contract {
+        operation: NestedEditOperation,
+        contract: Contract,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NestedEditOperation {
+    Upsert,
+    Delete,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1140,6 +1181,8 @@ pub struct SpecificationTraceQuery {
     pub mode: Option<String>,
     #[serde(default)]
     pub node_budget: Option<usize>,
+    #[serde(default)]
+    pub edge_budget: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1154,6 +1197,7 @@ pub struct SpecificationTraceView {
     pub closures: Vec<CriterionClosureView>,
     pub truncated: bool,
     pub hidden_node_count: usize,
+    pub hidden_edge_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1186,6 +1230,12 @@ pub struct CriterionClosureView {
     pub verification_targets: Vec<String>,
     pub state: String,
     pub reasons: Vec<String>,
+    /// Definition-time evidence is deliberately separate from runtime facts.
+    /// Runtime receipts are populated only by an explicit verification run.
+    pub runtime_status: String,
+    pub runtime_timestamp: Option<String>,
+    pub runtime_revision: Option<String>,
+    pub runtime_receipt: Option<String>,
 }
 
 async fn api_specification_candidates(
@@ -1336,6 +1386,7 @@ async fn api_specification_trace(
         })?;
     Ok(Json(specification_trace_view(
         &snapshot.projection,
+        &snapshot.index,
         item,
         &query,
     )))
@@ -1343,6 +1394,7 @@ async fn api_specification_trace(
 
 fn specification_trace_view(
     projection: &WorkspaceProjection,
+    index: &SpecIndex,
     root: &ItemSummary,
     query: &SpecificationTraceQuery,
 ) -> SpecificationTraceView {
@@ -1352,189 +1404,202 @@ fn specification_trace_view(
         .filter(|value| matches!(*value, "readable" | "exact"))
         .unwrap_or("readable")
         .to_string();
-    let depth = query.depth.unwrap_or(3).clamp(1, 8);
+    let depth = query.depth.unwrap_or(1).clamp(1, 8);
     let node_budget = query.node_budget.unwrap_or(80).clamp(8, 500);
+    let edge_budget = query.edge_budget.unwrap_or(160).clamp(8, 1000);
     let items = &projection.specifications.specifications;
     let mut nodes = BTreeMap::<String, TraceNodeView>::new();
     let mut edges = BTreeMap::<String, TraceEdgeView>::new();
 
-    trace_node(
-        &mut nodes,
-        root.id.clone(),
-        "item",
-        root.title.clone(),
-        Some(root.kind.clone()),
-        "specification",
-        None,
-        Some(root.id.clone()),
-        BTreeMap::new(),
-    );
-
-    for principle in &root.principles {
-        add_anchor_trace_node(&mut nodes, items, principle.anchor.clone());
-        add_trace_edge(
-            &mut edges,
-            &root.id,
-            &principle.anchor,
-            "contains",
-            "contains",
-            None,
+    // Build the canonical graph from every document. The browser receives
+    // this bounded neighbourhood and never infers cross-item joins itself.
+    for item in items {
+        trace_node(
+            &mut nodes,
+            item.id.clone(),
+            TraceNodeSpec {
+                kind: "item",
+                label: item.title.clone(),
+                secondary_label: Some(item.kind.clone()),
+                lane: "specification",
+                source_target: None,
+                item_id: Some(item.id.clone()),
+                metadata: BTreeMap::new(),
+            },
         );
-    }
-    for rule in &root.rules {
-        add_anchor_trace_node(&mut nodes, items, rule.anchor.clone());
-        add_trace_edge(
-            &mut edges,
-            &root.id,
-            &rule.anchor,
-            "contains",
-            "contains",
-            None,
-        );
-        for governed_by in &rule.governed_by {
-            let governed_by = governed_by.to_string();
-            add_anchor_trace_node(&mut nodes, items, governed_by.clone());
+        for principle in &item.principles {
+            add_anchor_trace_node(&mut nodes, items, principle.anchor.clone());
             add_trace_edge(
                 &mut edges,
+                &item.id,
+                &principle.anchor,
+                "contains",
+                "contains",
+                None,
+            );
+        }
+        for rule in &item.rules {
+            add_anchor_trace_node(&mut nodes, items, rule.anchor.clone());
+            add_trace_edge(
+                &mut edges,
+                &item.id,
                 &rule.anchor,
-                &governed_by,
-                "governed_by",
-                "governed by",
-                None,
-            );
-        }
-    }
-    for criterion in &root.criteria {
-        add_anchor_trace_node(&mut nodes, items, criterion.anchor.clone());
-        add_trace_edge(
-            &mut edges,
-            &root.id,
-            &criterion.anchor,
-            "contains",
-            "contains",
-            None,
-        );
-        for governed_by in &criterion.governed_by {
-            let governed_by = governed_by.to_string();
-            add_anchor_trace_node(&mut nodes, items, governed_by.clone());
-            add_trace_edge(
-                &mut edges,
-                &criterion.anchor,
-                &governed_by,
-                "governed_by",
-                "governed by",
-                None,
-            );
-        }
-    }
-    for binding in &root.bindings {
-        add_anchor_trace_node(&mut nodes, items, binding.anchor.clone());
-        add_trace_edge(
-            &mut edges,
-            &root.id,
-            &binding.anchor,
-            "contains",
-            "contains",
-            None,
-        );
-        for ownership in &binding.owns {
-            let ownership_id = format!("{}/owns.{}", binding.anchor, ownership.id);
-            let mut metadata = BTreeMap::new();
-            metadata.insert("adapter".into(), ownership.adapter.clone());
-            metadata.insert("path".into(), ownership.path.to_string_lossy().into_owned());
-            metadata.insert(
-                "selector".into(),
-                serde_json::to_string(&ownership.selector).unwrap_or_default(),
-            );
-            trace_node(
-                &mut nodes,
-                ownership_id.clone(),
-                "ownership",
-                ownership.id.to_string(),
-                Some("owned scope".into()),
-                "implementation",
-                None,
-                Some(root.id.clone()),
-                metadata,
-            );
-            add_trace_edge(
-                &mut edges,
-                &binding.anchor,
-                &ownership_id,
-                "owns",
-                "owns",
-                None,
-            );
-        }
-        for target in &binding.targets {
-            add_target_trace_node(&mut nodes, root, binding, target);
-            add_trace_edge(
-                &mut edges,
-                &root.id,
-                &target.reference,
                 "contains",
                 "contains",
                 None,
             );
-            add_trace_edge(
-                &mut edges,
-                &binding.anchor,
-                &target.reference,
-                "owns",
-                "owns",
-                None,
-            );
-            for (index, claim) in target.claims.iter().enumerate() {
-                add_claim_trace(
-                    &mut nodes,
+            for governed_by in &rule.governed_by {
+                let governed_by = governed_by.to_string();
+                add_anchor_trace_node(&mut nodes, items, governed_by.clone());
+                add_trace_edge(
                     &mut edges,
-                    items,
-                    &mode,
+                    &rule.anchor,
+                    &governed_by,
+                    "governed_by",
+                    "governed by",
+                    None,
+                );
+            }
+        }
+        for criterion in &item.criteria {
+            add_anchor_trace_node(&mut nodes, items, criterion.anchor.clone());
+            add_trace_edge(
+                &mut edges,
+                &item.id,
+                &criterion.anchor,
+                "contains",
+                "contains",
+                None,
+            );
+            for governed_by in &criterion.governed_by {
+                let governed_by = governed_by.to_string();
+                add_anchor_trace_node(&mut nodes, items, governed_by.clone());
+                add_trace_edge(
+                    &mut edges,
+                    &criterion.anchor,
+                    &governed_by,
+                    "governed_by",
+                    "governed by",
+                    None,
+                );
+            }
+        }
+        for binding in &item.bindings {
+            add_anchor_trace_node(&mut nodes, items, binding.anchor.clone());
+            add_trace_edge(
+                &mut edges,
+                &item.id,
+                &binding.anchor,
+                "contains",
+                "contains",
+                None,
+            );
+            for ownership in &binding.owns {
+                let ownership_id = format!("{}/owns.{}", binding.anchor, ownership.id);
+                let metadata = BTreeMap::from([
+                    ("adapter".into(), ownership.adapter.clone()),
+                    ("path".into(), ownership.path.to_string_lossy().into_owned()),
+                    (
+                        "selector".into(),
+                        serde_json::to_string(&ownership.selector).unwrap_or_default(),
+                    ),
+                ]);
+                trace_node(
+                    &mut nodes,
+                    ownership_id.clone(),
+                    TraceNodeSpec {
+                        kind: "ownership",
+                        label: ownership.id.to_string(),
+                        secondary_label: Some("owned scope".into()),
+                        lane: "implementation",
+                        source_target: None,
+                        item_id: Some(item.id.clone()),
+                        metadata,
+                    },
+                );
+                add_trace_edge(
+                    &mut edges,
+                    &binding.anchor,
+                    &ownership_id,
+                    "owns",
+                    "owns",
+                    None,
+                );
+            }
+            for target in &binding.targets {
+                add_target_trace_node(&mut nodes, item, binding, target);
+                add_trace_edge(
+                    &mut edges,
+                    &item.id,
                     &target.reference,
-                    index,
-                    claim,
+                    "contains",
+                    "contains",
+                    None,
+                );
+                add_trace_edge(
+                    &mut edges,
+                    &binding.anchor,
+                    &target.reference,
+                    "owns",
+                    "owns",
+                    None,
+                );
+                for (claim_index, claim) in target.claims.iter().enumerate() {
+                    add_claim_trace(
+                        &mut nodes,
+                        &mut edges,
+                        ClaimTraceSpec {
+                            items,
+                            index,
+                            mode: &mode,
+                            target_reference: &target.reference,
+                            claim_index,
+                            claim,
+                        },
+                    );
+                }
+            }
+        }
+        for contract in &item.contracts {
+            add_anchor_trace_node(&mut nodes, items, contract.anchor.clone());
+            add_trace_edge(
+                &mut edges,
+                &item.id,
+                &contract.anchor,
+                "contains",
+                "contains",
+                None,
+            );
+            let source = contract.source.to_string();
+            add_target_or_anchor_trace_node(&mut nodes, items, index, &source);
+            add_trace_edge(
+                &mut edges,
+                &contract.anchor,
+                &source,
+                "owns",
+                "source",
+                None,
+            );
+            for participant in &contract.participants {
+                let participant = participant.binding.clone();
+                add_target_or_anchor_trace_node(&mut nodes, items, index, &participant);
+                add_trace_edge(
+                    &mut edges,
+                    &contract.anchor,
+                    &participant,
+                    "participates",
+                    "participant",
+                    None,
                 );
             }
         }
     }
-    for contract in &root.contracts {
-        add_anchor_trace_node(&mut nodes, items, contract.anchor.clone());
-        add_trace_edge(
-            &mut edges,
-            &root.id,
-            &contract.anchor,
-            "contains",
-            "contains",
-            None,
-        );
-        let source = contract.source.clone();
-        add_target_or_anchor_trace_node(&mut nodes, items, &source);
-        add_trace_edge(
-            &mut edges,
-            &contract.anchor,
-            &source,
-            "owns",
-            "source",
-            None,
-        );
-        for participant in &contract.participants {
-            add_target_or_anchor_trace_node(&mut nodes, items, &participant.binding);
-            add_trace_edge(
-                &mut edges,
-                &contract.anchor,
-                &participant.binding,
-                "participates",
-                &participant.role,
-                None,
-            );
-        }
-    }
 
-    let closures = specification_closures(items, root);
+    let closures = specification_closures(items, index, root);
     let reachable = trace_reachable(&root.id, &edges, depth);
     let ordered = nodes
         .values()
-        .filter(|node| reachable.contains(&node.id))
+        .filter(|node| reachable.contains(&node.id) && node.kind != "claim")
         .map(|node| node.id.clone())
         .collect::<Vec<_>>();
     let mut ordered = ordered;
@@ -1550,6 +1615,15 @@ fn specification_trace_view(
         .take(node_budget)
         .collect::<BTreeSet<_>>();
     visible.insert(root.id.clone());
+    if mode == "exact" {
+        for node in nodes.values().filter(|node| node.kind == "claim") {
+            if edges.values().any(|edge| {
+                edge.relation == "claim" && edge.to == node.id && visible.contains(&edge.from)
+            }) {
+                visible.insert(node.id.clone());
+            }
+        }
+    }
     let mut visible_nodes = visible
         .iter()
         .filter_map(|id| nodes.remove(id))
@@ -1563,10 +1637,20 @@ fn specification_trace_view(
     for (stable_order, node) in visible_nodes.iter_mut().enumerate() {
         node.stable_order = stable_order;
     }
-    let visible_edges = edges
+    let reachable_edge_count = edges
+        .values()
+        .filter(|edge| reachable.contains(&edge.from) && reachable.contains(&edge.to))
+        .count();
+    let mut visible_edges = edges
         .into_values()
         .filter(|edge| visible.contains(&edge.from) && visible.contains(&edge.to))
-        .collect();
+        .collect::<Vec<_>>();
+    visible_edges.sort_by(|left, right| left.id.cmp(&right.id));
+    let hidden_edge_count =
+        reachable_edge_count.saturating_sub(edge_budget.min(visible_edges.len()));
+    if visible_edges.len() > edge_budget {
+        visible_edges.truncate(edge_budget);
+    }
     SpecificationTraceView {
         root_item_id: root.id.clone(),
         revision: projection.snapshot.revision.clone(),
@@ -1576,32 +1660,33 @@ fn specification_trace_view(
         nodes: visible_nodes,
         edges: visible_edges,
         closures,
-        truncated: hidden_node_count > 0,
+        truncated: hidden_node_count > 0 || hidden_edge_count > 0,
         hidden_node_count,
+        hidden_edge_count,
     }
 }
 
-fn trace_node(
-    nodes: &mut BTreeMap<String, TraceNodeView>,
-    id: String,
-    kind: &str,
+struct TraceNodeSpec {
+    kind: &'static str,
     label: String,
     secondary_label: Option<String>,
-    lane: &str,
+    lane: &'static str,
     source_target: Option<String>,
     item_id: Option<String>,
     metadata: BTreeMap<String, String>,
-) {
+}
+
+fn trace_node(nodes: &mut BTreeMap<String, TraceNodeView>, id: String, spec: TraceNodeSpec) {
     nodes.entry(id.clone()).or_insert_with(|| TraceNodeView {
         id,
-        kind: kind.into(),
-        label,
-        secondary_label,
-        lane: lane.into(),
+        kind: spec.kind.into(),
+        label: spec.label,
+        secondary_label: spec.secondary_label,
+        lane: spec.lane.into(),
         stable_order: 0,
-        source_target,
-        item_id,
-        metadata,
+        source_target: spec.source_target,
+        item_id: spec.item_id,
+        metadata: spec.metadata,
     });
 }
 
@@ -1696,13 +1781,15 @@ fn add_anchor_trace_node(
     trace_node(
         nodes,
         anchor,
-        kind.as_str(),
-        label,
-        secondary_label,
-        lane,
-        None,
-        item_id,
-        metadata,
+        TraceNodeSpec {
+            kind: Box::leak(kind.into_boxed_str()),
+            label,
+            secondary_label,
+            lane: Box::leak(lane.to_string().into_boxed_str()),
+            source_target: None,
+            item_id,
+            metadata,
+        },
     );
 }
 
@@ -1742,19 +1829,22 @@ fn add_target_trace_node(
     trace_node(
         nodes,
         target.reference.clone(),
-        kind,
-        selector_label(&target.selector),
-        Some(target.path.clone()),
-        lane,
-        Some(target.reference.clone()),
-        Some(root.id.clone()),
-        metadata,
+        TraceNodeSpec {
+            kind: Box::leak(kind.to_string().into_boxed_str()),
+            label: selector_label(&target.selector),
+            secondary_label: Some(target.path.clone()),
+            lane: Box::leak(lane.to_string().into_boxed_str()),
+            source_target: Some(target.reference.clone()),
+            item_id: Some(root.id.clone()),
+            metadata,
+        },
     );
 }
 
 fn add_target_or_anchor_trace_node(
     nodes: &mut BTreeMap<String, TraceNodeView>,
     items: &[ItemSummary],
+    index: &SpecIndex,
     reference: &str,
 ) {
     if nodes.contains_key(reference) {
@@ -1771,6 +1861,10 @@ fn add_target_or_anchor_trace_node(
     }) {
         add_target_trace_node(nodes, item, binding, target);
     } else {
+        let _known_anchor = reference
+            .parse::<SpecAnchor>()
+            .ok()
+            .is_some_and(|anchor| index.anchors.contains_key(&anchor));
         add_anchor_trace_node(nodes, items, reference.to_string());
     }
 }
@@ -1786,17 +1880,30 @@ fn selector_label(selector: &Selector) -> String {
     }
 }
 
+struct ClaimTraceSpec<'a> {
+    items: &'a [ItemSummary],
+    index: &'a SpecIndex,
+    mode: &'a str,
+    target_reference: &'a str,
+    claim_index: usize,
+    claim: &'a TargetClaim,
+}
+
 fn add_claim_trace(
     nodes: &mut BTreeMap<String, TraceNodeView>,
     edges: &mut BTreeMap<String, TraceEdgeView>,
-    items: &[ItemSummary],
-    mode: &str,
-    target_reference: &str,
-    index: usize,
-    claim: &TargetClaim,
+    spec: ClaimTraceSpec<'_>,
 ) {
+    let ClaimTraceSpec {
+        items,
+        index: spec_index,
+        mode,
+        target_reference,
+        claim_index,
+        claim,
+    } = spec;
     let exact_claim = serde_json::to_string(claim).ok();
-    let claim_node = format!("{target_reference}#claim.{index}");
+    let claim_node = format!("{target_reference}#claim.{claim_index}");
     let mut destinations = Vec::<(&str, String, &str)>::new();
     match claim {
         TargetClaim::Satisfies { criterion } => {
@@ -1836,21 +1943,33 @@ fn add_claim_trace(
         trace_node(
             nodes,
             claim_node.clone(),
-            "claim",
-            destinations
-                .first()
-                .map(|(_, _, label)| (*label).to_string())
-                .unwrap_or_else(|| "claim".into()),
-            Some("exact canonical claim".into()),
-            "specification",
-            None,
-            None,
-            metadata,
+            TraceNodeSpec {
+                kind: "claim",
+                label: destinations
+                    .first()
+                    .map(|(_, _, label)| (*label).to_string())
+                    .unwrap_or_else(|| "claim".into()),
+                secondary_label: Some("exact canonical claim".into()),
+                lane: "specification",
+                source_target: None,
+                item_id: None,
+                metadata,
+            },
         );
         add_trace_edge(edges, target_reference, &claim_node, "claim", "claim", None);
     }
     for (relation, destination, display_label) in destinations {
-        add_target_or_anchor_trace_node(nodes, items, &destination);
+        add_target_or_anchor_trace_node(nodes, items, spec_index, &destination);
+        // The readable graph contains the canonical relation. Exact mode adds
+        // the claim node without changing neighbourhood reachability.
+        add_trace_edge(
+            edges,
+            target_reference,
+            &destination,
+            relation,
+            display_label,
+            exact_claim.clone(),
+        );
         if mode == "exact" {
             add_trace_edge(
                 edges,
@@ -1860,26 +1979,33 @@ fn add_claim_trace(
                 display_label,
                 exact_claim.clone(),
             );
-        } else {
-            add_trace_edge(
-                edges,
-                target_reference,
-                &destination,
-                relation,
-                display_label,
-                exact_claim.clone(),
-            );
         }
     }
 }
 
-fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<CriterionClosureView> {
+fn specification_closures(
+    items: &[ItemSummary],
+    index: &SpecIndex,
+    root: &ItemSummary,
+) -> Vec<CriterionClosureView> {
     root.criteria
         .iter()
         .map(|criterion| {
-            let mut implementation_targets = BTreeSet::new();
-            let mut verification_targets = BTreeSet::new();
-            let unresolved;
+            let criterion_anchor = criterion.anchor.parse::<SpecAnchor>().ok();
+            let mut implementation_targets = criterion_anchor
+                .as_ref()
+                .and_then(|anchor| index.all_criteria_to_implementation_targets.get(anchor))
+                .into_iter()
+                .flatten()
+                .map(ToString::to_string)
+                .collect::<BTreeSet<_>>();
+            let mut verification_targets = criterion_anchor
+                .as_ref()
+                .and_then(|anchor| index.all_criteria_to_verification_targets.get(anchor))
+                .into_iter()
+                .flatten()
+                .map(ToString::to_string)
+                .collect::<BTreeSet<_>>();
             for item in items {
                 for binding in &item.bindings {
                     for target in &binding.targets {
@@ -1915,6 +2041,10 @@ fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<Crit
                     reasons: vec![
                         "No exact implementation target satisfies this criterion.".into(),
                     ],
+                    runtime_status: "unavailable".into(),
+                    runtime_timestamp: None,
+                    runtime_revision: None,
+                    runtime_receipt: None,
                 };
             }
             if verification_targets.is_empty() {
@@ -1924,6 +2054,10 @@ fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<Crit
                     verification_targets: Vec::new(),
                     state: "verification-missing".into(),
                     reasons: vec!["No exact verification target covers this criterion.".into()],
+                    runtime_status: "unavailable".into(),
+                    runtime_timestamp: None,
+                    runtime_revision: None,
+                    runtime_receipt: None,
                 };
             }
             let known_targets = items
@@ -1932,7 +2066,7 @@ fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<Crit
                 .flat_map(|binding| binding.targets.iter())
                 .map(|target| target.reference.as_str())
                 .collect::<BTreeSet<_>>();
-            unresolved = implementation_targets
+            let unresolved = implementation_targets
                 .iter()
                 .chain(verification_targets.iter())
                 .any(|target| !known_targets.contains(target.as_str()));
@@ -1943,7 +2077,7 @@ fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<Crit
                 state: if unresolved {
                     "target-unresolved"
                 } else {
-                    "closed"
+                    "declaration-only"
                 }
                 .into(),
                 reasons: if unresolved {
@@ -1954,6 +2088,10 @@ fn specification_closures(items: &[ItemSummary], root: &ItemSummary) -> Vec<Crit
                 } else {
                     Vec::new()
                 },
+                runtime_status: "unavailable".into(),
+                runtime_timestamp: None,
+                runtime_revision: None,
+                runtime_receipt: None,
             }
         })
         .collect()
@@ -1971,12 +2109,20 @@ fn trace_reachable(
         if current_depth >= depth {
             continue;
         }
-        for edge in edges.values().filter(|edge| edge.from == current) {
-            if distances.contains_key(&edge.to) {
+        for neighbour in edges.values().filter_map(|edge| {
+            if edge.from == current {
+                Some(edge.to.clone())
+            } else if edge.to == current {
+                Some(edge.from.clone())
+            } else {
+                None
+            }
+        }) {
+            if distances.contains_key(&neighbour) {
                 continue;
             }
-            distances.insert(edge.to.clone(), current_depth + 1);
-            frontier.push(edge.to.clone());
+            distances.insert(neighbour.clone(), current_depth + 1);
+            frontier.push(neighbour);
         }
     }
     distances.into_keys().collect()
@@ -2230,6 +2376,7 @@ fn specification_document_path(workspace: &SpecWorkspace, document: &str) -> Res
 fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
     match patch {
         EditPatch::Specification { item_id, .. } => specification_path(workspace, item_id),
+        EditPatch::Nested { item_id, .. } => specification_path(workspace, item_id),
         EditPatch::Anchor { anchor, .. } => {
             let item = anchor
                 .split('#')
@@ -2313,6 +2460,9 @@ fn specification_impact(
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
     if let Some(EditPatch::Specification { item_id, .. }) = patch {
+        affected_items.insert(item_id.clone());
+    }
+    if let Some(EditPatch::Nested { item_id, .. }) = patch {
         affected_items.insert(item_id.clone());
     }
     if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
@@ -2438,6 +2588,44 @@ fn changed_specification_anchors(
         Some(EditPatch::Specification { item_id, .. }) => {
             let _ = (index, item_id);
         }
+        Some(EditPatch::Nested { item_id, edit }) => {
+            anchors.insert(item_id.clone());
+            match edit {
+                NestedEdit::Binding { binding, .. } => {
+                    anchors.insert(format!("{item_id}#binding.{}", binding.id));
+                }
+                NestedEdit::Ownership {
+                    binding_id,
+                    ownership,
+                    ..
+                } => {
+                    anchors.insert(format!("{item_id}#binding.{binding_id}"));
+                    anchors.insert(format!(
+                        "{item_id}#binding.{binding_id}/owns.{}",
+                        ownership.id
+                    ));
+                }
+                NestedEdit::Target {
+                    binding_id, target, ..
+                } => {
+                    anchors.insert(format!("{item_id}#binding.{binding_id}"));
+                    anchors.insert(format!(
+                        "{item_id}#binding.{binding_id}/target.{}",
+                        target.id
+                    ));
+                }
+                NestedEdit::Claim {
+                    binding_id,
+                    target_id,
+                    ..
+                } => {
+                    anchors.insert(format!("{item_id}#binding.{binding_id}/target.{target_id}"));
+                }
+                NestedEdit::Contract { contract, .. } => {
+                    anchors.insert(format!("{item_id}#contract.{}", contract.id));
+                }
+            }
+        }
         Some(EditPatch::CreateRequirement { id, .. })
         | Some(EditPatch::CreateFeature { id, .. }) => {
             if let Some(item) = index
@@ -2484,6 +2672,9 @@ fn specification_patch_content(
                     mapping.insert(key, field);
                 }
             }
+        }
+        EditPatch::Nested { item_id, edit } => {
+            nested_patch_content(&mut value, item_id, edit)?;
         }
         EditPatch::Anchor { anchor, fields } => {
             let parsed = anchor
@@ -2595,6 +2786,172 @@ fn specification_patch_content(
     Ok(content)
 }
 
+fn nested_patch_content(
+    value: &mut serde_yaml::Value,
+    item_id: &str,
+    edit: &NestedEdit,
+) -> Result<()> {
+    let collection = collection_for_value(value)?;
+    let sequence = specification_sequence(value, collection)?;
+    let item = sequence
+        .iter_mut()
+        .find(|item| item.get("id").and_then(serde_yaml::Value::as_str) == Some(item_id))
+        .ok_or_else(|| anyhow::anyhow!("specification item {item_id} not found"))?;
+    let mapping = item
+        .as_mapping_mut()
+        .ok_or_else(|| anyhow::anyhow!("specification item is not a mapping"))?;
+    match edit {
+        NestedEdit::Binding { operation, binding } => {
+            let bindings = mapping_sequence(mapping, "bindings")?;
+            upsert_or_delete(
+                bindings,
+                "id",
+                binding.id.to_string(),
+                serde_yaml::to_value(binding)?,
+                *operation,
+            )?;
+        }
+        NestedEdit::Ownership {
+            operation,
+            binding_id,
+            ownership,
+        } => {
+            let binding = find_mapping(
+                mapping_sequence(mapping, "bindings")?,
+                binding_id.to_string().as_str(),
+            )?;
+            let owns = mapping_sequence(binding, "owns")?;
+            upsert_or_delete(
+                owns,
+                "id",
+                ownership.id.to_string(),
+                serde_yaml::to_value(ownership)?,
+                *operation,
+            )?;
+        }
+        NestedEdit::Target {
+            operation,
+            binding_id,
+            target,
+        } => {
+            let binding = find_mapping(
+                mapping_sequence(mapping, "bindings")?,
+                binding_id.to_string().as_str(),
+            )?;
+            let targets = mapping_sequence(binding, "targets")?;
+            upsert_or_delete(
+                targets,
+                "id",
+                target.id.to_string(),
+                serde_yaml::to_value(target)?,
+                *operation,
+            )?;
+        }
+        NestedEdit::Claim {
+            operation,
+            binding_id,
+            target_id,
+            claim_index,
+            claim,
+        } => {
+            let binding = find_mapping(
+                mapping_sequence(mapping, "bindings")?,
+                binding_id.to_string().as_str(),
+            )?;
+            let target = find_mapping(
+                mapping_sequence(binding, "targets")?,
+                target_id.to_string().as_str(),
+            )?;
+            let claims = mapping_sequence(target, "claims")?;
+            match operation {
+                NestedEditOperation::Upsert => {
+                    let value = serde_yaml::to_value(claim)?;
+                    if *claim_index > claims.len() {
+                        anyhow::bail!(
+                            "claim index {} is outside the target claim list",
+                            claim_index
+                        );
+                    }
+                    if *claim_index == claims.len() {
+                        claims.push(value);
+                    } else {
+                        claims[*claim_index] = value;
+                    }
+                }
+                NestedEditOperation::Delete => {
+                    if *claim_index >= claims.len() {
+                        anyhow::bail!(
+                            "claim index {} is outside the target claim list",
+                            claim_index
+                        );
+                    }
+                    claims.remove(*claim_index);
+                }
+            }
+        }
+        NestedEdit::Contract {
+            operation,
+            contract,
+        } => {
+            let contracts = mapping_sequence(mapping, "contracts")?;
+            upsert_or_delete(
+                contracts,
+                "id",
+                contract.id.to_string(),
+                serde_yaml::to_value(contract)?,
+                *operation,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn mapping_sequence<'a>(
+    mapping: &'a mut serde_yaml::Mapping,
+    key: &str,
+) -> Result<&'a mut Vec<serde_yaml::Value>> {
+    let key_value = serde_yaml::Value::String(key.into());
+    if !mapping.contains_key(&key_value) {
+        mapping.insert(key_value.clone(), serde_yaml::Value::Sequence(Vec::new()));
+    }
+    mapping
+        .get_mut(&key_value)
+        .and_then(serde_yaml::Value::as_sequence_mut)
+        .ok_or_else(|| anyhow::anyhow!("{key} must be a sequence"))
+}
+
+fn find_mapping<'a>(
+    sequence: &'a mut [serde_yaml::Value],
+    id: &str,
+) -> Result<&'a mut serde_yaml::Mapping> {
+    sequence
+        .iter_mut()
+        .find(|entry| entry.get("id").and_then(serde_yaml::Value::as_str) == Some(id))
+        .and_then(serde_yaml::Value::as_mapping_mut)
+        .ok_or_else(|| anyhow::anyhow!("nested entity {id} not found"))
+}
+
+fn upsert_or_delete(
+    sequence: &mut Vec<serde_yaml::Value>,
+    id_key: &str,
+    id: String,
+    value: serde_yaml::Value,
+    operation: NestedEditOperation,
+) -> Result<()> {
+    let position = sequence.iter().position(|entry| {
+        entry.get(id_key).and_then(serde_yaml::Value::as_str) == Some(id.as_str())
+    });
+    match (operation, position) {
+        (NestedEditOperation::Upsert, Some(position)) => sequence[position] = value,
+        (NestedEditOperation::Upsert, None) => sequence.push(value),
+        (NestedEditOperation::Delete, Some(position)) => {
+            sequence.remove(position);
+        }
+        (NestedEditOperation::Delete, None) => anyhow::bail!("nested entity {id} not found"),
+    }
+    Ok(())
+}
+
 fn collection_for_value(value: &serde_yaml::Value) -> Result<&'static str> {
     let kind = value
         .get("kind")
@@ -2693,6 +3050,7 @@ fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Re
     match patch {
         EditPatch::Specification { .. }
         | EditPatch::Anchor { .. }
+        | EditPatch::Nested { .. }
         | EditPatch::CreateRequirement { .. }
         | EditPatch::CreateFeature { .. } => specification_patch_content(workspace, path, patch),
         EditPatch::Config { config } => Ok(serde_yaml::to_string(config)?),
@@ -6189,6 +6547,7 @@ mod tests {
     fn specification_trace_is_deterministic_and_preserves_canonical_claims() {
         let fixture = workspace_root().join("fixtures/v1/valid-web-app");
         let workspace = SpecWorkspace::load(fixture).expect("trace fixture loads");
+        let index = workspace.index().expect("trace index loads");
         let projection = project(&workspace, None, "test-revision").expect("projection loads");
         let root = projection
             .specifications
@@ -6200,9 +6559,10 @@ mod tests {
             depth: Some(4),
             mode: Some("exact".into()),
             node_budget: Some(80),
+            edge_budget: Some(160),
         };
-        let first = specification_trace_view(&projection, root, &query);
-        let second = specification_trace_view(&projection, root, &query);
+        let first = specification_trace_view(&projection, &index, root, &query);
+        let second = specification_trace_view(&projection, &index, root, &query);
         assert_eq!(
             serde_json::to_string(&first).expect("serialize trace"),
             serde_json::to_string(&second).expect("serialize trace")
@@ -6212,7 +6572,121 @@ mod tests {
         assert!(first.nodes.iter().any(|node| node.kind == "claim"));
         assert!(first.edges.iter().any(|edge| edge.exact_claim.is_some()));
         assert_eq!(first.closures.len(), 1);
-        assert_eq!(first.closures[0].state, "closed");
+        assert_eq!(first.closures[0].state, "declaration-only");
+    }
+
+    #[test]
+    fn specification_trace_reaches_external_workbench_targets_from_spec_index() {
+        let workspace = SpecWorkspace::load(workspace_root()).expect("repository loads");
+        let index = workspace.index().expect("repository index loads");
+        let projection = project(&workspace, None, "test-revision").expect("projection loads");
+        let root = projection
+            .specifications
+            .specifications
+            .iter()
+            .find(|item| item.id == "REQ-WORKBENCH-003")
+            .expect("workbench requirement");
+        let query = SpecificationTraceQuery {
+            depth: Some(4),
+            mode: Some("readable".into()),
+            node_budget: Some(200),
+            edge_budget: Some(400),
+        };
+        let trace = specification_trace_view(&projection, &index, root, &query);
+        assert!(trace.nodes.iter().any(|node| {
+            node.id == "FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply"
+        }));
+        assert!(
+            trace
+                .nodes
+                .iter()
+                .any(|node| node.id == "POL-DELIVERY-001#rule.exact-ownership")
+        );
+    }
+
+    #[test]
+    fn typed_nested_binding_and_target_edits_round_trip_without_yaml_maps() {
+        let fixture = workspace_root().join("fixtures/v1/valid-web-app");
+        let workspace = SpecWorkspace::load(fixture).expect("trace fixture loads");
+        let loaded = workspace
+            .documents
+            .iter()
+            .find(|loaded| matches!(loaded.document, SpecDocument::Requirements { .. }))
+            .expect("requirement document");
+        let requirement = match &loaded.document {
+            SpecDocument::Requirements { requirements, .. } => requirements
+                .iter()
+                .find(|item| item.id.to_string() == "REQ-AUTH-001")
+                .expect("fixture requirement"),
+            _ => unreachable!(),
+        };
+        let binding = requirement.bindings.first().expect("fixture binding");
+        let binding_patch = ArtifactBinding {
+            facet: format!("{}-edited", binding.facet),
+            ..binding.clone()
+        };
+        let binding_edit = EditPatch::Nested {
+            item_id: requirement.id.to_string(),
+            edit: NestedEdit::Binding {
+                operation: NestedEditOperation::Upsert,
+                binding: binding_patch.clone(),
+            },
+        };
+        let path = specification_path(&workspace, &requirement.id.to_string()).expect("path");
+        let binding_content = specification_patch_content(&workspace, &path, &binding_edit)
+            .expect("typed binding edit");
+        let edited: SpecDocument = serde_yaml::from_str(&binding_content).expect("edited document");
+        let edited_binding = match edited {
+            SpecDocument::Requirements { requirements, .. } => requirements
+                .into_iter()
+                .find(|item| item.id == requirement.id)
+                .and_then(|item| {
+                    item.bindings
+                        .into_iter()
+                        .find(|binding| binding.id == binding_patch.id)
+                })
+                .expect("edited binding"),
+            _ => unreachable!(),
+        };
+        assert_eq!(edited_binding.facet, format!("{}-edited", binding.facet));
+
+        let target = binding.targets.first().expect("fixture target");
+        let target_edit = EditPatch::Nested {
+            item_id: requirement.id.to_string(),
+            edit: NestedEdit::Target {
+                operation: NestedEditOperation::Delete,
+                binding_id: binding.id.clone(),
+                target: target.clone(),
+            },
+        };
+        let target_content = specification_patch_content(&workspace, &path, &target_edit)
+            .expect("typed target delete");
+        let deleted: SpecDocument =
+            serde_yaml::from_str(&target_content).expect("deleted document");
+        let remaining = match deleted {
+            SpecDocument::Requirements { requirements, .. } => requirements
+                .into_iter()
+                .find(|item| item.id == requirement.id)
+                .and_then(|item| {
+                    item.bindings
+                        .into_iter()
+                        .find(|binding| binding.id == binding_edit_binding_id(&binding_edit))
+                })
+                .map(|binding| binding.targets)
+                .expect("remaining binding"),
+            _ => unreachable!(),
+        };
+        assert!(remaining.iter().all(|candidate| candidate.id != target.id));
+    }
+
+    fn binding_edit_binding_id(patch: &EditPatch) -> LocalId {
+        match patch {
+            EditPatch::Nested {
+                edit: NestedEdit::Binding { binding, .. },
+                ..
+            } => binding.id.clone(),
+            _ => unreachable!(),
+        }
     }
 
     #[tokio::test]

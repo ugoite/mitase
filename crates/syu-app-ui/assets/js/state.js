@@ -11,7 +11,7 @@ export function createState(projection) {
     specificationTraceRoot: null,
     specificationTraceMode: 'readable',
     specificationTraceNode: null,
-    specificationTraceDepth: 3,
+    specificationTraceDepth: 1,
     specificationTraceLoading: false,
     specificationEditor: null,
     specificationPreview: null,
