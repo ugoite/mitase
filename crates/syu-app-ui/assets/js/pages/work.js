@@ -416,9 +416,11 @@ function renderScopeDetail(root, journey, state, work) {
     );
     targetButton.addEventListener('click', () => {
       state.journeyContextTarget = target;
+      state.journeyContextTab = 'specification';
       state.specificationSourceTarget = target;
       state.specificationSource = null;
       state.specificationSourceFull = false;
+      state.journeySpecificationExpanded = true;
       state.render();
     });
     targetList.append(targetButton);

@@ -687,7 +687,7 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
     }
     values.forEach(value => {
       const row = document.createElement('article');
-      row.className = 'specification-detail-anchor';
+      row.className = `specification-detail-anchor${kind === 'criterion' ? ' specification-criterion' : ''}${options.highlightedAnchor === value.anchor ? ' is-highlighted' : ''}`;
       const head = document.createElement('div');
       head.className = 'spec-detail-anchor-head';
       const exact = document.createElement('code');
@@ -695,10 +695,17 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
       const badge = document.createElement('span');
       badge.className = 'chip';
       badge.textContent = value.kind || value.level || kind;
-      head.append(exact, badge);
+      if (kind === 'criterion') {
+        const anchor = document.createElement('strong');
+        anchor.append(exact);
+        head.append(anchor, badge);
+      } else {
+        head.append(exact, badge);
+      }
       row.append(head);
       const statement = document.createElement('p');
       statement.textContent = value.statement;
+      if (options.highlightedAnchor === value.anchor) statement.setAttribute('data-work-specification-criterion', '');
       row.append(statement);
       if (!options.readOnly && kind === 'criterion' && selected.status === 'implemented') {
         const createWork = button(t('items.create_work'), '→', () => state.runAction(
