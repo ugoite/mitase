@@ -147,7 +147,7 @@ assert 'transition: format!("{:?}"' not in SERVER_RS
 assert "presentation_title_key: builtin_presentation_title_key" in SERVER_RS
 assert "Box::leak" not in SERVER_RS
 assert "kind: String" in SERVER_RS and "lane: String" in SERVER_RS
-assert "candidate_count.saturating_sub(visible.len())" in SERVER_RS
+assert "semantic_candidate_count" in SERVER_RS and "hidden_closure_target_count" in SERVER_RS
 for entity in ("binding", "ownership", "target", "claim", "contract"):
     assert f"entity: '{entity}'" in SPECIFICATIONS_JS, f"missing typed {entity} edit"
 assert "selector_kind" in SPECIFICATIONS_JS
@@ -155,6 +155,12 @@ assert "claim_kind" in SPECIFICATIONS_JS
 assert "runtime_timestamp" in SPECIFICATIONS_JS and "runtime_receipt" in SPECIFICATIONS_JS
 assert "ArrowRight" in SPECIFICATIONS_JS and "event.key === 'Home'" in SPECIFICATIONS_JS
 assert "specificationSourceFocusKey" in SPECIFICATIONS_JS
+assert "kind === 'module'" in SPECIFICATIONS_JS and "kind === 'path-prefix'" in SPECIFICATIONS_JS
+assert "Runner arguments must be valid JSON" in SPECIFICATIONS_JS
+assert "input.readOnly = true" in SPECIFICATIONS_JS and "currentId" in SPECIFICATIONS_JS
+assert "current_id" in SERVER_RS and "ids are immutable" in SERVER_RS
+assert "onLocationChange" in SPECIFICATIONS_JS and "syncWorkSpecificationLocation" in WORK_JS
+assert "[1, 2, 3, 4, 5, 6, 7, 8]" in SPECIFICATIONS_JS
 for key in (
     "criterion.kind.behavior",
     "criterion.kind.quality",

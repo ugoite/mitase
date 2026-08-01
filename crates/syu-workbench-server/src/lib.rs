@@ -612,16 +612,22 @@ pub enum NestedEdit {
     Binding {
         operation: NestedEditOperation,
         binding: ArtifactBinding,
+        #[serde(default)]
+        current_id: Option<String>,
     },
     Ownership {
         operation: NestedEditOperation,
         binding_id: LocalId,
         ownership: OwnershipScope,
+        #[serde(default)]
+        current_id: Option<String>,
     },
     Target {
         operation: NestedEditOperation,
         binding_id: LocalId,
         target: syu_spec_model::ArtifactTarget,
+        #[serde(default)]
+        current_id: Option<String>,
     },
     Claim {
         operation: NestedEditOperation,
@@ -633,6 +639,8 @@ pub enum NestedEdit {
     Contract {
         operation: NestedEditOperation,
         contract: Contract,
+        #[serde(default)]
+        current_id: Option<String>,
     },
 }
 
@@ -1198,6 +1206,9 @@ pub struct SpecificationTraceView {
     /// items, and targets from a partial projection.
     pub related: TraceRelatedView,
     pub closures: Vec<CriterionClosureView>,
+    pub hidden_related_count: usize,
+    pub hidden_closure_count: usize,
+    pub hidden_closure_target_count: usize,
     pub truncated: bool,
     pub hidden_node_count: usize,
     pub hidden_edge_count: usize,
@@ -1208,6 +1219,7 @@ pub struct TraceRelatedView {
     pub specification: Vec<TraceRelatedSpecificationView>,
     pub implementation: Vec<TraceRelatedTargetView>,
     pub verification: Vec<TraceRelatedTargetView>,
+    pub hidden_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1222,6 +1234,7 @@ pub struct TraceRelatedSpecificationView {
 pub struct TraceRelatedTargetView {
     pub item_id: String,
     pub target: BindingTargetSummary,
+    pub hidden_claim_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1260,6 +1273,20 @@ pub struct CriterionClosureView {
     pub runtime_timestamp: Option<String>,
     pub runtime_revision: Option<String>,
     pub runtime_receipt: Option<String>,
+    pub readiness_blockers: Vec<String>,
+    pub diagnostics: Vec<TraceDiagnosticView>,
+    pub hidden_target_count: usize,
+    pub hidden_reason_count: usize,
+    pub hidden_readiness_count: usize,
+    pub hidden_diagnostic_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceDiagnosticView {
+    pub identity: String,
+    pub severity: String,
+    pub message: String,
+    pub reason: Option<String>,
 }
 
 async fn api_specification_candidates(
@@ -1619,23 +1646,23 @@ fn specification_trace_view(
         }
     }
 
-    let closures = specification_closures(items, index, root);
-    let related = specification_related(items, root);
+    let (closures, hidden_closure_count, hidden_closure_target_count) =
+        specification_closures(projection, items, index, root, node_budget);
+    let (related, hidden_related_count) = specification_related(items, root, node_budget);
     let reachable = trace_reachable(&root.id, &edges, depth);
-    let ordered = nodes
+    let mut semantic_ordered = nodes
         .values()
-        .filter(|node| reachable.contains(&node.id) && (mode == "exact" || node.kind != "claim"))
+        .filter(|node| reachable.contains(&node.id) && node.kind != "claim")
         .map(|node| node.id.clone())
         .collect::<Vec<_>>();
-    let mut ordered = ordered;
-    ordered.sort_by(|left, right| {
+    semantic_ordered.sort_by(|left, right| {
         trace_lane_rank(nodes[left].lane.as_str())
             .cmp(&trace_lane_rank(nodes[right].lane.as_str()))
             .then_with(|| nodes[left].kind.cmp(&nodes[right].kind))
             .then_with(|| left.cmp(right))
     });
-    let candidate_count = ordered.len();
-    let mut visible = ordered
+    let semantic_candidate_count = semantic_ordered.len();
+    let mut visible = semantic_ordered
         .into_iter()
         .take(node_budget)
         .collect::<BTreeSet<_>>();
@@ -1647,7 +1674,51 @@ fn specification_trace_view(
         }
         visible.insert(root.id.clone());
     }
-    let hidden_node_count = candidate_count.saturating_sub(visible.len());
+    let semantic_visible = visible.clone();
+    let mut claim_ordered = nodes
+        .values()
+        .filter(|node| node.kind == "claim" && reachable.contains(&node.id))
+        .filter(|node| {
+            visible.contains(
+                &edges
+                    .values()
+                    .find_map(|edge| {
+                        (edge.to == node.id && edge.relation == "claim")
+                            .then_some(edge.from.clone())
+                    })
+                    .unwrap_or_default(),
+            )
+        })
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    claim_ordered.sort();
+    if mode == "exact" {
+        for id in claim_ordered
+            .iter()
+            .take(node_budget.saturating_sub(visible.len()))
+        {
+            visible.insert(id.clone());
+        }
+    }
+    let hidden_node_count = semantic_candidate_count.saturating_sub(
+        visible
+            .iter()
+            .filter(|id| nodes[*id].kind != "claim")
+            .count(),
+    ) + if mode == "exact" {
+        claim_ordered.len().saturating_sub(
+            visible
+                .iter()
+                .filter(|id| nodes[*id].kind == "claim")
+                .count(),
+        )
+    } else {
+        0
+    };
+    let node_kinds = nodes
+        .iter()
+        .map(|(id, node)| (id.clone(), node.kind.clone()))
+        .collect::<BTreeMap<_, _>>();
     let mut visible_nodes = visible
         .iter()
         .filter_map(|id| nodes.remove(id))
@@ -1661,20 +1732,53 @@ fn specification_trace_view(
     for (stable_order, node) in visible_nodes.iter_mut().enumerate() {
         node.stable_order = stable_order;
     }
+    let canonical_edges = edges
+        .values()
+        .filter(|edge| {
+            node_kinds
+                .get(&edge.from)
+                .is_none_or(|kind| kind != "claim")
+                && node_kinds.get(&edge.to).is_none_or(|kind| kind != "claim")
+        })
+        .filter(|edge| reachable.contains(&edge.from) && reachable.contains(&edge.to))
+        .filter(|edge| semantic_visible.contains(&edge.from) && semantic_visible.contains(&edge.to))
+        .cloned()
+        .collect::<Vec<_>>();
+    let claim_edges = edges
+        .values()
+        .filter(|edge| {
+            node_kinds
+                .get(&edge.from)
+                .is_some_and(|kind| kind == "claim")
+                || node_kinds.get(&edge.to).is_some_and(|kind| kind == "claim")
+        })
+        .filter(|edge| reachable.contains(&edge.from) && reachable.contains(&edge.to))
+        .filter(|edge| visible.contains(&edge.from) && visible.contains(&edge.to))
+        .cloned()
+        .collect::<Vec<_>>();
     let reachable_edge_count = edges
         .values()
         .filter(|edge| reachable.contains(&edge.from) && reachable.contains(&edge.to))
+        .filter(|edge| {
+            mode == "exact"
+                || (node_kinds
+                    .get(&edge.from)
+                    .is_none_or(|kind| kind != "claim")
+                    && node_kinds.get(&edge.to).is_none_or(|kind| kind != "claim"))
+        })
         .count();
-    let mut visible_edges = edges
-        .into_values()
-        .filter(|edge| visible.contains(&edge.from) && visible.contains(&edge.to))
-        .collect::<Vec<_>>();
+    let mut visible_edges = canonical_edges;
+    visible_edges.sort_by(|left, right| left.id.cmp(&right.id));
+    visible_edges.truncate(edge_budget);
+    if mode == "exact" && visible_edges.len() < edge_budget {
+        let remaining = edge_budget - visible_edges.len();
+        let mut presentation_edges = claim_edges;
+        presentation_edges.sort_by(|left, right| left.id.cmp(&right.id));
+        visible_edges.extend(presentation_edges.into_iter().take(remaining));
+    }
     visible_edges.sort_by(|left, right| left.id.cmp(&right.id));
     let hidden_edge_count =
         reachable_edge_count.saturating_sub(edge_budget.min(visible_edges.len()));
-    if visible_edges.len() > edge_budget {
-        visible_edges.truncate(edge_budget);
-    }
     SpecificationTraceView {
         root_item_id: root.id.clone(),
         revision: projection.snapshot.revision.clone(),
@@ -1685,13 +1789,24 @@ fn specification_trace_view(
         edges: visible_edges,
         related,
         closures,
-        truncated: hidden_node_count > 0 || hidden_edge_count > 0,
+        hidden_related_count,
+        hidden_closure_count,
+        hidden_closure_target_count,
+        truncated: hidden_node_count > 0
+            || hidden_edge_count > 0
+            || hidden_related_count > 0
+            || hidden_closure_count > 0
+            || hidden_closure_target_count > 0,
         hidden_node_count,
         hidden_edge_count,
     }
 }
 
-fn specification_related(items: &[ItemSummary], root: &ItemSummary) -> TraceRelatedView {
+fn specification_related(
+    items: &[ItemSummary],
+    root: &ItemSummary,
+    budget: usize,
+) -> (TraceRelatedView, usize) {
     let root_criteria = root
         .criteria
         .iter()
@@ -1731,9 +1846,13 @@ fn specification_related(items: &[ItemSummary], root: &ItemSummary) -> TraceRela
                         item.presentation_title_key.clone(),
                     ));
                 }
+                let mut bounded_target = target.clone();
+                let hidden_claim_count = bounded_target.claims.len().saturating_sub(budget);
+                bounded_target.claims.truncate(budget);
                 let entry = TraceRelatedTargetView {
                     item_id: item.id.clone(),
-                    target: target.clone(),
+                    target: bounded_target,
+                    hidden_claim_count,
                 };
                 if kind == "verification" {
                     related.verification.push(entry);
@@ -1760,7 +1879,29 @@ fn specification_related(items: &[ItemSummary], root: &ItemSummary) -> TraceRela
     related
         .verification
         .sort_by(|left, right| left.target.reference.cmp(&right.target.reference));
-    related
+    let total =
+        related.specification.len() + related.implementation.len() + related.verification.len();
+    let mut remaining = budget;
+    if related.specification.len() > remaining {
+        related.specification.truncate(remaining);
+        remaining = 0;
+    } else {
+        remaining -= related.specification.len();
+    }
+    if related.implementation.len() > remaining {
+        related.implementation.truncate(remaining);
+        remaining = 0;
+    } else {
+        remaining -= related.implementation.len();
+    }
+    if related.verification.len() > remaining {
+        related.verification.truncate(remaining);
+    }
+    let hidden = total.saturating_sub(
+        related.specification.len() + related.implementation.len() + related.verification.len(),
+    );
+    related.hidden_count = hidden;
+    (related, hidden)
 }
 
 struct TraceNodeSpec {
@@ -2081,11 +2222,15 @@ fn add_claim_trace(
 }
 
 fn specification_closures(
+    projection: &WorkspaceProjection,
     items: &[ItemSummary],
     index: &SpecIndex,
     root: &ItemSummary,
-) -> Vec<CriterionClosureView> {
-    root.criteria
+    budget: usize,
+) -> (Vec<CriterionClosureView>, usize, usize) {
+    let mut hidden_closure_target_count = 0;
+    let mut closures = root
+        .criteria
         .iter()
         .map(|criterion| {
             let criterion_anchor = criterion.anchor.parse::<SpecAnchor>().ok();
@@ -2129,33 +2274,12 @@ fn specification_closures(
                     }
                 }
             }
+            let mut reasons = Vec::new();
             if implementation_targets.is_empty() {
-                return CriterionClosureView {
-                    criterion: criterion.anchor.clone(),
-                    implementation_targets: Vec::new(),
-                    verification_targets: verification_targets.into_iter().collect(),
-                    state: "implementation-missing".into(),
-                    reasons: vec![
-                        "No exact implementation target satisfies this criterion.".into(),
-                    ],
-                    runtime_status: "unavailable".into(),
-                    runtime_timestamp: None,
-                    runtime_revision: None,
-                    runtime_receipt: None,
-                };
+                reasons.push("No exact implementation target satisfies this criterion.".into());
             }
             if verification_targets.is_empty() {
-                return CriterionClosureView {
-                    criterion: criterion.anchor.clone(),
-                    implementation_targets: implementation_targets.into_iter().collect(),
-                    verification_targets: Vec::new(),
-                    state: "verification-missing".into(),
-                    reasons: vec!["No exact verification target covers this criterion.".into()],
-                    runtime_status: "unavailable".into(),
-                    runtime_timestamp: None,
-                    runtime_revision: None,
-                    runtime_receipt: None,
-                };
+                reasons.push("No exact verification target covers this criterion.".into());
             }
             let known_targets = items
                 .iter()
@@ -2167,31 +2291,113 @@ fn specification_closures(
                 .iter()
                 .chain(verification_targets.iter())
                 .any(|target| !known_targets.contains(target.as_str()));
+            let state = if implementation_targets.is_empty() {
+                "implementation-missing"
+            } else if verification_targets.is_empty() {
+                "verification-missing"
+            } else if unresolved {
+                "target-unresolved"
+            } else {
+                "declaration-only"
+            };
+            if unresolved {
+                reasons.push(
+                    "A claim points at a target that is not in the canonical projection.".into(),
+                );
+            }
+            let readiness_blockers = projection
+                .readiness
+                .axes
+                .values()
+                .flat_map(|axis| axis.subjects.iter())
+                .filter(|subject| {
+                    subject.id.contains(&root.id)
+                        || subject.scope_id.contains(&root.id)
+                        || subject.id.contains(&criterion.anchor)
+                        || subject.scope_id.contains(&criterion.anchor)
+                })
+                .flat_map(|subject| subject.blockers.clone())
+                .collect::<Vec<_>>();
+            reasons.extend(readiness_blockers.iter().cloned());
+            let diagnostics = projection
+                .diagnostics
+                .validation
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| {
+                    diagnostic.diagnostic.anchor.as_ref().is_some_and(|anchor| {
+                        anchor.to_string() == criterion.anchor || anchor.item.to_string() == root.id
+                    })
+                })
+                .map(|diagnostic| TraceDiagnosticView {
+                    identity: diagnostic.diagnostic.rule_id.clone(),
+                    severity: format!("{:?}", diagnostic.diagnostic.severity).to_ascii_lowercase(),
+                    message: diagnostic.diagnostic.message.clone(),
+                    reason: diagnostic.diagnostic.help.clone(),
+                })
+                .collect::<Vec<_>>();
+            reasons.extend(
+                diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.message.clone()),
+            );
+            let runtime = projection.work.verification_receipt.as_ref();
             CriterionClosureView {
                 criterion: criterion.anchor.clone(),
                 implementation_targets: implementation_targets.into_iter().collect(),
                 verification_targets: verification_targets.into_iter().collect(),
-                state: if unresolved {
-                    "target-unresolved"
-                } else {
-                    "declaration-only"
-                }
-                .into(),
-                reasons: if unresolved {
-                    vec![
-                        "A claim points at a target that is not in the canonical projection."
-                            .into(),
-                    ]
-                } else {
-                    Vec::new()
-                },
-                runtime_status: "unavailable".into(),
-                runtime_timestamp: None,
-                runtime_revision: None,
-                runtime_receipt: None,
+                state: state.into(),
+                reasons,
+                runtime_status: runtime
+                    .map(|receipt| receipt.status.clone())
+                    .unwrap_or_else(|| "unavailable".into()),
+                runtime_timestamp: runtime.map(|receipt| receipt.completed_at.clone()),
+                runtime_revision: runtime.map(|receipt| receipt.revision.clone()),
+                runtime_receipt: runtime.map(|receipt| receipt.slice_id.clone()),
+                readiness_blockers,
+                diagnostics,
+                hidden_target_count: 0,
+                hidden_reason_count: 0,
+                hidden_readiness_count: 0,
+                hidden_diagnostic_count: 0,
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    closures.sort_by(|left, right| left.criterion.cmp(&right.criterion));
+    let hidden_closure_count = closures.len().saturating_sub(budget);
+    if closures.len() > budget {
+        closures.truncate(budget);
+    }
+    for closure in &mut closures {
+        let total_targets =
+            closure.implementation_targets.len() + closure.verification_targets.len();
+        let mut remaining = budget;
+        if closure.implementation_targets.len() > remaining {
+            closure.implementation_targets.truncate(remaining);
+            remaining = 0;
+        } else {
+            remaining -= closure.implementation_targets.len();
+        }
+        if closure.verification_targets.len() > remaining {
+            closure.verification_targets.truncate(remaining);
+        }
+        closure.hidden_target_count = total_targets.saturating_sub(
+            closure.implementation_targets.len() + closure.verification_targets.len(),
+        );
+        let reason_count = closure.reasons.len();
+        let readiness_count = closure.readiness_blockers.len();
+        let diagnostic_count = closure.diagnostics.len();
+        closure.reasons.truncate(budget);
+        closure.readiness_blockers.truncate(budget);
+        closure.diagnostics.truncate(budget);
+        closure.hidden_reason_count = reason_count.saturating_sub(closure.reasons.len());
+        closure.hidden_readiness_count =
+            readiness_count.saturating_sub(closure.readiness_blockers.len());
+        closure.hidden_diagnostic_count =
+            diagnostic_count.saturating_sub(closure.diagnostics.len());
+        hidden_closure_target_count += closure.hidden_target_count;
+    }
+    (closures, hidden_closure_count, hidden_closure_target_count)
 }
 
 fn trace_reachable(
@@ -2898,7 +3104,11 @@ fn nested_patch_content(
         .as_mapping_mut()
         .ok_or_else(|| anyhow::anyhow!("specification item is not a mapping"))?;
     match edit {
-        NestedEdit::Binding { operation, binding } => {
+        NestedEdit::Binding {
+            operation,
+            binding,
+            current_id,
+        } => {
             let bindings = mapping_sequence(mapping, "bindings")?;
             upsert_or_delete(
                 bindings,
@@ -2906,12 +3116,14 @@ fn nested_patch_content(
                 binding.id.to_string(),
                 serde_yaml::to_value(binding)?,
                 *operation,
+                current_id.as_deref(),
             )?;
         }
         NestedEdit::Ownership {
             operation,
             binding_id,
             ownership,
+            current_id,
         } => {
             let binding = find_mapping(
                 mapping_sequence(mapping, "bindings")?,
@@ -2924,12 +3136,14 @@ fn nested_patch_content(
                 ownership.id.to_string(),
                 serde_yaml::to_value(ownership)?,
                 *operation,
+                current_id.as_deref(),
             )?;
         }
         NestedEdit::Target {
             operation,
             binding_id,
             target,
+            current_id,
         } => {
             let binding = find_mapping(
                 mapping_sequence(mapping, "bindings")?,
@@ -2942,6 +3156,7 @@ fn nested_patch_content(
                 target.id.to_string(),
                 serde_yaml::to_value(target)?,
                 *operation,
+                current_id.as_deref(),
             )?;
         }
         NestedEdit::Claim {
@@ -2989,6 +3204,7 @@ fn nested_patch_content(
         NestedEdit::Contract {
             operation,
             contract,
+            current_id,
         } => {
             let contracts = mapping_sequence(mapping, "contracts")?;
             upsert_or_delete(
@@ -2997,6 +3213,7 @@ fn nested_patch_content(
                 contract.id.to_string(),
                 serde_yaml::to_value(contract)?,
                 *operation,
+                current_id.as_deref(),
             )?;
         }
     }
@@ -3034,12 +3251,23 @@ fn upsert_or_delete(
     id: String,
     value: serde_yaml::Value,
     operation: NestedEditOperation,
+    current_id: Option<&str>,
 ) -> Result<()> {
+    if let Some(current_id) = current_id
+        && current_id != id
+    {
+        anyhow::bail!(
+            "nested entity ids are immutable; create a new entity instead of renaming {current_id}"
+        );
+    }
     let position = sequence.iter().position(|entry| {
         entry.get(id_key).and_then(serde_yaml::Value::as_str) == Some(id.as_str())
     });
     match (operation, position) {
         (NestedEditOperation::Upsert, Some(position)) => sequence[position] = value,
+        (NestedEditOperation::Upsert, None) if current_id.is_some() => {
+            anyhow::bail!("nested entity {id} not found for immutable update")
+        }
         (NestedEditOperation::Upsert, None) => sequence.push(value),
         (NestedEditOperation::Delete, Some(position)) => {
             sequence.remove(position);
@@ -4835,6 +5063,11 @@ pub struct TargetView {
 #[derive(Debug, Clone, Serialize)]
 pub struct VerificationReceiptView {
     pub slice_id: String,
+    pub status: String,
+    pub revision: String,
+    pub workspace_fingerprint: String,
+    pub started_at: String,
+    pub completed_at: String,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct ContextPackView {
@@ -5519,6 +5752,19 @@ fn plan_view(plan: &WorkPlan) -> PlanView {
 fn verification_receipt_view(receipt: &VerificationReceipt) -> VerificationReceiptView {
     VerificationReceiptView {
         slice_id: receipt.slice_id.clone(),
+        status: if receipt
+            .executions
+            .iter()
+            .all(|execution| execution.exit_code == 0)
+        {
+            "passed".into()
+        } else {
+            "failed".into()
+        },
+        revision: receipt.revision.clone(),
+        workspace_fingerprint: receipt.workspace_fingerprint.clone(),
+        started_at: receipt.started_at.clone(),
+        completed_at: receipt.completed_at.clone(),
     }
 }
 
@@ -6685,6 +6931,100 @@ mod tests {
             assert!(bounded.nodes.len() <= 8, "{mode} node budget exceeded");
             assert!(bounded.edges.len() <= 8, "{mode} edge budget exceeded");
         }
+        let readable = specification_trace_view(
+            &projection,
+            &index,
+            root,
+            &SpecificationTraceQuery {
+                depth: Some(8),
+                mode: Some("readable".into()),
+                node_budget: Some(20),
+                edge_budget: Some(20),
+            },
+        );
+        let exact = specification_trace_view(
+            &projection,
+            &index,
+            root,
+            &SpecificationTraceQuery {
+                depth: Some(8),
+                mode: Some("exact".into()),
+                node_budget: Some(20),
+                edge_budget: Some(20),
+            },
+        );
+        let readable_nodes = readable
+            .nodes
+            .iter()
+            .map(|node| node.id.clone())
+            .collect::<BTreeSet<_>>();
+        let exact_semantic_nodes = exact
+            .nodes
+            .iter()
+            .filter(|node| node.kind != "claim")
+            .map(|node| node.id.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(readable_nodes, exact_semantic_nodes);
+        let readable_edges = readable
+            .edges
+            .iter()
+            .filter(|edge| {
+                readable
+                    .nodes
+                    .iter()
+                    .find(|node| node.id == edge.from)
+                    .is_none_or(|node| node.kind != "claim")
+                    && readable
+                        .nodes
+                        .iter()
+                        .find(|node| node.id == edge.to)
+                        .is_none_or(|node| node.kind != "claim")
+            })
+            .map(|edge| edge.id.clone())
+            .collect::<BTreeSet<_>>();
+        let exact_edges = exact
+            .edges
+            .iter()
+            .filter(|edge| {
+                exact
+                    .nodes
+                    .iter()
+                    .find(|node| node.id == edge.from)
+                    .is_none_or(|node| node.kind != "claim")
+                    && exact
+                        .nodes
+                        .iter()
+                        .find(|node| node.id == edge.to)
+                        .is_none_or(|node| node.kind != "claim")
+            })
+            .map(|edge| edge.id.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(readable_edges, exact_edges);
+        let mut with_receipt = projection.clone();
+        with_receipt.work.verification_receipt = Some(VerificationReceiptView {
+            slice_id: "slice-fixture".into(),
+            status: "failed".into(),
+            revision: "receipt-revision".into(),
+            workspace_fingerprint: "receipt-fingerprint".into(),
+            started_at: "2026-08-01T00:00:00Z".into(),
+            completed_at: "2026-08-01T00:01:00Z".into(),
+        });
+        let evidence = specification_trace_view(
+            &with_receipt,
+            &index,
+            root,
+            &SpecificationTraceQuery {
+                depth: Some(4),
+                mode: Some("readable".into()),
+                node_budget: Some(80),
+                edge_budget: Some(160),
+            },
+        );
+        assert_eq!(evidence.closures[0].runtime_status, "failed");
+        assert_eq!(
+            evidence.closures[0].runtime_revision.as_deref(),
+            Some("receipt-revision")
+        );
     }
 
     #[test]
@@ -6721,6 +7061,46 @@ mod tests {
                 .iter()
                 .any(|node| node.id == "POL-DELIVERY-001#rule.exact-ownership")
         );
+        let philosophy = projection
+            .specifications
+            .specifications
+            .iter()
+            .find(|item| item.id == "PHIL-001")
+            .expect("workbench philosophy");
+        let philosophy_trace = specification_trace_view(
+            &projection,
+            &index,
+            philosophy,
+            &SpecificationTraceQuery {
+                depth: Some(4),
+                mode: Some("readable".into()),
+                node_budget: Some(240),
+                edge_budget: Some(480),
+            },
+        );
+        assert!(
+            philosophy_trace
+                .nodes
+                .iter()
+                .any(|node| node.id == "PHIL-001#principle.exact-intent")
+        );
+        assert!(
+            philosophy_trace
+                .nodes
+                .iter()
+                .any(|node| node.id == "POL-DELIVERY-001#rule.exact-ownership")
+        );
+        assert!(
+            philosophy_trace
+                .nodes
+                .iter()
+                .any(|node| node.id == "REQ-WORKBENCH-003#criterion.transactional-spec-edit")
+        );
+        assert!(philosophy_trace.nodes.iter().any(|node| node.id
+            == "FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply"));
+        assert!(philosophy_trace.nodes.iter().any(
+            |node| node.id == "REQ-WORKBENCH-003#binding.spec-edit-check/target.spec-edit-test"
+        ));
     }
 
     #[test]
@@ -6749,6 +7129,7 @@ mod tests {
             edit: NestedEdit::Binding {
                 operation: NestedEditOperation::Upsert,
                 binding: binding_patch.clone(),
+                current_id: Some(binding.id.to_string()),
             },
         };
         let path = specification_path(&workspace, &requirement.id.to_string()).expect("path");
@@ -6776,6 +7157,7 @@ mod tests {
                 operation: NestedEditOperation::Delete,
                 binding_id: binding.id.clone(),
                 target: target.clone(),
+                current_id: Some(target.id.to_string()),
             },
         };
         let target_content = specification_patch_content(&workspace, &path, &target_edit)
@@ -6796,6 +7178,51 @@ mod tests {
             _ => unreachable!(),
         };
         assert!(remaining.iter().all(|candidate| candidate.id != target.id));
+    }
+
+    #[test]
+    fn module_ownership_round_trip_preserves_name_and_renames_are_rejected() {
+        let workspace = SpecWorkspace::load(workspace_root()).expect("repository loads");
+        let projection = project(&workspace, None, "test-revision").expect("projection loads");
+        let (item, binding, ownership) = projection
+            .specifications
+            .specifications
+            .iter()
+            .find_map(|item| {
+                item.bindings.iter().find_map(|binding| {
+                    binding.owns.iter().find_map(|ownership| {
+                        matches!(
+                            &ownership.selector,
+                            syu_spec_model::OwnershipSelector::Module { .. }
+                        )
+                        .then_some((item, binding, ownership))
+                    })
+                })
+            })
+            .expect("self-hosting module ownership");
+        let path = specification_path(&workspace, &item.id).expect("module ownership path");
+        let edit = EditPatch::Nested {
+            item_id: item.id.clone(),
+            edit: NestedEdit::Ownership {
+                operation: NestedEditOperation::Upsert,
+                binding_id: LocalId::from(binding.anchor.split("#binding.").last().unwrap()),
+                ownership: ownership.clone(),
+                current_id: Some(ownership.id.to_string()),
+            },
+        };
+        let content = specification_patch_content(&workspace, &path, &edit).expect("round trip");
+        assert!(content.contains("kind: module"));
+        assert!(content.contains("name:"));
+        let renamed = EditPatch::Nested {
+            item_id: item.id.clone(),
+            edit: NestedEdit::Ownership {
+                operation: NestedEditOperation::Upsert,
+                binding_id: LocalId::from(binding.anchor.split("#binding.").last().unwrap()),
+                ownership: ownership.clone(),
+                current_id: Some("different-id".into()),
+            },
+        };
+        assert!(specification_patch_content(&workspace, &path, &renamed).is_err());
     }
 
     fn binding_edit_binding_id(patch: &EditPatch) -> LocalId {
@@ -6862,6 +7289,7 @@ mod tests {
                     adapter: "openapi-edited".into(),
                     ..ownership.clone()
                 },
+                current_id: Some(ownership.id.to_string()),
             },
         };
         let ownership_content =
@@ -6874,6 +7302,7 @@ mod tests {
                 operation: NestedEditOperation::Delete,
                 binding_id: binding.id.clone(),
                 ownership,
+                current_id: None,
             },
         };
         let ownership_deleted =
@@ -6891,6 +7320,7 @@ mod tests {
                         .expect("repository path"),
                     ..target.clone()
                 },
+                current_id: Some(target.id.to_string()),
             },
         };
         assert!(
@@ -6960,6 +7390,7 @@ mod tests {
                     ],
                     ..contract.clone()
                 },
+                current_id: Some(contract.id.to_string()),
             },
         };
         assert!(
@@ -6972,6 +7403,7 @@ mod tests {
             edit: NestedEdit::Contract {
                 operation: NestedEditOperation::Delete,
                 contract,
+                current_id: None,
             },
         };
         let contract_deleted =

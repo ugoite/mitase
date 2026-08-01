@@ -72,6 +72,10 @@ projection_data['specifications']['specifications'].append({
     'contracts': [],
     'anchors': ['REQ-CAPABILITY-001#criterion.behavior'],
 })
+for candidate in projection_data['specifications']['specifications']:
+    for binding in candidate.get('bindings', []):
+        for ownership in binding.get('owns', []):
+            ownership['selector'] = {'kind': 'module', 'name': '*'}
 projection = json.dumps(projection_data).replace('<', '\\u003c')
 pathlib.Path(sys.argv[2]).write_text(
     f'<script type="application/json" id="syu-projection">{projection}</script>'
@@ -213,6 +217,37 @@ setTimeout(()=>{
       document.querySelector('[data-page="specifications"] .specification-editor .canvas-head button')?.click();
       await wait(40);
     }
+    const featureRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
+      .find(node=>node.textContent.includes('FEAT-AUTH-001'));
+    if(featureRail) {
+      featureRail.click();
+      await wait(60);
+      const ownershipEdit=document.querySelector('[data-page="specifications"] .specification-detail-ownership .btn');
+      if(!ownershipEdit) failures.push('module ownership editor is missing');
+      else {
+        ownershipEdit.click();
+        await wait(40);
+        const editor=document.querySelector('[data-page="specifications"] .specification-editor');
+        const selectorKind=editor?.querySelector('[name="selector_kind"]');
+        const selectorName=editor?.querySelector('[name="selector_name"]');
+        if(!selectorKind || !selectorName) failures.push('module ownership selector fields are missing');
+        else {
+          selectorKind.value='module';
+          selectorName.value='*';
+          editor.requestSubmit();
+          await wait(100);
+          const patches=window.__SYU_NESTED_PATCHES__||[];
+          const patch=patches[patches.length-1];
+          if(patch?.edit?.entity!=='ownership' || patch.edit.ownership.selector?.kind!=='module' || patch.edit.ownership.selector?.name!=='*') failures.push('module ownership selector did not round-trip losslessly');
+        }
+        document.querySelector('[data-page="specifications"] .specification-editor .canvas-head button')?.click();
+        await wait(40);
+      }
+      const requirementRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
+        .find(node=>node.textContent.includes('REQ-AUTH-001'));
+      requirementRail?.click();
+      await wait(60);
+    } else failures.push('feature fixture for module ownership is missing');
   }
   const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
   const selectedCriterion=document.querySelector('[data-page="specifications"] .specification-criterion');
@@ -233,6 +268,19 @@ setTimeout(()=>{
   if(document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent!==selectedSpecificationTitle) failures.push('related specification does not match the selected specification');
   if(document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent!==selectedCriterionStatement) failures.push('related criterion does not match the selected criterion');
   if(document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor!==selectedCriterionAnchor) failures.push('Work seed anchor does not match the selected criterion');
+  const workTraceTab=document.querySelector('[data-page="work"] [data-detail-tab="trace"]');
+  if(workTraceTab) {
+    workTraceTab.click();
+    await wait(80);
+    if(new URL(location.href).searchParams.get('page')!=='work') failures.push('Work trace tab rewrote the route to Specifications');
+    history.back();
+    await wait(100);
+    if(new URL(location.href).searchParams.get('page')!=='work') failures.push('Work back navigation left the Work route');
+    history.forward();
+    await wait(100);
+    if(new URL(location.href).searchParams.get('workDetailTab')!=='trace') failures.push('Work forward navigation did not restore Trace context');
+    await click('[data-page="work"] [data-detail-tab="information"]');
+  } else failures.push('Work trace tab is missing');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');

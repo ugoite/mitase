@@ -346,6 +346,22 @@ function resetContextSource(state) {
   state.specificationSourceFull = false;
 }
 
+function syncWorkSpecificationLocation(state, push = true) {
+  const parameters = new URLSearchParams(location.search);
+  parameters.set('page', 'work');
+  if (state.journeyContextItemId) parameters.set('workItem', state.journeyContextItemId);
+  else parameters.delete('workItem');
+  if (state.specificationDetailTab) parameters.set('workDetailTab', state.specificationDetailTab);
+  if (state.specificationTraceNode) parameters.set('workNode', state.specificationTraceNode);
+  else parameters.delete('workNode');
+  if (state.specificationTraceMode === 'exact') parameters.set('workTraceMode', 'exact');
+  else parameters.delete('workTraceMode');
+  if (state.specificationTraceDepth > 1) parameters.set('workDepth', String(state.specificationTraceDepth));
+  else parameters.delete('workDepth');
+  const url = `?${parameters.toString()}`;
+  if (push) history.pushState({}, '', url); else history.replaceState({}, '', url);
+}
+
 function renderContextTabs(root, state, hasScope, hasWorkInsights) {
   const tabs = element('div', 'journey-context-tabs');
   const addTab = (id, label, icon) => {
@@ -546,6 +562,7 @@ function renderSpecification(root, workspace, journey, state, work) {
     onSourceClose: () => {
       resetContextSource(state);
     },
+    onLocationChange: (nextState, push = true) => syncWorkSpecificationLocation(nextState, push),
   });
   body.querySelector('.specification-detail-head h2')?.setAttribute('data-work-specification-title', '');
   body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');

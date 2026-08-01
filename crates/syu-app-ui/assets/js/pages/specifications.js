@@ -194,9 +194,15 @@ function lineValues(value) {
 function selectorFromDraft(draft, ownership = false) {
   const kind = String(draft.selector_kind || (ownership ? 'file' : 'file'));
   if (kind === 'file') return { kind };
+  if (ownership) {
+    if (kind === 'module') return { kind, name: draft.selector_name || '' };
+    if (kind === 'path-prefix') return { kind, value: draft.selector_value || '' };
+    throw new Error(`Unsupported ownership selector: ${kind}`);
+  }
   if (kind === 'symbol') return { kind, name: draft.selector_name || '' };
   if (kind === 'operation') return { kind, method: draft.selector_method || '', path: draft.selector_path || '' };
-  return { kind, value: draft.selector_value || '' };
+  if (['heading', 'json-pointer', 'marker'].includes(kind)) return { kind, value: draft.selector_value || '' };
+  throw new Error(`Unsupported target selector: ${kind}`);
 }
 
 function selectorDraft(selector, ownership = false) {
@@ -214,8 +220,16 @@ function claimFromDraft(draft) {
   const kind = String(draft.claim_kind || 'satisfies');
   if (kind === 'satisfies') return { kind, criterion: draft.criterion || '' };
   if (kind === 'verifies') {
-    let argumentsValue = {};
-    try { argumentsValue = JSON.parse(draft.runner_arguments || '{}'); } catch { argumentsValue = {}; }
+    let argumentsValue;
+    try {
+      argumentsValue = JSON.parse(draft.runner_arguments || '{}');
+    } catch (error) {
+      throw new Error(`Runner arguments must be valid JSON: ${error.message}`);
+    }
+    if (!argumentsValue || Array.isArray(argumentsValue) || typeof argumentsValue !== 'object'
+      || Object.entries(argumentsValue).some(([, value]) => typeof value !== 'string')) {
+      throw new Error('Runner arguments must be an object whose values are strings.');
+    }
     return {
       kind,
       criterion: draft.criterion || '',
@@ -234,6 +248,7 @@ function createNestedPatch(editor, form) {
   editor.draft = draft;
   const operation = editor.operation || 'upsert';
   const edit = { entity: editor.entity, operation };
+  const currentId = editor.currentId || null;
   if (editor.entity === 'binding') edit.binding = {
     ...editor.binding,
     id: draft.id || editor.binding?.id,
@@ -243,6 +258,7 @@ function createNestedPatch(editor, form) {
     owns: editor.binding?.owns || [],
     targets: editor.binding?.targets || [],
   };
+  if (currentId && ['binding', 'ownership', 'target', 'contract'].includes(editor.entity)) edit.current_id = currentId;
   if (editor.entity === 'ownership') edit.ownership = {
     ...editor.ownership,
     id: draft.id || editor.ownership?.id,
@@ -339,15 +355,25 @@ function appendNestedEditorFields(form, editor) {
     form.append(warning);
     return;
   }
+  const immutableId = (value) => {
+    const wrapper = field(t('items.detail.id'), value, 'id');
+    const input = wrapper.querySelector('[name="id"]');
+    if (editor.currentId) {
+      input.readOnly = true;
+      input.setAttribute('aria-readonly', 'true');
+      wrapper.classList.add('spec-field-readonly');
+    }
+    return wrapper;
+  };
   if (editor.entity === 'binding') {
-    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', editor.binding?.id), 'id'));
+    form.append(immutableId(draftValue(editor, draft, 'id', editor.binding?.id)));
     form.append(field(t('items.detail.role'), draftValue(editor, draft, 'role', editor.binding?.role || 'implementation'), 'role', 'select', localizedOptions('target.role', ['implementation', 'verification', 'documentation', 'enforcement', 'contract-source', 'configuration', 'generated', 'migration', 'operation', 'evidence'])));
     form.append(field(t('items.detail.facet'), draftValue(editor, draft, 'facet', editor.binding?.facet), 'facet'));
     form.append(field(t('items.detail.responsibility'), draftValue(editor, draft, 'responsibility', editor.binding?.responsibility), 'responsibility', 'textarea'));
     return;
   }
   if (editor.entity === 'ownership') {
-    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', editor.ownership?.id), 'id'));
+    form.append(immutableId(draftValue(editor, draft, 'id', editor.ownership?.id)));
     form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.ownership?.adapter), 'adapter'));
     form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.ownership?.path), 'path'));
     form.append(field(t('items.detail.supports'), draftValue(editor, draft, 'supports', (editor.ownership?.supports || []).join(', ')), 'supports'));
@@ -355,7 +381,7 @@ function appendNestedEditorFields(form, editor) {
     return;
   }
   if (editor.entity === 'target') {
-    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', editor.target?.id), 'id'));
+    form.append(immutableId(draftValue(editor, draft, 'id', editor.target?.id)));
     form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.target?.adapter), 'adapter'));
     form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.target?.path), 'path'));
     appendSelectorEditor(form, editor, draft, editor.target?.selector);
@@ -389,7 +415,7 @@ function appendNestedEditorFields(form, editor) {
   }
   if (editor.entity === 'contract') {
     const contract = editor.contract || {};
-    form.append(field(t('items.detail.id'), draftValue(editor, draft, 'id', contract.id), 'id'));
+    form.append(immutableId(draftValue(editor, draft, 'id', contract.id)));
     form.append(field(t('items.detail.contract_kind'), draftValue(editor, draft, 'contract_kind', contract.kind || 'custom'), 'contract_kind', 'select', ['http', 'event', 'function', 'schema', 'cli', 'file', 'custom']));
     form.append(field(t('items.detail.source'), draftValue(editor, draft, 'source', contract.source), 'source'));
     const participants = (contract.participants || []).map(participant => `${participant.target || participant.binding}|${participant.role}`).join('\n');
@@ -697,7 +723,15 @@ function renderEditor(root, state) {
   });
   form.addEventListener('submit', event => {
     event.preventDefault();
-    const patch = patchFromForm(editor, state, form);
+    let patch;
+    try {
+      patch = patchFromForm(editor, state, form);
+    } catch (error) {
+      state.specificationError = error.message;
+      state.specificationPreview = null;
+      state.render();
+      return;
+    }
     state.specificationError = null;
     state.specificationPreview = null;
     runBusy(state, async () => {
@@ -828,9 +862,11 @@ function claimLabel(claim) {
 }
 
 function beginNestedEditor(state, config) {
+  const entityValue = config[config.entity];
   state.specificationEditor = {
     mode: 'nested',
     operation: 'upsert',
+    currentId: config.currentId || (config.operation !== 'delete' && entityValue?.id ? String(entityValue.id) : null),
     ...config,
   };
   state.specificationPreview = null;
@@ -1187,7 +1223,7 @@ function traceNodeButton(state, node, onSelect) {
   return buttonNode;
 }
 
-function renderTrace(root, state, selected, onSelect) {
+function renderTrace(root, state, selected, onSelect, onLocationChange = syncSpecificationLocation) {
   ensureSpecificationTrace(state, selected);
   const trace = state.specificationTrace;
   if (state.specificationTraceLoading || !trace || state.specificationTraceRoot !== `${selected.id}:${state.specificationTraceMode}:${state.specificationTraceDepth}`) {
@@ -1210,7 +1246,7 @@ function renderTrace(root, state, selected, onSelect) {
     const modeButton = button(label, mode === state.specificationTraceMode ? '●' : '○', () => {
       state.specificationTraceMode = mode;
       state.specificationTraceRoot = null;
-      syncSpecificationLocation(state);
+      onLocationChange(state);
       state.render();
     }, `btn small ${mode === state.specificationTraceMode ? 'primary' : 'ghost'}`);
     controls.append(modeButton);
@@ -1220,7 +1256,7 @@ function renderTrace(root, state, selected, onSelect) {
   depth.append(Object.assign(document.createElement('span'), { textContent: t('items.detail.depth') }));
   const select = document.createElement('select');
   select.className = 'native-select';
-  [1, 2, 3].forEach(value => {
+  [1, 2, 3, 4, 5, 6, 7, 8].forEach(value => {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = String(value);
@@ -1230,7 +1266,7 @@ function renderTrace(root, state, selected, onSelect) {
   select.addEventListener('change', () => {
     state.specificationTraceDepth = Number(select.value);
     state.specificationTraceRoot = null;
-    syncSpecificationLocation(state);
+    onLocationChange(state);
     state.render();
   });
   depth.append(select);
@@ -1325,13 +1361,31 @@ function renderEvidence(root, state, selected) {
       note.textContent = t('items.detail.runtime_unavailable');
       card.append(note);
     }
+    if (closure.readiness_blockers?.length) {
+      card.append(detailList(t('readiness.blockers'), closure.readiness_blockers));
+    }
+    if (closure.diagnostics?.length) {
+      const diagnostics = closure.diagnostics.map(diagnostic =>
+        `${diagnostic.identity} · ${diagnostic.severity} · ${diagnostic.message}`,
+      );
+      card.append(detailList(t('diagnostics.title'), diagnostics));
+    }
     if (closure.reasons?.length) card.append(detailList(t('items.detail.reasons'), closure.reasons));
     root.append(card);
   });
+  const hidden = (trace.hidden_related_count || 0)
+    + (trace.hidden_closure_count || 0)
+    + (trace.hidden_closure_target_count || 0);
+  if (hidden) {
+    const notice = document.createElement('p');
+    notice.className = 'notice warn';
+    notice.textContent = t('items.detail.hidden').replace('{count}', String(hidden));
+    root.append(notice);
+  }
   if (!(trace.closures || []).length) root.append(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: t('items.detail.trace_empty') }));
 }
 
-function renderSourceInspector(root, state, onClose) {
+function renderSourceInspector(root, state, onClose, onLocationChange = syncSpecificationLocation) {
   root.className = 'canvas specification-source-inspector';
   const target = state.specificationSourceTarget;
   if (!target) {
@@ -1348,7 +1402,7 @@ function renderSourceInspector(root, state, onClose) {
     state.specificationTraceNode = null;
     state.specificationSourceFocusKey = focusKey;
     onClose?.();
-    syncSpecificationLocation(state);
+    onLocationChange(state);
     state.render();
     setTimeout(() => {
       const control = [...document.querySelectorAll('[data-source-target]')]
@@ -1393,6 +1447,7 @@ function renderSourceInspector(root, state, onClose) {
 }
 
 function renderSpecificationWorkspace(root, state, selected, options) {
+  const onLocationChange = options.onLocationChange || ((nextState, push = true) => syncSpecificationLocation(nextState, push));
   if (!state.specificationSourceTarget && state.specificationTraceNode) {
     state.specificationSourceTarget = specificationTarget(state, state.specificationTraceNode) || null;
   }
@@ -1447,7 +1502,7 @@ function renderSpecificationWorkspace(root, state, selected, options) {
     state.specificationDetailTab = tabName;
     state.specificationTraceNode = null;
     state.specificationSourceTarget = null;
-    syncSpecificationLocation(state);
+    onLocationChange(state);
     state.render();
     if (focus) setTimeout(() => document.querySelector(`[data-detail-tab="${tabName}"]`)?.focus(), 0);
   };
@@ -1492,13 +1547,13 @@ function renderSpecificationWorkspace(root, state, selected, options) {
     state.specificationTrace = null;
     state.specificationTraceRoot = null;
     state.specificationSourceTarget = null;
-    syncSpecificationLocation(state);
+    onLocationChange(state);
     state.render();
   });
   const onTarget = options.onTarget || (target => {
     state.specificationTraceNode = target.reference;
     state.specificationSourceTarget = target;
-    syncSpecificationLocation(state);
+    onLocationChange(state);
     state.render();
   });
   const rememberTarget = target => {
@@ -1516,16 +1571,16 @@ function renderSpecificationWorkspace(root, state, selected, options) {
       state.specificationSourceTarget = node.source_target ? specificationTarget(state, node.source_target) : null;
       if (node.source_target) state.specificationSourceFocusKey = node.source_target;
       if (node.item_id && node.item_id !== selected.id && node.kind === 'item') state.selectedSpecification = node.item_id;
-      syncSpecificationLocation(state);
+      onLocationChange(state);
       state.render();
-    });
+    }, onLocationChange);
   } else renderEvidence(body, state, selected);
   main.append(body);
   shell.append(main);
   if (state.specificationSourceTarget) {
     const inspector = document.createElement('aside');
     inspector.className = 'canvas specification-detail-inspector';
-    renderSourceInspector(inspector, state, options.onSourceClose);
+    renderSourceInspector(inspector, state, options.onSourceClose, onLocationChange);
     shell.append(inspector);
   }
   root.append(shell);
