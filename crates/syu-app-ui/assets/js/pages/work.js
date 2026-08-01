@@ -1,6 +1,11 @@
 import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 import { renderDiff } from '../components/diff.js';
-import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
+import {
+  renderEditor,
+  renderSourceDetail,
+  renderSpecificationDetail,
+  renderTargetSuggestions,
+} from './specifications.js';
 import { renderReadinessPage } from './readiness.js';
 import { renderDiagnostics } from './diagnostics.js';
 
@@ -57,6 +62,182 @@ function openWorkDiff(state, force = false) {
   loadWorkDiff(state, force);
 }
 
+function journeyAnchorCandidates(state) {
+  return (state.journeyCandidates || []).flatMap(candidate => {
+    const item = candidate.item || candidate;
+    if (item.kind !== 'requirement' || item.status === 'deprecated') return [];
+    const anchors = candidate.stable_anchors || (item.criteria || []).map(criterion => criterion.anchor);
+    return anchors.map(anchor => ({
+      candidate,
+      item,
+      criterion: (item.criteria || []).find(value => value.anchor === anchor),
+    })).filter(value => value.criterion);
+  });
+}
+
+function candidateEvidence(candidate) {
+  if (candidate.evidence?.length) return candidate.evidence;
+  return (candidate.relevance || []).map(detail => ({ source: 'advisory', detail }));
+}
+
+async function discoverJourneyCandidates(state, query) {
+  const sequence = (state.journeyDiscoverySequence || 0) + 1;
+  state.journeyDiscoverySequence = sequence;
+  state.journeyQuery = query;
+  state.journeyIntentSearch = true;
+  state.journeyCandidateAnchor = null;
+  state.journeyCandidates = null;
+  state.journeyDiscoveryError = null;
+  state.journeyCreatedSpecification = null;
+  state.journeyAuthoringNotice = null;
+  state.targetSuggestions = null;
+  state.targetSuggestionSelection = [];
+  state.journeyDiscoveryLoading = true;
+  state.render();
+  try {
+    const candidates = await state.api.searchSpecificationCandidates(query, 'requirement');
+    if (state.journeyDiscoverySequence !== sequence) return;
+    state.journeyCandidates = candidates;
+  } catch (error) {
+    if (state.journeyDiscoverySequence !== sequence) return;
+    state.journeyDiscoveryError = error.message;
+    state.journeyCandidates = [];
+  }
+  if (state.journeyDiscoverySequence !== sequence) return;
+  state.journeyDiscoveryLoading = false;
+  state.render();
+}
+
+async function continueJourneyAfterAuthoring(state, patch) {
+  const criterion = patch.kind === 'add_criterion'
+    ? patch.criterion
+    : patch.kind === 'create_requirement'
+      ? patch.criteria?.[0]
+      : patch.kind === 'create_feature'
+        ? (state.projection.specifications?.specifications || [])
+          .flatMap(item => item.criteria || [])
+          .find(value => value.anchor === patch.criterion_anchor)
+        : null;
+  const criterionAnchor = patch.kind === 'create_feature'
+    ? patch.criterion_anchor
+    : criterion
+      ? `${patch.kind === 'add_criterion' ? patch.requirement_id : patch.id}#criterion.${criterion.id}`
+      : null;
+  const requirementId = patch.kind === 'add_criterion'
+    ? patch.requirement_id
+    : patch.kind === 'create_requirement'
+      ? patch.id
+      : null;
+  state.specificationEditor = null;
+  state.specificationPreview = null;
+  state.journeyQuery = criterion?.statement || patch.title || state.journeyQuery;
+  state.journeyCreatedSpecification = requirementId || (patch.kind === 'create_feature' ? patch.id : null);
+  state.journeyAuthoringNotice = patch.kind === 'create_feature'
+    ? t('journey.created_feature_linked')
+    : t('journey.created_requirement');
+  state.journeyCandidateAnchor = criterionAnchor;
+  state.journeyCandidates = await state.api.searchSpecificationCandidates(state.journeyQuery, 'requirement');
+  state.journeyDiscoveryError = null;
+  if (patch.kind === 'create_feature' && !criterionAnchor) {
+    state.selectedSpecification = patch.id;
+    state.go('specifications');
+    return;
+  }
+  if (criterionAnchor) {
+    await reviewJourneyTargetSuggestions(state, criterionAnchor);
+  } else {
+    state.render();
+  }
+}
+
+async function reviewJourneyTargetSuggestions(state, anchor) {
+  state.journeyCandidateAnchor = anchor;
+  state.journeyTargetSuggestionsLoading = true;
+  state.specificationError = null;
+  state.targetSuggestions = null;
+  state.targetSuggestionSelection = [];
+  state.render();
+  try {
+    const suggestions = await state.api.readTargetSuggestions(anchor);
+    state.targetSuggestions = suggestions;
+    state.targetSuggestionSelection = (suggestions.suggestions || []).map(candidate => candidate.id);
+  } catch (error) {
+    state.specificationError = error.message;
+  }
+  state.journeyTargetSuggestionsLoading = false;
+  state.render();
+}
+
+function openJourneyAuthoring(state, mode, requirementId = null, options = {}) {
+  state.specificationEditor = mode === 'add-criterion'
+    ? { mode, requirementId, governedBy: [] }
+    : {
+      mode: 'create',
+      createKind: mode,
+      governedBy: [],
+      draft: options.criterionAnchor
+        ? { criterion_anchor: options.criterionAnchor }
+        : undefined,
+    };
+  state.specificationEditor.journey = true;
+  state.specificationEditor.afterApply = continueJourneyAfterAuthoring;
+  state.specificationEditor.onClose = nextState => {
+    nextState.specificationEditor = null;
+    nextState.specificationPreview = null;
+    nextState.render();
+  };
+  state.specificationPreview = null;
+  state.render();
+}
+
+function renderNoMatchRecovery(root, state) {
+  root.append(element('p', 'empty-state', t('journey.no_match')));
+  const recovery = element('section', 'journey-recovery card');
+  recovery.append(element('h3', null, t('journey.no_match.title')));
+  recovery.append(element('p', null, t('journey.no_match.explanation')));
+  const requirements = (state.projection.specifications?.specifications || [])
+    .filter(item => item.kind === 'requirement' && item.status !== 'deprecated');
+  const availableCriteria = requirements.flatMap(item => item.criteria || []);
+  if (requirements.length) {
+    const label = element('label', null, t('journey.no_match.requirement'));
+    const select = document.createElement('select');
+    select.className = 'native-select';
+    requirements.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.title;
+      option.selected = item.id === state.journeyFallbackRequirement;
+      select.append(option);
+    });
+    if (!state.journeyFallbackRequirement) state.journeyFallbackRequirement = requirements[0].id;
+    select.addEventListener('change', () => { state.journeyFallbackRequirement = select.value; });
+    label.append(select);
+    recovery.append(label);
+    recovery.append(button(t('journey.no_match.add_criterion'), () => {
+      openJourneyAuthoring(state, 'add-criterion', state.journeyFallbackRequirement);
+    }, true, '+'));
+  }
+  const choices = element('div', 'journey-actions');
+  choices.append(button(
+    t('journey.no_match.create_requirement'),
+    () => openJourneyAuthoring(state, 'requirement'),
+    false,
+    '+',
+  ));
+  if (availableCriteria.length) {
+    choices.append(button(
+      t('journey.no_match.create_feature'),
+      () => openJourneyAuthoring(state, 'feature', null, {
+        criterionAnchor: availableCriteria[0].anchor,
+      }),
+      false,
+      '+',
+    ));
+  }
+  recovery.append(choices);
+  root.append(recovery);
+}
+
 function run(state, action) {
   return state.runAction(
     () => state.api.runJourneyAction(state.projection, action),
@@ -82,15 +263,90 @@ function dispatchJourneyAction(state, action) {
 
 function renderStart(root, journey, state) {
   const action = journey?.primary_action;
-  if (!action) return;
-  const empty = element('section', 'context-empty-state work-start');
-  empty.append(
-    element('span', 'context-empty-icon', '◈'),
-    element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
-    element('p', null, actionText(action, 'explanation')),
-    button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
-  );
-  root.append(empty);
+  if (journey?.current_step === 'select_specification' && action && !state.journeyIntentSearch) {
+    const empty = element('section', 'context-empty-state work-start');
+    empty.append(
+      element('span', 'context-empty-icon', '◈'),
+      element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
+      element('p', null, actionText(action, 'explanation')),
+      button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
+      button(t('journey.action.describe_intent'), () => {
+        state.journeyIntentSearch = true;
+        state.render();
+      }, false, '⌕'),
+    );
+    root.append(empty);
+    return;
+  }
+  root.append(element('p', 'journey-copy', t('journey.intro')));
+  const form = element('form', 'journey-intake');
+  const label = element('label', null, t('journey.prompt'));
+  const input = document.createElement('textarea');
+  input.rows = 3;
+  input.value = state.journeyQuery || '';
+  input.placeholder = t('journey.placeholder');
+  label.append(input);
+  form.append(label);
+  form.append(button(t('journey.find'), event => {
+    event.preventDefault();
+    discoverJourneyCandidates(state, input.value.trim());
+  }, true, '⌕'));
+  form.addEventListener('submit', event => event.preventDefault());
+  root.append(form);
+  if (state.journeyAuthoringNotice) {
+    root.append(element('p', 'status-message status-success', state.journeyAuthoringNotice));
+  }
+  if (!String(state.journeyQuery || '').trim()) return;
+  if (state.journeyDiscoveryLoading) {
+    root.append(element('p', 'empty-state', t('common.loading')));
+    return;
+  }
+  if (state.journeyDiscoveryError) {
+    root.append(element('p', 'status-message status-error', state.journeyDiscoveryError));
+    return;
+  }
+  if (state.journeyCandidates === null) return;
+  const candidates = journeyAnchorCandidates(state);
+  root.append(element('h2', 'journey-section-title', t('journey.choose')));
+  if (!candidates.length && !state.targetSuggestions) {
+    state.journeyCandidateAnchor = null;
+    renderNoMatchRecovery(root, state);
+    return;
+  }
+  candidates.slice(0, 6).forEach(({ candidate, item, criterion }) => {
+    const selected = criterion.anchor === state.journeyCandidateAnchor;
+    const card = element('article', `journey-card${selected ? ' selected' : ''}`);
+    card.append(element('h3', null, item.title));
+    const meta = element('div', 'meta-line');
+    meta.append(element(
+      'span',
+      `chip status-component status-${item.status || 'planned'}`,
+      localizeEnum('status', item.status || item.kind),
+    ));
+    card.append(meta);
+    card.append(element('p', 'path', criterion.anchor));
+    const rationale = element('ul', 'compact-list');
+    candidateEvidence(candidate).forEach(entry => {
+      rationale.append(element('li', null, `${entry.source}: ${entry.detail}`));
+    });
+    card.append(rationale);
+    card.append(button(t('journey.preview'), () => {
+      state.journeyCandidateAnchor = criterion.anchor;
+      state.targetSuggestions = null;
+      state.targetSuggestionSelection = [];
+      state.journeyContextTab = 'specification';
+      state.render();
+    }, selected, '◈'));
+    root.append(card);
+  });
+  if (state.journeyTargetSuggestionsLoading) {
+    root.append(element('p', 'empty-state', t('common.loading')));
+  } else if (state.specificationError) {
+    root.append(element('p', 'status-message status-error', state.specificationError));
+  } else if (state.targetSuggestions) {
+    root.append(element('h2', 'journey-section-title', t('items.suggestions.title')));
+    renderTargetSuggestions(root, state);
+}
 }
 
 function progressIcon(status) {
@@ -430,8 +686,19 @@ function renderScopeDetail(root, journey, state, work) {
 
 function renderSpecification(root, workspace, journey, state, work) {
   const specification = journey?.related_specification;
-  const specificationAnchor = journey?.advanced?.specification_anchor || null;
-  const contextAnchor = specificationAnchor;
+  const specificationAnchor = journey?.advanced?.specification_anchor
+    || state.journeyCandidateAnchor
+    || null;
+  const createdItem = state.journeyCreatedSpecification
+    ? (state.projection.specifications?.specifications || [])
+      .find(item => item.id === state.journeyCreatedSpecification)
+    : null;
+  const candidates = String(state.journeyQuery || '').trim()
+    ? journeyAnchorCandidates(state)
+    : [];
+  const candidate = candidates.find(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)
+    || null;
+  const contextAnchor = specificationAnchor || candidate?.criterion.anchor || null;
   if (state.journeySpecificationAnchor !== specificationAnchor) {
     state.journeySpecificationAnchor = specificationAnchor;
     state.journeySpecificationExpanded = false;
@@ -440,7 +707,17 @@ function renderSpecification(root, workspace, journey, state, work) {
     state.journeyContextHistory = [];
     resetContextSource(state);
   }
-  const hasContext = Boolean(specification);
+  if (!specification && candidate && state.journeyContextItemId !== candidate.item.id) {
+    state.journeyContextItemId = candidate.item.id;
+    state.journeyContextHistory = [];
+    resetContextSource(state);
+  }
+  if (!specification && !candidate && createdItem && state.journeyContextItemId !== createdItem.id) {
+    state.journeyContextItemId = createdItem.id;
+    state.journeyContextHistory = [];
+    resetContextSource(state);
+  }
+  const hasContext = Boolean(specification || candidate || createdItem);
   const hasScope = Boolean(journey?.approved_scope && work?.plan?.slices?.length);
   const hasWorkInsights = Boolean(work?.request);
   if (!hasScope && state.journeyContextTab === 'scope') state.journeyContextTab = 'specification';
@@ -453,6 +730,8 @@ function renderSpecification(root, workspace, journey, state, work) {
   const header = element('header', 'journey-specification-head');
   const heading = element('div');
   heading.append(element('p', 'eyebrow', t('journey.context')));
+  if (candidate && !specification) heading.append(element('h2', null, t('journey.specification.preview')));
+  if (createdItem && !specification && !candidate) heading.append(element('h2', null, t('journey.specification.created')));
   header.append(heading);
   const toggle = element('button', 'journey-specification-toggle');
   toggle.type = 'button';
@@ -517,6 +796,7 @@ function renderSpecification(root, workspace, journey, state, work) {
   }
   const items = state.projection.specifications?.specifications || [];
   const selected = items.find(item => item.id === state.journeyContextItemId)
+    || createdItem
     || items.find(item => item.id === contextAnchor?.split('#')[0]);
   if (!selected) {
     body.append(element('p', 'context-empty', t('journey.specification.empty')));
@@ -536,6 +816,11 @@ function renderSpecification(root, workspace, journey, state, work) {
     readOnly: true,
     hideHeading: false,
     highlightedAnchor: contextAnchor,
+    action: candidate && !specification ? {
+      label: t('items.suggestions.review'),
+      icon: '◎',
+      onClick: () => reviewJourneyTargetSuggestions(state, candidate.criterion.anchor),
+    } : null,
     onItem: itemId => {
       if (itemId === state.journeyContextItemId) return;
       state.journeyContextHistory.push(state.journeyContextItemId);
@@ -552,6 +837,9 @@ function renderSpecification(root, workspace, journey, state, work) {
   });
   body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
   body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
+  if (candidate && !specification) {
+    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
+  }
   root.append(body);
 }
 
@@ -643,7 +931,10 @@ export function renderWork(work, state) {
   if (!root) return;
   const content = element('div', 'journey');
   if (state.error) content.append(element('p', 'status-message status-error', state.error.message));
-  if (!journey || journey.current_step === 'select_specification') renderStart(content, journey, state);
+  if (state.specificationEditor?.journey) renderEditor(content, state);
+  else if (!journey || journey.current_step === 'describe' || journey.current_step === 'select_specification') {
+    renderStart(content, journey, state);
+  }
   else renderJourney(content, journey, state, work);
   replace(root, content);
   if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state, work);

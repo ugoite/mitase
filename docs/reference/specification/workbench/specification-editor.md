@@ -62,6 +62,8 @@ description: "Generated reference for docs/syu/features/workbench/specification-
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
         - **id**: specification-candidate-preview
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -71,6 +73,15 @@ description: "Generated reference for docs/syu/features/workbench/specification-
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
+        - **id**: criterion-authoring
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: specification_patch_content
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.recovery-authoring
       - **owns**:
         - **id**: app-ui-components-module
           - **adapter**: rust
@@ -168,6 +179,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
     - id: specification-candidate-preview
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -177,6 +190,15 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+    - id: criterion-authoring
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: specification_patch_content
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.recovery-authoring
     owns:
     - id: app-ui-components-module
       adapter: rust
