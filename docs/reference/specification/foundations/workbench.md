@@ -268,15 +268,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-workbench-server
-                  - **test**: tests::workbench_accessible_navigation
-            - **kind**: verifies
-              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
-              - **covers**:
-                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
@@ -356,13 +348,13 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-011
   - **title**: Scoped agent evidence
-  - **description**: Workbench exposes the approved agent boundary and its server-owned execution evidence.
+  - **description**: Workbench exposes the approved agent boundary and its server-owned execution evidence, including lifecycle proofs for approved target creation and deletion.
   - **priority**: critical
   - **status**: implemented
   - **criteria**:
     - **id**: scoped-agent
       - **kind**: security
-      - **statement**: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
+      - **statement**: Workbench can start a scoped agent only for an approved slice, applies only its exact Modify, Add, or Remove transitions, and shows accepted, rejected, blocked, and expansion events.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-013
@@ -382,6 +374,70 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-014
+  - **title**: Advisory multilingual specification discovery
+  - **description**: Workbench helps people discover a suitable specification across wording and language differences without treating a ranked result as executable scope.
+  - **priority**: high
+  - **status**: implemented
+  - **criteria**:
+    - **id**: advisory-multilingual-discovery
+      - **kind**: behavior
+      - **statement**: Candidate discovery combines disclosed lexical and deterministic multilingual semantic signals, then shows graph and completion-history context together with the exact criterion anchors that a person may choose.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: recovery-authoring
+      - **kind**: behavior
+      - **statement**: A no-match journey keeps authoring in context by offering a criterion addition to an existing Requirement or a new Requirement or Feature through the validated specification authoring boundary.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: exact-anchor-approval
+      - **kind**: security
+      - **statement**: Discovery results and target suggestions remain advisory, and no discovery result creates a WorkRequest until a person explicitly selects one existing exact criterion anchor and approves its exact targets.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+  - **bindings**:
+    - **id**: discovery-check
+      - **role**: verification
+      - **facet**: verification
+      - **responsibility**: Verify multilingual advisory ranking, false-positive recovery, typed authoring, and exact-anchor scope protection.
+      - **targets**:
+        - **id**: discovery-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidates
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.recovery-authoring
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.criterion-authoring
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_specification_candidates_support_search_edit_and_create
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
+              - **covers**:
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-discovery
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-target-suggestions
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope
+- **id**: REQ-WORKBENCH-015
   - **title**: Canonical specification detail workspace
   - **description**: The specification detail surface is one bounded, server-owned workspace for canonical trace, evidence, and typed nested edits.
   - **priority**: critical
@@ -609,11 +665,7 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
-              - kind: verifies
-                criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
-                covers:
-                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
   - id: REQ-WORKBENCH-009
     title: Durable completion history
@@ -675,13 +727,13 @@ requirements:
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-011
     title: Scoped agent evidence
-    description: Workbench exposes the approved agent boundary and its server-owned execution evidence.
+    description: Workbench exposes the approved agent boundary and its server-owned execution evidence, including lifecycle proofs for approved target creation and deletion.
     priority: critical
     status: implemented
     criteria:
       - id: scoped-agent
         kind: security
-        statement: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
+        statement: Workbench can start a scoped agent only for an approved slice, applies only its exact Modify, Add, or Remove transitions, and shows accepted, rejected, blocked, and expansion events.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-013
     title: Guided non-programmer journey
@@ -698,6 +750,54 @@ requirements:
         statement: After one exact criterion is selected, Workbench renders the linked specification detail in a read-only split or collapsed narrow-screen context and lets people move between the requirement, feature, exact implementation, and verification evidence without leaving the work journey.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-014
+    title: Advisory multilingual specification discovery
+    description: Workbench helps people discover a suitable specification across wording and language differences without treating a ranked result as executable scope.
+    priority: high
+    status: implemented
+    criteria:
+      - id: advisory-multilingual-discovery
+        kind: behavior
+        statement: Candidate discovery combines disclosed lexical and deterministic multilingual semantic signals, then shows graph and completion-history context together with the exact criterion anchors that a person may choose.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: recovery-authoring
+        kind: behavior
+        statement: A no-match journey keeps authoring in context by offering a criterion addition to an existing Requirement or a new Requirement or Feature through the validated specification authoring boundary.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: exact-anchor-approval
+        kind: security
+        statement: Discovery results and target suggestions remain advisory, and no discovery result creates a WorkRequest until a person explicitly selects one existing exact criterion anchor and approves its exact targets.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: discovery-check
+        role: verification
+        facet: verification
+        responsibility: Verify multilingual advisory ranking, false-positive recovery, typed authoring, and exact-anchor scope protection.
+        targets:
+          - id: discovery-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
+                covers:
+                  - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidates
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
+              - kind: verifies
+                criterion: REQ-WORKBENCH-014#criterion.recovery-authoring
+                covers:
+                  - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.criterion-authoring
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_specification_candidates_support_search_edit_and_create } }
+              - kind: verifies
+                criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
+                covers:
+                  - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
+                  - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
+                  - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-discovery
+                  - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-target-suggestions
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
+
+  - id: REQ-WORKBENCH-015
     title: Canonical specification detail workspace
     description: The specification detail surface is one bounded, server-owned workspace for canonical trace, evidence, and typed nested edits.
     priority: critical

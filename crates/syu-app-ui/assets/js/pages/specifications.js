@@ -441,7 +441,13 @@ function createWizardPatch(editor, form) {
     status: 'planned',
   };
   if (editor.createKind === 'feature') {
-    return { kind: 'create_feature', ...base, summary: formValue(form, 'summary') };
+    return {
+      kind: 'create_feature',
+      ...base,
+      summary: formValue(form, 'summary'),
+      ...(editor.draft?.criterion_anchor ? { criterion_anchor: editor.draft.criterion_anchor } : {}),
+      ...(editor.draft?.target ? { target: editor.draft.target } : {}),
+    };
   }
   return {
     kind: 'create_requirement',
@@ -758,13 +764,32 @@ function renderEditor(root, state) {
           state.specificationPreview.patch,
           state.specificationPreview.result.preview_token,
         );
+        const appliedPatch = state.specificationPreview.patch;
+        const previousItemId = state.specificationEditor?.itemId || null;
+        const afterApply = state.specificationEditor?.afterApply;
         state.projection = await state.api.readProjection();
         state.specificationCandidates = null;
         state.specificationTrace = null;
         state.specificationTraceRoot = null;
         state.specificationEditor = null;
         state.specificationPreview = null;
-        state.selectedSpecification = null;
+        if (afterApply) {
+          await afterApply(state, appliedPatch);
+          return;
+        }
+        const patchItemId = appliedPatch.kind === 'create_requirement' || appliedPatch.kind === 'create_feature'
+          ? appliedPatch.id
+          : appliedPatch.item_id || appliedPatch.itemId || previousItemId;
+        const items = state.projection.specifications?.specifications || [];
+        const selected = items.find(item => item.id === patchItemId)
+          || items.find(item => item.id === previousItemId)
+          || items.find(item => item.status === 'implemented' && item.criteria?.length)
+          || items[0]
+          || null;
+        state.selectedSpecification = selected?.id || null;
+        state.specificationDetailTab = 'information';
+        state.specificationTraceNode = null;
+        syncSpecificationLocation(state, false);
     }), 'btn primary specification-apply');
     actions.append(apply);
   }
@@ -1369,13 +1394,31 @@ function renderEvidence(root, state, selected) {
         `${diagnostic.identity} · ${diagnostic.severity} · ${diagnostic.message}`,
       );
       card.append(detailList(t('diagnostics.title'), diagnostics));
+      const reasons = closure.diagnostics
+        .map(diagnostic => diagnostic.reason)
+        .filter(Boolean);
+      if (reasons.length) card.append(detailList(t('items.detail.reason'), reasons));
     }
     if (closure.reasons?.length) card.append(detailList(t('items.detail.reasons'), closure.reasons));
+    const hiddenClosure = (closure.hidden_target_count || 0)
+      + (closure.hidden_reason_count || 0)
+      + (closure.hidden_readiness_count || 0)
+      + (closure.hidden_diagnostic_count || 0);
+    if (hiddenClosure) {
+      const notice = document.createElement('p');
+      notice.className = 'notice warn';
+      notice.textContent = t('items.detail.hidden').replace('{count}', String(hiddenClosure));
+      card.append(notice);
+    }
     root.append(card);
   });
   const hidden = (trace.hidden_related_count || 0)
+    + (trace.hidden_related_claim_count || 0)
     + (trace.hidden_closure_count || 0)
-    + (trace.hidden_closure_target_count || 0);
+    + (trace.hidden_closure_target_count || 0)
+    + (trace.hidden_reason_count || 0)
+    + (trace.hidden_readiness_count || 0)
+    + (trace.hidden_diagnostic_count || 0);
   if (hidden) {
     const notice = document.createElement('p');
     notice.className = 'notice warn';
@@ -1447,7 +1490,10 @@ function renderSourceInspector(root, state, onClose, onLocationChange = syncSpec
 }
 
 function renderSpecificationWorkspace(root, state, selected, options) {
-  const onLocationChange = options.onLocationChange || ((nextState, push = true) => syncSpecificationLocation(nextState, push));
+  const workspaceAdapter = options.workspaceAdapter;
+  const onLocationChange = workspaceAdapter?.syncLocation
+    || options.onLocationChange
+    || ((nextState, push = true) => syncSpecificationLocation(nextState, push));
   if (!state.specificationSourceTarget && state.specificationTraceNode) {
     state.specificationSourceTarget = specificationTarget(state, state.specificationTraceNode) || null;
   }
@@ -1542,7 +1588,7 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   body.setAttribute('role', 'tabpanel');
   body.setAttribute('aria-labelledby', `specification-detail-tab-${state.specificationDetailTab}`);
   body.tabIndex = 0;
-  const onItem = options.onItem || (itemId => {
+  const onItem = workspaceAdapter?.setSelectedItem || options.onItem || (itemId => {
     state.selectedSpecification = itemId;
     state.specificationTrace = null;
     state.specificationTraceRoot = null;
@@ -1550,7 +1596,7 @@ function renderSpecificationWorkspace(root, state, selected, options) {
     onLocationChange(state);
     state.render();
   });
-  const onTarget = options.onTarget || (target => {
+  const onTarget = workspaceAdapter?.openTarget || options.onTarget || (target => {
     state.specificationTraceNode = target.reference;
     state.specificationSourceTarget = target;
     onLocationChange(state);
@@ -1570,8 +1616,12 @@ function renderSpecificationWorkspace(root, state, selected, options) {
       state.specificationTraceNode = node.id;
       state.specificationSourceTarget = node.source_target ? specificationTarget(state, node.source_target) : null;
       if (node.source_target) state.specificationSourceFocusKey = node.source_target;
-      if (node.item_id && node.item_id !== selected.id && node.kind === 'item') state.selectedSpecification = node.item_id;
-      onLocationChange(state);
+      if (node.item_id && node.item_id !== selected.id && node.kind === 'item') {
+        onItem(node.item_id);
+        return;
+      }
+      if (workspaceAdapter) workspaceAdapter.setSelectedNode(node.id);
+      else onLocationChange(state);
       state.render();
     }, onLocationChange);
   } else renderEvidence(body, state, selected);

@@ -40,6 +40,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
     - id: specification-candidate-preview
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -49,78 +51,100 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
-    - id: specification-nested-edit
+    - id: criterion-authoring
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector:
         kind: symbol
-        name: nested_patch_content
+        name: specification_patch_content
       claims:
       - kind: satisfies
-        criterion: REQ-WORKBENCH-014#criterion.typed-nested-specification-edit
-    - id: specification-detail-trace
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector:
-        kind: symbol
-        name: specification_trace_view
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
-    - id: specification-detail-workspace
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
-      selector:
-        kind: symbol
-        name: renderSpecificationWorkspace
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
+        criterion: REQ-WORKBENCH-014#criterion.recovery-authoring
     owns:
-    - id: assets-page-specifications-module
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
-      selector:
-        kind: module
-        name: '*'
-  - id: detail-verification
-    role: verification
-    facet: verification
-    responsibility: Verify canonical detail trace, typed nested edits, and browser detail contracts.
-    targets:
-    - id: detail-trace-test
+    - id: server-candidate-evidence
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
-      selector:
-        kind: symbol
-        name: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
-      claims:
-      - kind: verifies
-        criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
-        covers:
-        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-trace
-        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-workspace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
-      - kind: verifies
-        criterion: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
-        covers:
-        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-workspace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
-    - id: detail-nested-edit-test
+      selector: { kind: module, name: 'lib::CandidateEvidence' }
+    - id: server-discovery-concepts
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
-      selector:
-        kind: symbol
-        name: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps
-      claims:
-      - kind: verifies
-        criterion: REQ-WORKBENCH-014#criterion.typed-nested-specification-edit
-        covers:
-        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-nested-edit
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps } }
-    owns:
+      selector: { kind: module, name: 'lib::DISCOVERY_CONCEPTS' }
+    - id: server-discovery-concept
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::DiscoveryConcept' }
+    - id: server-edit-patch
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::EditPatch' }
+    - id: server-feature-target-draft
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::FeatureTargetDraft' }
+    - id: server-specification-candidate-query
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SpecificationCandidateQuery' }
+    - id: server-specification-candidate-view
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SpecificationCandidateView' }
+    - id: server-api-specification
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_specification' }
+    - id: server-api-specification-candidate-apply
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_specification_candidate_apply' }
+    - id: server-ascii-tokens
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ascii_tokens' }
+    - id: server-candidate-field-weight
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::candidate_field_weight' }
+    - id: server-changed-specification-anchors
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::changed_specification_anchors' }
+    - id: server-discovery-history
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_history' }
+    - id: server-discovery-query-exact-matches
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_query_exact_matches' }
+    - id: server-discovery-query-matches
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_query_matches' }
+    - id: server-discovery-term-matches
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_term_matches' }
+    - id: server-edit-content
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::edit_content' }
+    - id: server-matching-discovery-concepts
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::matching_discovery_concepts' }
+    - id: server-patch-path
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::patch_path' }
+    - id: server-specification-impact
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::specification_impact' }
+    - id: server-validate-feature-criterion-link
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::validate_feature_criterion_link' }
     - id: app-ui-components-module
       adapter: rust
       path: crates/syu-app-ui/src/components.rs
@@ -171,3 +195,84 @@ features:
       path: crates/syu-app-ui/src/shell.rs
       selector:
         kind: file
+
+- id: FEAT-WORKBENCH-SPEC-DETAIL-001
+  title: Canonical specification detail workspace
+  summary: Present a bounded server-owned intent-to-evidence trace and typed nested edits without changing the meaning of existing discovery contracts.
+  status: implemented
+  bindings:
+  - id: detail-workspace
+    role: implementation
+    facet: specification-detail
+    responsibility: Render the canonical detail, trace, item-scoped evidence, and strict typed edit workspace.
+    targets:
+    - id: detail-trace
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: specification_trace_view }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+    - id: detail-nested-edit
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: nested_patch_content }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
+    - id: detail-browser-workspace
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector: { kind: symbol, name: renderSpecificationWorkspace }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+  - id: detail-verification
+    role: verification
+    facet: verification
+    responsibility: Verify the bounded trace, item-scoped evidence, typed nested edits, and route-aware browser workspace.
+    targets:
+    - id: detail-trace-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::specification_trace_reaches_external_workbench_targets_from_spec_index }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
+    - id: detail-nested-edit-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::typed_nested_edit_round_trip_covers_all_entity_variants }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-nested-edit
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_edit_round_trip_covers_all_entity_variants } }
+    - id: detail-browser-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::workbench_http_projection_readiness_and_esm_flow }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_http_projection_readiness_and_esm_flow } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_http_projection_readiness_and_esm_flow } }

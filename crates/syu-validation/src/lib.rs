@@ -2,7 +2,8 @@
 mod readiness;
 use anyhow::{Context, Result, bail};
 pub use readiness::{
-    ReadinessAxis, ReadinessAxisId, ReadinessReport, evaluate as evaluate_readiness, required_axes,
+    ReadinessAxis, ReadinessAxisId, ReadinessReport, ReadinessSubject,
+    evaluate as evaluate_readiness, required_axes,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};

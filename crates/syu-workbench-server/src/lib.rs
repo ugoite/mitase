@@ -27,9 +27,10 @@ use syu_planner::{
 use syu_project_model::{ChangeBaseline, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, CriterionKind,
-    ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy, Policy, Priority,
-    Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument, SpecId, TargetClaim,
+    ArtifactBinding, ArtifactTarget, BindingRole, BoundTargetRef, Contract, ContractKind,
+    Criterion, CriterionKind, ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy,
+    Policy, Priority, RepoPath, Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument,
+    SpecId, TargetClaim,
 };
 use syu_validation::{ChangeStatus, PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
@@ -579,8 +580,12 @@ pub enum EditPatch {
         anchor: String,
         fields: AnchorPatchFields,
     },
+    AddCriterion {
+        requirement_id: SpecId,
+        criterion: NewCriterion,
+    },
     /// Typed nested edits are the only supported way to change bindings,
-    /// ownership scopes, targets, claims, or contracts.  The payload is
+    /// ownership scopes, targets, claims, or contracts. The payload is
     /// intentionally schema-shaped; arbitrary YAML maps are not accepted.
     Nested { item_id: String, edit: NestedEdit },
     CreateRequirement {
@@ -600,6 +605,16 @@ pub enum EditPatch {
         summary: String,
         #[serde(default)]
         status: Option<ItemStatus>,
+        #[serde(default)]
+        criterion_anchor: Option<String>,
+        #[serde(default)]
+        target: Option<FeatureTargetDraft>,
+    },
+    AddFeatureTarget {
+        document: String,
+        feature_id: SpecId,
+        criterion_anchor: String,
+        target: FeatureTargetDraft,
     },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
@@ -677,6 +692,15 @@ pub struct NewCriterion {
     pub statement: String,
     #[serde(default)]
     pub governed_by: Vec<SpecAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureTargetDraft {
+    pub id: LocalId,
+    pub adapter: String,
+    pub path: String,
+    pub selector: Selector,
 }
 
 /// Typed edit payloads keep item-kind/schema semantics on the server. The
@@ -1172,6 +1196,12 @@ pub struct SpecificationCandidateView {
     pub item: ItemSummary,
     pub matches: Vec<CandidateMatch>,
     pub relevance: Vec<String>,
+    /// Ranking is advisory.  It is intentionally separated from the stable
+    /// criterion anchors that a person must explicitly select before work can
+    /// be created.
+    pub score: usize,
+    pub evidence: Vec<CandidateEvidence>,
+    pub stable_anchors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1181,6 +1211,164 @@ pub struct CandidateMatch {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateEvidence {
+    pub source: String,
+    pub detail: String,
+}
+
+#[derive(Clone, Copy)]
+struct DiscoveryConcept {
+    label: &'static str,
+    terms: &'static [&'static str],
+}
+
+// This intentionally small, deterministic glossary is a discovery aid, not
+// an authority on scope.  It keeps multilingual matching inspectable and
+// testable without turning an embedding or an LLM result into executable work.
+const DISCOVERY_CONCEPTS: &[DiscoveryConcept] = &[
+    DiscoveryConcept {
+        label: "behavior",
+        terms: &[
+            "behavior",
+            "behaviour",
+            "function",
+            "functional",
+            "動作",
+            "振る舞い",
+            "挙動",
+            "機能",
+        ],
+    },
+    DiscoveryConcept {
+        label: "validation",
+        terms: &[
+            "validate",
+            "validation",
+            "verify",
+            "verification",
+            "test",
+            "valid",
+            "検証",
+            "確認",
+            "テスト",
+            "有効",
+        ],
+    },
+    DiscoveryConcept {
+        label: "change",
+        terms: &[
+            "change",
+            "modify",
+            "update",
+            "implement",
+            "implementation",
+            "変更",
+            "改修",
+            "更新",
+            "実装",
+        ],
+    },
+    DiscoveryConcept {
+        label: "scope",
+        terms: &[
+            "scope", "boundary", "bounded", "plan", "planning", "範囲", "境界", "計画",
+        ],
+    },
+    DiscoveryConcept {
+        label: "security",
+        terms: &[
+            "security",
+            "secure",
+            "auth",
+            "permission",
+            "安全",
+            "認証",
+            "権限",
+        ],
+    },
+];
+
+fn matching_discovery_concepts(query: &str) -> Vec<&'static DiscoveryConcept> {
+    DISCOVERY_CONCEPTS
+        .iter()
+        .filter(|concept| {
+            concept
+                .terms
+                .iter()
+                .any(|term| discovery_term_matches(query, term))
+        })
+        .collect()
+}
+
+fn ascii_tokens(value: &str) -> Vec<&str> {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// English discovery terms are whole words. Japanese terms remain explicit
+/// glossary entries and use controlled substring matching because the
+/// Workbench does not promise a language-specific tokenizer.
+fn discovery_term_matches(text: &str, term: &str) -> bool {
+    if term.is_ascii() {
+        let tokens = ascii_tokens(text);
+        return tokens.iter().any(|token| token.eq_ignore_ascii_case(term));
+    }
+    text.contains(term)
+}
+
+fn discovery_query_matches(text: &str, query: &str) -> bool {
+    if !query.is_ascii() {
+        return text.to_lowercase().contains(&query.to_lowercase());
+    }
+    text.to_ascii_lowercase()
+        .contains(&query.to_ascii_lowercase())
+}
+
+fn discovery_query_exact_matches(text: &str, query: &str) -> bool {
+    if !query.is_ascii() {
+        return text.to_lowercase() == query.to_lowercase();
+    }
+    let text_tokens = ascii_tokens(text);
+    let query_tokens = ascii_tokens(query);
+    if query_tokens.is_empty() {
+        return false;
+    }
+    text_tokens.windows(query_tokens.len()).any(|window| {
+        window
+            .iter()
+            .zip(query_tokens.iter())
+            .all(|(text, query)| text.eq_ignore_ascii_case(query))
+    })
+}
+
+fn candidate_field_weight(kind: &str) -> usize {
+    match kind {
+        "item" => 7,
+        "title" => 6,
+        "criterion" => 5,
+        "summary" | "description" => 4,
+        "rule" | "principle" => 3,
+        _ => 1,
+    }
+}
+
+fn discovery_history(workspace: &SpecWorkspace) -> BTreeMap<String, usize> {
+    DeliveryStore::for_workspace(&workspace.root)
+        .and_then(|store| store.attempts())
+        .map(|attempts| {
+            let mut history = BTreeMap::new();
+            for attempt in attempts {
+                for evidence in attempt.report.demonstrated {
+                    *history.entry(evidence.anchor.to_string()).or_insert(0) += 1;
+                }
+            }
+            history
+        })
+        .unwrap_or_default()
+}
 #[derive(Debug, Clone, Deserialize)]
 pub struct SpecificationTraceQuery {
     #[serde(default)]
@@ -1207,8 +1395,12 @@ pub struct SpecificationTraceView {
     pub related: TraceRelatedView,
     pub closures: Vec<CriterionClosureView>,
     pub hidden_related_count: usize,
+    pub hidden_related_claim_count: usize,
     pub hidden_closure_count: usize,
     pub hidden_closure_target_count: usize,
+    pub hidden_reason_count: usize,
+    pub hidden_readiness_count: usize,
+    pub hidden_diagnostic_count: usize,
     pub truncated: bool,
     pub hidden_node_count: usize,
     pub hidden_edge_count: usize,
@@ -1220,6 +1412,7 @@ pub struct TraceRelatedView {
     pub implementation: Vec<TraceRelatedTargetView>,
     pub verification: Vec<TraceRelatedTargetView>,
     pub hidden_count: usize,
+    pub hidden_claim_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1282,6 +1475,26 @@ pub struct CriterionClosureView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationExecutionView {
+    /// Stable receipt-local identity; this is deliberately distinct from the
+    /// target so two executions of the same target cannot be conflated.
+    pub identity: String,
+    pub target: String,
+    /// The exact target/criterion pair selected for this execution. The
+    /// nested exact reference prevents two claims on the same target from
+    /// being conflated in the projection while retaining a criterion field
+    /// convenient for closure matching.
+    pub claim: Option<VerificationClaimView>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationClaimView {
+    pub target: String,
+    pub criterion: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceDiagnosticView {
     pub identity: String,
     pub severity: String,
@@ -1295,7 +1508,9 @@ async fn api_specification_candidates(
 ) -> Result<Json<Vec<SpecificationCandidateView>>, ApiError> {
     let snapshot = service.snapshot()?;
     let entries = snapshot.projection.specifications.specifications.clone();
-    let query_text = query.q.unwrap_or_default().trim().to_ascii_lowercase();
+    let query_text = query.q.unwrap_or_default().trim().to_lowercase();
+    let query_concepts = matching_discovery_concepts(&query_text);
+    let history = discovery_history(&snapshot.workspace);
     let kind_filter = query.kind.as_deref().filter(|kind| !kind.is_empty());
     let mut candidates = entries
         .into_iter()
@@ -1328,54 +1543,138 @@ async fn api_specification_candidates(
                     criterion.statement.clone(),
                 ));
             }
-            let matches = if query_text.is_empty() {
-                vec![CandidateMatch {
+            let mut matches = Vec::new();
+            let mut evidence = Vec::new();
+            let mut score = 0;
+            if query_text.is_empty() {
+                matches.push(CandidateMatch {
                     anchor: item.id.clone(),
                     kind: "item".into(),
                     text: item.title.clone(),
-                }]
+                });
+                evidence.push(CandidateEvidence {
+                    source: "available".into(),
+                    detail: "available specification".into(),
+                });
             } else {
-                fields
-                    .into_iter()
-                    .filter_map(|(anchor, kind, text)| {
-                        text.to_ascii_lowercase()
-                            .contains(&query_text)
-                            .then_some(CandidateMatch { anchor, kind, text })
-                    })
-                    .collect::<Vec<_>>()
-            };
+                for (anchor, kind, text) in &fields {
+                    if discovery_query_matches(text, &query_text) {
+                        let exact = discovery_query_exact_matches(text, &query_text);
+                        score += if exact {
+                            candidate_field_weight(kind)
+                        } else {
+                            (candidate_field_weight(kind) / 2).max(1)
+                        };
+                        matches.push(CandidateMatch {
+                            anchor: anchor.clone(),
+                            kind: kind.clone(),
+                            text: text.clone(),
+                        });
+                        evidence.push(CandidateEvidence {
+                            source: "lexical".into(),
+                            detail: if exact {
+                                format!("lexical {kind} match")
+                            } else {
+                                format!("lexical substring {kind} match")
+                            },
+                        });
+                    }
+                }
+                for concept in &query_concepts {
+                    let mut concept_matches = 0;
+                    for (anchor, _kind, text) in &fields {
+                        if concept
+                            .terms
+                            .iter()
+                            .any(|term| discovery_term_matches(text, term))
+                        {
+                            concept_matches += 1;
+                            if !matches.iter().any(|entry| {
+                                entry.anchor == *anchor
+                                    && entry.kind == "semantic"
+                                    && entry.text == *text
+                            }) {
+                                matches.push(CandidateMatch {
+                                    anchor: anchor.clone(),
+                                    kind: "semantic".into(),
+                                    text: text.clone(),
+                                });
+                            }
+                        }
+                    }
+                    if concept_matches > 0 {
+                        score += 3;
+                        evidence.push(CandidateEvidence {
+                            source: "semantic".into(),
+                            detail: format!(
+                                "semantic concept '{}' links the intent to {concept_matches} specification field(s)",
+                                concept.label
+                            ),
+                        });
+                    }
+                }
+            }
             if matches.is_empty() {
                 return None;
             }
-            let mut relevance = Vec::new();
-            if query_text.is_empty() {
-                relevance.push("available specification".into());
-            } else {
-                if item.id.to_ascii_lowercase() == query_text {
-                    relevance.push("exact item id".into());
-                } else if item.id.to_ascii_lowercase().contains(&query_text) {
-                    relevance.push("item id match".into());
-                }
-                if item.title.to_ascii_lowercase().contains(&query_text) {
-                    relevance.push("title match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "criterion") {
-                    relevance.push("criterion match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "rule") {
-                    relevance.push("rule match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "principle") {
-                    relevance.push("principle match".into());
-                }
-            }
-            let score = relevance.len();
+            let stable_anchors = item
+                .criteria
+                .iter()
+                .map(|criterion| criterion.anchor.clone())
+                .collect::<Vec<_>>();
+            let (implementation_targets, verification_targets) = stable_anchors.iter().fold(
+                (0, 0),
+                |(implementation, verification), anchor| {
+                    let anchor = anchor.parse::<SpecAnchor>().ok();
+                    let implementation = implementation
+                        + anchor
+                            .as_ref()
+                            .and_then(|anchor| {
+                                snapshot
+                                    .index
+                                    .criteria_to_implementation_targets
+                                    .get(anchor)
+                            })
+                            .map_or(0, Vec::len);
+                    let verification = verification
+                        + anchor
+                            .as_ref()
+                            .and_then(|anchor| {
+                                snapshot.index.criteria_to_verification_targets.get(anchor)
+                            })
+                            .map_or(0, Vec::len);
+                    (implementation, verification)
+                },
+            );
+            evidence.push(CandidateEvidence {
+                source: "graph".into(),
+                detail: format!(
+                    "{} exact criterion anchor(s), {implementation_targets} implementation target(s), and {verification_targets} verification target(s)",
+                    stable_anchors.len(),
+                ),
+            });
+            let completed = stable_anchors
+                .iter()
+                .map(|anchor| history.get(anchor).copied().unwrap_or_default())
+                .sum::<usize>();
+            evidence.push(CandidateEvidence {
+                source: "history".into(),
+                detail: if completed == 0 {
+                    "no completed evidence recorded for these criterion anchors".into()
+                } else {
+                    format!("{completed} completed evidence record(s) reference these criterion anchors")
+                },
+            });
+            let relevance = evidence.iter().map(|entry| entry.detail.clone()).collect();
             Some((
                 score,
                 SpecificationCandidateView {
                     item,
                     matches,
                     relevance,
+                    score,
+                    evidence,
+                    stable_anchors,
                 },
             ))
         })
@@ -1395,7 +1694,6 @@ async fn api_specification_candidates(
             .collect(),
     ))
 }
-
 async fn api_specification(
     State(service): State<Arc<WorkbenchService>>,
     AxumPath(anchor): AxumPath<String>,
@@ -1534,6 +1832,36 @@ fn specification_trace_view(
                     None,
                 );
             }
+            let criterion_anchor = criterion.anchor.parse::<SpecAnchor>().ok();
+            for (targets, relation, label) in [
+                (
+                    criterion_anchor.as_ref().and_then(|anchor| {
+                        index.all_criteria_to_implementation_targets.get(anchor)
+                    }),
+                    "satisfies",
+                    "satisfies",
+                ),
+                (
+                    criterion_anchor
+                        .as_ref()
+                        .and_then(|anchor| index.all_criteria_to_verification_targets.get(anchor)),
+                    "verifies",
+                    "verifies",
+                ),
+            ] {
+                for target in targets.into_iter().flatten() {
+                    let target = target.to_string();
+                    add_target_or_anchor_trace_node(&mut nodes, items, index, &target);
+                    add_trace_edge(
+                        &mut edges,
+                        &criterion.anchor,
+                        &target,
+                        relation,
+                        label,
+                        None,
+                    );
+                }
+            }
         }
         for binding in &item.bindings {
             add_anchor_trace_node(&mut nodes, items, binding.anchor.clone());
@@ -1646,20 +1974,55 @@ fn specification_trace_view(
         }
     }
 
-    let (closures, hidden_closure_count, hidden_closure_target_count) =
-        specification_closures(projection, items, index, root, node_budget);
-    let (related, hidden_related_count) = specification_related(items, root, node_budget);
-    let reachable = trace_reachable(&root.id, &edges, depth);
+    let (
+        closures,
+        hidden_closure_count,
+        hidden_closure_target_count,
+        hidden_reason_count,
+        hidden_readiness_count,
+        hidden_diagnostic_count,
+    ) = specification_closures(projection, items, index, root, node_budget);
+    let (related, hidden_related_count, hidden_related_claim_count) =
+        specification_related(items, index, root, node_budget);
+    let distances = trace_distances(&root.id, &edges, depth);
+    let reachable = distances.keys().cloned().collect::<BTreeSet<_>>();
+    let evidence_priority = closures
+        .iter()
+        .flat_map(|closure| {
+            std::iter::once(closure.criterion.clone())
+                .chain(closure.implementation_targets.iter().cloned())
+                .chain(closure.verification_targets.iter().cloned())
+        })
+        .collect::<BTreeSet<_>>();
     let mut semantic_ordered = nodes
         .values()
         .filter(|node| reachable.contains(&node.id) && node.kind != "claim")
         .map(|node| node.id.clone())
         .collect::<Vec<_>>();
     semantic_ordered.sort_by(|left, right| {
-        trace_lane_rank(nodes[left].lane.as_str())
-            .cmp(&trace_lane_rank(nodes[right].lane.as_str()))
-            .then_with(|| nodes[left].kind.cmp(&nodes[right].kind))
-            .then_with(|| left.cmp(right))
+        (if left == &root.id {
+            0
+        } else if evidence_priority.contains(left) {
+            1
+        } else {
+            2
+        })
+        .cmp(
+            &(if right == &root.id {
+                0
+            } else if evidence_priority.contains(right) {
+                1
+            } else {
+                2
+            }),
+        )
+        .then_with(|| distances[left].cmp(&distances[right]))
+        .then_with(|| {
+            trace_lane_rank(nodes[left].lane.as_str())
+                .cmp(&trace_lane_rank(nodes[right].lane.as_str()))
+        })
+        .then_with(|| nodes[left].kind.cmp(&nodes[right].kind))
+        .then_with(|| left.cmp(right))
     });
     let semantic_candidate_count = semantic_ordered.len();
     let mut visible = semantic_ordered
@@ -1790,13 +2153,21 @@ fn specification_trace_view(
         related,
         closures,
         hidden_related_count,
+        hidden_related_claim_count,
         hidden_closure_count,
         hidden_closure_target_count,
+        hidden_reason_count,
+        hidden_readiness_count,
+        hidden_diagnostic_count,
         truncated: hidden_node_count > 0
             || hidden_edge_count > 0
             || hidden_related_count > 0
+            || hidden_related_claim_count > 0
             || hidden_closure_count > 0
-            || hidden_closure_target_count > 0,
+            || hidden_closure_target_count > 0
+            || hidden_reason_count > 0
+            || hidden_readiness_count > 0
+            || hidden_diagnostic_count > 0,
         hidden_node_count,
         hidden_edge_count,
     }
@@ -1804,16 +2175,16 @@ fn specification_trace_view(
 
 fn specification_related(
     items: &[ItemSummary],
+    index: &SpecIndex,
     root: &ItemSummary,
     budget: usize,
-) -> (TraceRelatedView, usize) {
-    let root_criteria = root
-        .criteria
-        .iter()
-        .map(|criterion| criterion.anchor.as_str())
+) -> (TraceRelatedView, usize, usize) {
+    let root_criteria = closure_criterion_anchors(items, index, root)
+        .into_iter()
         .collect::<BTreeSet<_>>();
     let mut related = TraceRelatedView::default();
     let mut specifications = BTreeSet::new();
+    let mut hidden_related_claim_count = 0;
     for item in items {
         for binding in &item.bindings {
             for target in &binding.targets {
@@ -1833,6 +2204,9 @@ fn specification_related(
                     | TargetClaim::Verifies { criterion, .. } => {
                         root_criteria.contains(criterion.to_string().as_str())
                     }
+                    TargetClaim::Evidences { anchor } => {
+                        root_criteria.contains(anchor.to_string().as_str())
+                    }
                     _ => false,
                 });
                 if !matches_root {
@@ -1849,6 +2223,7 @@ fn specification_related(
                 let mut bounded_target = target.clone();
                 let hidden_claim_count = bounded_target.claims.len().saturating_sub(budget);
                 bounded_target.claims.truncate(budget);
+                hidden_related_claim_count += hidden_claim_count;
                 let entry = TraceRelatedTargetView {
                     item_id: item.id.clone(),
                     target: bounded_target,
@@ -1901,7 +2276,8 @@ fn specification_related(
         related.specification.len() + related.implementation.len() + related.verification.len(),
     );
     related.hidden_count = hidden;
-    (related, hidden)
+    related.hidden_claim_count = hidden_related_claim_count;
+    (related, hidden, hidden_related_claim_count)
 }
 
 struct TraceNodeSpec {
@@ -2221,19 +2597,123 @@ fn add_claim_trace(
     }
 }
 
+fn closure_criterion_anchors(
+    items: &[ItemSummary],
+    index: &SpecIndex,
+    root: &ItemSummary,
+) -> Vec<String> {
+    let mut anchors = BTreeSet::new();
+    for criterion in &root.criteria {
+        anchors.insert(criterion.anchor.clone());
+    }
+    match root.kind.as_str() {
+        "feature" => {
+            for binding in &root.bindings {
+                for target in &binding.targets {
+                    for claim in &target.claims {
+                        match claim {
+                            TargetClaim::Satisfies { criterion }
+                            | TargetClaim::Verifies { criterion, .. } => {
+                                anchors.insert(criterion.to_string());
+                            }
+                            TargetClaim::Evidences { anchor }
+                                if anchor.kind == LocalAnchorKind::Criterion =>
+                            {
+                                anchors.insert(anchor.to_string());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        "policy" => {
+            let rules = root
+                .rules
+                .iter()
+                .filter_map(|rule| rule.anchor.parse::<SpecAnchor>().ok())
+                .collect::<BTreeSet<_>>();
+            for (criterion, governed_rules) in &index.criteria_to_rules {
+                if governed_rules.iter().any(|rule| rules.contains(rule)) {
+                    anchors.insert(criterion.to_string());
+                }
+            }
+        }
+        "philosophy" => {
+            let principles = root
+                .principles
+                .iter()
+                .filter_map(|principle| principle.anchor.parse::<SpecAnchor>().ok())
+                .collect::<BTreeSet<_>>();
+            let governing_rules = index
+                .rules_to_principles
+                .iter()
+                .filter(|(_, governed_by)| governed_by.iter().any(|p| principles.contains(p)))
+                .map(|(rule, _)| rule)
+                .collect::<BTreeSet<_>>();
+            for (criterion, governed_rules) in &index.criteria_to_rules {
+                if governed_rules
+                    .iter()
+                    .any(|rule| governing_rules.contains(rule))
+                {
+                    anchors.insert(criterion.to_string());
+                }
+            }
+        }
+        _ => {}
+    }
+    // Keep only criteria that are present in the canonical projection. This
+    // prevents a stale claim from creating an evidence card with no anchor.
+    anchors
+        .into_iter()
+        .filter(|anchor| {
+            items.iter().any(|item| {
+                item.criteria
+                    .iter()
+                    .any(|criterion| criterion.anchor == *anchor)
+            })
+        })
+        .collect()
+}
+
+fn readiness_identity_matches(value: &str, expected: &str) -> bool {
+    value == expected
+        || value
+            .strip_prefix("criterion:")
+            .is_some_and(|candidate| candidate == expected)
+        || value
+            .strip_prefix("item:")
+            .is_some_and(|candidate| candidate == expected)
+        || value
+            .split(['/', '|', ','])
+            .any(|segment| segment == expected)
+}
+
+fn readiness_subject_matches(
+    subject: &syu_validation::ReadinessSubject,
+    root_id: &str,
+    criterion: &str,
+) -> bool {
+    [subject.id.as_str(), subject.scope_id.as_str()]
+        .into_iter()
+        .any(|value| {
+            readiness_identity_matches(value, root_id)
+                || readiness_identity_matches(value, criterion)
+        })
+}
+
 fn specification_closures(
     projection: &WorkspaceProjection,
     items: &[ItemSummary],
     index: &SpecIndex,
     root: &ItemSummary,
     budget: usize,
-) -> (Vec<CriterionClosureView>, usize, usize) {
+) -> (Vec<CriterionClosureView>, usize, usize, usize, usize, usize) {
     let mut hidden_closure_target_count = 0;
-    let mut closures = root
-        .criteria
-        .iter()
-        .map(|criterion| {
-            let criterion_anchor = criterion.anchor.parse::<SpecAnchor>().ok();
+    let mut closures = closure_criterion_anchors(items, index, root)
+        .into_iter()
+        .map(|criterion_anchor_text| {
+            let criterion_anchor = criterion_anchor_text.parse::<SpecAnchor>().ok();
             let mut implementation_targets = criterion_anchor
                 .as_ref()
                 .and_then(|anchor| index.all_criteria_to_implementation_targets.get(anchor))
@@ -2254,7 +2734,7 @@ fn specification_closures(
                         for claim in &target.claims {
                             match claim {
                                 TargetClaim::Satisfies { criterion: claimed }
-                                    if claimed.to_string() == criterion.anchor =>
+                                    if claimed.to_string() == criterion_anchor_text =>
                                 {
                                     implementation_targets.insert(target.reference.clone());
                                 }
@@ -2262,7 +2742,7 @@ fn specification_closures(
                                     criterion: claimed,
                                     covers,
                                     ..
-                                } if claimed.to_string() == criterion.anchor => {
+                                } if claimed.to_string() == criterion_anchor_text => {
                                     verification_targets.insert(target.reference.clone());
                                     for covered in covers {
                                         implementation_targets.insert(covered.to_string());
@@ -2311,10 +2791,7 @@ fn specification_closures(
                 .values()
                 .flat_map(|axis| axis.subjects.iter())
                 .filter(|subject| {
-                    subject.id.contains(&root.id)
-                        || subject.scope_id.contains(&root.id)
-                        || subject.id.contains(&criterion.anchor)
-                        || subject.scope_id.contains(&criterion.anchor)
+                    readiness_subject_matches(subject, &root.id, &criterion_anchor_text)
                 })
                 .flat_map(|subject| subject.blockers.clone())
                 .collect::<Vec<_>>();
@@ -2326,7 +2803,8 @@ fn specification_closures(
                 .iter()
                 .filter(|diagnostic| {
                     diagnostic.diagnostic.anchor.as_ref().is_some_and(|anchor| {
-                        anchor.to_string() == criterion.anchor || anchor.item.to_string() == root.id
+                        anchor.to_string() == criterion_anchor_text
+                            || anchor.item.to_string() == root.id
                     })
                 })
                 .map(|diagnostic| TraceDiagnosticView {
@@ -2341,19 +2819,59 @@ fn specification_closures(
                     .iter()
                     .map(|diagnostic| diagnostic.message.clone()),
             );
-            let runtime = projection.work.verification_receipt.as_ref();
+            let matching_executions = projection
+                .work
+                .verification_receipt
+                .as_ref()
+                .map(|receipt| {
+                    receipt
+                        .executions
+                        .iter()
+                        .filter(|execution| {
+                            execution
+                                .claim
+                                .as_ref()
+                                .is_some_and(|claim| claim.criterion == criterion_anchor_text)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let runtime_status = if matching_executions.is_empty() {
+                "unavailable".to_string()
+            } else if matching_executions
+                .iter()
+                .any(|execution| execution.status == "failed")
+            {
+                "failed".into()
+            } else {
+                "passed".into()
+            };
+            let runtime_details =
+                projection
+                    .work
+                    .verification_receipt
+                    .as_ref()
+                    .and_then(|receipt| {
+                        (!matching_executions.is_empty()).then_some((
+                            receipt.completed_at.clone(),
+                            receipt.revision.clone(),
+                            matching_executions
+                                .iter()
+                                .map(|execution| execution.identity.clone())
+                                .collect::<Vec<_>>()
+                                .join(","),
+                        ))
+                    });
             CriterionClosureView {
-                criterion: criterion.anchor.clone(),
+                criterion: criterion_anchor_text,
                 implementation_targets: implementation_targets.into_iter().collect(),
                 verification_targets: verification_targets.into_iter().collect(),
                 state: state.into(),
                 reasons,
-                runtime_status: runtime
-                    .map(|receipt| receipt.status.clone())
-                    .unwrap_or_else(|| "unavailable".into()),
-                runtime_timestamp: runtime.map(|receipt| receipt.completed_at.clone()),
-                runtime_revision: runtime.map(|receipt| receipt.revision.clone()),
-                runtime_receipt: runtime.map(|receipt| receipt.slice_id.clone()),
+                runtime_status,
+                runtime_timestamp: runtime_details.as_ref().map(|details| details.0.clone()),
+                runtime_revision: runtime_details.as_ref().map(|details| details.1.clone()),
+                runtime_receipt: runtime_details.map(|details| details.2),
                 readiness_blockers,
                 diagnostics,
                 hidden_target_count: 0,
@@ -2365,9 +2883,9 @@ fn specification_closures(
         .collect::<Vec<_>>();
     closures.sort_by(|left, right| left.criterion.cmp(&right.criterion));
     let hidden_closure_count = closures.len().saturating_sub(budget);
-    if closures.len() > budget {
-        closures.truncate(budget);
-    }
+    let mut hidden_reason_count = 0;
+    let mut hidden_readiness_count = 0;
+    let mut hidden_diagnostic_count = 0;
     for closure in &mut closures {
         let total_targets =
             closure.implementation_targets.len() + closure.verification_targets.len();
@@ -2396,15 +2914,35 @@ fn specification_closures(
         closure.hidden_diagnostic_count =
             diagnostic_count.saturating_sub(closure.diagnostics.len());
         hidden_closure_target_count += closure.hidden_target_count;
+        hidden_reason_count += closure.hidden_reason_count;
+        hidden_readiness_count += closure.hidden_readiness_count;
+        hidden_diagnostic_count += closure.hidden_diagnostic_count;
     }
-    (closures, hidden_closure_count, hidden_closure_target_count)
+    if closures.len() > budget {
+        for closure in closures.iter().skip(budget) {
+            hidden_closure_target_count +=
+                closure.implementation_targets.len() + closure.verification_targets.len();
+            hidden_reason_count += closure.reasons.len();
+            hidden_readiness_count += closure.readiness_blockers.len();
+            hidden_diagnostic_count += closure.diagnostics.len();
+        }
+        closures.truncate(budget);
+    }
+    (
+        closures,
+        hidden_closure_count,
+        hidden_closure_target_count,
+        hidden_reason_count,
+        hidden_readiness_count,
+        hidden_diagnostic_count,
+    )
 }
 
-fn trace_reachable(
+fn trace_distances(
     root: &str,
     edges: &BTreeMap<String, TraceEdgeView>,
     depth: usize,
-) -> BTreeSet<String> {
+) -> BTreeMap<String, usize> {
     let mut distances = BTreeMap::from([(root.to_string(), 0usize)]);
     let mut frontier = vec![root.to_string()];
     while let Some(current) = frontier.pop() {
@@ -2428,7 +2966,7 @@ fn trace_reachable(
             frontier.push(neighbour);
         }
     }
-    distances.into_keys().collect()
+    distances
 }
 
 fn trace_lane_rank(lane: &str) -> usize {
@@ -2608,6 +3146,37 @@ async fn api_target_suggestions_approve(
         .iter()
         .map(|candidate| candidate.id.clone())
         .collect::<Vec<_>>();
+    if let Some(split_recommendation) = split_work_recommendation(&approved, workspace, index)
+        && approved
+            .iter()
+            .any(|candidate| !matches!(candidate.transition, TargetTransition::Modify))
+    {
+        return Ok(Json(TargetSuggestionApprovalView {
+            approved_ids: vec![],
+            split_recommendation: Some(split_recommendation),
+        }));
+    }
+    let mut transition_groups = BTreeMap::<String, Vec<String>>::new();
+    for candidate in &approved {
+        transition_groups
+            .entry(format!("{:?}", candidate.transition))
+            .or_default()
+            .push(candidate.id.clone());
+    }
+    if transition_groups.len() > 1
+        && approved.len() > 2
+        && approved
+            .iter()
+            .any(|candidate| !matches!(candidate.transition, TargetTransition::Modify))
+    {
+        return Ok(Json(TargetSuggestionApprovalView {
+            approved_ids: vec![],
+            split_recommendation: Some(SplitWorkRecommendation {
+                reason: "Selected targets use incompatible transitions; approve one transition group at a time.".into(),
+                suggested_groups: transition_groups.into_values().collect(),
+            }),
+        }));
+    }
     {
         let mut session = service
             .session
@@ -2628,7 +3197,7 @@ async fn api_target_suggestions_approve(
     }
     Ok(Json(TargetSuggestionApprovalView {
         approved_ids,
-        split_recommendation: split_work_recommendation(&approved, workspace, index),
+        split_recommendation: None,
     }))
 }
 
@@ -2687,12 +3256,104 @@ fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
                 .ok_or_else(|| anyhow::anyhow!("anchor is missing an item id"))?;
             specification_path(workspace, item)
         }
+        EditPatch::AddCriterion { requirement_id, .. } => {
+            specification_path(workspace, &requirement_id.to_string())
+        }
         EditPatch::CreateRequirement { document, .. }
-        | EditPatch::CreateFeature { document, .. } => {
+        | EditPatch::CreateFeature { document, .. }
+        | EditPatch::AddFeatureTarget { document, .. } => {
             specification_document_path(workspace, document)
         }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a candidate patch"),
     }
+}
+
+fn validate_feature_criterion_link(
+    snapshot: &CachedWorkspaceSnapshot,
+    patch: &EditPatch,
+) -> Result<()> {
+    let (anchor, feature_id) = match patch {
+        EditPatch::CreateFeature {
+            criterion_anchor,
+            target,
+            status,
+            ..
+        } => {
+            if criterion_anchor.is_some() != target.is_some() {
+                anyhow::bail!(
+                    "a Feature must declare an exact Requirement Criterion and planned target together"
+                );
+            }
+            if criterion_anchor.is_none() && target.is_none() {
+                if status.is_some_and(|status| status != ItemStatus::Planned) {
+                    anyhow::bail!(
+                        "a Feature target must remain planned until its WorkRequest is approved and finalized"
+                    );
+                }
+                return Ok(());
+            }
+            let Some(anchor) = criterion_anchor else {
+                anyhow::bail!(
+                    "a Feature must declare an exact Requirement Criterion and planned target together"
+                );
+            };
+            if status.is_some_and(|status| status != ItemStatus::Planned) {
+                anyhow::bail!(
+                    "a Feature target must remain planned until its WorkRequest is approved and finalized"
+                );
+            }
+            (anchor, None)
+        }
+        EditPatch::AddFeatureTarget {
+            criterion_anchor,
+            feature_id,
+            ..
+        } => (criterion_anchor, Some(feature_id)),
+        _ => return Ok(()),
+    };
+    let parsed = anchor
+        .parse::<SpecAnchor>()
+        .map_err(|error| anyhow::anyhow!("invalid feature criterion anchor: {error}"))?;
+    if parsed.kind != LocalAnchorKind::Criterion {
+        anyhow::bail!("feature journey link must point to an exact Requirement Criterion");
+    }
+    let item = snapshot
+        .projection
+        .specifications
+        .specifications
+        .iter()
+        .find(|item| item.id == parsed.item.to_string())
+        .ok_or_else(|| anyhow::anyhow!("feature journey link references an unknown Requirement"))?;
+    if item.kind != "requirement" || item.status.as_deref() == Some("deprecated") {
+        anyhow::bail!("feature journey link must reference an active Requirement");
+    }
+    if !item
+        .criteria
+        .iter()
+        .any(|criterion| criterion.anchor == *anchor)
+    {
+        anyhow::bail!("feature journey link must reference an exact existing Criterion");
+    }
+    if let Some(feature_id) = feature_id {
+        let feature = snapshot
+            .projection
+            .specifications
+            .specifications
+            .iter()
+            .find(|item| item.id == feature_id.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!("Feature target addition references an unknown Feature")
+            })?;
+        if feature.kind != "feature" || feature.status.as_deref() == Some("deprecated") {
+            anyhow::bail!("Feature target addition must reference an active Feature");
+        }
+        if feature.status.as_deref() != Some("planned") {
+            anyhow::bail!(
+                "Feature target addition requires a planned Feature; implemented Features need an explicit lifecycle transition"
+            );
+        }
+    }
+    Ok(())
 }
 
 fn edit_preview(
@@ -2768,10 +3429,16 @@ fn specification_impact(
     if let Some(EditPatch::Nested { item_id, .. }) = patch {
         affected_items.insert(item_id.clone());
     }
+    if let Some(EditPatch::AddCriterion { requirement_id, .. }) = patch {
+        affected_items.insert(requirement_id.to_string());
+    }
     if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
         patch
     {
         affected_items.insert(id.to_string());
+    }
+    if let Some(EditPatch::AddFeatureTarget { feature_id, .. }) = patch {
+        affected_items.insert(feature_id.to_string());
     }
     let mut implementation_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
     let mut verification_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
@@ -2929,6 +3596,17 @@ fn changed_specification_anchors(
                 }
             }
         }
+        Some(EditPatch::AddCriterion {
+            requirement_id,
+            criterion,
+        }) => {
+            let anchor = anchor_string(requirement_id, LocalAnchorKind::Criterion, &criterion.id);
+            if let Ok(parsed) = anchor.parse::<SpecAnchor>()
+                && index.anchor(&parsed).is_some()
+            {
+                anchors.insert(anchor);
+            }
+        }
         Some(EditPatch::CreateRequirement { id, .. })
         | Some(EditPatch::CreateFeature { id, .. }) => {
             if let Some(item) = index
@@ -2945,6 +3623,11 @@ fn changed_specification_anchors(
                         .map(ToString::to_string),
                 );
             }
+        }
+        Some(EditPatch::AddFeatureTarget {
+            criterion_anchor, ..
+        }) => {
+            anchors.insert(criterion_anchor.clone());
         }
         _ => {}
     }
@@ -3024,6 +3707,47 @@ fn specification_patch_content(
                 entry.insert(serde_yaml::Value::String(key), field);
             }
         }
+        EditPatch::AddCriterion {
+            requirement_id,
+            criterion,
+        } => {
+            if collection_for_value(&value)? != "requirements" {
+                anyhow::bail!("a criterion can only be added to a requirement");
+            }
+            let requirements = specification_sequence(&mut value, "requirements")?;
+            let requirement = requirements
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == requirement_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("requirement {requirement_id} not found"))?;
+            let mapping = requirement
+                .as_mapping_mut()
+                .ok_or_else(|| anyhow::anyhow!("requirement is not a mapping"))?;
+            let criteria = mapping
+                .get_mut(serde_yaml::Value::String("criteria".into()))
+                .and_then(serde_yaml::Value::as_sequence_mut)
+                .ok_or_else(|| anyhow::anyhow!("requirement criteria are missing"))?;
+            if criteria.iter().any(|entry| {
+                entry
+                    .get("id")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|id| id == criterion.id.to_string())
+            }) {
+                anyhow::bail!(
+                    "criterion {} already exists in requirement {requirement_id}",
+                    criterion.id
+                );
+            }
+            criteria.push(serde_yaml::to_value(Criterion {
+                id: criterion.id.clone(),
+                kind: criterion.kind,
+                statement: criterion.statement.clone(),
+                governed_by: criterion.governed_by.clone(),
+            })?);
+        }
         EditPatch::CreateRequirement {
             id,
             title,
@@ -3064,20 +3788,105 @@ fn specification_patch_content(
             title,
             summary,
             status,
+            criterion_anchor,
+            target,
             ..
         } => {
             if collection_for_value(&value)? != "features" {
                 anyhow::bail!("candidate destination is not a features document");
             }
+            let bindings = target
+                .as_ref()
+                .map(|target| {
+                    let path = RepoPath::new(target.path.clone())
+                        .map_err(|error| anyhow::anyhow!("invalid Feature target path: {error}"))?;
+                    let claims = criterion_anchor
+                        .as_deref()
+                        .map(|anchor| {
+                            anchor
+                                .parse::<SpecAnchor>()
+                                .map(|criterion| vec![TargetClaim::Satisfies { criterion }])
+                                .map_err(|error| {
+                                    anyhow::anyhow!("invalid Feature target claim: {error}")
+                                })
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    Ok::<_, anyhow::Error>(vec![ArtifactBinding {
+                        id: "implementation".into(),
+                        role: BindingRole::Implementation,
+                        facet: "work".into(),
+                        responsibility: "Implement the planned Feature target.".into(),
+                        owns: vec![],
+                        targets: vec![ArtifactTarget {
+                            id: target.id.clone(),
+                            adapter: target.adapter.clone(),
+                            path,
+                            selector: target.selector.clone(),
+                            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
+                            claims,
+                        }],
+                    }])
+                })
+                .transpose()?
+                .unwrap_or_default();
             let feature = syu_spec_model::Feature {
                 id: id.clone(),
                 title: title.clone(),
                 summary: summary.clone(),
                 status: status.unwrap_or(ItemStatus::Planned),
-                bindings: vec![],
+                bindings,
                 contracts: vec![],
             };
             specification_sequence(&mut value, "features")?.push(serde_yaml::to_value(feature)?);
+        }
+        EditPatch::AddFeatureTarget {
+            feature_id,
+            criterion_anchor,
+            target,
+            ..
+        } => {
+            if collection_for_value(&value)? != "features" {
+                anyhow::bail!("candidate destination is not a features document");
+            }
+            let parsed_criterion = criterion_anchor
+                .parse::<SpecAnchor>()
+                .map_err(|error| anyhow::anyhow!("invalid Feature target claim: {error}"))?;
+            let sequence = specification_sequence(&mut value, "features")?;
+            let item = sequence
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == feature_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("Feature {feature_id} not found"))?;
+            let mut feature: syu_spec_model::Feature = serde_yaml::from_value(item.clone())?;
+            let path = RepoPath::new(target.path.clone())
+                .map_err(|error| anyhow::anyhow!("invalid Feature target path: {error}"))?;
+            let binding = feature
+                .bindings
+                .iter_mut()
+                .find(|binding| binding.role == BindingRole::Implementation)
+                .ok_or_else(|| anyhow::anyhow!("Feature has no implementation binding"))?;
+            if binding
+                .targets
+                .iter()
+                .any(|candidate| candidate.id == target.id)
+            {
+                anyhow::bail!("Feature target {} already exists", target.id);
+            }
+            binding.targets.push(ArtifactTarget {
+                id: target.id.clone(),
+                adapter: target.adapter.clone(),
+                path,
+                selector: target.selector.clone(),
+                lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
+                claims: vec![TargetClaim::Satisfies {
+                    criterion: parsed_criterion,
+                }],
+            });
+            *item = serde_yaml::to_value(feature)?;
         }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a specification patch"),
     }
@@ -3375,9 +4184,11 @@ fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Re
     match patch {
         EditPatch::Specification { .. }
         | EditPatch::Anchor { .. }
+        | EditPatch::AddCriterion { .. }
         | EditPatch::Nested { .. }
         | EditPatch::CreateRequirement { .. }
-        | EditPatch::CreateFeature { .. } => specification_patch_content(workspace, path, patch),
+        | EditPatch::CreateFeature { .. }
+        | EditPatch::AddFeatureTarget { .. } => specification_patch_content(workspace, path, patch),
         EditPatch::Config { config } => Ok(serde_yaml::to_string(config)?),
     }
 }
@@ -3495,6 +4306,7 @@ async fn api_specification_candidate_preview(
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let workspace = &snapshot.workspace;
+    validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
     let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
@@ -3524,6 +4336,7 @@ async fn api_specification_candidate_apply(
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let workspace = &snapshot.workspace;
+    validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
     let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
@@ -4111,6 +4924,30 @@ async fn api_source(
 fn validate_create_work_criterion(
     snapshot: &CachedWorkspaceSnapshot,
     anchor: &SpecAnchor,
+    approved_candidates: &[TargetSuggestion],
+) -> Result<()> {
+    validate_work_criterion_anchor(snapshot, anchor)?;
+    match snapshot.index.criterion_status.get(anchor) {
+        Some(ItemStatus::Implemented) => Ok(()),
+        Some(ItemStatus::Planned)
+            if approved_candidates
+                .iter()
+                .all(|candidate| candidate.transition == TargetTransition::Add)
+                && approved_candidates
+                    .iter()
+                    .any(|candidate| candidate.role == BindingRole::Implementation) =>
+        {
+            Ok(())
+        }
+        _ => anyhow::bail!(
+            "Work can only start from an implemented requirement criterion, or a planned criterion with an approved exact implementation Add target"
+        ),
+    }
+}
+
+fn validate_work_criterion_anchor(
+    snapshot: &CachedWorkspaceSnapshot,
+    anchor: &SpecAnchor,
 ) -> Result<()> {
     if anchor.kind != LocalAnchorKind::Criterion {
         anyhow::bail!("Work must start from an exact requirement criterion");
@@ -4121,10 +4958,41 @@ fn validate_create_work_criterion(
     ) {
         anyhow::bail!("Work criterion anchor does not resolve to an exact requirement criterion");
     }
-    if snapshot.index.criterion_status.get(anchor) != Some(&ItemStatus::Implemented) {
-        anyhow::bail!("Work can only start from a criterion in an implemented requirement");
+    Ok(())
+}
+
+fn ensure_homogeneous_approved_transitions(candidates: &[TargetSuggestion]) -> Result<()> {
+    let transitions = candidates
+        .iter()
+        .map(|candidate| format!("{:?}", candidate.transition))
+        .collect::<BTreeSet<_>>();
+    if transitions.len() > 1 {
+        anyhow::bail!(
+            "approved target suggestions use multiple transitions; create separate WorkRequests"
+        );
     }
     Ok(())
+}
+
+fn resolve_approved_target_candidates(
+    anchor: &SpecAnchor,
+    suggestions: Result<Vec<TargetSuggestion>>,
+    approvals: &[ApprovedTargetSuggestion],
+) -> Result<Vec<TargetSuggestion>> {
+    let suggestions = suggestions?;
+    Ok(approvals
+        .iter()
+        .filter(|approval| approval.criterion == *anchor)
+        .filter_map(|approval| {
+            suggestions
+                .iter()
+                .find(|candidate| {
+                    candidate.id == approval.suggestion_id
+                        && candidate.evidence_fingerprint == approval.evidence_fingerprint
+                })
+                .cloned()
+        })
+        .collect())
 }
 
 fn resolve_requested_targets(
@@ -4165,7 +5033,7 @@ async fn api_journey_action(
             let snapshot = basis(&service, &command.basis)?;
             let anchor = SpecAnchor::from_str(&anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
-            validate_create_work_criterion(&snapshot, &anchor)
+            validate_work_criterion_anchor(&snapshot, &anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
             if summary.trim().is_empty() {
                 return Err(ApiError(
@@ -4179,26 +5047,66 @@ async fn api_journey_action(
                 .map_err(|_| anyhow::anyhow!("workbench session lock"))?
                 .approved_target_suggestions
                 .clone();
-            let requested_targets = resolve_requested_targets(
-                &anchor,
-                suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
-                    .map(|set| set.suggestions),
-                &approvals,
-            )
-            .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let suggestions = suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
+                .map(|set| set.suggestions)
+                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let approved_candidates =
+                resolve_approved_target_candidates(&anchor, Ok(suggestions.clone()), &approvals)
+                    .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            ensure_homogeneous_approved_transitions(&approved_candidates)
+                .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+            if let Some(split_recommendation) = split_work_recommendation(
+                &approved_candidates,
+                &snapshot.workspace,
+                &snapshot.index,
+            ) {
+                return Err(ApiError(
+                    StatusCode::CONFLICT,
+                    anyhow::anyhow!(
+                        "approved target group exceeds slicing budget: {}",
+                        split_recommendation.reason
+                    ),
+                ));
+            }
+            validate_create_work_criterion(&snapshot, &anchor, &approved_candidates)
+                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
+            let requested_targets = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
+                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let operation = match approved_candidates
+                .first()
+                .map(|candidate| candidate.transition)
+            {
+                Some(TargetTransition::Add) => WorkOperation::Add,
+                Some(TargetTransition::Remove) => WorkOperation::Remove,
+                _ => WorkOperation::Modify,
+            };
+            let max_added_bytes_per_target = approved_candidates
+                .iter()
+                .filter_map(|candidate| candidate.budget_bytes)
+                .max();
+            let max_added_lines_per_target = approved_candidates
+                .iter()
+                .filter_map(|candidate| candidate.budget_lines)
+                .max();
             let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
             let summary = summary.trim().to_owned();
             let request = WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: store.new_id("work"),
                 summary,
-                operation: WorkOperation::Modify,
-                seeds: vec![WorkSeed::Anchor(anchor.clone())],
+                operation,
+                seeds: if requested_targets.is_empty() {
+                    vec![WorkSeed::Anchor(anchor.clone())]
+                } else {
+                    vec![]
+                },
                 // A guided journey has one executable change boundary.  Plans
                 // with several isolated slices need separate worktrees, so do
                 // not silently pick and execute their first slice here.
                 constraints: WorkConstraints {
                     max_slices: Some(1),
+                    max_added_bytes_per_target,
+                    max_added_lines_per_target,
                     ..WorkConstraints::default()
                 },
                 requested_targets,
@@ -5068,6 +5976,7 @@ pub struct VerificationReceiptView {
     pub workspace_fingerprint: String,
     pub started_at: String,
     pub completed_at: String,
+    pub executions: Vec<VerificationExecutionView>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct ContextPackView {
@@ -5765,6 +6674,24 @@ fn verification_receipt_view(receipt: &VerificationReceipt) -> VerificationRecei
         workspace_fingerprint: receipt.workspace_fingerprint.clone(),
         started_at: receipt.started_at.clone(),
         completed_at: receipt.completed_at.clone(),
+        executions: receipt
+            .executions
+            .iter()
+            .enumerate()
+            .map(|(index, execution)| VerificationExecutionView {
+                identity: format!("{}#execution-{index}", receipt.slice_id),
+                target: execution.target.to_string(),
+                claim: execution.claim.as_ref().map(|claim| VerificationClaimView {
+                    target: claim.target.to_string(),
+                    criterion: claim.criterion.to_string(),
+                }),
+                status: if execution.exit_code == 0 {
+                    "passed".into()
+                } else {
+                    "failed".into()
+                },
+            })
+            .collect(),
     }
 }
 
@@ -7008,6 +7935,15 @@ mod tests {
             workspace_fingerprint: "receipt-fingerprint".into(),
             started_at: "2026-08-01T00:00:00Z".into(),
             completed_at: "2026-08-01T00:01:00Z".into(),
+            executions: vec![VerificationExecutionView {
+                identity: "slice-fixture#execution-0".into(),
+                target: "target-fixture".into(),
+                claim: Some(VerificationClaimView {
+                    target: "target-fixture".into(),
+                    criterion: root.criteria[0].anchor.clone(),
+                }),
+                status: "failed".into(),
+            }],
         });
         let evidence = specification_trace_view(
             &with_receipt,
@@ -7020,10 +7956,51 @@ mod tests {
                 edge_budget: Some(160),
             },
         );
+        assert_eq!(
+            with_receipt
+                .work
+                .verification_receipt
+                .as_ref()
+                .expect("fixture receipt")
+                .executions[0]
+                .claim
+                .as_ref()
+                .expect("exact claim")
+                .target,
+            "target-fixture"
+        );
         assert_eq!(evidence.closures[0].runtime_status, "failed");
         assert_eq!(
             evidence.closures[0].runtime_revision.as_deref(),
             Some("receipt-revision")
+        );
+        let mut unrelated_receipt = with_receipt.clone();
+        unrelated_receipt
+            .work
+            .verification_receipt
+            .as_mut()
+            .expect("fixture receipt")
+            .executions[0]
+            .claim = Some(VerificationClaimView {
+            target: "other-target".into(),
+            criterion: "REQ-UNRELATED-001#criterion.other".into(),
+        });
+        let unrelated = specification_trace_view(
+            &unrelated_receipt,
+            &index,
+            root,
+            &SpecificationTraceQuery {
+                depth: Some(4),
+                mode: Some("readable".into()),
+                node_budget: Some(80),
+                edge_budget: Some(160),
+            },
+        );
+        assert!(
+            unrelated
+                .closures
+                .iter()
+                .all(|closure| closure.runtime_status == "unavailable")
         );
     }
 
@@ -7101,6 +8078,29 @@ mod tests {
         assert!(philosophy_trace.nodes.iter().any(
             |node| node.id == "REQ-WORKBENCH-003#binding.spec-edit-check/target.spec-edit-test"
         ));
+        for kind in ["policy", "feature"] {
+            let item = projection
+                .specifications
+                .specifications
+                .iter()
+                .find(|item| item.kind == kind)
+                .expect("item kind exists");
+            let evidence = specification_trace_view(
+                &projection,
+                &index,
+                item,
+                &SpecificationTraceQuery {
+                    depth: Some(4),
+                    mode: Some("readable".into()),
+                    node_budget: Some(240),
+                    edge_budget: Some(480),
+                },
+            );
+            assert!(
+                !evidence.closures.is_empty(),
+                "{kind} must expose related evidence"
+            );
+        }
     }
 
     #[test]
@@ -8141,6 +9141,200 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn advisory_specification_discovery_is_multilingual_and_never_creates_scope() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=%E6%8C%AF%E3%82%8B%E8%88%9E%E3%81%84%E3%82%92%E6%A4%9C%E8%A8%BC&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let candidates: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("multilingual candidate response");
+        let fixture_candidate = candidates
+            .iter()
+            .find(|candidate| candidate.item.id == "REQ-FIXTURE-001")
+            .expect("Japanese intent finds the English fixture requirement");
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "semantic")
+        );
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "graph")
+        );
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "history")
+        );
+        assert_eq!(
+            fixture_candidate.stable_anchors,
+            vec![
+                "REQ-FIXTURE-001#criterion.behavior",
+                "REQ-FIXTURE-001#criterion.add-symbol",
+                "REQ-FIXTURE-001#criterion.add-file",
+                "REQ-FIXTURE-001#criterion.remove-symbol",
+                "REQ-FIXTURE-001#criterion.remove-file",
+            ]
+        );
+        assert!(
+            service.session.read().unwrap().draft_request.is_none(),
+            "discovery results must remain advisory"
+        );
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=function&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let synonyms: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("synonym candidate response");
+        assert!(synonyms.iter().any(|candidate| {
+            candidate.item.id == "REQ-FIXTURE-001"
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|entry| entry.source == "semantic")
+        }));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=orchard&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let no_match: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("no-match response");
+        assert!(
+            no_match.is_empty(),
+            "unrelated intent must not become a false positive"
+        );
+
+        for query in ["contest", "invalid", "authorization"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!(
+                            "/api/specifications/candidates?q={query}&kind=requirement"
+                        ))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let embedded_token: Vec<SpecificationCandidateView> =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("embedded-token response");
+            assert!(
+                embedded_token.iter().all(|candidate| {
+                    candidate
+                        .evidence
+                        .iter()
+                        .all(|entry| entry.source != "semantic")
+                }),
+                "{query} must not produce semantic evidence from an embedded token"
+            );
+        }
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=behav&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let lexical: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("substring candidate response");
+        let lexical_candidate = lexical
+            .iter()
+            .find(|candidate| candidate.item.id == "REQ-FIXTURE-001")
+            .expect("substring query finds behavior");
+        assert!(
+            lexical_candidate
+                .evidence
+                .iter()
+                .any(|entry| { entry.source == "lexical" && entry.detail.contains("substring") })
+        );
+        assert!(discovery_query_exact_matches("Behavior", "behavior"));
+        assert!(discovery_query_exact_matches("BEHAVIOR", "behavior"));
+        assert!(!discovery_query_exact_matches("Behavior", "behav"));
+        assert!(
+            matching_discovery_concepts("test")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+        assert!(
+            !matching_discovery_concepts("contest")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+        assert!(
+            !matching_discovery_concepts("invalid")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#binding.verification",
+                "summary": "Do not accept a non-criterion anchor"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            service.session.read().unwrap().draft_request.is_none(),
+            "an unapproved or non-criterion discovery result cannot create scope"
+        );
+    }
+    #[tokio::test]
     async fn workbench_specification_candidates_support_search_edit_and_create() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -8326,6 +9520,8 @@ mod tests {
                 title: "A guided feature".into(),
                 summary: "Created through the same typed wizard.".into(),
                 status: None,
+                criterion_anchor: None,
+                target: None,
             },
             preview_token: None,
         };
@@ -8337,10 +9533,15 @@ mod tests {
             &feature,
         )
         .await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let preview: EditPreview =
-            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
-                .expect("feature preview");
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "{}",
+            String::from_utf8_lossy(&response_body)
+        );
+        let preview: EditPreview = serde_json::from_slice(&response_body).expect("feature preview");
         let response = json_mutation(
             &app,
             Method::PUT,
@@ -8744,6 +9945,208 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn planned_requirement_with_approved_add_target_can_create_ready_plan() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        fs::write(
+            temp.path().join("spec/planned-requirement.yaml"),
+            "schema: syu/spec/v1\nkind: requirements\nnamespace: fixture\ncategory: Workbench recovery\nrequirements:\n  - id: REQ-PLANNED-001\n    title: A planned behavior\n    description: A planned requirement created through recovery.\n    priority: high\n    status: planned\n    criteria:\n      - id: behavior\n        kind: behavior\n        statement: Add the planned behavior.\n        governed_by: []\n",
+        )
+        .expect("planned requirement fixture");
+        fs::write(
+            temp.path().join("spec/planned-feature.yaml"),
+            "schema: syu/spec/v1\nkind: features\nnamespace: fixture\ncategory: Workbench recovery\nfeatures:\n  - id: FEAT-PLANNED-001\n    title: A planned behavior implementation\n    summary: A planned Feature target created through recovery.\n    status: planned\n    bindings:\n      - id: implementation\n        role: implementation\n        facet: work\n        responsibility: Add the planned behavior implementation.\n        targets:\n          - id: behavior\n            adapter: rust\n            path: src/lib.rs\n            selector: { kind: symbol, name: planned_behavior }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n          - id: behavior-two\n            adapter: rust\n            path: src/other.rs\n            selector: { kind: symbol, name: planned_behavior_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n",
+        )
+        .expect("planned Feature fixture");
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("config fixture");
+        fs::write(
+            &config_path,
+            config.replace("max_total_bytes: 120000", "max_total_bytes: 700"),
+        )
+        .expect("small slicing budget");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-PLANNED-001%23criterion.behavior/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(response_status, StatusCode::OK, "{response_body:?}");
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response_body).expect("planned Add suggestions");
+        let add_candidates = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| candidate.transition == TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(add_candidates.len(), 2);
+        let add = add_candidates
+            .first()
+            .cloned()
+            .expect("planned implementation Add suggestion");
+        assert_eq!(add.role, BindingRole::Implementation);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis: basis.clone(),
+                suggestion_token: suggestions.suggestion_token.clone(),
+                suggestion_ids: add_candidates
+                    .iter()
+                    .map(|candidate| candidate.id.clone())
+                    .collect(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bulk_approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("bulk planned Add approval");
+        assert!(bulk_approval.approved_ids.is_empty());
+        assert_eq!(
+            bulk_approval
+                .split_recommendation
+                .as_ref()
+                .expect("budget split recommendation")
+                .suggested_groups
+                .len(),
+            2
+        );
+        let split_groups = bulk_approval
+            .split_recommendation
+            .as_ref()
+            .expect("budget split recommendation")
+            .suggested_groups
+            .clone();
+        assert!(
+            service
+                .session
+                .read()
+                .expect("workbench session lock")
+                .approved_target_suggestions
+                .is_empty(),
+            "over-budget bulk approval must not persist any candidate"
+        );
+        for group in &split_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: suggestions.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-PLANNED-001#criterion.behavior",
+                "summary": "reject accumulated over-budget groups"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        service
+            .session
+            .write()
+            .unwrap()
+            .approved_target_suggestions
+            .clear();
+        fs::write(&config_path, config).expect("restore slicing budget");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let restored_suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("restored planned Add suggestions");
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: restored_suggestions.suggestion_token,
+                suggestion_ids: vec![add.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-PLANNED-001#criterion.behavior",
+                "summary": "add the approved planned target"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("workbench session lock")
+                .draft_request
+                .as_ref()
+                .is_some_and(|request| request.seeds.is_empty())
+        );
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned requirement work plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
+    }
     #[tokio::test]
     async fn journey_action_exposes_one_friendly_next_step_and_can_cancel() {
         let _workspace_lock = workspace_test_lock().await;

@@ -101,10 +101,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::CriterionClosureView' }
-    - id: server-review-owned-005
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::EditPatch' }
     - id: server-review-owned-006
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -121,14 +117,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::SliceView' }
-    - id: server-review-owned-010
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::SpecificationCandidateQuery' }
-    - id: server-review-owned-011
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::SpecificationCandidateView' }
     - id: server-review-owned-012
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -201,10 +189,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::api_diagnostics_run' }
-    - id: server-review-owned-030
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::api_specification' }
     - id: server-review-owned-031
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -213,18 +197,10 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::api_specifications' }
-    - id: server-review-owned-033
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::changed_specification_anchors' }
     - id: server-review-owned-034
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::collection_for_value' }
-    - id: server-review-owned-035
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::edit_content' }
     - id: server-review-owned-036
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -253,10 +229,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::patch_fields' }
-    - id: server-review-owned-043
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::patch_path' }
     - id: server-review-owned-044
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -265,10 +237,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::specification_closures' }
-    - id: server-review-owned-046
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::specification_impact' }
     - id: server-review-owned-047
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -425,6 +393,334 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::tests::workspace_root' }
+    - id: server-validation-readiness-subject
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector: { kind: module, name: 'lib::ReadinessSubject' }
+    - id: server-review-contract-001
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ActionCapabilityView' }
+    - id: server-review-contract-002
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::BindingSummary' }
+    - id: server-review-contract-003
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::BindingTargetSummary' }
+    - id: server-review-contract-004
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::BranchChangedTargetView' }
+    - id: server-review-contract-005
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::BranchScopeView' }
+    - id: server-review-contract-006
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ContextPackView' }
+    - id: server-review-contract-007
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ContractParticipantSummary' }
+    - id: server-review-contract-008
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ContractSummary' }
+    - id: server-review-contract-009
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::CriterionSummary' }
+    - id: server-review-contract-010
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::DiagnosticsView' }
+    - id: server-review-contract-011
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::IssueCounts' }
+    - id: server-review-contract-012
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ItemSummary' }
+    - id: server-review-contract-013
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneyActionView' }
+    - id: server-review-contract-014
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneyAdvancedView' }
+    - id: server-review-contract-015
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneyBlockerView' }
+    - id: server-review-contract-016
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneyEvidenceView' }
+    - id: server-review-contract-017
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneyScopeView' }
+    - id: server-review-contract-018
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneySpecificationView' }
+    - id: server-review-contract-019
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::JourneyStepView' }
+    - id: server-review-contract-020
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::NavigationView' }
+    - id: server-review-contract-021
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::PrincipleSummary' }
+    - id: server-review-contract-022
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ReadinessView' }
+    - id: server-review-contract-023
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::RuleSummary' }
+    - id: server-review-contract-024
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ScopeView' }
+    - id: server-review-contract-025
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SpecificationCatalogView' }
+    - id: server-review-contract-026
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SpecificationDocumentView' }
+    - id: server-review-contract-027
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::TargetView' }
+    - id: server-review-contract-028
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ValidationDiagnosticView' }
+    - id: server-review-contract-029
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ValidationPhaseView' }
+    - id: server-review-contract-030
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ValidationRunState' }
+    - id: server-review-contract-031
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ValidationRunView' }
+    - id: server-review-contract-032
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::VerificationClaimView' }
+    - id: server-review-contract-033
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::VerificationExecutionView' }
+    - id: server-review-contract-034
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::WorkSessionView' }
+    - id: server-review-contract-035
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::WorkbenchProjection' }
+    - id: server-review-contract-036
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::WorkspaceProjection' }
+    - id: server-review-contract-037
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::WorkspaceSummary' }
+    - id: server-review-contract-038
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::anchor_string' }
+    - id: server-review-contract-039
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::anchors_for' }
+    - id: server-review-contract-040
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_discard' }
+    - id: server-review-contract-041
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_result' }
+    - id: server-review-contract-042
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_target_suggestion_reject' }
+    - id: server-review-contract-043
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::binding_role_label' }
+    - id: server-review-contract-044
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::bindings_for' }
+    - id: server-review-contract-045
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::builtin_presentation_title_key' }
+    - id: server-review-contract-046
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::cancel_action' }
+    - id: server-review-contract-047
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::closure_criterion_anchors' }
+    - id: server-review-contract-048
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::content_hash' }
+    - id: server-review-contract-049
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::context_pack_view' }
+    - id: server-review-contract-050
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::contract_kind_label' }
+    - id: server-review-contract-051
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::contract_summary' }
+    - id: server-review-contract-052
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::criterion_summary' }
+    - id: server-review-contract-053
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::edit_preview' }
+    - id: server-review-contract-054
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::edit_preview_for_patch' }
+    - id: server-review-contract-055
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::empty_journey' }
+    - id: server-review-contract-056
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::epoch_ms' }
+    - id: server-review-contract-057
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::issue_counts' }
+    - id: server-review-contract-058
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::item_summary_from_feature' }
+    - id: server-review-contract-059
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::item_summary_from_policy' }
+    - id: server-review-contract-060
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::item_summary_from_requirement' }
+    - id: server-review-contract-061
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::journey_specification_context' }
+    - id: server-review-contract-062
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ownership_for_targets' }
+    - id: server-review-contract-063
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::phase_views' }
+    - id: server-review-contract-064
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::plan_view' }
+    - id: server-review-contract-065
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::priority_label' }
+    - id: server-review-contract-066
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::project_with_index' }
+    - id: server-review-contract-067
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::readiness_identity_matches' }
+    - id: server-review-contract-068
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::readiness_impact' }
+    - id: server-review-contract-069
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::readiness_not_run' }
+    - id: server-review-contract-070
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::readiness_subject_matches' }
+    - id: server-review-contract-071
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::relative_display' }
+    - id: server-review-contract-072
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::request_view' }
+    - id: server-review-contract-073
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::rule_summary' }
+    - id: server-review-contract-074
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::rules_in_phase' }
+    - id: server-review-contract-075
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::specification_document_path' }
+    - id: server-review-contract-076
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::status_label' }
+    - id: server-review-contract-077
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::target_view' }
+    - id: server-review-contract-078
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps' }
+    - id: server-review-contract-079
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::trace_distances' }
+    - id: server-review-contract-080
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::validation_phase_from_id' }
+    - id: server-review-contract-081
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::validation_phase_id' }
     targets:
     - id: mutation-guard
       adapter: rust

@@ -268,4 +268,8 @@ work:
     max_editable_symbols: 8
     max_verification_targets: 8
     max_readonly_targets: 12
-    max_total_bytes: 80000
+    # The Workbench discovery/detail projection carries disclosed evidence
+    # alongside the existing public entrypoint context. Keep the context
+    # bounded while allowing the restored multilingual journey to remain
+    # seedable as one slice.
+    max_total_bytes: 100000

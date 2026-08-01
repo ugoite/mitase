@@ -35,12 +35,6 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
       - **facet**: delivery
       - **responsibility**: Store immutable attempts and perform the planned-to-implemented handoff.
       - **owns**:
-        - **id**: delivery-module
-          - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib
         - **id**: delivery-manifest-file
           - **adapter**: declared
           - **path**: crates/syu-delivery/Cargo.toml
@@ -590,10 +584,6 @@ features:
         facet: delivery
         responsibility: Store immutable attempts and perform the planned-to-implemented handoff.
         owns:
-          - id: delivery-module
-            adapter: rust
-            path: crates/syu-delivery/src/lib.rs
-            selector: { kind: module, name: lib }
           - id: delivery-manifest-file
             adapter: declared
             path: crates/syu-delivery/Cargo.toml

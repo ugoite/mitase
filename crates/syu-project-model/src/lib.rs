@@ -238,7 +238,7 @@ work:
                 max_editable_symbols: 8,
                 max_verification_targets: 8,
                 max_readonly_targets: 12,
-                max_total_bytes: 80_000,
+                max_total_bytes: 100_000,
             }
         );
         assert!(

@@ -120,15 +120,33 @@ export function bindRouter(state, onRoute) {
       state.specificationSourceFull = false;
     } else if (page === 'work') {
       const workItem = parameters.get('workItem');
+      // Work owns a separate detail state namespace. Always hydrate it from
+      // the URL, including clearing stale state when back/forward removes the
+      // parameter.
+      state.journeyRouteItemId = workItem || null;
+      state.journeyContextItemId = workItem || null;
+      state.journeyContextTarget = null;
+      state.journeyContextHistory = [];
+      state.journeySpecificationAnchor = null;
       if (workItem) {
         state.journeyContextTab = 'specification';
-        state.journeyContextItemId = workItem;
         const detailTab = parameters.get('workDetailTab');
         state.specificationDetailTab = SPECIFICATION_DETAIL_TABS.includes(detailTab) ? detailTab : 'information';
         state.specificationTraceMode = parameters.get('workTraceMode') === 'exact' ? 'exact' : 'readable';
         const depth = Number.parseInt(parameters.get('workDepth') || '1', 10);
         state.specificationTraceDepth = Number.isFinite(depth) ? Math.max(1, Math.min(depth, 8)) : 1;
         state.specificationTraceNode = parameters.get('workNode') || null;
+        state.specificationTrace = null;
+        state.specificationTraceRoot = null;
+        state.specificationSourceTarget = null;
+        state.specificationSourceFocusKey = null;
+        state.specificationSource = null;
+        state.specificationSourceFull = false;
+      } else {
+        state.specificationDetailTab = 'information';
+        state.specificationTraceMode = 'readable';
+        state.specificationTraceDepth = 1;
+        state.specificationTraceNode = null;
         state.specificationTrace = null;
         state.specificationTraceRoot = null;
         state.specificationSourceTarget = null;

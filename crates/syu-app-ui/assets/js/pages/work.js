@@ -57,6 +57,181 @@ function openWorkDiff(state, force = false) {
   loadWorkDiff(state, force);
 }
 
+function journeyAnchorCandidates(state) {
+  return (state.journeyCandidates || []).flatMap(candidate => {
+    const item = candidate.item || candidate;
+    if (item.kind !== 'requirement' || item.status === 'deprecated') return [];
+    const anchors = candidate.stable_anchors || (item.criteria || []).map(criterion => criterion.anchor);
+    return anchors.map(anchor => ({
+      candidate,
+      item,
+      criterion: (item.criteria || []).find(value => value.anchor === anchor),
+    })).filter(value => value.criterion);
+  });
+}
+
+function candidateEvidence(candidate) {
+  if (candidate.evidence?.length) return candidate.evidence;
+  return (candidate.relevance || []).map(detail => ({ source: 'advisory', detail }));
+}
+
+async function discoverJourneyCandidates(state, query) {
+  const sequence = (state.journeyDiscoverySequence || 0) + 1;
+  state.journeyDiscoverySequence = sequence;
+  state.journeyQuery = query;
+  state.journeyIntentSearch = true;
+  state.journeyCandidateAnchor = null;
+  state.journeyCandidates = null;
+  state.journeyDiscoveryError = null;
+  state.journeyCreatedSpecification = null;
+  state.journeyAuthoringNotice = null;
+  state.targetSuggestions = null;
+  state.targetSuggestionSelection = [];
+  state.journeyDiscoveryLoading = true;
+  state.render();
+  try {
+    const candidates = await state.api.searchSpecificationCandidates(query, 'requirement');
+    if (state.journeyDiscoverySequence !== sequence) return;
+    state.journeyCandidates = candidates;
+  } catch (error) {
+    if (state.journeyDiscoverySequence !== sequence) return;
+    state.journeyDiscoveryError = error.message;
+    state.journeyCandidates = [];
+  }
+  if (state.journeyDiscoverySequence !== sequence) return;
+  state.journeyDiscoveryLoading = false;
+  state.render();
+}
+
+async function continueJourneyAfterAuthoring(state, patch) {
+  const criterion = patch.kind === 'add_criterion'
+    ? patch.criterion
+    : patch.kind === 'create_requirement'
+      ? patch.criteria?.[0]
+      : patch.kind === 'create_feature'
+        ? (state.projection.specifications?.specifications || [])
+          .flatMap(item => item.criteria || [])
+          .find(value => value.anchor === patch.criterion_anchor)
+        : null;
+  const criterionAnchor = patch.kind === 'create_feature'
+    ? patch.criterion_anchor
+    : criterion
+      ? `${patch.kind === 'add_criterion' ? patch.requirement_id : patch.id}#criterion.${criterion.id}`
+      : null;
+  const requirementId = patch.kind === 'add_criterion'
+    ? patch.requirement_id
+    : patch.kind === 'create_requirement'
+      ? patch.id
+      : null;
+  state.specificationEditor = null;
+  state.specificationPreview = null;
+  state.journeyQuery = criterion?.statement || patch.title || state.journeyQuery;
+  state.journeyCreatedSpecification = requirementId || (patch.kind === 'create_feature' ? patch.id : null);
+  state.journeyAuthoringNotice = patch.kind === 'create_feature'
+    ? t('journey.created_feature_linked')
+    : t('journey.created_requirement');
+  state.journeyCandidateAnchor = criterionAnchor;
+  state.journeyCandidates = await state.api.searchSpecificationCandidates(state.journeyQuery, 'requirement');
+  state.journeyDiscoveryError = null;
+  if (patch.kind === 'create_feature' && !criterionAnchor) {
+    state.selectedSpecification = patch.id;
+    state.go('specifications');
+    return;
+  }
+  if (criterionAnchor) {
+    await reviewJourneyTargetSuggestions(state, criterionAnchor);
+  } else {
+    state.render();
+  }
+}
+
+async function reviewJourneyTargetSuggestions(state, anchor) {
+  state.journeyCandidateAnchor = anchor;
+  state.journeyTargetSuggestionsLoading = true;
+  state.specificationError = null;
+  state.targetSuggestions = null;
+  state.targetSuggestionSelection = [];
+  state.render();
+  try {
+    const suggestions = await state.api.readTargetSuggestions(anchor);
+    state.targetSuggestions = suggestions;
+    state.targetSuggestionSelection = (suggestions.suggestions || []).map(candidate => candidate.id);
+  } catch (error) {
+    state.specificationError = error.message;
+  }
+  state.journeyTargetSuggestionsLoading = false;
+  state.render();
+}
+
+function openJourneyAuthoring(state, mode, requirementId = null, options = {}) {
+  state.specificationEditor = mode === 'add-criterion'
+    ? { mode, requirementId, governedBy: [] }
+    : {
+      mode: 'create',
+      createKind: mode,
+      governedBy: [],
+      draft: options.criterionAnchor
+        ? { criterion_anchor: options.criterionAnchor }
+        : undefined,
+    };
+  state.specificationEditor.journey = true;
+  state.specificationEditor.afterApply = continueJourneyAfterAuthoring;
+  state.specificationEditor.onClose = nextState => {
+    nextState.specificationEditor = null;
+    nextState.specificationPreview = null;
+    nextState.render();
+  };
+  state.specificationPreview = null;
+  state.render();
+}
+
+function renderNoMatchRecovery(root, state) {
+  root.append(element('p', 'empty-state', t('journey.no_match')));
+  const recovery = element('section', 'journey-recovery card');
+  recovery.append(element('h3', null, t('journey.no_match.title')));
+  recovery.append(element('p', null, t('journey.no_match.explanation')));
+  const requirements = (state.projection.specifications?.specifications || [])
+    .filter(item => item.kind === 'requirement' && item.status !== 'deprecated');
+  const availableCriteria = requirements.flatMap(item => item.criteria || []);
+  if (requirements.length) {
+    const label = element('label', null, t('journey.no_match.requirement'));
+    const select = document.createElement('select');
+    select.className = 'native-select';
+    requirements.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.title;
+      option.selected = item.id === state.journeyFallbackRequirement;
+      select.append(option);
+    });
+    if (!state.journeyFallbackRequirement) state.journeyFallbackRequirement = requirements[0].id;
+    select.addEventListener('change', () => { state.journeyFallbackRequirement = select.value; });
+    label.append(select);
+    recovery.append(label);
+    recovery.append(button(t('journey.no_match.add_criterion'), () => {
+      openJourneyAuthoring(state, 'add-criterion', state.journeyFallbackRequirement);
+    }, true, '+'));
+  }
+  const choices = element('div', 'journey-actions');
+  choices.append(button(
+    t('journey.no_match.create_requirement'),
+    () => openJourneyAuthoring(state, 'requirement'),
+    false,
+    '+',
+  ));
+  if (availableCriteria.length) {
+    choices.append(button(
+      t('journey.no_match.create_feature'),
+      () => openJourneyAuthoring(state, 'feature', null, {
+        criterionAnchor: availableCriteria[0].anchor,
+      }),
+      false,
+      '+',
+    ));
+  }
+  recovery.append(choices);
+  root.append(recovery);
+}
 function run(state, action) {
   return state.runAction(
     () => state.api.runJourneyAction(state.projection, action),
@@ -70,6 +245,54 @@ function run(state, action) {
     },
     action.action === 'rename' ? t('work.title.saving') : actionText(action, 'label'),
   );
+}
+
+function renderJourneyDiscovery(root, state) {
+  const card = element('section', 'journey-discovery card');
+  card.append(element('h2', null, t('journey.discovery.title')));
+  card.append(element('p', null, t('journey.discovery.explanation')));
+  const form = document.createElement('form');
+  form.className = 'journey-discovery-form';
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.required = true;
+  input.value = state.journeyQuery || '';
+  input.placeholder = t('journey.discovery.placeholder');
+  input.setAttribute('aria-label', t('journey.discovery.input'));
+  const submit = button(t('journey.discovery.search'), () => form.requestSubmit(), true, '⌕');
+  submit.type = 'submit';
+  form.append(input, submit);
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    discoverJourneyCandidates(state, input.value.trim());
+  });
+  card.append(form);
+  if (state.journeyDiscoveryLoading) {
+    card.append(element('p', 'empty-state', t('common.loading')));
+  } else if (Array.isArray(state.journeyCandidates) && state.journeyCandidates.length) {
+    const list = element('div', 'journey-candidate-list');
+    journeyAnchorCandidates(state).forEach(({ item, criterion, candidate }) => {
+      const row = button(`${item.id} · ${criterion.statement}`, () => {
+        state.journeyContextItemId = item.id;
+        state.journeyCandidateAnchor = criterion.anchor;
+        state.journeyIntentSearch = false;
+        state.journeySpecificationExpanded = true;
+        state.specificationTraceNode = null;
+        state.specificationTrace = null;
+        resetContextSource(state);
+        syncWorkSpecificationLocation(state);
+        state.render();
+      }, false, '◈');
+      row.classList.add('journey-candidate');
+      const evidence = candidateEvidence(candidate);
+      if (evidence.length) row.title = evidence.map(value => value.detail || value).join(' · ');
+      list.append(row);
+    });
+    card.append(list);
+  } else if (Array.isArray(state.journeyCandidates)) {
+    renderNoMatchRecovery(card, state);
+  }
+  root.append(card);
 }
 
 function dispatchJourneyAction(state, action) {
@@ -349,6 +572,9 @@ function resetContextSource(state) {
 function syncWorkSpecificationLocation(state, push = true) {
   const parameters = new URLSearchParams(location.search);
   parameters.set('page', 'work');
+  // Work has its own detail namespace. Do not leave a Specifications deep
+  // link active alongside the Work context when a related item is opened.
+  ['item', 'detailTab', 'node', 'traceMode', 'depth', 'specificationsTab'].forEach(key => parameters.delete(key));
   if (state.journeyContextItemId) parameters.set('workItem', state.journeyContextItemId);
   else parameters.delete('workItem');
   if (state.specificationDetailTab) parameters.set('workDetailTab', state.specificationDetailTab);
@@ -360,6 +586,41 @@ function syncWorkSpecificationLocation(state, push = true) {
   else parameters.delete('workDepth');
   const url = `?${parameters.toString()}`;
   if (push) history.pushState({}, '', url); else history.replaceState({}, '', url);
+}
+
+function workSpecificationWorkspaceAdapter(state) {
+  return {
+    getSelectedItem: () => state.journeyContextItemId,
+    setSelectedItem: itemId => {
+      if (itemId === state.journeyContextItemId) return;
+      if (state.journeyContextItemId) state.journeyContextHistory.push(state.journeyContextItemId);
+      state.journeyContextItemId = itemId;
+      state.specificationTraceNode = null;
+      state.specificationTrace = null;
+      resetContextSource(state);
+      syncWorkSpecificationLocation(state);
+      state.render();
+    },
+    getSelectedNode: () => state.specificationTraceNode,
+    setSelectedNode: nodeId => {
+      state.specificationTraceNode = nodeId;
+      syncWorkSpecificationLocation(state);
+    },
+    openTarget: target => {
+      state.journeyContextTarget = target;
+      state.specificationTraceNode = target.reference;
+      state.specificationSourceTarget = target;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
+      syncWorkSpecificationLocation(state);
+      state.render();
+    },
+    closeTarget: () => {
+      resetContextSource(state);
+      state.specificationTraceNode = null;
+    },
+    syncLocation: (nextState, push = true) => syncWorkSpecificationLocation(nextState, push),
+  };
 }
 
 function renderContextTabs(root, state, hasScope, hasWorkInsights) {
@@ -433,10 +694,12 @@ function renderScopeDetail(root, journey, state, work) {
     targetButton.addEventListener('click', () => {
       state.journeyContextTarget = target;
       state.journeyContextTab = 'specification';
+      state.specificationTraceNode = target.reference;
       state.specificationSourceTarget = target;
       state.specificationSource = null;
       state.specificationSourceFull = false;
       state.journeySpecificationExpanded = true;
+      syncWorkSpecificationLocation(state);
       state.render();
     });
     targetList.append(targetButton);
@@ -455,19 +718,29 @@ function renderSpecification(root, workspace, journey, state, work) {
     state.journeySpecificationExpanded = false;
     state.journeyContextTab = 'specification';
     state.relatedKind = 'specification';
-    state.journeyContextItemId = contextAnchor?.split('#')[0] || null;
+    if (state.journeyRouteItemId !== undefined) {
+      state.journeyContextItemId = state.journeyRouteItemId;
+      state.journeyRouteItemId = undefined;
+    } else {
+      state.journeyContextItemId = contextAnchor?.split('#')[0] || null;
+    }
     state.journeyContextHistory = [];
     resetContextSource(state);
   }
   const hasContext = Boolean(specification);
   const hasScope = Boolean(journey?.approved_scope && work?.plan?.slices?.length);
   const hasWorkInsights = Boolean(work?.request);
+  const hasDiscovery = Boolean(state.journeyIntentSearch || journey?.current_step === 'select_specification');
   if (!hasScope && state.journeyContextTab === 'scope') state.journeyContextTab = 'specification';
-  const hasPanel = hasContext || hasWorkInsights;
+  const hasPanel = hasContext || hasWorkInsights || hasDiscovery;
   root.hidden = !hasPanel;
   workspace?.classList.toggle('has-specification', hasPanel);
   root.replaceChildren();
   if (!hasPanel) return;
+  if (hasDiscovery && !specification && !state.journeyContextItemId) {
+    renderJourneyDiscovery(root, state);
+    return;
+  }
 
   const header = element('header', 'journey-specification-head');
   const heading = element('div');
@@ -540,30 +813,18 @@ function renderSpecification(root, workspace, journey, state, work) {
       state.journeyContextTarget = null;
       state.specificationSourceTarget = null;
       state.specificationSource = null;
+      state.specificationTraceNode = null;
+      syncWorkSpecificationLocation(state);
       state.render();
     }, false, '←'));
   }
+  const workspaceAdapter = workSpecificationWorkspaceAdapter(state);
   renderSpecificationDetail(body, state, selected, {
     readOnly: true,
     hideHeading: false,
     highlightedAnchor: contextAnchor,
-    onItem: itemId => {
-      if (itemId === state.journeyContextItemId) return;
-      state.journeyContextHistory.push(state.journeyContextItemId);
-      state.journeyContextItemId = itemId;
-      state.render();
-    },
-    onTarget: target => {
-      state.journeyContextTarget = target;
-      state.specificationSourceTarget = target;
-      state.specificationSource = null;
-      state.specificationSourceFull = false;
-      state.render();
-    },
-    onSourceClose: () => {
-      resetContextSource(state);
-    },
-    onLocationChange: (nextState, push = true) => syncWorkSpecificationLocation(nextState, push),
+    workspaceAdapter,
+    onSourceClose: workspaceAdapter.closeTarget,
   });
   body.querySelector('.specification-detail-head h2')?.setAttribute('data-work-specification-title', '');
   body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
