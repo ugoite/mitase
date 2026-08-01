@@ -77,6 +77,12 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
           - **selector**:
             - **kind**: module
             - **name**: lib::basis
+        - **id**: planner-claim-anchor
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::claim_anchor
         - **id**: planner-build-context
           - **adapter**: rust
           - **path**: crates/syu-planner/src/lib.rs
@@ -674,6 +680,10 @@ features:
             adapter: rust
             path: crates/syu-planner/src/lib.rs
             selector: { kind: module, name: 'lib::basis' }
+          - id: planner-claim-anchor
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::claim_anchor' }
           - id: planner-build-context
             adapter: rust
             path: crates/syu-planner/src/lib.rs
