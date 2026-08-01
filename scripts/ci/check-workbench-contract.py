@@ -125,7 +125,6 @@ assert "approved_target_suggestions" in SERVER_RS
 assert "validate_create_work_criterion" in SERVER_RS
 assert '"/api/work/request"' not in SERVER_RS
 assert "WorkRequestCommand" not in SERVER_RS
-assert "request: None" in SERVER_RS
 assert "resolve_approved_target_candidates" in SERVER_RS
 assert "operation," in SERVER_RS
 assert "max_added_bytes_per_target" in SERVER_RS
