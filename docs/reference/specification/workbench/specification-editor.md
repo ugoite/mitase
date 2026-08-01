@@ -109,6 +109,13 @@ description: "Generated reference for docs/syu/features/workbench/specification-
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
+      - **owns**:
+        - **id**: assets-page-specifications-module
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: module
+            - **name**: *
     - **id**: detail-verification
       - **role**: verification
       - **facet**: verification
@@ -322,6 +329,13 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
+    owns:
+    - id: assets-page-specifications-module
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: module
+        name: '*'
   - id: detail-verification
     role: verification
     facet: verification

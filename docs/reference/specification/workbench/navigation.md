@@ -212,12 +212,6 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
           - **selector**:
             - **kind**: module
             - **name**: *
-        - **id**: assets-page-specifications-module
-          - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
-          - **selector**:
-            - **kind**: module
-            - **name**: *
         - **id**: assets-page-work-module
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/pages/work.js
@@ -437,12 +431,6 @@ features:
     - id: assets-page-settings-module
       adapter: javascript
       path: crates/syu-app-ui/assets/js/pages/settings.js
-      selector:
-        kind: module
-        name: '*'
-    - id: assets-page-specifications-module
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
       selector:
         kind: module
         name: '*'

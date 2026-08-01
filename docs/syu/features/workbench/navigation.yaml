@@ -190,12 +190,6 @@ features:
       selector:
         kind: module
         name: '*'
-    - id: assets-page-specifications-module
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
-      selector:
-        kind: module
-        name: '*'
     - id: assets-page-work-module
       adapter: javascript
       path: crates/syu-app-ui/assets/js/pages/work.js
