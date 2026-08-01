@@ -135,6 +135,13 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **role**: implementation
       - **facet**: identity
       - **responsibility**: Resolve exact targets through the overlay-aware workspace.
+      - **owns**:
+        - **id**: workspace-module
+          - **adapter**: rust
+          - **path**: crates/syu-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
       - **targets**:
         - **id**: target-resolver
           - **adapter**: rust
@@ -192,6 +199,13 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **role**: implementation
       - **facet**: readiness
       - **responsibility**: Evaluate readiness subjects and canonical execution closure.
+      - **owns**:
+        - **id**: readiness-module
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/readiness.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: readiness
       - **targets**:
         - **id**: readiness-evaluate
           - **adapter**: rust
@@ -211,6 +225,13 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **role**: implementation
       - **facet**: validation
       - **responsibility**: Validate semantic changed units against ownership and plan scope.
+      - **owns**:
+        - **id**: validation-module
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
       - **targets**:
         - **id**: change-validate
           - **adapter**: rust
@@ -318,6 +339,11 @@ features:
         role: implementation
         facet: identity
         responsibility: Resolve exact targets through the overlay-aware workspace.
+        owns:
+          - id: workspace-module
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: module, name: lib }
         targets:
           - id: target-resolver
             adapter: rust
@@ -369,6 +395,11 @@ features:
         role: implementation
         facet: readiness
         responsibility: Evaluate readiness subjects and canonical execution closure.
+        owns:
+          - id: readiness-module
+            adapter: rust
+            path: crates/syu-validation/src/readiness.rs
+            selector: { kind: module, name: readiness }
         targets:
           - id: readiness-evaluate
             adapter: rust
@@ -387,6 +418,11 @@ features:
         role: implementation
         facet: validation
         responsibility: Validate semantic changed units against ownership and plan scope.
+        owns:
+          - id: validation-module
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: module, name: lib }
         targets:
           - id: change-validate
             adapter: rust

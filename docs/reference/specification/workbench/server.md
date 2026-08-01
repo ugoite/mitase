@@ -34,6 +34,13 @@ description: "Generated reference for docs/syu/features/workbench/server.yaml"
       - **role**: implementation
       - **facet**: server
       - **responsibility**: Serve canonical Workbench HTTP routes and mutation guards.
+      - **owns**:
+        - **id**: server-module
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
       - **targets**:
         - **id**: mutation-guard
           - **adapter**: rust
@@ -71,6 +78,11 @@ features:
     role: implementation
     facet: server
     responsibility: Serve canonical Workbench HTTP routes and mutation guards.
+    owns:
+    - id: server-module
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: lib }
     targets:
     - id: mutation-guard
       adapter: rust

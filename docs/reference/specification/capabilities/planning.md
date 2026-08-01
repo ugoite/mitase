@@ -34,6 +34,19 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
       - **role**: implementation
       - **facet**: planner
       - **responsibility**: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
+      - **owns**:
+        - **id**: planner-module
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
+        - **id**: work-model-module
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
       - **targets**:
         - **id**: canonical-plan
           - **adapter**: rust
@@ -380,6 +393,15 @@ features:
         role: implementation
         facet: planner
         responsibility: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
+        owns:
+          - id: planner-module
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: lib }
+          - id: work-model-module
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: lib }
         targets:
           - id: canonical-plan
             adapter: rust
