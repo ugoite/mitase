@@ -2714,6 +2714,30 @@ async fn api_source(
 fn validate_create_work_criterion(
     snapshot: &CachedWorkspaceSnapshot,
     anchor: &SpecAnchor,
+    approved_candidates: &[TargetSuggestion],
+) -> Result<()> {
+    validate_work_criterion_anchor(snapshot, anchor)?;
+    match snapshot.index.criterion_status.get(anchor) {
+        Some(ItemStatus::Implemented) => Ok(()),
+        Some(ItemStatus::Planned)
+            if approved_candidates
+                .iter()
+                .all(|candidate| candidate.transition == TargetTransition::Add)
+                && approved_candidates
+                    .iter()
+                    .any(|candidate| candidate.role == BindingRole::Implementation) =>
+        {
+            Ok(())
+        }
+        _ => anyhow::bail!(
+            "Work can only start from an implemented requirement criterion, or a planned criterion with an approved exact implementation Add target"
+        ),
+    }
+}
+
+fn validate_work_criterion_anchor(
+    snapshot: &CachedWorkspaceSnapshot,
+    anchor: &SpecAnchor,
 ) -> Result<()> {
     if anchor.kind != LocalAnchorKind::Criterion {
         anyhow::bail!("Work must start from an exact requirement criterion");
@@ -2724,8 +2748,18 @@ fn validate_create_work_criterion(
     ) {
         anyhow::bail!("Work criterion anchor does not resolve to an exact requirement criterion");
     }
-    if snapshot.index.criterion_status.get(anchor) != Some(&ItemStatus::Implemented) {
-        anyhow::bail!("Work can only start from a criterion in an implemented requirement");
+    Ok(())
+}
+
+fn ensure_homogeneous_approved_transitions(candidates: &[TargetSuggestion]) -> Result<()> {
+    let transitions = candidates
+        .iter()
+        .map(|candidate| format!("{:?}", candidate.transition))
+        .collect::<BTreeSet<_>>();
+    if transitions.len() > 1 {
+        anyhow::bail!(
+            "approved target suggestions use multiple transitions; create separate WorkRequests"
+        );
     }
     Ok(())
 }
@@ -2783,7 +2817,7 @@ async fn api_journey_action(
             let snapshot = basis(&service, &command.basis)?;
             let anchor = SpecAnchor::from_str(&anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
-            validate_create_work_criterion(&snapshot, &anchor)
+            validate_work_criterion_anchor(&snapshot, &anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
             if summary.trim().is_empty() {
                 return Err(ApiError(
@@ -2803,6 +2837,10 @@ async fn api_journey_action(
             let approved_candidates =
                 resolve_approved_target_candidates(&anchor, Ok(suggestions.clone()), &approvals)
                     .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            ensure_homogeneous_approved_transitions(&approved_candidates)
+                .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+            validate_create_work_criterion(&snapshot, &anchor, &approved_candidates)
+                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
             let requested_targets = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
                 .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
             let operation = match approved_candidates
@@ -7781,6 +7819,30 @@ mod tests {
         persisted_view_ids.sort();
         assert_eq!(persisted_view_ids, actual_approved_ids);
 
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Do not create mixed transition work"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("target suggestion session")
+                .draft_request
+                .is_none()
+        );
+
         let mut changed_again = fs::read_to_string(&target_path).expect("changed target source");
         let next_body_offset = changed_again[unit.span.byte_start..unit.span.byte_end]
             .find('{')
@@ -7802,10 +7864,6 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("invalidated suggestion response");
         assert!(!invalidated.approved_ids.contains(&rejected_id));
-        let valid_approved_count = persisted_approved_ids
-            .iter()
-            .filter(|id| *id != &rejected_id)
-            .count();
         assert!(
             service
                 .session
@@ -7831,42 +7889,6 @@ mod tests {
         assert_eq!(
             projection["journey"]["current_step"],
             "select_specification"
-        );
-
-        let (basis, csrf, _) = projection_and_basis(&app).await;
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/action",
-            &csrf,
-            &serde_json::json!({
-                "basis": basis,
-                "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.behavior",
-                "summary": "Start the approved fixture work"
-            }),
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let request = service
-            .session
-            .read()
-            .expect("target suggestion session")
-            .draft_request
-            .clone()
-            .expect("created work request");
-        assert_eq!(request.requested_targets.len(), valid_approved_count);
-        assert!(request.requested_targets.iter().all(|target| {
-            target.criterion.as_ref()
-                == Some(&"REQ-FIXTURE-001#criterion.behavior".parse().unwrap())
-        }));
-        assert!(
-            service
-                .session
-                .read()
-                .expect("target suggestion session")
-                .approved_target_suggestions
-                .is_empty()
         );
     }
 
@@ -7941,6 +7963,13 @@ mod tests {
             .join("fixtures/v1/valid-workbench-flow");
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
+        let requirement_path = temp.path().join("spec/requirement.yaml");
+        let requirement = fs::read_to_string(&requirement_path).expect("requirement fixture");
+        fs::write(
+            requirement_path,
+            requirement.replacen("status: implemented", "status: planned", 1),
+        )
+        .expect("planned requirement fixture");
         initialize_fixture_git(temp.path());
         let server = WorkbenchServer::new(temp.path().to_path_buf());
         let service = server.service.clone();
@@ -8008,6 +8037,14 @@ mod tests {
             request.requested_targets[0].transition,
             syu_work_model::TargetTransition::Add
         );
+        assert!(request.seeds.is_empty());
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned requirement work plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
         assert!(service.session.read().unwrap().draft_request.is_some());
     }
 
