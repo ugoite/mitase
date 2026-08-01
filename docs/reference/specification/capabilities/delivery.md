@@ -35,17 +35,95 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
       - **facet**: delivery
       - **responsibility**: Store immutable attempts, retain target lifecycle proofs, and perform the planned-to-implemented handoff.
       - **owns**:
-        - **id**: delivery-module
-          - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib
         - **id**: delivery-manifest-file
           - **adapter**: declared
           - **path**: crates/syu-delivery/Cargo.toml
           - **selector**:
             - **kind**: file
+        - **id**: delivery-legacy-agent-event
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::LegacyAgentEvent
+        - **id**: delivery-legacy-agent-event-kind
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::LegacyAgentEventKind
+        - **id**: delivery-legacy-agent-patch-record
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::LegacyAgentPatchRecord
+        - **id**: delivery-legacy-agent-target-change
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::LegacyAgentTargetChange
+        - **id**: delivery-legacy-completion-attempt
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::LegacyCompletionAttempt
+        - **id**: delivery-legacy-verification-receipt
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::LegacyVerificationReceipt
+        - **id**: delivery-agent-events-all
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(DeliveryStore)::agent_events_all
+        - **id**: delivery-legacy-completion-from
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(From&lt;&CompletionAttempt&gt;forLegacyCompletionAttempt)::from
+        - **id**: delivery-fixture-attempt
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::fixture_attempt
+        - **id**: delivery-legacy-evidence-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::legacy_evidence_shapes_preserve_digests_and_round_trip
+        - **id**: delivery-legacy-run-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::legacy_run_started_event_preserves_digest_and_run_reconstruction
+        - **id**: delivery-legacy-plan-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::legacy_work_plan_and_approval_keep_the_v1_canonical_digest
+        - **id**: delivery-tests-module
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests[cfg(test)]
+        - **id**: delivery-validate-event-digest
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::validate_agent_event_digest
       - **targets**:
         - **id**: delivery-store
           - **adapter**: rust
@@ -644,14 +722,66 @@ features:
         facet: delivery
         responsibility: Store immutable attempts, retain target lifecycle proofs, and perform the planned-to-implemented handoff.
         owns:
-          - id: delivery-module
-            adapter: rust
-            path: crates/syu-delivery/src/lib.rs
-            selector: { kind: module, name: lib }
           - id: delivery-manifest-file
             adapter: declared
             path: crates/syu-delivery/Cargo.toml
             selector: { kind: file }
+          - id: delivery-legacy-agent-event
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentEvent' }
+          - id: delivery-legacy-agent-event-kind
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentEventKind' }
+          - id: delivery-legacy-agent-patch-record
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentPatchRecord' }
+          - id: delivery-legacy-agent-target-change
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentTargetChange' }
+          - id: delivery-legacy-completion-attempt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyCompletionAttempt' }
+          - id: delivery-legacy-verification-receipt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyVerificationReceipt' }
+          - id: delivery-agent-events-all
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(DeliveryStore)::agent_events_all' }
+          - id: delivery-legacy-completion-from
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(From<&CompletionAttempt>forLegacyCompletionAttempt)::from' }
+          - id: delivery-fixture-attempt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::fixture_attempt' }
+          - id: delivery-legacy-evidence-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::legacy_evidence_shapes_preserve_digests_and_round_trip' }
+          - id: delivery-legacy-run-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::legacy_run_started_event_preserves_digest_and_run_reconstruction' }
+          - id: delivery-legacy-plan-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::legacy_work_plan_and_approval_keep_the_v1_canonical_digest' }
+          - id: delivery-tests-module
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests[cfg(test)]' }
+          - id: delivery-validate-event-digest
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::validate_agent_event_digest' }
         targets:
           - id: delivery-store
             adapter: rust

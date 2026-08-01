@@ -72,12 +72,6 @@ description: "Generated reference for docs/syu/features/workbench/specification-
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
       - **owns**:
-        - **id**: spec-model-module
-          - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib
         - **id**: app-ui-components-module
           - **adapter**: rust
           - **path**: crates/syu-app-ui/src/components.rs
@@ -184,12 +178,6 @@ features:
       - kind: satisfies
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
     owns:
-    - id: spec-model-module
-      adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
-      selector:
-        kind: module
-        name: lib
     - id: app-ui-components-module
       adapter: rust
       path: crates/syu-app-ui/src/components.rs

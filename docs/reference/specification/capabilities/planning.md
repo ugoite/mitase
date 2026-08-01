@@ -35,18 +35,270 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
       - **facet**: planner
       - **responsibility**: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
       - **owns**:
-        - **id**: planner-module
+        - **id**: planner-declared-options
           - **adapter**: rust
           - **path**: crates/syu-planner/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: lib
-        - **id**: work-model-module
+            - **name**: lib::DeclaredTargetPlanOptions
+        - **id**: planner-suggestion-budget
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::SuggestionBudget
+        - **id**: planner-target-options
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::TargetPlanOptions
+        - **id**: planner-target-suggestion
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::TargetSuggestion
+        - **id**: planner-apply-overrides
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::apply_changed_artifact_overrides
+        - **id**: planner-approved-container-hash
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::approved_container_hash
+        - **id**: planner-basis
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::basis
+        - **id**: planner-build-context
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::build_context_pack
+        - **id**: planner-readonly-context
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::contract_readonly_context_for_target
+        - **id**: planner-verification-targets
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::criterion_verification_targets
+        - **id**: planner-finalize-slice
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::finalize_slice
+        - **id**: planner-hex-digest
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::hex_digest
+        - **id**: planner-one-target
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::one_target
+        - **id**: planner-rebuild-split
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::rebuild_split_slice
+        - **id**: planner-significant-terms
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::significant_terms
+        - **id**: planner-suggestion-budget-calc
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::suggestion_budget
+        - **id**: planner-suggestion-budget-bytes
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::suggestion_budget_bytes
+        - **id**: planner-budget-exceeds
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::suggestion_budget_exceeds
+        - **id**: planner-suggestion-digest
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::suggestion_digest
+        - **id**: planner-suggestion-id
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::suggestion_id
+        - **id**: planner-suggestion-token
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::suggestion_set_token
+        - **id**: planner-targets
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::targets
+        - **id**: planner-implementation-add-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::implementation_add_does_not_pull_unapproved_missing_verification_target
+        - **id**: planner-budget-split-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::missing_add_targets_split_by_declared_budget_and_file_limit
+        - **id**: planner-remove-suggestion-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::planned_absent_exact_target_is_a_remove_suggestion_when_artifact_exists
+        - **id**: planner-add-suggestion-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::planned_missing_exact_target_is_an_add_suggestion_with_scope_metadata
+        - **id**: planner-verification-runonly-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::requested_add_verification_target_is_repeated_as_post_state_run_only
+        - **id**: planner-verification-budget-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::verification_add_targets_count_the_post_write_run_only_phase
+        - **id**: planner-tests-module
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests[cfg(test)]
+        - **id**: planner-target-access-uniqueness
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::validate_target_access_uniqueness
+        - **id**: work-model-agent-blocker
           - **adapter**: rust
           - **path**: crates/syu-work-model/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: lib
+            - **name**: lib::AgentBlocker
+        - **id**: work-model-agent-change
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::AgentTargetChange
+        - **id**: work-model-agent-digest
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::AgentTargetDigest
+        - **id**: work-model-agent-write
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::AgentTargetWrite
+        - **id**: work-model-finalization-receipt
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::FinalizationReceipt
+        - **id**: work-model-plan-approval
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::PlanApproval
+        - **id**: work-model-planned-target
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::PlannedTarget
+        - **id**: work-model-lifecycle-proof
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::TargetLifecycleProof
+        - **id**: work-model-transition
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::TargetTransition
+        - **id**: work-model-verification-receipt
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::VerificationReceipt
+        - **id**: work-model-empty-vec
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::is_empty_vec
+        - **id**: work-model-stable-lifecycle
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::is_stable_target_lifecycle
+        - **id**: work-model-readonly-excluding
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::readonly_targets_fingerprint_excluding_paths
+        - **id**: work-model-readonly-fingerprint
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::readonly_targets_fingerprint_for_execution
       - **targets**:
         - **id**: canonical-plan
           - **adapter**: rust
@@ -394,14 +646,182 @@ features:
         facet: planner
         responsibility: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
         owns:
-          - id: planner-module
+          - id: planner-declared-options
             adapter: rust
             path: crates/syu-planner/src/lib.rs
-            selector: { kind: module, name: lib }
-          - id: work-model-module
+            selector: { kind: module, name: 'lib::DeclaredTargetPlanOptions' }
+          - id: planner-suggestion-budget
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::SuggestionBudget' }
+          - id: planner-target-options
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::TargetPlanOptions' }
+          - id: planner-target-suggestion
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::TargetSuggestion' }
+          - id: planner-apply-overrides
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::apply_changed_artifact_overrides' }
+          - id: planner-approved-container-hash
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::approved_container_hash' }
+          - id: planner-basis
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::basis' }
+          - id: planner-build-context
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::build_context_pack' }
+          - id: planner-readonly-context
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::contract_readonly_context_for_target' }
+          - id: planner-verification-targets
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::criterion_verification_targets' }
+          - id: planner-finalize-slice
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::finalize_slice' }
+          - id: planner-hex-digest
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::hex_digest' }
+          - id: planner-one-target
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::one_target' }
+          - id: planner-rebuild-split
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::rebuild_split_slice' }
+          - id: planner-significant-terms
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::significant_terms' }
+          - id: planner-suggestion-budget-calc
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::suggestion_budget' }
+          - id: planner-suggestion-budget-bytes
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::suggestion_budget_bytes' }
+          - id: planner-budget-exceeds
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::suggestion_budget_exceeds' }
+          - id: planner-suggestion-digest
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::suggestion_digest' }
+          - id: planner-suggestion-id
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::suggestion_id' }
+          - id: planner-suggestion-token
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::suggestion_set_token' }
+          - id: planner-targets
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::targets' }
+          - id: planner-implementation-add-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::implementation_add_does_not_pull_unapproved_missing_verification_target' }
+          - id: planner-budget-split-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::missing_add_targets_split_by_declared_budget_and_file_limit' }
+          - id: planner-remove-suggestion-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::planned_absent_exact_target_is_a_remove_suggestion_when_artifact_exists' }
+          - id: planner-add-suggestion-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::planned_missing_exact_target_is_an_add_suggestion_with_scope_metadata' }
+          - id: planner-verification-runonly-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::requested_add_verification_target_is_repeated_as_post_state_run_only' }
+          - id: planner-verification-budget-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::verification_add_targets_count_the_post_write_run_only_phase' }
+          - id: planner-tests-module
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::tests[cfg(test)]' }
+          - id: planner-target-access-uniqueness
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: module, name: 'lib::validate_target_access_uniqueness' }
+          - id: work-model-agent-blocker
             adapter: rust
             path: crates/syu-work-model/src/lib.rs
-            selector: { kind: module, name: lib }
+            selector: { kind: module, name: 'lib::AgentBlocker' }
+          - id: work-model-agent-change
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::AgentTargetChange' }
+          - id: work-model-agent-digest
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::AgentTargetDigest' }
+          - id: work-model-agent-write
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::AgentTargetWrite' }
+          - id: work-model-finalization-receipt
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::FinalizationReceipt' }
+          - id: work-model-plan-approval
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::PlanApproval' }
+          - id: work-model-planned-target
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::PlannedTarget' }
+          - id: work-model-lifecycle-proof
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::TargetLifecycleProof' }
+          - id: work-model-transition
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::TargetTransition' }
+          - id: work-model-verification-receipt
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::VerificationReceipt' }
+          - id: work-model-empty-vec
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::is_empty_vec' }
+          - id: work-model-stable-lifecycle
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::is_stable_target_lifecycle' }
+          - id: work-model-readonly-excluding
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::readonly_targets_fingerprint_excluding_paths' }
+          - id: work-model-readonly-fingerprint
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector: { kind: module, name: 'lib::readonly_targets_fingerprint_for_execution' }
         targets:
           - id: canonical-plan
             adapter: rust

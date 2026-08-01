@@ -1821,7 +1821,7 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 .then(|| baseline.as_ref().map(|baseline| &baseline.index))
                 .flatten()
                 .unwrap_or(ctx.index);
-            let owned = index
+            let mut owned = index
                 .artifact_owners
                 .get(&unit.identity)
                 .cloned()
@@ -1847,6 +1847,18 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         })
                         .collect::<Vec<_>>()
                 });
+            if owned.is_empty() && from_baseline {
+                // Ownership migrations are part of the current specification boundary. A
+                // changed artifact that was unowned in the baseline must be checked against
+                // the current exact owner before it is rejected; otherwise a code change and
+                // its first explicit ownership binding can never land atomically.
+                owned = ctx
+                    .index
+                    .artifact_owners
+                    .get(&unit.identity)
+                    .cloned()
+                    .unwrap_or_default();
+            }
             let owners = Some(owned.as_slice());
             // Cargo build scripts are compiler-owned entrypoints. Their semantic inventory
             // includes historical helper symbols so branch diffs can be compared across
