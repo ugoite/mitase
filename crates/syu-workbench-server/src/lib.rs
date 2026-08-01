@@ -8735,6 +8735,30 @@ mod tests {
                 .is_none()
         );
 
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Do not create mixed transition work"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("target suggestion session")
+                .draft_request
+                .is_none()
+        );
+
         let mut changed_again = fs::read_to_string(&target_path).expect("changed target source");
         let next_body_offset = changed_again[unit.span.byte_start..unit.span.byte_end]
             .find('{')
@@ -8886,7 +8910,6 @@ mod tests {
         let app = server.router();
         let suggestion_path =
             "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
-
         let response = app
             .clone()
             .oneshot(
@@ -8921,7 +8944,6 @@ mod tests {
         assert_eq!(add.budget_bytes, Some(512));
         assert_eq!(add.budget_lines, Some(32));
         assert!(service.session.read().unwrap().draft_request.is_none());
-
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(
             &app,
@@ -9060,6 +9082,100 @@ mod tests {
                 .expect("planned requirement work plan");
         assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
         assert!(service.session.read().unwrap().draft_request.is_some());
+    }
+
+    #[tokio::test]
+    async fn planned_requirement_with_approved_add_target_can_create_ready_plan() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        fs::write(
+            temp.path().join("spec/planned-requirement.yaml"),
+            "schema: syu/spec/v1\nkind: requirements\nnamespace: fixture\ncategory: Workbench recovery\nrequirements:\n  - id: REQ-PLANNED-001\n    title: A planned behavior\n    description: A planned requirement created through recovery.\n    priority: high\n    status: planned\n    criteria:\n      - id: behavior\n        kind: behavior\n        statement: Add the planned behavior.\n        governed_by: []\n",
+        )
+        .expect("planned requirement fixture");
+        fs::write(
+            temp.path().join("spec/planned-feature.yaml"),
+            "schema: syu/spec/v1\nkind: features\nnamespace: fixture\ncategory: Workbench recovery\nfeatures:\n  - id: FEAT-PLANNED-001\n    title: A planned behavior implementation\n    summary: A planned Feature target created through recovery.\n    status: planned\n    bindings:\n      - id: implementation\n        role: implementation\n        facet: work\n        responsibility: Add the planned behavior implementation.\n        targets:\n          - id: behavior\n            adapter: rust\n            path: src/lib.rs\n            selector: { kind: symbol, name: planned_behavior }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n",
+        )
+        .expect("planned Feature fixture");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-PLANNED-001%23criterion.behavior/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(response_status, StatusCode::OK, "{response_body:?}");
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response_body).expect("planned Add suggestions");
+        let add = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| candidate.transition == TargetTransition::Add)
+            .expect("planned implementation Add suggestion");
+        assert_eq!(add.role, BindingRole::Implementation);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: suggestions.suggestion_token,
+                suggestion_ids: vec![add.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-PLANNED-001#criterion.behavior",
+                "summary": "add the approved planned target"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("workbench session lock")
+                .draft_request
+                .as_ref()
+                .is_some_and(|request| request.seeds.is_empty())
+        );
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned requirement work plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
     }
 
     #[tokio::test]
