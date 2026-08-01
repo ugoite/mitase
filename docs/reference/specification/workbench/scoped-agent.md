@@ -27,13 +27,13 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
 
 - **id**: FEAT-WORKBENCH-SCOPED-AGENT-001
   - **title**: Scoped agent evidence
-  - **summary**: Expose the approved lifecycle-aware agent boundary and append-only execution evidence in Workbench.
+  - **summary**: Expose the approved agent boundary and append-only execution evidence in Workbench.
   - **status**: implemented
   - **bindings**:
     - **id**: agent-api
       - **role**: implementation
       - **facet**: scoped-agent
-      - **responsibility**: Connect Workbench actions to the provider-neutral scoped agent API for exact Modify, Add, and Remove transitions.
+      - **responsibility**: Connect Workbench actions to the provider-neutral scoped agent API.
       - **targets**:
         - **id**: agent-start
           - **adapter**: rust
@@ -82,13 +82,13 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-SCOPED-AGENT-001
   title: Scoped agent evidence
-  summary: Expose the approved lifecycle-aware agent boundary and append-only execution evidence in Workbench.
+  summary: Expose the approved agent boundary and append-only execution evidence in Workbench.
   status: implemented
   bindings:
   - id: agent-api
     role: implementation
     facet: scoped-agent
-    responsibility: Connect Workbench actions to the provider-neutral scoped agent API for exact Modify, Add, and Remove transitions.
+    responsibility: Connect Workbench actions to the provider-neutral scoped agent API.
     targets:
     - id: agent-start
       adapter: rust

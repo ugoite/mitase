@@ -121,12 +121,6 @@ features:
         - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-nested-edit
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps } }
     owns:
-    - id: spec-model-module
-      adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
-      selector:
-        kind: module
-        name: lib
     - id: app-ui-components-module
       adapter: rust
       path: crates/syu-app-ui/src/components.rs
