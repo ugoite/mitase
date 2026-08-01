@@ -78,7 +78,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
           - **path**: crates/syu-project-model/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: tests
+            - **name**: tests[cfg(test)]
 - **id**: FEAT-INVENTORY-001
   - **title**: Inventory providers
   - **summary**: Discover active artifact units through profile-selected providers.
@@ -263,7 +263,7 @@ features:
           - id: project-config-tests
             adapter: rust
             path: crates/syu-project-model/src/lib.rs
-            selector: { kind: module, name: tests }
+            selector: { kind: module, name: 'tests[cfg(test)]' }
 
   - id: FEAT-INVENTORY-001
     title: Inventory providers
