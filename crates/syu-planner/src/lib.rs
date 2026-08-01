@@ -403,7 +403,6 @@ pub fn split_work_recommendation(
     if !suggestion_budget_exceeds(&budget, limits) {
         return None;
     }
-
     let mut groups = Vec::<Vec<TargetSuggestion>>::new();
     for candidate in suggestions {
         let can_append = groups.last().is_some_and(|group| {

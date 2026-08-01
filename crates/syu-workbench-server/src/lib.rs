@@ -9101,9 +9101,16 @@ mod tests {
         .expect("planned requirement fixture");
         fs::write(
             temp.path().join("spec/planned-feature.yaml"),
-            "schema: syu/spec/v1\nkind: features\nnamespace: fixture\ncategory: Workbench recovery\nfeatures:\n  - id: FEAT-PLANNED-001\n    title: A planned behavior implementation\n    summary: A planned Feature target created through recovery.\n    status: planned\n    bindings:\n      - id: implementation\n        role: implementation\n        facet: work\n        responsibility: Add the planned behavior implementation.\n        targets:\n          - id: behavior\n            adapter: rust\n            path: src/lib.rs\n            selector: { kind: symbol, name: planned_behavior }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n",
+            "schema: syu/spec/v1\nkind: features\nnamespace: fixture\ncategory: Workbench recovery\nfeatures:\n  - id: FEAT-PLANNED-001\n    title: A planned behavior implementation\n    summary: A planned Feature target created through recovery.\n    status: planned\n    bindings:\n      - id: implementation\n        role: implementation\n        facet: work\n        responsibility: Add the planned behavior implementation.\n        targets:\n          - id: behavior\n            adapter: rust\n            path: src/lib.rs\n            selector: { kind: symbol, name: planned_behavior }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n          - id: behavior-two\n            adapter: rust\n            path: src/other.rs\n            selector: { kind: symbol, name: planned_behavior_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n",
         )
         .expect("planned Feature fixture");
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("config fixture");
+        fs::write(
+            &config_path,
+            config.replace("max_total_bytes: 120000", "max_total_bytes: 700"),
+        )
+        .expect("small slicing budget");
         initialize_fixture_git(temp.path());
         let server = WorkbenchServer::new(temp.path().to_path_buf());
         let service = server.service.clone();
@@ -9125,10 +9132,16 @@ mod tests {
         assert_eq!(response_status, StatusCode::OK, "{response_body:?}");
         let suggestions: TargetSuggestionSet =
             serde_json::from_slice(&response_body).expect("planned Add suggestions");
-        let add = suggestions
+        let add_candidates = suggestions
             .suggestions
             .iter()
-            .find(|candidate| candidate.transition == TargetTransition::Add)
+            .filter(|candidate| candidate.transition == TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(add_candidates.len(), 2);
+        let add = add_candidates
+            .first()
+            .cloned()
             .expect("planned implementation Add suggestion");
         assert_eq!(add.role, BindingRole::Implementation);
         let (basis, csrf, _) = projection_and_basis(&app).await;
@@ -9138,8 +9151,61 @@ mod tests {
             &format!("{suggestion_path}/approve"),
             &csrf,
             &TargetSuggestionApprovalCommand {
+                basis: basis.clone(),
+                suggestion_token: suggestions.suggestion_token.clone(),
+                suggestion_ids: add_candidates
+                    .iter()
+                    .map(|candidate| candidate.id.clone())
+                    .collect(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bulk_approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("bulk planned Add approval");
+        assert!(bulk_approval.approved_ids.is_empty());
+        assert_eq!(
+            bulk_approval
+                .split_recommendation
+                .as_ref()
+                .expect("budget split recommendation")
+                .suggested_groups
+                .len(),
+            2
+        );
+        assert!(
+            service
+                .session
+                .read()
+                .expect("workbench session lock")
+                .approved_target_suggestions
+                .is_empty(),
+            "over-budget bulk approval must not persist any candidate"
+        );
+        fs::write(&config_path, config).expect("restore slicing budget");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let restored_suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("restored planned Add suggestions");
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
                 basis,
-                suggestion_token: suggestions.suggestion_token,
+                suggestion_token: restored_suggestions.suggestion_token,
                 suggestion_ids: vec![add.id.clone()],
             },
         )
