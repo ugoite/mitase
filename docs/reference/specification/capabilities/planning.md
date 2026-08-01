@@ -237,12 +237,53 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
           - **path**: docs/generated/site-spec/index.md
           - **selector**:
             - **kind**: file
-        - **id**: documentation-tree
+        - **id**: documentation-contribute
           - **adapter**: declared
-          - **path**: docs
+          - **path**: docs/contribute
           - **selector**:
             - **kind**: path-prefix
-            - **value**: docs
+            - **value**: docs/contribute
+        - **id**: documentation-project
+          - **adapter**: declared
+          - **path**: docs/project
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs/project
+        - **id**: documentation-reference
+          - **adapter**: declared
+          - **path**: docs/reference
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs/reference
+        - **id**: documentation-start-here
+          - **adapter**: declared
+          - **path**: docs/start-here
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs/start-here
+        - **id**: documentation-syu
+          - **adapter**: declared
+          - **path**: docs/syu
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs/syu
+        - **id**: documentation-understand
+          - **adapter**: declared
+          - **path**: docs/understand
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs/understand
+        - **id**: documentation-workflows
+          - **adapter**: declared
+          - **path**: docs/workflows
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: docs/workflows
+        - **id**: documentation-index
+          - **adapter**: declared
+          - **path**: docs/index.md
+          - **selector**:
+            - **kind**: file
         - **id**: site-docs-generator
           - **adapter**: declared
           - **path**: scripts/generate-site-docs.py
@@ -482,7 +523,14 @@ features:
           - { id: legacy-guide-getting-started, adapter: declared, path: docs/guide/getting-started.md, selector: { kind: file } }
           - { id: legacy-generated-documentation-page, adapter: declared, path: docs/generated/site-spec/features/documentation/docs.md, selector: { kind: file } }
           - { id: legacy-generated-site-spec-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
-          - { id: documentation-tree, adapter: declared, path: docs, selector: { kind: path-prefix, value: docs } }
+          - { id: documentation-contribute, adapter: declared, path: docs/contribute, selector: { kind: path-prefix, value: docs/contribute } }
+          - { id: documentation-project, adapter: declared, path: docs/project, selector: { kind: path-prefix, value: docs/project } }
+          - { id: documentation-reference, adapter: declared, path: docs/reference, selector: { kind: path-prefix, value: docs/reference } }
+          - { id: documentation-start-here, adapter: declared, path: docs/start-here, selector: { kind: path-prefix, value: docs/start-here } }
+          - { id: documentation-syu, adapter: declared, path: docs/syu, selector: { kind: path-prefix, value: docs/syu } }
+          - { id: documentation-understand, adapter: declared, path: docs/understand, selector: { kind: path-prefix, value: docs/understand } }
+          - { id: documentation-workflows, adapter: declared, path: docs/workflows, selector: { kind: path-prefix, value: docs/workflows } }
+          - { id: documentation-index, adapter: declared, path: docs/index.md, selector: { kind: file } }
           - { id: site-docs-generator, adapter: declared, path: scripts/generate-site-docs.py, selector: { kind: file } }
           - { id: site-docs-extras-generator, adapter: declared, path: scripts/generate-docs-site-extras.py, selector: { kind: file } }
           - { id: site-docs-freshness-check, adapter: declared, path: scripts/ci/check-generated-docs-freshness.sh, selector: { kind: file } }
