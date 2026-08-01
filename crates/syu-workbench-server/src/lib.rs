@@ -27,9 +27,10 @@ use syu_planner::{
 use syu_project_model::{ChangeBaseline, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, CriterionKind,
-    ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy, Policy, Priority,
-    Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument, SpecId, TargetClaim,
+    ArtifactBinding, ArtifactTarget, BindingRole, BoundTargetRef, Contract, ContractKind,
+    Criterion, CriterionKind, ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy,
+    Policy, Priority, RepoPath, Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument,
+    SpecId, TargetClaim,
 };
 use syu_validation::{ChangeStatus, PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
@@ -575,6 +576,10 @@ pub enum EditPatch {
         anchor: String,
         fields: AnchorPatchFields,
     },
+    AddCriterion {
+        requirement_id: SpecId,
+        criterion: NewCriterion,
+    },
     CreateRequirement {
         document: String,
         id: SpecId,
@@ -592,6 +597,21 @@ pub enum EditPatch {
         summary: String,
         #[serde(default)]
         status: Option<ItemStatus>,
+        /// A journey-only exact Requirement Criterion link. Feature documents
+        /// do not own criteria, but the guided authoring flow must retain the
+        /// human-selected anchor while it continues to target review.
+        #[serde(default)]
+        criterion_anchor: Option<String>,
+        /// An exact planned implementation target owned by the Feature. The
+        /// target remains advisory until a human approves its suggestion.
+        #[serde(default)]
+        target: Option<FeatureTargetDraft>,
+    },
+    AddFeatureTarget {
+        document: String,
+        feature_id: SpecId,
+        criterion_anchor: String,
+        target: FeatureTargetDraft,
     },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
@@ -624,6 +644,15 @@ pub struct NewCriterion {
     pub statement: String,
     #[serde(default)]
     pub governed_by: Vec<SpecAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureTargetDraft {
+    pub id: LocalId,
+    pub adapter: String,
+    pub path: String,
+    pub selector: Selector,
 }
 
 /// Typed edit payloads keep item-kind/schema semantics on the server. The
@@ -1119,6 +1148,12 @@ pub struct SpecificationCandidateView {
     pub item: ItemSummary,
     pub matches: Vec<CandidateMatch>,
     pub relevance: Vec<String>,
+    /// Ranking is advisory.  It is intentionally separated from the stable
+    /// criterion anchors that a person must explicitly select before work can
+    /// be created.
+    pub score: usize,
+    pub evidence: Vec<CandidateEvidence>,
+    pub stable_anchors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1128,13 +1163,174 @@ pub struct CandidateMatch {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateEvidence {
+    pub source: String,
+    pub detail: String,
+}
+
+#[derive(Clone, Copy)]
+struct DiscoveryConcept {
+    label: &'static str,
+    terms: &'static [&'static str],
+}
+
+// This intentionally small, deterministic glossary is a discovery aid, not
+// an authority on scope.  It keeps multilingual matching inspectable and
+// testable without turning an embedding or an LLM result into executable work.
+const DISCOVERY_CONCEPTS: &[DiscoveryConcept] = &[
+    DiscoveryConcept {
+        label: "behavior",
+        terms: &[
+            "behavior",
+            "behaviour",
+            "function",
+            "functional",
+            "動作",
+            "振る舞い",
+            "挙動",
+            "機能",
+        ],
+    },
+    DiscoveryConcept {
+        label: "validation",
+        terms: &[
+            "validate",
+            "validation",
+            "verify",
+            "verification",
+            "test",
+            "valid",
+            "検証",
+            "確認",
+            "テスト",
+            "有効",
+        ],
+    },
+    DiscoveryConcept {
+        label: "change",
+        terms: &[
+            "change",
+            "modify",
+            "update",
+            "implement",
+            "implementation",
+            "変更",
+            "改修",
+            "更新",
+            "実装",
+        ],
+    },
+    DiscoveryConcept {
+        label: "scope",
+        terms: &[
+            "scope", "boundary", "bounded", "plan", "planning", "範囲", "境界", "計画",
+        ],
+    },
+    DiscoveryConcept {
+        label: "security",
+        terms: &[
+            "security",
+            "secure",
+            "auth",
+            "permission",
+            "安全",
+            "認証",
+            "権限",
+        ],
+    },
+];
+
+fn matching_discovery_concepts(query: &str) -> Vec<&'static DiscoveryConcept> {
+    DISCOVERY_CONCEPTS
+        .iter()
+        .filter(|concept| {
+            concept
+                .terms
+                .iter()
+                .any(|term| discovery_term_matches(query, term))
+        })
+        .collect()
+}
+
+fn ascii_tokens(value: &str) -> Vec<&str> {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// English discovery terms are whole words. Japanese terms remain explicit
+/// glossary entries and use controlled substring matching because the
+/// Workbench does not promise a language-specific tokenizer.
+fn discovery_term_matches(text: &str, term: &str) -> bool {
+    if term.is_ascii() {
+        let tokens = ascii_tokens(text);
+        return tokens.iter().any(|token| token.eq_ignore_ascii_case(term));
+    }
+    text.contains(term)
+}
+
+fn discovery_query_matches(text: &str, query: &str) -> bool {
+    if !query.is_ascii() {
+        return text.to_lowercase().contains(&query.to_lowercase());
+    }
+    text.to_ascii_lowercase()
+        .contains(&query.to_ascii_lowercase())
+}
+
+fn discovery_query_exact_matches(text: &str, query: &str) -> bool {
+    if !query.is_ascii() {
+        return text.to_lowercase() == query.to_lowercase();
+    }
+    let text_tokens = ascii_tokens(text);
+    let query_tokens = ascii_tokens(query);
+    if query_tokens.is_empty() {
+        return false;
+    }
+    text_tokens.windows(query_tokens.len()).any(|window| {
+        window
+            .iter()
+            .zip(query_tokens.iter())
+            .all(|(text, query)| text.eq_ignore_ascii_case(query))
+    })
+}
+
+fn candidate_field_weight(kind: &str) -> usize {
+    match kind {
+        "item" => 7,
+        "title" => 6,
+        "criterion" => 5,
+        "summary" | "description" => 4,
+        "rule" | "principle" => 3,
+        _ => 1,
+    }
+}
+
+fn discovery_history(workspace: &SpecWorkspace) -> BTreeMap<String, usize> {
+    DeliveryStore::for_workspace(&workspace.root)
+        .and_then(|store| store.attempts())
+        .map(|attempts| {
+            let mut history = BTreeMap::new();
+            for attempt in attempts {
+                for evidence in attempt.report.demonstrated {
+                    *history.entry(evidence.anchor.to_string()).or_insert(0) += 1;
+                }
+            }
+            history
+        })
+        .unwrap_or_default()
+}
+
 async fn api_specification_candidates(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<SpecificationCandidateQuery>,
 ) -> Result<Json<Vec<SpecificationCandidateView>>, ApiError> {
     let snapshot = service.snapshot()?;
     let entries = snapshot.projection.specifications.specifications.clone();
-    let query_text = query.q.unwrap_or_default().trim().to_ascii_lowercase();
+    let query_text = query.q.unwrap_or_default().trim().to_lowercase();
+    let query_concepts = matching_discovery_concepts(&query_text);
+    let history = discovery_history(&snapshot.workspace);
     let kind_filter = query.kind.as_deref().filter(|kind| !kind.is_empty());
     let mut candidates = entries
         .into_iter()
@@ -1167,54 +1363,138 @@ async fn api_specification_candidates(
                     criterion.statement.clone(),
                 ));
             }
-            let matches = if query_text.is_empty() {
-                vec![CandidateMatch {
+            let mut matches = Vec::new();
+            let mut evidence = Vec::new();
+            let mut score = 0;
+            if query_text.is_empty() {
+                matches.push(CandidateMatch {
                     anchor: item.id.clone(),
                     kind: "item".into(),
                     text: item.title.clone(),
-                }]
+                });
+                evidence.push(CandidateEvidence {
+                    source: "available".into(),
+                    detail: "available specification".into(),
+                });
             } else {
-                fields
-                    .into_iter()
-                    .filter_map(|(anchor, kind, text)| {
-                        text.to_ascii_lowercase()
-                            .contains(&query_text)
-                            .then_some(CandidateMatch { anchor, kind, text })
-                    })
-                    .collect::<Vec<_>>()
-            };
+                for (anchor, kind, text) in &fields {
+                    if discovery_query_matches(text, &query_text) {
+                        let exact = discovery_query_exact_matches(text, &query_text);
+                        score += if exact {
+                            candidate_field_weight(kind)
+                        } else {
+                            (candidate_field_weight(kind) / 2).max(1)
+                        };
+                        matches.push(CandidateMatch {
+                            anchor: anchor.clone(),
+                            kind: kind.clone(),
+                            text: text.clone(),
+                        });
+                        evidence.push(CandidateEvidence {
+                            source: "lexical".into(),
+                            detail: if exact {
+                                format!("lexical {kind} match")
+                            } else {
+                                format!("lexical substring {kind} match")
+                            },
+                        });
+                    }
+                }
+                for concept in &query_concepts {
+                    let mut concept_matches = 0;
+                    for (anchor, _kind, text) in &fields {
+                        if concept
+                            .terms
+                            .iter()
+                            .any(|term| discovery_term_matches(text, term))
+                        {
+                            concept_matches += 1;
+                            if !matches.iter().any(|entry| {
+                                entry.anchor == *anchor
+                                    && entry.kind == "semantic"
+                                    && entry.text == *text
+                            }) {
+                                matches.push(CandidateMatch {
+                                    anchor: anchor.clone(),
+                                    kind: "semantic".into(),
+                                    text: text.clone(),
+                                });
+                            }
+                        }
+                    }
+                    if concept_matches > 0 {
+                        score += 3;
+                        evidence.push(CandidateEvidence {
+                            source: "semantic".into(),
+                            detail: format!(
+                                "semantic concept '{}' links the intent to {concept_matches} specification field(s)",
+                                concept.label
+                            ),
+                        });
+                    }
+                }
+            }
             if matches.is_empty() {
                 return None;
             }
-            let mut relevance = Vec::new();
-            if query_text.is_empty() {
-                relevance.push("available specification".into());
-            } else {
-                if item.id.to_ascii_lowercase() == query_text {
-                    relevance.push("exact item id".into());
-                } else if item.id.to_ascii_lowercase().contains(&query_text) {
-                    relevance.push("item id match".into());
-                }
-                if item.title.to_ascii_lowercase().contains(&query_text) {
-                    relevance.push("title match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "criterion") {
-                    relevance.push("criterion match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "rule") {
-                    relevance.push("rule match".into());
-                }
-                if matches.iter().any(|entry| entry.kind == "principle") {
-                    relevance.push("principle match".into());
-                }
-            }
-            let score = relevance.len();
+            let stable_anchors = item
+                .criteria
+                .iter()
+                .map(|criterion| criterion.anchor.clone())
+                .collect::<Vec<_>>();
+            let (implementation_targets, verification_targets) = stable_anchors.iter().fold(
+                (0, 0),
+                |(implementation, verification), anchor| {
+                    let anchor = anchor.parse::<SpecAnchor>().ok();
+                    let implementation = implementation
+                        + anchor
+                            .as_ref()
+                            .and_then(|anchor| {
+                                snapshot
+                                    .index
+                                    .criteria_to_implementation_targets
+                                    .get(anchor)
+                            })
+                            .map_or(0, Vec::len);
+                    let verification = verification
+                        + anchor
+                            .as_ref()
+                            .and_then(|anchor| {
+                                snapshot.index.criteria_to_verification_targets.get(anchor)
+                            })
+                            .map_or(0, Vec::len);
+                    (implementation, verification)
+                },
+            );
+            evidence.push(CandidateEvidence {
+                source: "graph".into(),
+                detail: format!(
+                    "{} exact criterion anchor(s), {implementation_targets} implementation target(s), and {verification_targets} verification target(s)",
+                    stable_anchors.len(),
+                ),
+            });
+            let completed = stable_anchors
+                .iter()
+                .map(|anchor| history.get(anchor).copied().unwrap_or_default())
+                .sum::<usize>();
+            evidence.push(CandidateEvidence {
+                source: "history".into(),
+                detail: if completed == 0 {
+                    "no completed evidence recorded for these criterion anchors".into()
+                } else {
+                    format!("{completed} completed evidence record(s) reference these criterion anchors")
+                },
+            });
+            let relevance = evidence.iter().map(|entry| entry.detail.clone()).collect();
             Some((
                 score,
                 SpecificationCandidateView {
                     item,
                     matches,
                     relevance,
+                    score,
+                    evidence,
+                    stable_anchors,
                 },
             ))
         })
@@ -1464,8 +1744,11 @@ async fn api_target_suggestions_approve(
         }
     }
     Ok(Json(TargetSuggestionApprovalView {
+        // Approval records the exact advisory evidence.  WorkRequest creation
+        // remains an explicit journey action so a suggestion can never become
+        // executable scope merely by being displayed or approved.
         approved_ids,
-        split_recommendation: split_work_recommendation(&approved, workspace, index),
+        split_recommendation: None,
     }))
 }
 
@@ -1523,12 +1806,96 @@ fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
                 .ok_or_else(|| anyhow::anyhow!("anchor is missing an item id"))?;
             specification_path(workspace, item)
         }
+        EditPatch::AddCriterion { requirement_id, .. } => {
+            specification_path(workspace, &requirement_id.to_string())
+        }
         EditPatch::CreateRequirement { document, .. }
-        | EditPatch::CreateFeature { document, .. } => {
+        | EditPatch::CreateFeature { document, .. }
+        | EditPatch::AddFeatureTarget { document, .. } => {
             specification_document_path(workspace, document)
         }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a candidate patch"),
     }
+}
+
+fn validate_feature_criterion_link(
+    snapshot: &CachedWorkspaceSnapshot,
+    patch: &EditPatch,
+) -> Result<()> {
+    let (anchor, feature_id) = match patch {
+        EditPatch::CreateFeature {
+            criterion_anchor,
+            target,
+            status,
+            ..
+        } => {
+            if criterion_anchor.is_some() != target.is_some() {
+                anyhow::bail!(
+                    "a Feature must declare an exact Requirement Criterion and planned target together"
+                );
+            }
+            let Some(anchor) = criterion_anchor else {
+                anyhow::bail!(
+                    "a Feature must declare an exact Requirement Criterion and planned target together"
+                );
+            };
+            if status.is_some_and(|status| status != ItemStatus::Planned) {
+                anyhow::bail!(
+                    "a Feature target must remain planned until its WorkRequest is approved and finalized"
+                );
+            }
+            (anchor, None)
+        }
+        EditPatch::AddFeatureTarget {
+            criterion_anchor,
+            feature_id,
+            ..
+        } => (criterion_anchor, Some(feature_id)),
+        _ => return Ok(()),
+    };
+    let parsed = anchor
+        .parse::<SpecAnchor>()
+        .map_err(|error| anyhow::anyhow!("invalid feature criterion anchor: {error}"))?;
+    if parsed.kind != LocalAnchorKind::Criterion {
+        anyhow::bail!("feature journey link must point to an exact Requirement Criterion");
+    }
+    let item = snapshot
+        .projection
+        .specifications
+        .specifications
+        .iter()
+        .find(|item| item.id == parsed.item.to_string())
+        .ok_or_else(|| anyhow::anyhow!("feature journey link references an unknown Requirement"))?;
+    if item.kind != "requirement" || item.status.as_deref() == Some("deprecated") {
+        anyhow::bail!("feature journey link must reference an active Requirement");
+    }
+    if !item
+        .criteria
+        .iter()
+        .any(|criterion| criterion.anchor == *anchor)
+    {
+        anyhow::bail!("feature journey link must reference an exact existing Criterion");
+    }
+    if let Some(feature_id) = feature_id {
+        let feature = snapshot
+            .projection
+            .specifications
+            .specifications
+            .iter()
+            .find(|item| item.id == feature_id.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!("Feature target addition references an unknown Feature")
+            })?;
+        if feature.kind != "feature" || feature.status.as_deref() == Some("deprecated") {
+            anyhow::bail!("Feature target addition must reference an active Feature");
+        }
+        if feature.status.as_deref() != Some("planned") {
+            anyhow::bail!(
+                "Feature target addition requires a planned Feature; implemented Features need an explicit lifecycle transition"
+            );
+        }
+    }
+    Ok(())
 }
 
 fn edit_preview(
@@ -1601,10 +1968,18 @@ fn specification_impact(
     if let Some(EditPatch::Specification { item_id, .. }) = patch {
         affected_items.insert(item_id.clone());
     }
-    if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
-        patch
-    {
-        affected_items.insert(id.to_string());
+    if let Some(EditPatch::AddCriterion { requirement_id, .. }) = patch {
+        affected_items.insert(requirement_id.to_string());
+    }
+    match patch {
+        Some(EditPatch::CreateRequirement { id, .. })
+        | Some(EditPatch::CreateFeature { id, .. }) => {
+            affected_items.insert(id.to_string());
+        }
+        Some(EditPatch::AddFeatureTarget { feature_id, .. }) => {
+            affected_items.insert(feature_id.to_string());
+        }
+        _ => {}
     }
     let mut implementation_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
     let mut verification_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
@@ -1724,6 +2099,17 @@ fn changed_specification_anchors(
         Some(EditPatch::Specification { item_id, .. }) => {
             let _ = (index, item_id);
         }
+        Some(EditPatch::AddCriterion {
+            requirement_id,
+            criterion,
+        }) => {
+            let anchor = anchor_string(requirement_id, LocalAnchorKind::Criterion, &criterion.id);
+            if let Ok(parsed) = anchor.parse::<SpecAnchor>()
+                && index.anchor(&parsed).is_some()
+            {
+                anchors.insert(anchor);
+            }
+        }
         Some(EditPatch::CreateRequirement { id, .. })
         | Some(EditPatch::CreateFeature { id, .. }) => {
             if let Some(item) = index
@@ -1740,6 +2126,11 @@ fn changed_specification_anchors(
                         .map(ToString::to_string),
                 );
             }
+        }
+        Some(EditPatch::AddFeatureTarget {
+            criterion_anchor, ..
+        }) => {
+            anchors.insert(criterion_anchor.clone());
         }
         _ => {}
     }
@@ -1816,6 +2207,47 @@ fn specification_patch_content(
                 entry.insert(serde_yaml::Value::String(key), field);
             }
         }
+        EditPatch::AddCriterion {
+            requirement_id,
+            criterion,
+        } => {
+            if collection_for_value(&value)? != "requirements" {
+                anyhow::bail!("a criterion can only be added to a requirement");
+            }
+            let requirements = specification_sequence(&mut value, "requirements")?;
+            let requirement = requirements
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == requirement_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("requirement {requirement_id} not found"))?;
+            let mapping = requirement
+                .as_mapping_mut()
+                .ok_or_else(|| anyhow::anyhow!("requirement is not a mapping"))?;
+            let criteria = mapping
+                .get_mut(serde_yaml::Value::String("criteria".into()))
+                .and_then(serde_yaml::Value::as_sequence_mut)
+                .ok_or_else(|| anyhow::anyhow!("requirement criteria are missing"))?;
+            if criteria.iter().any(|entry| {
+                entry
+                    .get("id")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|id| id == criterion.id.to_string())
+            }) {
+                anyhow::bail!(
+                    "criterion {} already exists in requirement {requirement_id}",
+                    criterion.id
+                );
+            }
+            criteria.push(serde_yaml::to_value(Criterion {
+                id: criterion.id.clone(),
+                kind: criterion.kind,
+                statement: criterion.statement.clone(),
+                governed_by: criterion.governed_by.clone(),
+            })?);
+        }
         EditPatch::CreateRequirement {
             id,
             title,
@@ -1856,20 +2288,105 @@ fn specification_patch_content(
             title,
             summary,
             status,
+            criterion_anchor,
+            target,
             ..
         } => {
             if collection_for_value(&value)? != "features" {
                 anyhow::bail!("candidate destination is not a features document");
             }
+            let bindings = target
+                .as_ref()
+                .map(|target| {
+                    let path = RepoPath::new(target.path.clone())
+                        .map_err(|error| anyhow::anyhow!("invalid Feature target path: {error}"))?;
+                    let claims = criterion_anchor
+                        .as_deref()
+                        .map(|anchor| {
+                            anchor
+                                .parse::<SpecAnchor>()
+                                .map(|criterion| vec![TargetClaim::Satisfies { criterion }])
+                                .map_err(|error| {
+                                    anyhow::anyhow!("invalid Feature target claim: {error}")
+                                })
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    Ok::<_, anyhow::Error>(vec![ArtifactBinding {
+                        id: "implementation".into(),
+                        role: BindingRole::Implementation,
+                        facet: "work".into(),
+                        responsibility: "Implement the planned Feature target.".into(),
+                        owns: vec![],
+                        targets: vec![ArtifactTarget {
+                            id: target.id.clone(),
+                            adapter: target.adapter.clone(),
+                            path,
+                            selector: target.selector.clone(),
+                            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
+                            claims,
+                        }],
+                    }])
+                })
+                .transpose()?
+                .unwrap_or_default();
             let feature = syu_spec_model::Feature {
                 id: id.clone(),
                 title: title.clone(),
                 summary: summary.clone(),
                 status: status.unwrap_or(ItemStatus::Planned),
-                bindings: vec![],
+                bindings,
                 contracts: vec![],
             };
             specification_sequence(&mut value, "features")?.push(serde_yaml::to_value(feature)?);
+        }
+        EditPatch::AddFeatureTarget {
+            feature_id,
+            criterion_anchor,
+            target,
+            ..
+        } => {
+            if collection_for_value(&value)? != "features" {
+                anyhow::bail!("candidate destination is not a features document");
+            }
+            let parsed_criterion = criterion_anchor
+                .parse::<SpecAnchor>()
+                .map_err(|error| anyhow::anyhow!("invalid Feature target claim: {error}"))?;
+            let sequence = specification_sequence(&mut value, "features")?;
+            let item = sequence
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == feature_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("Feature {feature_id} not found"))?;
+            let mut feature: syu_spec_model::Feature = serde_yaml::from_value(item.clone())?;
+            let path = RepoPath::new(target.path.clone())
+                .map_err(|error| anyhow::anyhow!("invalid Feature target path: {error}"))?;
+            let binding = feature
+                .bindings
+                .iter_mut()
+                .find(|binding| binding.role == BindingRole::Implementation)
+                .ok_or_else(|| anyhow::anyhow!("Feature has no implementation binding"))?;
+            if binding
+                .targets
+                .iter()
+                .any(|candidate| candidate.id == target.id)
+            {
+                anyhow::bail!("Feature target {} already exists", target.id);
+            }
+            binding.targets.push(ArtifactTarget {
+                id: target.id.clone(),
+                adapter: target.adapter.clone(),
+                path,
+                selector: target.selector.clone(),
+                lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
+                claims: vec![TargetClaim::Satisfies {
+                    criterion: parsed_criterion,
+                }],
+            });
+            *item = serde_yaml::to_value(feature)?;
         }
         EditPatch::Config { .. } => anyhow::bail!("configuration is not a specification patch"),
     }
@@ -1979,8 +2496,10 @@ fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Re
     match patch {
         EditPatch::Specification { .. }
         | EditPatch::Anchor { .. }
+        | EditPatch::AddCriterion { .. }
         | EditPatch::CreateRequirement { .. }
-        | EditPatch::CreateFeature { .. } => specification_patch_content(workspace, path, patch),
+        | EditPatch::CreateFeature { .. }
+        | EditPatch::AddFeatureTarget { .. } => specification_patch_content(workspace, path, patch),
         EditPatch::Config { config } => Ok(serde_yaml::to_string(config)?),
     }
 }
@@ -2098,6 +2617,7 @@ async fn api_specification_candidate_preview(
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let workspace = &snapshot.workspace;
+    validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
     let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
@@ -2127,6 +2647,7 @@ async fn api_specification_candidate_apply(
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let workspace = &snapshot.workspace;
+    validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
     let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
@@ -7346,6 +7867,201 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn advisory_specification_discovery_is_multilingual_and_never_creates_scope() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=%E6%8C%AF%E3%82%8B%E8%88%9E%E3%81%84%E3%82%92%E6%A4%9C%E8%A8%BC&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let candidates: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("multilingual candidate response");
+        let fixture_candidate = candidates
+            .iter()
+            .find(|candidate| candidate.item.id == "REQ-FIXTURE-001")
+            .expect("Japanese intent finds the English fixture requirement");
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "semantic")
+        );
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "graph")
+        );
+        assert!(
+            fixture_candidate
+                .evidence
+                .iter()
+                .any(|entry| entry.source == "history")
+        );
+        assert_eq!(
+            fixture_candidate.stable_anchors,
+            vec![
+                "REQ-FIXTURE-001#criterion.behavior",
+                "REQ-FIXTURE-001#criterion.add-symbol",
+                "REQ-FIXTURE-001#criterion.add-file",
+                "REQ-FIXTURE-001#criterion.remove-symbol",
+                "REQ-FIXTURE-001#criterion.remove-file",
+            ]
+        );
+        assert!(
+            service.session.read().unwrap().draft_request.is_none(),
+            "discovery results must remain advisory"
+        );
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=function&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let synonyms: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("synonym candidate response");
+        assert!(synonyms.iter().any(|candidate| {
+            candidate.item.id == "REQ-FIXTURE-001"
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|entry| entry.source == "semantic")
+        }));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=orchard&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let no_match: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("no-match response");
+        assert!(
+            no_match.is_empty(),
+            "unrelated intent must not become a false positive"
+        );
+
+        for query in ["contest", "invalid", "authorization"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!(
+                            "/api/specifications/candidates?q={query}&kind=requirement"
+                        ))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let embedded_token: Vec<SpecificationCandidateView> =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("embedded-token response");
+            assert!(
+                embedded_token.iter().all(|candidate| {
+                    candidate
+                        .evidence
+                        .iter()
+                        .all(|entry| entry.source != "semantic")
+                }),
+                "{query} must not produce semantic evidence from an embedded token"
+            );
+        }
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=behav&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let lexical: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("substring candidate response");
+        let lexical_candidate = lexical
+            .iter()
+            .find(|candidate| candidate.item.id == "REQ-FIXTURE-001")
+            .expect("substring query finds behavior");
+        assert!(
+            lexical_candidate
+                .evidence
+                .iter()
+                .any(|entry| { entry.source == "lexical" && entry.detail.contains("substring") })
+        );
+        assert!(discovery_query_exact_matches("Behavior", "behavior"));
+        assert!(discovery_query_exact_matches("BEHAVIOR", "behavior"));
+        assert!(!discovery_query_exact_matches("Behavior", "behav"));
+        assert!(
+            matching_discovery_concepts("test")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+        assert!(
+            !matching_discovery_concepts("contest")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+        assert!(
+            !matching_discovery_concepts("invalid")
+                .iter()
+                .any(|concept| concept.label == "validation")
+        );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#binding.verification",
+                "summary": "Do not accept a non-criterion anchor"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            service.session.read().unwrap().draft_request.is_none(),
+            "an unapproved or non-criterion discovery result cannot create scope"
+        );
+    }
+
+    #[tokio::test]
     async fn workbench_specification_candidates_support_search_edit_and_create() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7356,7 +8072,9 @@ mod tests {
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
 
         let response = app
             .clone()
@@ -7523,6 +8241,108 @@ mod tests {
         assert!(created.contains("guided"));
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
+        let add_criterion = StructuredEditCommand {
+            basis,
+            patch: EditPatch::AddCriterion {
+                requirement_id: SpecId("REQ-FIXTURE-001".into()),
+                criterion: NewCriterion {
+                    id: "recovery".into(),
+                    kind: CriterionKind::Behavior,
+                    statement: "The no-match recovery path adds a reviewable behavior.".into(),
+                    governed_by: vec!["POL-FIXTURE-001#rule.behavior".parse().unwrap()],
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &add_criterion,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: EditPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("criterion add preview");
+        assert!(preview.impact.as_ref().is_some_and(|impact| {
+            impact
+                .changed_anchors
+                .iter()
+                .any(|anchor| anchor == "REQ-FIXTURE-001#criterion.recovery")
+        }));
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/candidates/apply",
+            &csrf,
+            &StructuredEditCommand {
+                preview_token: Some(preview.preview_token),
+                ..add_criterion
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+                .expect("criterion added")
+                .contains("recovery")
+        );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let orphan_feature = StructuredEditCommand {
+            basis,
+            patch: EditPatch::CreateFeature {
+                document: "spec/feature.yaml".into(),
+                id: "FEAT-FIXTURE-ORPHAN".into(),
+                title: "Orphan feature".into(),
+                summary: "Must not enter the graph without an exact target pair.".into(),
+                status: None,
+                criterion_anchor: None,
+                target: None,
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &orphan_feature,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let implemented_feature_target = StructuredEditCommand {
+            basis,
+            patch: EditPatch::AddFeatureTarget {
+                document: "spec/feature.yaml".into(),
+                feature_id: "FEAT-FIXTURE-001".into(),
+                criterion_anchor: "REQ-FIXTURE-001#criterion.recovery".into(),
+                target: FeatureTargetDraft {
+                    id: "planned-recovery".into(),
+                    adapter: "rust".into(),
+                    path: "src/guided_feature.rs".into(),
+                    selector: Selector::Symbol {
+                        name: "guided_recovery".into(),
+                    },
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &implemented_feature_target,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
         let feature = StructuredEditCommand {
             basis,
             patch: EditPatch::CreateFeature {
@@ -7531,6 +8351,15 @@ mod tests {
                 title: "A guided feature".into(),
                 summary: "Created through the same typed wizard.".into(),
                 status: None,
+                criterion_anchor: Some("REQ-FIXTURE-001#criterion.recovery".into()),
+                target: Some(FeatureTargetDraft {
+                    id: "implementation".into(),
+                    adapter: "rust".into(),
+                    path: "src/guided_feature.rs".into(),
+                    selector: Selector::Symbol {
+                        name: "guided_feature".into(),
+                    },
+                }),
             },
             preview_token: None,
         };
@@ -7563,6 +8392,65 @@ mod tests {
                 .expect("created feature")
                 .contains("FEAT-FIXTURE-002")
         );
+        let created_feature = fs::read_to_string(temp.path().join("spec/feature.yaml"))
+            .expect("created feature graph");
+        assert!(created_feature.contains("REQ-FIXTURE-001#criterion.recovery"));
+        assert!(created_feature.contains("guided_feature.rs"));
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let suggestions_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/specifications/REQ-FIXTURE-001%23criterion.recovery/target-suggestions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(suggestions_response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet = serde_json::from_slice(
+            &suggestions_response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes(),
+        )
+        .expect("feature target suggestions");
+        let planned_feature_target = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| candidate.reference.to_string().contains("FEAT-FIXTURE-002"))
+            .expect("persisted feature target suggestion");
+        assert_eq!(
+            planned_feature_target.transition,
+            syu_work_model::TargetTransition::Add
+        );
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        let approve = TargetSuggestionApprovalCommand {
+            basis,
+            suggestion_token: suggestions.suggestion_token,
+            suggestion_ids: vec![planned_feature_target.id.clone()],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/REQ-FIXTURE-001%23criterion.recovery/target-suggestions/approve",
+            &csrf,
+            &approve,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved feature target");
+        assert_eq!(
+            approval.approved_ids,
+            vec![planned_feature_target.id.clone()]
+        );
+        assert!(service.session.read().unwrap().draft_request.is_none());
     }
 
     #[test]
@@ -7763,12 +8651,12 @@ mod tests {
             "a rejected candidate must reappear when its artifact evidence changes"
         );
         let (basis, csrf, _) = projection_and_basis(&app).await;
-
         let approved_ids = refreshed
             .suggestions
             .iter()
             .map(|candidate| candidate.id.clone())
             .collect::<Vec<_>>();
+
         let response = json_mutation(
             &app,
             Method::POST,
@@ -7831,6 +8719,30 @@ mod tests {
         let mut persisted_view_ids = persisted.approved_ids.clone();
         persisted_view_ids.sort();
         assert_eq!(persisted_view_ids, actual_approved_ids);
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Do not create mixed transition work"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("target suggestion session")
+                .draft_request
+                .is_none()
+        );
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(
@@ -8007,7 +8919,6 @@ mod tests {
         let app = server.router();
         let suggestion_path =
             "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
-
         let response = app
             .clone()
             .oneshot(
@@ -8042,7 +8953,6 @@ mod tests {
         assert_eq!(add.budget_bytes, Some(512));
         assert_eq!(add.budget_lines, Some(32));
         assert!(service.session.read().unwrap().draft_request.is_none());
-
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(
             &app,
@@ -8181,6 +9091,209 @@ mod tests {
                 .expect("planned requirement work plan");
         assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
         assert!(service.session.read().unwrap().draft_request.is_some());
+    }
+
+    #[tokio::test]
+    async fn planned_requirement_with_approved_add_target_can_create_ready_plan() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        fs::write(
+            temp.path().join("spec/planned-requirement.yaml"),
+            "schema: syu/spec/v1\nkind: requirements\nnamespace: fixture\ncategory: Workbench recovery\nrequirements:\n  - id: REQ-PLANNED-001\n    title: A planned behavior\n    description: A planned requirement created through recovery.\n    priority: high\n    status: planned\n    criteria:\n      - id: behavior\n        kind: behavior\n        statement: Add the planned behavior.\n        governed_by: []\n",
+        )
+        .expect("planned requirement fixture");
+        fs::write(
+            temp.path().join("spec/planned-feature.yaml"),
+            "schema: syu/spec/v1\nkind: features\nnamespace: fixture\ncategory: Workbench recovery\nfeatures:\n  - id: FEAT-PLANNED-001\n    title: A planned behavior implementation\n    summary: A planned Feature target created through recovery.\n    status: planned\n    bindings:\n      - id: implementation\n        role: implementation\n        facet: work\n        responsibility: Add the planned behavior implementation.\n        targets:\n          - id: behavior\n            adapter: rust\n            path: src/lib.rs\n            selector: { kind: symbol, name: planned_behavior }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n          - id: behavior-two\n            adapter: rust\n            path: src/other.rs\n            selector: { kind: symbol, name: planned_behavior_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-PLANNED-001#criterion.behavior\n",
+        )
+        .expect("planned Feature fixture");
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("config fixture");
+        fs::write(
+            &config_path,
+            config.replace("max_total_bytes: 120000", "max_total_bytes: 700"),
+        )
+        .expect("small slicing budget");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-PLANNED-001%23criterion.behavior/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(response_status, StatusCode::OK, "{response_body:?}");
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response_body).expect("planned Add suggestions");
+        let add_candidates = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| candidate.transition == TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(add_candidates.len(), 2);
+        let add = add_candidates
+            .first()
+            .cloned()
+            .expect("planned implementation Add suggestion");
+        assert_eq!(add.role, BindingRole::Implementation);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis: basis.clone(),
+                suggestion_token: suggestions.suggestion_token.clone(),
+                suggestion_ids: add_candidates
+                    .iter()
+                    .map(|candidate| candidate.id.clone())
+                    .collect(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bulk_approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("bulk planned Add approval");
+        assert!(bulk_approval.approved_ids.is_empty());
+        assert_eq!(
+            bulk_approval
+                .split_recommendation
+                .as_ref()
+                .expect("budget split recommendation")
+                .suggested_groups
+                .len(),
+            2
+        );
+        let split_groups = bulk_approval
+            .split_recommendation
+            .as_ref()
+            .expect("budget split recommendation")
+            .suggested_groups
+            .clone();
+        assert!(
+            service
+                .session
+                .read()
+                .expect("workbench session lock")
+                .approved_target_suggestions
+                .is_empty(),
+            "over-budget bulk approval must not persist any candidate"
+        );
+        for group in &split_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: suggestions.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-PLANNED-001#criterion.behavior",
+                "summary": "reject accumulated over-budget groups"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        service
+            .session
+            .write()
+            .unwrap()
+            .approved_target_suggestions
+            .clear();
+        fs::write(&config_path, config).expect("restore slicing budget");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let restored_suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("restored planned Add suggestions");
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: restored_suggestions.suggestion_token,
+                suggestion_ids: vec![add.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-PLANNED-001#criterion.behavior",
+                "summary": "add the approved planned target"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("workbench session lock")
+                .draft_request
+                .as_ref()
+                .is_some_and(|request| request.seeds.is_empty())
+        );
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned requirement work plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
     }
 
     #[tokio::test]

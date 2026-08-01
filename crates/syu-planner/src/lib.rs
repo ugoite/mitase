@@ -136,6 +136,12 @@ pub fn suggest_targets(
             if directly_claims {
                 score += 100;
                 evidence.push("The target explicitly claims this criterion.".into());
+                if !current_target {
+                    evidence.push(
+                        "The target is declared in the specification but is not present in the current inventory; review it as an Add candidate."
+                            .into(),
+                    );
+                }
             }
             if planned_missing_target {
                 score += 20;
@@ -408,7 +414,6 @@ pub fn split_work_recommendation(
     if !suggestion_budget_exceeds(&budget, limits) {
         return None;
     }
-
     let mut groups = Vec::<Vec<TargetSuggestion>>::new();
     for candidate in suggestions {
         let can_append = groups.last().is_some_and(|group| {
@@ -3988,6 +3993,20 @@ mod tests {
                 .iter()
                 .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-014")
         }));
+    }
+
+    #[test]
+    fn implemented_missing_exact_target_is_not_reframed_as_add() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(tempdir.path().join("src/handler.rs"), "pub fn other() {}\n")
+            .expect("drifted artifact");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("workspace index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        assert!(suggestions.suggestions.is_empty());
     }
 
     #[test]
