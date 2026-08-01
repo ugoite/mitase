@@ -1194,10 +1194,34 @@ pub struct SpecificationTraceView {
     pub mode: String,
     pub nodes: Vec<TraceNodeView>,
     pub edges: Vec<TraceEdgeView>,
+    /// Server-owned related entries keep the browser from re-joining claims,
+    /// items, and targets from a partial projection.
+    pub related: TraceRelatedView,
     pub closures: Vec<CriterionClosureView>,
     pub truncated: bool,
     pub hidden_node_count: usize,
     pub hidden_edge_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TraceRelatedView {
+    pub specification: Vec<TraceRelatedSpecificationView>,
+    pub implementation: Vec<TraceRelatedTargetView>,
+    pub verification: Vec<TraceRelatedTargetView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceRelatedSpecificationView {
+    pub item_id: String,
+    pub kind: String,
+    pub title: String,
+    pub presentation_title_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceRelatedTargetView {
+    pub item_id: String,
+    pub target: BindingTargetSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1596,6 +1620,7 @@ fn specification_trace_view(
     }
 
     let closures = specification_closures(items, index, root);
+    let related = specification_related(items, root);
     let reachable = trace_reachable(&root.id, &edges, depth);
     let ordered = nodes
         .values()
@@ -1659,11 +1684,84 @@ fn specification_trace_view(
         mode,
         nodes: visible_nodes,
         edges: visible_edges,
+        related,
         closures,
         truncated: hidden_node_count > 0 || hidden_edge_count > 0,
         hidden_node_count,
         hidden_edge_count,
     }
+}
+
+fn specification_related(items: &[ItemSummary], root: &ItemSummary) -> TraceRelatedView {
+    let root_criteria = root
+        .criteria
+        .iter()
+        .map(|criterion| criterion.anchor.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut related = TraceRelatedView::default();
+    let mut specifications = BTreeSet::new();
+    for item in items {
+        for binding in &item.bindings {
+            for target in &binding.targets {
+                let kind = if binding.role == "verification"
+                    || target.claims.iter().any(|claim| {
+                        matches!(
+                            claim,
+                            TargetClaim::Verifies { .. } | TargetClaim::Evidences { .. }
+                        )
+                    }) {
+                    "verification"
+                } else {
+                    "implementation"
+                };
+                let matches_root = target.claims.iter().any(|claim| match claim {
+                    TargetClaim::Satisfies { criterion }
+                    | TargetClaim::Verifies { criterion, .. } => {
+                        root_criteria.contains(criterion.to_string().as_str())
+                    }
+                    _ => false,
+                });
+                if !matches_root {
+                    continue;
+                }
+                if item.id != root.id {
+                    specifications.insert((
+                        item.id.clone(),
+                        item.kind.clone(),
+                        item.title.clone(),
+                        item.presentation_title_key.clone(),
+                    ));
+                }
+                let entry = TraceRelatedTargetView {
+                    item_id: item.id.clone(),
+                    target: target.clone(),
+                };
+                if kind == "verification" {
+                    related.verification.push(entry);
+                } else {
+                    related.implementation.push(entry);
+                }
+            }
+        }
+    }
+    related.specification = specifications
+        .into_iter()
+        .map(
+            |(item_id, kind, title, presentation_title_key)| TraceRelatedSpecificationView {
+                item_id,
+                kind,
+                title,
+                presentation_title_key,
+            },
+        )
+        .collect();
+    related
+        .implementation
+        .sort_by(|left, right| left.target.reference.cmp(&right.target.reference));
+    related
+        .verification
+        .sort_by(|left, right| left.target.reference.cmp(&right.target.reference));
+    related
 }
 
 struct TraceNodeSpec {
@@ -6596,6 +6694,13 @@ mod tests {
         assert!(trace.nodes.iter().any(|node| {
             node.id == "FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply"
         }));
+        assert!(
+            trace
+                .related
+                .specification
+                .iter()
+                .any(|item| item.item_id == "FEAT-WORKBENCH-SPEC-EDITOR-001")
+        );
         assert!(
             trace
                 .nodes

@@ -545,12 +545,8 @@ function renderSpecification(root, workspace, journey, state, work) {
       resetContextSource(state);
     },
   });
-  if (candidate && !specification) {
-    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
-  } else {
-    body.querySelector('.specification-detail-head h2')?.setAttribute('data-work-specification-title', '');
-    body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
-  }
+  body.querySelector('.specification-detail-head h2')?.setAttribute('data-work-specification-title', '');
+  body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
   root.append(body);
 }
 

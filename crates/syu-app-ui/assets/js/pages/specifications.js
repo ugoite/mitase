@@ -854,6 +854,64 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
   root.append(contracts);
 }
 
+function renderRelatedFromTrace(root, state, selected, onItem, onTarget) {
+  ensureSpecificationTrace(state, selected);
+  const trace = state.specificationTrace;
+  if (state.specificationTraceLoading || !trace || trace.error || trace.root_item_id !== selected.id) return;
+  const related = trace.related || {};
+  const groups = {
+    specification: related.specification || [],
+    implementation: related.implementation || [],
+    verification: related.verification || [],
+  };
+  const availableKinds = Object.keys(groups).filter(kind => groups[kind].length);
+  if (!availableKinds.length) return;
+  if (!availableKinds.includes(state.relatedKind)) state.relatedKind = availableKinds[0];
+  const section = document.createElement('section');
+  section.className = 'specification-related';
+  section.append(Object.assign(document.createElement('h3'), { textContent: t('items.related') }));
+  const chooser = document.createElement('label');
+  chooser.className = 'related-chooser';
+  chooser.append(Object.assign(document.createElement('span'), { textContent: t('items.related.choose') }));
+  const select = document.createElement('select');
+  select.className = 'native-select';
+  availableKinds.forEach(kind => {
+    const option = document.createElement('option');
+    option.value = kind;
+    option.textContent = `${kind === 'verification' ? '✓' : kind === 'implementation' ? '⌘' : '◆'} ${t(`items.related.${kind}`)} · ${groups[kind].length}`;
+    option.selected = kind === state.relatedKind;
+    select.append(option);
+  });
+  select.addEventListener('change', () => {
+    state.relatedKind = select.value;
+    state.render();
+  });
+  chooser.append(select);
+  section.append(chooser);
+  const list = document.createElement('div');
+  list.className = 'related-list';
+  groups[state.relatedKind].forEach(entry => {
+    if (state.relatedKind === 'specification') {
+      list.append(button(
+        localizeSpecificationTitle(entry),
+        entry.kind === 'feature' ? '◆' : '◈',
+        () => onItem(entry.item_id),
+        'related-row specification',
+      ));
+      return;
+    }
+    const target = entry.target;
+    list.append(button(
+      target.path || target.reference,
+      state.relatedKind === 'verification' ? '✓' : '⌘',
+      () => onTarget(target),
+      `related-row ${state.relatedKind}`,
+    ));
+  });
+  section.append(list);
+  root.append(section);
+}
+
 function traceNodeButton(state, node, onSelect) {
   const buttonNode = document.createElement('button');
   buttonNode.type = 'button';
@@ -1157,6 +1215,7 @@ function renderSpecificationWorkspace(root, state, selected, options) {
   });
   if (state.specificationDetailTab === 'information') {
     renderInformation(body, state, selected, onItem, onTarget, options);
+    renderRelatedFromTrace(body, state, selected, onItem, onTarget);
     if (!options.readOnly) renderTargetSuggestions(body, state);
   }
   else if (state.specificationDetailTab === 'trace') {
