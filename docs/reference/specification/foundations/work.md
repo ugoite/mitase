@@ -63,6 +63,22 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
                 - **arguments**:
                   - **package**: syu-spec-model
                   - **test**: tests::anchors_roundtrip
+        - **id**: lifecycle-plan-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::explicit_add_transition_plans_missing_target_as_ensure_present
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-001#criterion.exact-slice
+              - **covers**:
+                - FEAT-PLANNER-001#binding.implementation/target.lifecycle-plan
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-planner
+                  - **test**: tests::explicit_add_transition_plans_missing_target_as_ensure_present
 - **id**: REQ-WORK-002
   - **title**: Durable completion delivery
   - **description**: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
@@ -91,13 +107,13 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORK-003
   - **title**: Scoped implementation agent
-  - **description**: An implementation tool can modify only the approved editable targets of one WorkPlan slice and must preserve inspectable evidence for every decision.
+  - **description**: An implementation tool can perform only approved Modify, Add, or Remove transitions for editable targets in one WorkPlan slice and must preserve inspectable evidence for every decision.
   - **priority**: critical
   - **status**: implemented
   - **criteria**:
     - **id**: scoped-write
       - **kind**: security
-      - **statement**: A scoped agent write is checked against the approved plan, slice, target digest, access mode, and budget before application.
+      - **statement**: A scoped agent write is checked against the approved plan, slice, target digest, transition lifecycle, access mode, and budget before application; Add and Remove preconditions reject newly existing or stale targets.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
     - **id**: expansion-request
@@ -148,6 +164,15 @@ requirements:
                 criterion: REQ-WORK-001#criterion.exact-slice
                 covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
                 runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::anchors_roundtrip } }
+          - id: lifecycle-plan-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: tests::explicit_add_transition_plans_missing_target_as_ensure_present }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-001#criterion.exact-slice
+                covers: [FEAT-PLANNER-001#binding.implementation/target.lifecycle-plan]
+                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::explicit_add_transition_plans_missing_target_as_ensure_present } }
   - id: REQ-WORK-002
     title: Durable completion delivery
     description: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
@@ -172,13 +197,13 @@ requirements:
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORK-003
     title: Scoped implementation agent
-    description: An implementation tool can modify only the approved editable targets of one WorkPlan slice and must preserve inspectable evidence for every decision.
+    description: An implementation tool can perform only approved Modify, Add, or Remove transitions for editable targets in one WorkPlan slice and must preserve inspectable evidence for every decision.
     priority: critical
     status: implemented
     criteria:
       - id: scoped-write
         kind: security
-        statement: A scoped agent write is checked against the approved plan, slice, target digest, access mode, and budget before application.
+        statement: A scoped agent write is checked against the approved plan, slice, target digest, transition lifecycle, access mode, and budget before application; Add and Remove preconditions reject newly existing or stale targets.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
       - id: expansion-request
         kind: behavior

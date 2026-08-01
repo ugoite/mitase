@@ -1423,6 +1423,28 @@ async fn api_target_suggestions_approve(
         .iter()
         .map(|candidate| candidate.id.clone())
         .collect::<Vec<_>>();
+    if let Some(split_recommendation) = split_work_recommendation(&approved, workspace, index) {
+        return Ok(Json(TargetSuggestionApprovalView {
+            approved_ids: vec![],
+            split_recommendation: Some(split_recommendation),
+        }));
+    }
+    let mut transition_groups = BTreeMap::<String, Vec<String>>::new();
+    for candidate in &approved {
+        transition_groups
+            .entry(format!("{:?}", candidate.transition))
+            .or_default()
+            .push(candidate.id.clone());
+    }
+    if transition_groups.len() > 1 {
+        return Ok(Json(TargetSuggestionApprovalView {
+            approved_ids: vec![],
+            split_recommendation: Some(SplitWorkRecommendation {
+                reason: "Selected targets use incompatible transitions; approve one transition group at a time.".into(),
+                suggested_groups: transition_groups.into_values().collect(),
+            }),
+        }));
+    }
     {
         let mut session = service
             .session
@@ -2692,6 +2714,30 @@ async fn api_source(
 fn validate_create_work_criterion(
     snapshot: &CachedWorkspaceSnapshot,
     anchor: &SpecAnchor,
+    approved_candidates: &[TargetSuggestion],
+) -> Result<()> {
+    validate_work_criterion_anchor(snapshot, anchor)?;
+    match snapshot.index.criterion_status.get(anchor) {
+        Some(ItemStatus::Implemented) => Ok(()),
+        Some(ItemStatus::Planned)
+            if approved_candidates
+                .iter()
+                .all(|candidate| candidate.transition == TargetTransition::Add)
+                && approved_candidates
+                    .iter()
+                    .any(|candidate| candidate.role == BindingRole::Implementation) =>
+        {
+            Ok(())
+        }
+        _ => anyhow::bail!(
+            "Work can only start from an implemented requirement criterion, or a planned criterion with an approved exact implementation Add target"
+        ),
+    }
+}
+
+fn validate_work_criterion_anchor(
+    snapshot: &CachedWorkspaceSnapshot,
+    anchor: &SpecAnchor,
 ) -> Result<()> {
     if anchor.kind != LocalAnchorKind::Criterion {
         anyhow::bail!("Work must start from an exact requirement criterion");
@@ -2702,8 +2748,18 @@ fn validate_create_work_criterion(
     ) {
         anyhow::bail!("Work criterion anchor does not resolve to an exact requirement criterion");
     }
-    if snapshot.index.criterion_status.get(anchor) != Some(&ItemStatus::Implemented) {
-        anyhow::bail!("Work can only start from a criterion in an implemented requirement");
+    Ok(())
+}
+
+fn ensure_homogeneous_approved_transitions(candidates: &[TargetSuggestion]) -> Result<()> {
+    let transitions = candidates
+        .iter()
+        .map(|candidate| format!("{:?}", candidate.transition))
+        .collect::<BTreeSet<_>>();
+    if transitions.len() > 1 {
+        anyhow::bail!(
+            "approved target suggestions use multiple transitions; create separate WorkRequests"
+        );
     }
     Ok(())
 }
@@ -2713,20 +2769,35 @@ fn resolve_requested_targets(
     suggestions: Result<Vec<TargetSuggestion>>,
     approvals: &[ApprovedTargetSuggestion],
 ) -> Result<Vec<RequestedTarget>> {
+    Ok(
+        resolve_approved_target_candidates(anchor, suggestions, approvals)?
+            .into_iter()
+            .map(|candidate| RequestedTarget {
+                reference: candidate.reference,
+                criterion: Some(anchor.clone()),
+                transition: candidate.transition,
+            })
+            .collect(),
+    )
+}
+
+fn resolve_approved_target_candidates(
+    anchor: &SpecAnchor,
+    suggestions: Result<Vec<TargetSuggestion>>,
+    approvals: &[ApprovedTargetSuggestion],
+) -> Result<Vec<TargetSuggestion>> {
     let suggestions = suggestions?;
     Ok(approvals
         .iter()
         .filter(|approval| approval.criterion == *anchor)
         .filter_map(|approval| {
-            suggestions.iter().find(|candidate| {
-                candidate.id == approval.suggestion_id
-                    && candidate.evidence_fingerprint == approval.evidence_fingerprint
-            })
-        })
-        .map(|candidate| RequestedTarget {
-            reference: candidate.reference.clone(),
-            criterion: Some(anchor.clone()),
-            transition: candidate.transition,
+            suggestions
+                .iter()
+                .find(|candidate| {
+                    candidate.id == approval.suggestion_id
+                        && candidate.evidence_fingerprint == approval.evidence_fingerprint
+                })
+                .cloned()
         })
         .collect())
 }
@@ -2746,7 +2817,7 @@ async fn api_journey_action(
             let snapshot = basis(&service, &command.basis)?;
             let anchor = SpecAnchor::from_str(&anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
-            validate_create_work_criterion(&snapshot, &anchor)
+            validate_work_criterion_anchor(&snapshot, &anchor)
                 .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
             if summary.trim().is_empty() {
                 return Err(ApiError(
@@ -2760,26 +2831,67 @@ async fn api_journey_action(
                 .map_err(|_| anyhow::anyhow!("workbench session lock"))?
                 .approved_target_suggestions
                 .clone();
-            let requested_targets = resolve_requested_targets(
-                &anchor,
-                suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
-                    .map(|set| set.suggestions),
-                &approvals,
-            )
-            .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let suggestions = suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
+                .map(|set| set.suggestions)
+                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let approved_candidates =
+                resolve_approved_target_candidates(&anchor, Ok(suggestions.clone()), &approvals)
+                    .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            ensure_homogeneous_approved_transitions(&approved_candidates)
+                .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+            if let Some(split_recommendation) = split_work_recommendation(
+                &approved_candidates,
+                &snapshot.workspace,
+                &snapshot.index,
+            ) {
+                return Err(ApiError(
+                    StatusCode::CONFLICT,
+                    anyhow::anyhow!(
+                        "approved target group exceeds slicing budget: {}",
+                        split_recommendation.reason
+                    ),
+                ));
+            }
+            validate_create_work_criterion(&snapshot, &anchor, &approved_candidates)
+                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
+            let requested_targets = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
+                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            let operation = match approved_candidates
+                .first()
+                .map(|candidate| candidate.transition)
+            {
+                Some(TargetTransition::Add) => WorkOperation::Add,
+                Some(TargetTransition::Remove) => WorkOperation::Remove,
+                _ => WorkOperation::Modify,
+            };
+            let max_added_bytes_per_target = approved_candidates
+                .iter()
+                .filter_map(|candidate| candidate.budget_bytes)
+                .max();
+            let max_added_lines_per_target = approved_candidates
+                .iter()
+                .filter_map(|candidate| candidate.budget_lines)
+                .max();
             let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
             let summary = summary.trim().to_owned();
+            let seeds = if requested_targets.is_empty() {
+                vec![WorkSeed::Anchor(anchor.clone())]
+            } else {
+                vec![]
+            };
             let request = WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: store.new_id("work"),
                 summary,
-                operation: WorkOperation::Modify,
-                seeds: vec![WorkSeed::Anchor(anchor.clone())],
+                operation,
+                seeds,
                 // A guided journey has one executable change boundary.  Plans
                 // with several isolated slices need separate worktrees, so do
                 // not silently pick and execute their first slice here.
                 constraints: WorkConstraints {
                     max_slices: Some(1),
+                    max_added_bytes_per_target,
+                    max_added_lines_per_target,
                     ..WorkConstraints::default()
                 },
                 requested_targets,
@@ -4381,11 +4493,41 @@ fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
         ("verification".into(), report.verification.clone()),
         ("closed_loop".into(), report.closed_loop.clone()),
     ]);
-    let blocker_details = axes
-        .values()
+    const TRACEABLE_AXES: &[&str] = &["inventory", "ownership"];
+    const SEEDABLE_AXES: &[&str] = &["inventory", "ownership", "seedability"];
+    const WORK_READY_AXES: &[&str] = &["inventory", "ownership", "seedability", "workability"];
+    const VERIFIABLE_AXES: &[&str] = &[
+        "inventory",
+        "ownership",
+        "seedability",
+        "workability",
+        "verification",
+    ];
+    const CLOSED_LOOP_AXES: &[&str] = &[
+        "inventory",
+        "ownership",
+        "seedability",
+        "workability",
+        "verification",
+        "closed_loop",
+    ];
+    let required_axes = match report.target {
+        ReadinessLevel::Traceable => TRACEABLE_AXES,
+        ReadinessLevel::Seedable => SEEDABLE_AXES,
+        ReadinessLevel::WorkReady => WORK_READY_AXES,
+        ReadinessLevel::Verifiable => VERIFIABLE_AXES,
+        ReadinessLevel::ClosedLoop => CLOSED_LOOP_AXES,
+        _ => &[],
+    };
+    let blocker_details = required_axes
+        .iter()
+        .filter_map(|axis| axes.get(*axis))
         .flat_map(|axis| axis.blockers.clone())
         .collect::<Vec<_>>();
-    let has_subjects = axes.values().any(|axis| axis.required > 0);
+    let has_subjects = required_axes
+        .iter()
+        .filter_map(|axis| axes.get(*axis))
+        .any(|axis| axis.required > 0);
     ReadinessView {
         target: report.target,
         status: if !has_subjects {
@@ -5803,8 +5945,11 @@ mod tests {
             )
             .expect("modify unrelated fixture source");
         } else {
-            fs::write(&source, "pub fn behavior() -> bool {\n    1 == 1\n}\n")
-                .expect("modify editable fixture source");
+            fs::write(
+                &source,
+                "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
+            )
+            .expect("modify editable fixture source");
         }
 
         let response = json_mutation(
@@ -6138,6 +6283,1068 @@ mod tests {
         assert!(projection["work"]["agent"].is_null());
     }
 
+    async fn start_lifecycle_agent(
+        server: &WorkbenchServer,
+        app: &Router,
+        target_id: &str,
+        transition: syu_work_model::TargetTransition,
+    ) -> (
+        MutationBasis,
+        String,
+        String,
+        AgentRun,
+        syu_work_model::AgentTargetDigest,
+    ) {
+        let (feature, binding, criterion) = match target_id {
+            "behavior" => ("FEAT-FIXTURE-001", "implementation", "behavior"),
+            "added-symbol" => ("FEAT-LIFECYCLE-ADD-SYMBOL-001", "lifecycle", "add-symbol"),
+            "added-file" => ("FEAT-LIFECYCLE-ADD-FILE-001", "lifecycle", "add-file"),
+            "removed-symbol" => (
+                "FEAT-LIFECYCLE-REMOVE-SYMBOL-001",
+                "lifecycle",
+                "remove-symbol",
+            ),
+            "removed-file" => ("FEAT-LIFECYCLE-REMOVE-FILE-001", "lifecycle", "remove-file"),
+            _ => unreachable!("declared lifecycle case"),
+        };
+        let target: BoundTargetRef = format!("{feature}#binding.{binding}/target.{target_id}")
+            .parse()
+            .expect("lifecycle target");
+        let operation = match transition {
+            syu_work_model::TargetTransition::Add => syu_work_model::WorkOperation::Add,
+            syu_work_model::TargetTransition::Modify => syu_work_model::WorkOperation::Modify,
+            syu_work_model::TargetTransition::Remove => syu_work_model::WorkOperation::Remove,
+            syu_work_model::TargetTransition::RunOnly
+            | syu_work_model::TargetTransition::Readonly => unreachable!("editable lifecycle"),
+        };
+        let constraints = if transition == syu_work_model::TargetTransition::Add {
+            syu_work_model::WorkConstraints {
+                max_added_bytes_per_target: Some(512),
+                max_added_lines_per_target: Some(32),
+                ..Default::default()
+            }
+        } else {
+            Default::default()
+        };
+        let request = WorkRequest {
+            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: format!("WORK-FIXTURE-LIFECYCLE-{target_id}"),
+            summary: format!("apply {transition:?} to {target_id}"),
+            operation,
+            seeds: vec![],
+            constraints,
+            requested_targets: vec![syu_work_model::RequestedTarget {
+                reference: target.clone(),
+                criterion: Some(
+                    format!("REQ-FIXTURE-001#criterion.{criterion}")
+                        .parse()
+                        .unwrap(),
+                ),
+                transition,
+            }],
+        };
+        start_lifecycle_agent_with_request(server, app, target, request).await
+    }
+
+    async fn start_lifecycle_agent_with_request(
+        server: &WorkbenchServer,
+        app: &Router,
+        target: BoundTargetRef,
+        request: WorkRequest,
+    ) -> (
+        MutationBasis,
+        String,
+        String,
+        AgentRun,
+        syu_work_model::AgentTargetDigest,
+    ) {
+        if let Ok(mut session) = server.service.session.write() {
+            session.draft_request = Some(request);
+        }
+        let (basis, csrf, _) = projection_and_basis(app).await;
+        let response = json_mutation(app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("lifecycle plan");
+        assert_eq!(plan.status, syu_work_model::PlanStatus::Ready, "{plan:?}");
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| {
+                slice
+                    .editable_targets
+                    .iter()
+                    .any(|planned| planned.reference == target)
+            })
+            .expect("lifecycle slice")
+            .id
+            .clone();
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/context",
+            &csrf,
+            &SliceCommand {
+                basis: basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/agent/start",
+            &csrf,
+            &AgentStartCommand {
+                basis: basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let run: AgentRun =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("lifecycle agent run");
+        let digest = run
+            .context
+            .editable_targets
+            .iter()
+            .find(|planned| planned.reference == target)
+            .expect("lifecycle target digest")
+            .clone();
+        (basis, csrf, slice, run, digest)
+    }
+
+    async fn create_approved_work_request(
+        server: &WorkbenchServer,
+        anchor: &str,
+        summary: &str,
+    ) -> WorkRequest {
+        let app = server.router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": anchor,
+                "summary": summary,
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        server
+            .service
+            .session
+            .read()
+            .expect("workbench session lock")
+            .draft_request
+            .clone()
+            .expect("created work request")
+    }
+
+    #[tokio::test]
+    async fn planned_remove_target_flows_from_suggestion_to_finalization() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("lifecycle suggestion tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("fixture config");
+        fs::write(
+            config_path,
+            config.replace("target: off", "target: traceable"),
+        )
+        .expect("enable readiness");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-FIXTURE-001%23criterion.remove-symbol/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove target suggestions");
+        let candidate = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .reference
+                    .to_string()
+                    .contains("FEAT-LIFECYCLE-REMOVE-SYMBOL-001")
+            })
+            .expect("planned remove suggestion");
+        assert_eq!(
+            candidate.transition,
+            syu_work_model::TargetTransition::Remove
+        );
+        assert_eq!(
+            candidate.lifecycle,
+            syu_work_model::TargetLifecycle::EnsureAbsent
+        );
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        assert!(
+            server
+                .service
+                .session
+                .read()
+                .unwrap()
+                .draft_request
+                .is_none()
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: suggestions.suggestion_token,
+                suggestion_ids: vec![candidate.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove suggestion approval");
+        assert_eq!(approval.approved_ids, vec![candidate.id.clone()]);
+        let request = create_approved_work_request(
+            &server,
+            "REQ-FIXTURE-001#criterion.remove-symbol",
+            "remove the approved symbol",
+        )
+        .await;
+        assert_eq!(request.operation, syu_work_model::WorkOperation::Remove);
+        let target = request.requested_targets[0].reference.clone();
+        let (basis, csrf, slice, run, target_digest) =
+            start_lifecycle_agent_with_request(&server, &app, target.clone(), request).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/patch",
+            &csrf,
+            &AgentPatchCommand {
+                basis,
+                run_id: run.run_id.clone(),
+                patch: AgentPatch {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    run_id: run.run_id.clone(),
+                    expected_workspace_fingerprint: run
+                        .context
+                        .context
+                        .basis
+                        .workspace_fingerprint
+                        .clone(),
+                    writes: vec![syu_work_model::AgentTargetWrite::Remove {
+                        target: target_digest.reference.clone(),
+                        expected_excerpt_hash: target_digest.excerpt_hash.clone(),
+                    }],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (post_basis, post_csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/verify",
+            &post_csrf,
+            &SliceCommand {
+                basis: post_basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let attempt: CompletionAttempt =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove completion attempt");
+        assert_eq!(
+            attempt.report.status,
+            syu_work_model::CompletionStatus::Complete
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/preview",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis.clone(),
+                attempt_id: attempt.attempt_id.clone(),
+                preview_token: None,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: FinalizationPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("remove finalization preview");
+        assert_eq!(preview.status, syu_work_model::CompletionStatus::Complete);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/apply",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis,
+                attempt_id: attempt.attempt_id,
+                preview_token: Some(preview.preview_token),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn planned_verification_add_runs_its_exact_runner_before_finalization() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("verification add tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        let feature_path = temp.path().join("spec/feature.yaml");
+        let mut feature = fs::read_to_string(&feature_path).expect("feature spec");
+        feature = feature.replacen(
+            "  - id: FEAT-LIFECYCLE-REMOVE-SYMBOL-001",
+            concat!(
+                "  - id: FEAT-LIFECYCLE-ADD-VERIFICATION-001\n",
+                "    title: Add an exact verification test\n",
+                "    summary: A planned verification target is written before it runs.\n",
+                "    status: planned\n",
+                "    bindings:\n",
+                "      - id: implementation\n",
+                "        role: implementation\n",
+                "        facet: work\n",
+                "        responsibility: Keep the existing implementation target connected to the verification proof.\n",
+                "        targets:\n",
+                "          - id: implementation\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: behavior }\n",
+                "            claims:\n",
+                "              - kind: satisfies\n",
+                "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                "      - id: verification\n",
+                "        role: verification\n",
+                "        facet: verification\n",
+                "        responsibility: Prove the add transition with its exact runner.\n",
+                "        targets:\n",
+                "          - id: added-verification\n",
+                "            adapter: rust\n",
+                "            path: tests/behavior.rs\n",
+                "            selector: { kind: symbol, name: added_verification_lifecycle_stays_valid }\n",
+                "            claims:\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                "                covers: [FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]\n",
+                "                runner: { runner: cargo-test, arguments: { package: workbench-flow-fixture, test: added_verification_lifecycle_stays_valid } }\n",
+                "  - id: FEAT-LIFECYCLE-REMOVE-SYMBOL-001"
+            ),
+            1,
+        );
+        fs::write(feature_path, feature).expect("verification feature");
+        let requirement_path = temp.path().join("spec/requirement.yaml");
+        let mut requirement = fs::read_to_string(&requirement_path).expect("requirement spec");
+        requirement = requirement.replacen(
+            "covers: [FEAT-LIFECYCLE-ADD-SYMBOL-001#binding.lifecycle/target.added-symbol]",
+            "covers: [FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]",
+            1,
+        );
+        fs::write(requirement_path, requirement).expect("verification requirement");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add suggestions");
+        let candidate = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .reference
+                    .to_string()
+                    .contains("FEAT-LIFECYCLE-ADD-VERIFICATION-001")
+            })
+            .expect("planned verification add suggestion");
+        assert_eq!(candidate.transition, syu_work_model::TargetTransition::Add);
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: suggestions.suggestion_token,
+                suggestion_ids: vec![candidate.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add approval");
+        assert_eq!(approval.approved_ids, vec![candidate.id.clone()]);
+        let request = create_approved_work_request(
+            &server,
+            "REQ-FIXTURE-001#criterion.add-symbol",
+            "add the approved verification target",
+        )
+        .await;
+        assert_eq!(request.operation, syu_work_model::WorkOperation::Add);
+        let target = request.requested_targets[0].reference.clone();
+        let (basis, csrf, slice, run, target_digest) =
+            start_lifecycle_agent_with_request(&server, &app, target.clone(), request).await;
+        assert_eq!(
+            target_digest.transition,
+            syu_work_model::TargetTransition::Add
+        );
+        assert_eq!(
+            target_digest.access,
+            syu_work_model::TargetAccessMode::Editable
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/patch",
+            &csrf,
+            &AgentPatchCommand {
+                basis,
+                run_id: run.run_id.clone(),
+                patch: AgentPatch {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    run_id: run.run_id.clone(),
+                    expected_workspace_fingerprint: run
+                        .context
+                        .context
+                        .basis
+                        .workspace_fingerprint
+                        .clone(),
+                    writes: vec![syu_work_model::AgentTargetWrite::AddToFile {
+                        target: target_digest.reference.clone(),
+                        expected_path_hash: target_digest
+                            .container_content_hash
+                            .clone()
+                            .expect("verification container digest"),
+                        content: "\n#[test]\nfn added_verification_lifecycle_stays_valid() {\n    assert!(workbench_flow_fixture::behavior());\n}\n".into(),
+                    }],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (post_basis, post_csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/verify",
+            &post_csrf,
+            &SliceCommand {
+                basis: post_basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let attempt: CompletionAttempt =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add attempt");
+        assert_eq!(
+            attempt.report.status,
+            syu_work_model::CompletionStatus::Complete
+        );
+        let receipt = attempt.receipt.as_ref().expect("verification add receipt");
+        assert!(receipt.executions.iter().any(|execution| {
+            execution.target == target
+                && execution.proof.identity == "added_verification_lifecycle_stays_valid"
+        }));
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/preview",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis.clone(),
+                attempt_id: attempt.attempt_id.clone(),
+                preview_token: None,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: FinalizationPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verification add preview");
+        assert_eq!(preview.status, syu_work_model::CompletionStatus::Complete);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/finalize/apply",
+            &post_csrf,
+            &FinalizeCommand {
+                basis: post_basis,
+                attempt_id: attempt.attempt_id,
+                preview_token: Some(preview.preview_token),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn workbench_agent_applies_all_approved_lifecycle_writes() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let cases = [
+            (
+                "behavior",
+                syu_work_model::TargetTransition::Modify,
+                "modify existing symbol",
+            ),
+            (
+                "added-symbol",
+                syu_work_model::TargetTransition::Add,
+                "add symbol to existing file",
+            ),
+            (
+                "added-file",
+                syu_work_model::TargetTransition::Add,
+                "add new file",
+            ),
+            (
+                "removed-symbol",
+                syu_work_model::TargetTransition::Remove,
+                "remove symbol",
+            ),
+            (
+                "removed-file",
+                syu_work_model::TargetTransition::Remove,
+                "remove file",
+            ),
+        ];
+        for (target_id, transition, description) in cases {
+            let temp = tempfile::tempdir().expect("lifecycle fixture tempdir");
+            copy_fixture_tree(&fixture, temp.path());
+            if target_id == "removed-symbol" {
+                let config_path = temp.path().join("syu.yaml");
+                let config = fs::read_to_string(&config_path).expect("fixture config");
+                fs::write(
+                    config_path,
+                    config.replace("target: off", "target: traceable"),
+                )
+                .expect("enable readiness for remove-symbol lifecycle");
+            }
+            initialize_fixture_git(temp.path());
+            let server = WorkbenchServer::new(temp.path().to_path_buf());
+            let app = server.router();
+            let (basis, csrf, slice, run, target) =
+                start_lifecycle_agent(&server, &app, target_id, transition).await;
+            assert_eq!(target.transition, transition, "{description}");
+            let write = match target_id {
+                "behavior" => syu_work_model::AgentTargetWrite::Replace {
+                    target: target.reference.clone(),
+                    expected_excerpt_hash: target.excerpt_hash.clone(),
+                    content: "pub fn behavior() -> bool {\n    1 == 1\n}".into(),
+                },
+                "added-symbol" => syu_work_model::AgentTargetWrite::AddToFile {
+                    target: target.reference.clone(),
+                    expected_path_hash: target
+                        .container_content_hash
+                        .clone()
+                        .expect("approved insertion digest"),
+                    content: "pub fn added_behavior() -> bool {\n    true\n}\n".into(),
+                },
+                "added-file" => syu_work_model::AgentTargetWrite::CreateFile {
+                    target: target.reference.clone(),
+                    content: "pub fn added_file() {}\n".into(),
+                },
+                "removed-symbol" => syu_work_model::AgentTargetWrite::Remove {
+                    target: target.reference.clone(),
+                    expected_excerpt_hash: target.excerpt_hash.clone(),
+                },
+                "removed-file" => syu_work_model::AgentTargetWrite::RemoveFile {
+                    target: target.reference.clone(),
+                    expected_content_hash: target.content_hash.clone(),
+                },
+                _ => unreachable!("declared lifecycle case"),
+            };
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/patch",
+                &csrf,
+                &AgentPatchCommand {
+                    basis,
+                    run_id: run.run_id.clone(),
+                    patch: AgentPatch {
+                        schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                        run_id: run.run_id.clone(),
+                        expected_workspace_fingerprint: run
+                            .context
+                            .context
+                            .basis
+                            .workspace_fingerprint
+                            .clone(),
+                        writes: vec![write],
+                    },
+                },
+            )
+            .await;
+            let status = response.status();
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "{description}: {}",
+                String::from_utf8_lossy(&body)
+            );
+            let patch: syu_work_model::AgentPatchRecord =
+                serde_json::from_slice(&body).expect("lifecycle patch record");
+            assert_eq!(patch.changes.len(), 1, "{description}");
+            assert_eq!(patch.changes[0].transition, transition, "{description}");
+            assert_eq!(
+                patch.changes[0].lifecycle, target.lifecycle,
+                "{description}"
+            );
+            let (post_basis, post_csrf, _) = projection_and_basis(&app).await;
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/verify",
+                &post_csrf,
+                &SliceCommand {
+                    basis: post_basis.clone(),
+                    slice_id: slice.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK, "{description}");
+            let attempt: CompletionAttempt =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("lifecycle completion attempt");
+            assert_eq!(
+                attempt.report.status,
+                syu_work_model::CompletionStatus::Complete,
+                "{description}: {attempt:?}"
+            );
+            let receipt = attempt.receipt.expect("lifecycle receipt");
+            assert_eq!(receipt.lifecycle_proofs.len(), 1, "{description}");
+            assert_eq!(receipt.lifecycle_proofs[0].reference, target.reference);
+            assert_eq!(receipt.lifecycle_proofs[0].transition, transition);
+
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/finalize/preview",
+                &post_csrf,
+                &FinalizeCommand {
+                    basis: post_basis.clone(),
+                    attempt_id: attempt.attempt_id.clone(),
+                    preview_token: None,
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK, "{description}");
+            let preview: FinalizationPreview =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("lifecycle finalization preview");
+            assert_eq!(preview.status, syu_work_model::CompletionStatus::Complete);
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/finalize/apply",
+                &post_csrf,
+                &FinalizeCommand {
+                    basis: post_basis,
+                    attempt_id: attempt.attempt_id,
+                    preview_token: Some(preview.preview_token),
+                },
+            )
+            .await;
+            let status = response.status();
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "{description}: {}",
+                String::from_utf8_lossy(&body)
+            );
+            let finalization: syu_work_model::FinalizationReceipt =
+                serde_json::from_slice(&body).expect("lifecycle finalization receipt");
+            assert_eq!(finalization.lifecycle_proofs.len(), 1, "{description}");
+            assert_eq!(finalization.lifecycle_proofs[0].reference, target.reference);
+            if target_id == "removed-symbol" {
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(readiness.status(), StatusCode::OK, "{description}");
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("post-finalization readiness");
+                assert_eq!(readiness.status, "Ready", "{readiness:?}");
+                let removed_subject = readiness
+                    .axes
+                    .get("seedability")
+                    .and_then(|axis| {
+                        axis.subjects.iter().find(|subject| {
+                            subject.id.contains("criterion.remove-symbol")
+                                && subject.id.contains("removed-symbol")
+                        })
+                    })
+                    .expect("finalized absent target readiness subject");
+                assert!(removed_subject.ready, "{removed_subject:?}");
+
+                // Absence evidence is durable across the commit that records
+                // finalization. It must not be tied to the exact HEAD or
+                // workspace fingerprint that existed immediately after the
+                // lifecycle write.
+                for args in [
+                    vec!["add", "-A"],
+                    vec!["commit", "-qm", "record finalized absence"],
+                ] {
+                    assert!(
+                        Command::new("git")
+                            .args(args)
+                            .current_dir(temp.path())
+                            .status()
+                            .expect("record finalized absence commit")
+                            .success()
+                    );
+                }
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("post-commit readiness");
+                assert_eq!(readiness.status, "Ready", "{readiness:?}");
+
+                // An unrelated, valid commit must also leave the historical
+                // lifecycle proof usable. Only the current exact absence
+                // obligation is relevant to this readiness decision.
+                let unrelated = temp.path().join("src/unrelated.rs");
+                let unrelated_content =
+                    fs::read_to_string(&unrelated).expect("unrelated fixture source");
+                fs::write(&unrelated, unrelated_content.replace("false", "true"))
+                    .expect("unrelated approved change");
+                for args in [
+                    vec!["add", "src/unrelated.rs"],
+                    vec!["commit", "-qm", "record unrelated approved change"],
+                ] {
+                    assert!(
+                        Command::new("git")
+                            .args(args)
+                            .current_dir(temp.path())
+                            .status()
+                            .expect("record unrelated change commit")
+                            .success()
+                    );
+                }
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("unrelated-change readiness");
+                assert_eq!(readiness.status, "Ready", "{readiness:?}");
+
+                // Readiness must reject a forged finalization record even
+                // when its post-state fingerprint still matches. The
+                // attempt, approval, exact Remove slice, and receipt proof
+                // are the durable closure, not this top-level JSON alone.
+                let store = DeliveryStore::for_workspace(temp.path()).expect("evidence store");
+                let finalization_path =
+                    fs::read_dir(store.root().join("completion/v1/finalizations"))
+                        .expect("finalization directory")
+                        .flatten()
+                        .map(|entry| entry.path())
+                        .find(|path| {
+                            path.extension().and_then(|value| value.to_str()) == Some("json")
+                        })
+                        .expect("finalization evidence");
+                let mut forged: serde_json::Value = serde_json::from_slice(
+                    &fs::read(&finalization_path).expect("read finalization evidence"),
+                )
+                .expect("parse finalization evidence");
+                forged["lifecycle_proofs"][0]["transition"] = serde_json::json!("add");
+                fs::write(
+                    &finalization_path,
+                    serde_json::to_vec_pretty(&forged).expect("serialize forged evidence"),
+                )
+                .expect("forge finalization evidence");
+                let readiness = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf.clone())
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("forged-evidence readiness");
+                let forged_subject = readiness
+                    .axes
+                    .get("seedability")
+                    .and_then(|axis| {
+                        axis.subjects.iter().find(|subject| {
+                            subject.id.contains("criterion.remove-symbol")
+                                && subject.id.contains("removed-symbol")
+                        })
+                    })
+                    .expect("forged finalized absent target subject");
+                assert!(!forged_subject.ready, "{forged_subject:?}");
+
+                let source = temp.path().join("src/removable.rs");
+                let mut restored = fs::read_to_string(&source).expect("removed source");
+                restored.push_str("\npub fn remove_me() {}\n");
+                fs::write(&source, restored).expect("restore removed target");
+                let readiness = app
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri("/api/readiness/run")
+                            .header("origin", "http://127.0.0.1:7737")
+                            .header("x-syu-csrf-token", post_csrf)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(readiness.status(), StatusCode::OK, "{description}");
+                let readiness: ReadinessView = serde_json::from_slice(
+                    &readiness.into_body().collect().await.unwrap().to_bytes(),
+                )
+                .expect("restored-target readiness");
+                let restored_subject = readiness
+                    .axes
+                    .get("seedability")
+                    .and_then(|axis| {
+                        axis.subjects.iter().find(|subject| {
+                            subject.id.contains("criterion.remove-symbol")
+                                && subject.id.contains("removed-symbol")
+                        })
+                    })
+                    .expect("restored target readiness subject");
+                assert!(!restored_subject.ready, "{restored_subject:?}");
+                assert!(
+                    restored_subject
+                        .blockers
+                        .iter()
+                        .any(|blocker| blocker.contains("finalized lifecycle proof"))
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let cases = [
+            (
+                "added-symbol",
+                syu_work_model::TargetTransition::Add,
+                "src/lib.rs",
+                "\npub fn added_behavior() -> bool { true }\n",
+                "now exists",
+            ),
+            (
+                "added-file",
+                syu_work_model::TargetTransition::Add,
+                "src/added.rs",
+                "pub fn preexisting_file() {}\n",
+                "now exists",
+            ),
+            (
+                "removed-symbol",
+                syu_work_model::TargetTransition::Remove,
+                "src/removable.rs",
+                "pub fn remove_me() { panic!(\"changed\") }\n",
+                "is stale",
+            ),
+            (
+                "removed-file",
+                syu_work_model::TargetTransition::Remove,
+                "remove-file.txt",
+                "changed before approved removal\n",
+                "is stale",
+            ),
+        ];
+        for (target_id, transition, path, changed_content, expected_blocker) in cases {
+            let temp = tempfile::tempdir().expect("lifecycle precondition fixture tempdir");
+            copy_fixture_tree(&fixture, temp.path());
+            initialize_fixture_git(temp.path());
+            let server = WorkbenchServer::new(temp.path().to_path_buf());
+            let app = server.router();
+            let (_, _, _, run, target) =
+                start_lifecycle_agent(&server, &app, target_id, transition).await;
+
+            let changed_path = temp.path().join(path);
+            if target_id == "added-symbol" {
+                let mut content = fs::read_to_string(&changed_path).expect("existing source");
+                content.push_str(changed_content);
+                fs::write(&changed_path, content).expect("create approved target early");
+            } else {
+                fs::write(&changed_path, changed_content).expect("change lifecycle target");
+            }
+            let (basis, csrf, _) = projection_and_basis(&app).await;
+            let write = match target_id {
+                "added-symbol" => syu_work_model::AgentTargetWrite::AddToFile {
+                    target: target.reference.clone(),
+                    expected_path_hash: target
+                        .container_content_hash
+                        .clone()
+                        .expect("approved insertion digest"),
+                    content: "pub fn added_behavior() -> bool { true }\n".into(),
+                },
+                "added-file" => syu_work_model::AgentTargetWrite::CreateFile {
+                    target: target.reference.clone(),
+                    content: "pub fn approved_file() {}\n".into(),
+                },
+                "removed-symbol" => syu_work_model::AgentTargetWrite::Remove {
+                    target: target.reference.clone(),
+                    expected_excerpt_hash: target.excerpt_hash.clone(),
+                },
+                "removed-file" => syu_work_model::AgentTargetWrite::RemoveFile {
+                    target: target.reference.clone(),
+                    expected_content_hash: target.content_hash.clone(),
+                },
+                _ => unreachable!("declared lifecycle precondition case"),
+            };
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/patch",
+                &csrf,
+                &AgentPatchCommand {
+                    basis,
+                    run_id: run.run_id.clone(),
+                    patch: AgentPatch {
+                        schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                        run_id: run.run_id,
+                        expected_workspace_fingerprint: run
+                            .context
+                            .context
+                            .basis
+                            .workspace_fingerprint
+                            .clone(),
+                        writes: vec![write],
+                    },
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::CONFLICT, "{target_id}");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert!(
+                String::from_utf8_lossy(&body).contains(expected_blocker),
+                "{target_id}: {}",
+                String::from_utf8_lossy(&body)
+            );
+            assert_eq!(
+                fs::read_to_string(&changed_path).expect("rejected write preserves target"),
+                if target_id == "added-symbol" {
+                    let mut expected =
+                        fs::read_to_string(fixture.join(path)).expect("fixture source");
+                    expected.push_str(changed_content);
+                    expected
+                } else {
+                    changed_content.to_string()
+                },
+                "{target_id}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn workbench_specification_candidates_support_search_edit_and_create() {
         let _workspace_lock = workspace_test_lock().await;
@@ -6372,6 +7579,12 @@ mod tests {
                 reference: target_reference.clone(),
                 role: BindingRole::Implementation,
                 transition: TargetTransition::Modify,
+                lifecycle: syu_work_model::TargetLifecycle::Stable,
+                path: "src/lib.rs".into(),
+                selector: "behavior".into(),
+                existing_file: true,
+                budget_bytes: None,
+                budget_lines: None,
                 confidence: syu_planner::SuggestionConfidence::High,
                 evidence: vec!["current evidence".into()],
                 evidence_fingerprint: "current-fingerprint".into(),
@@ -6382,6 +7595,12 @@ mod tests {
                 reference: target_reference,
                 role: BindingRole::Implementation,
                 transition: TargetTransition::Modify,
+                lifecycle: syu_work_model::TargetLifecycle::Stable,
+                path: "src/lib.rs".into(),
+                selector: "behavior".into(),
+                existing_file: true,
+                budget_bytes: None,
+                budget_lines: None,
                 confidence: syu_planner::SuggestionConfidence::High,
                 evidence: vec!["new evidence".into()],
                 evidence_fingerprint: "new-fingerprint".into(),
@@ -6557,7 +7776,7 @@ mod tests {
             &csrf,
             &TargetSuggestionApprovalCommand {
                 basis: basis.clone(),
-                suggestion_token: refreshed.suggestion_token,
+                suggestion_token: refreshed.suggestion_token.clone(),
                 suggestion_ids: approved_ids.clone(),
             },
         )
@@ -6566,8 +7785,36 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("approval response");
-        assert_eq!(approval.approved_ids, approved_ids);
-        assert!(approval.split_recommendation.is_none());
+        let split = approval
+            .split_recommendation
+            .expect("mixed transitions require separate approval groups");
+        assert!(split.suggested_groups.len() >= 2);
+        let mut persisted_approved_ids = Vec::new();
+        for group in split.suggested_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: refreshed.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let homogeneous: TargetSuggestionApprovalView =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("homogeneous approval response");
+            assert!(homogeneous.split_recommendation.is_none());
+            persisted_approved_ids.extend(group);
+        }
+        let mut expected_approved_ids = approved_ids.clone();
+        expected_approved_ids.sort();
+        let mut actual_approved_ids = persisted_approved_ids.clone();
+        actual_approved_ids.sort();
+        assert_eq!(actual_approved_ids, expected_approved_ids);
         let response = app
             .clone()
             .oneshot(
@@ -6581,7 +7828,33 @@ mod tests {
         let persisted: TargetSuggestionsView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("persisted suggestion response");
-        assert_eq!(persisted.approved_ids, approved_ids);
+        let mut persisted_view_ids = persisted.approved_ids.clone();
+        persisted_view_ids.sort();
+        assert_eq!(persisted_view_ids, actual_approved_ids);
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Do not create mixed transition work"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(
+            service
+                .session
+                .read()
+                .expect("target suggestion session")
+                .draft_request
+                .is_none()
+        );
 
         let mut changed_again = fs::read_to_string(&target_path).expect("changed target source");
         let next_body_offset = changed_again[unit.span.byte_start..unit.span.byte_end]
@@ -6604,7 +7877,6 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("invalidated suggestion response");
         assert!(!invalidated.approved_ids.contains(&rejected_id));
-        let valid_approved_count = approved_ids.iter().filter(|id| *id != &rejected_id).count();
         assert!(
             service
                 .session
@@ -6630,42 +7902,6 @@ mod tests {
         assert_eq!(
             projection["journey"]["current_step"],
             "select_specification"
-        );
-
-        let (basis, csrf, _) = projection_and_basis(&app).await;
-        let response = json_mutation(
-            &app,
-            Method::POST,
-            "/api/work/action",
-            &csrf,
-            &serde_json::json!({
-                "basis": basis,
-                "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.behavior",
-                "summary": "Start the approved fixture work"
-            }),
-        )
-        .await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let request = service
-            .session
-            .read()
-            .expect("target suggestion session")
-            .draft_request
-            .clone()
-            .expect("created work request");
-        assert_eq!(request.requested_targets.len(), valid_approved_count);
-        assert!(request.requested_targets.iter().all(|target| {
-            target.criterion.as_ref()
-                == Some(&"REQ-FIXTURE-001#criterion.behavior".parse().unwrap())
-        }));
-        assert!(
-            service
-                .session
-                .read()
-                .expect("target suggestion session")
-                .approved_target_suggestions
-                .is_empty()
         );
     }
 
@@ -6728,6 +7964,223 @@ mod tests {
                 "anchor={anchor} status={status:?}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn planned_add_target_is_advisory_until_human_approval() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        let feature_path = temp.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path).expect("feature fixture");
+        fs::write(
+            feature_path,
+            feature.replacen(
+                "criterion: REQ-FIXTURE-001#criterion.add-file",
+                "criterion: REQ-FIXTURE-001#criterion.add-symbol",
+                1,
+            ),
+        )
+        .expect("two Add targets fixture");
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("config fixture");
+        fs::write(
+            &config_path,
+            config.replace("max_total_bytes: 120000", "max_total_bytes: 700"),
+        )
+        .expect("small slicing budget");
+        let requirement_path = temp.path().join("spec/requirement.yaml");
+        let requirement = fs::read_to_string(&requirement_path).expect("requirement fixture");
+        fs::write(
+            requirement_path,
+            requirement.replacen("status: implemented", "status: planned", 1),
+        )
+        .expect("planned requirement fixture");
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let suggestion_path =
+            "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned add suggestions");
+        let add_candidates = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| candidate.transition == syu_work_model::TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(add_candidates.len(), 2);
+        let add = add_candidates
+            .first()
+            .cloned()
+            .expect("planned Add suggestion");
+        assert_eq!(
+            add.lifecycle,
+            syu_work_model::TargetLifecycle::EnsurePresent
+        );
+        assert_eq!(add.path, "src/lib.rs");
+        assert!(add.existing_file);
+        assert_eq!(add.budget_bytes, Some(512));
+        assert_eq!(add.budget_lines, Some(32));
+        assert!(service.session.read().unwrap().draft_request.is_none());
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis: basis.clone(),
+                suggestion_token: suggestions.suggestion_token.clone(),
+                suggestion_ids: add_candidates
+                    .iter()
+                    .map(|candidate| candidate.id.clone())
+                    .collect(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bulk_approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("bulk planned add approval");
+        assert!(bulk_approval.approved_ids.is_empty());
+        assert_eq!(
+            bulk_approval
+                .split_recommendation
+                .as_ref()
+                .expect("budget split recommendation")
+                .suggested_groups
+                .len(),
+            2
+        );
+        let split_groups = bulk_approval
+            .split_recommendation
+            .as_ref()
+            .expect("budget split recommendation")
+            .suggested_groups
+            .clone();
+        assert!(
+            service
+                .session
+                .read()
+                .unwrap()
+                .approved_target_suggestions
+                .is_empty(),
+            "over-budget bulk approval must not persist any candidate"
+        );
+        for group in &split_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: suggestions.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.add-symbol",
+                "summary": "reject accumulated over-budget groups"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        service
+            .session
+            .write()
+            .unwrap()
+            .approved_target_suggestions
+            .clear();
+        fs::write(&config_path, config).expect("restore slicing budget");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let restored_suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("restored planned add suggestions");
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
+                basis,
+                suggestion_token: restored_suggestions.suggestion_token,
+                suggestion_ids: vec![add.id.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned add approval");
+        assert_eq!(approval.approved_ids, vec![add.id.clone()]);
+        let request = create_approved_work_request(
+            &server,
+            "REQ-FIXTURE-001#criterion.add-symbol",
+            "add the approved target",
+        )
+        .await;
+        assert_eq!(request.constraints.max_added_bytes_per_target, Some(512));
+        assert_eq!(request.constraints.max_added_lines_per_target, Some(32));
+        assert_eq!(request.requested_targets.len(), 1);
+        assert_eq!(
+            request.requested_targets[0].transition,
+            syu_work_model::TargetTransition::Add
+        );
+        assert!(request.seeds.is_empty());
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("planned requirement work plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
+        assert!(service.session.read().unwrap().draft_request.is_some());
     }
 
     #[tokio::test]
@@ -7150,7 +8603,7 @@ mod tests {
 
         fs::write(
             temp.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
         )
         .expect("apply editable fixture change");
         let response = json_mutation(

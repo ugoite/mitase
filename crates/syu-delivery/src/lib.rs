@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use anyhow::{Context, Result, bail};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -12,14 +12,123 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
-    AgentEvent, AgentEventKind, AgentRun, AgentRunStatus, CompletionAttempt, CompletionBlocker,
-    CompletionStatus, FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt,
-    PlanApproval,
+    AgentBlocker, AgentEvent, AgentEventKind, AgentPatchStatus, AgentRun, AgentRunStatus,
+    AgentTargetWrite, CompletionAttempt, CompletionBlocker, CompletionStatus,
+    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PlanApproval,
+    ScopeExpansionRequest, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult,
+    VerificationExecution,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
 
 pub const STORE_SCHEMA: &str = "syu/completion/v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyAgentTargetChange {
+    #[serde(rename = "ref")]
+    reference: syu_spec_model::BoundTargetRef,
+    before_excerpt_hash: String,
+    after_excerpt_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyAgentPatchRecord {
+    schema: String,
+    patch_id: String,
+    run_id: String,
+    plan_digest: String,
+    slice_id: String,
+    status: AgentPatchStatus,
+    writes: Vec<AgentTargetWrite>,
+    changes: Vec<LegacyAgentTargetChange>,
+    before_workspace_fingerprint: String,
+    after_workspace_fingerprint: String,
+    blockers: Vec<AgentBlocker>,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+enum LegacyAgentEventKind {
+    RunStarted { run: Box<AgentRun> },
+    PatchRecorded { patch: LegacyAgentPatchRecord },
+    BlockerRecorded { blocker: AgentBlocker },
+    ScopeExpansionRequested { request: ScopeExpansionRequest },
+    VerificationRecorded { attempt_id: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyAgentEvent {
+    schema: String,
+    event_id: String,
+    event_digest: String,
+    run_id: String,
+    plan_digest: String,
+    slice_id: String,
+    created_at: String,
+    event: LegacyAgentEventKind,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LegacyVerificationReceipt {
+    schema: String,
+    plan_digest: String,
+    slice_id: String,
+    revision: String,
+    workspace_fingerprint: String,
+    started_at: String,
+    completed_at: String,
+    executions: Vec<VerificationExecution>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LegacyCompletionAttempt {
+    schema: String,
+    attempt_id: String,
+    attempt_digest: String,
+    plan_digest: String,
+    slice_id: String,
+    approved_plan_digest: String,
+    started_at: String,
+    completed_at: String,
+    verification: VerificationAttemptResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    receipt: Option<LegacyVerificationReceipt>,
+    report: syu_work_model::CompletionReport,
+}
+
+impl From<&CompletionAttempt> for LegacyCompletionAttempt {
+    fn from(attempt: &CompletionAttempt) -> Self {
+        Self {
+            schema: attempt.schema.clone(),
+            attempt_id: attempt.attempt_id.clone(),
+            attempt_digest: attempt.attempt_digest.clone(),
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+            approved_plan_digest: attempt.approved_plan_digest.clone(),
+            started_at: attempt.started_at.clone(),
+            completed_at: attempt.completed_at.clone(),
+            verification: attempt.verification.clone(),
+            receipt: attempt
+                .receipt
+                .as_ref()
+                .map(|receipt| LegacyVerificationReceipt {
+                    schema: receipt.schema.clone(),
+                    plan_digest: receipt.plan_digest.clone(),
+                    slice_id: receipt.slice_id.clone(),
+                    revision: receipt.revision.clone(),
+                    workspace_fingerprint: receipt.workspace_fingerprint.clone(),
+                    started_at: receipt.started_at.clone(),
+                    completed_at: receipt.completed_at.clone(),
+                    executions: receipt.executions.clone(),
+                }),
+            report: attempt.report.clone(),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DeliveryStore {
@@ -270,6 +379,11 @@ impl DeliveryStore {
             post_workspace_fingerprint,
             promoted_items: preview.promoted_items.clone(),
             changed_files: preview.changed_files.clone(),
+            lifecycle_proofs: attempt
+                .receipt
+                .as_ref()
+                .map(|receipt| receipt.lifecycle_proofs.clone())
+                .unwrap_or_default(),
             completed_at: now_nanos().to_string(),
         };
         match self.append_finalization(&receipt) {
@@ -303,12 +417,7 @@ impl DeliveryStore {
         let mut events = Vec::new();
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
-            let mut canonical = event.clone();
-            let expected = canonical.event_digest.clone();
-            canonical.event_digest.clear();
-            if expected != Self::digest(&canonical)? {
-                bail!("agent event {} has an invalid digest", event.event_id);
-            }
+            validate_agent_event_digest(&path, &event)?;
             if event.run_id == run_id {
                 events.push(event);
             }
@@ -371,12 +480,7 @@ impl DeliveryStore {
         let mut events = Vec::new();
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
-            let mut canonical = event.clone();
-            let expected = canonical.event_digest.clone();
-            canonical.event_digest.clear();
-            if expected != Self::digest(&canonical)? {
-                bail!("agent event {} has an invalid digest", event.event_id);
-            }
+            validate_agent_event_digest(&path, &event)?;
             events.push(event);
         }
         Ok(events)
@@ -442,11 +546,44 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
         .with_context(|| format!("parse {}", path.display()))
 }
 
+fn validate_agent_event_digest(path: &Path, event: &AgentEvent) -> Result<()> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    let raw: serde_json::Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("parse event envelope {}", event.event_id))?;
+    let mut digest = event.clone();
+    let expected = digest.event_digest.clone();
+    digest.event_digest.clear();
+    let legacy_patch = raw.pointer("/event/kind").and_then(|value| value.as_str())
+        == Some("patch-recorded")
+        && raw.pointer("/event/patch/changes/0/transition").is_none();
+    let actual = if legacy_patch {
+        let mut legacy: LegacyAgentEvent = serde_json::from_slice(&bytes)
+            .with_context(|| format!("parse legacy agent event {}", event.event_id))?;
+        legacy.event_digest.clear();
+        DeliveryStore::digest(&legacy)?
+    } else {
+        DeliveryStore::digest(&digest)?
+    };
+    if expected != actual {
+        bail!("agent event {} has an invalid digest", event.event_id);
+    }
+    Ok(())
+}
+
 fn validate_attempt_digest(attempt: &CompletionAttempt) -> Result<()> {
     let mut copy = attempt.clone();
     let expected = copy.attempt_digest.clone();
     copy.attempt_digest.clear();
-    if expected != DeliveryStore::digest(&copy)? {
+    let actual = if copy
+        .receipt
+        .as_ref()
+        .is_some_and(|receipt| receipt.schema != VERIFICATION_RECEIPT_SCHEMA)
+    {
+        DeliveryStore::digest(&LegacyCompletionAttempt::from(&copy))?
+    } else {
+        DeliveryStore::digest(&copy)?
+    };
+    if expected != actual {
         bail!(
             "completion attempt {} has an invalid digest",
             attempt.attempt_id
@@ -647,11 +784,12 @@ fn atomic_write(path: &Path, content: impl AsRef<[u8]>) -> Result<()> {
 mod tests {
     use super::*;
     use std::{fs, process::Command};
+    use syu_work_model::{AgentContextPack, AgentTargetDigest};
     use syu_work_model::{
-        COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionReport,
-        PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult,
-        VerificationAttemptStatus, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation,
-        WorkRequest, WorkSeed,
+        AgentPatchRecord, AgentTargetChange, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
+        CompletionReport, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
+        VerificationAttemptResult, VerificationAttemptStatus, VerificationReceipt,
+        WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest, WorkSeed,
     };
 
     fn workbench_fixture_root() -> PathBuf {
@@ -751,6 +889,7 @@ mod tests {
             started_at: "0".into(),
             completed_at: "1".into(),
             executions: vec![],
+            lifecycle_proofs: vec![],
         };
         let mut attempt = CompletionAttempt {
             schema: COMPLETION_ATTEMPT_SCHEMA.into(),
@@ -842,6 +981,260 @@ mod tests {
         let mut tampered = attempt;
         tampered.completed_at = "later".into();
         assert!(store.append_attempt(&tampered).is_err());
+    }
+
+    #[test]
+    fn legacy_evidence_shapes_preserve_digests_and_round_trip() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let approval = fixture_approval(&workspace, &plan, &revision);
+        let attempt = fixture_attempt(&plan, &approval, &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+
+        let mut legacy_receipt = serde_json::to_value(attempt.receipt.as_ref().unwrap()).unwrap();
+        legacy_receipt["schema"] = "syu/verification-receipt/v2".into();
+        legacy_receipt
+            .as_object_mut()
+            .unwrap()
+            .remove("lifecycle_proofs");
+        let parsed_receipt: VerificationReceipt =
+            serde_json::from_value(legacy_receipt.clone()).expect("legacy verification receipt");
+        assert_eq!(
+            serde_json::to_value(parsed_receipt).unwrap(),
+            legacy_receipt
+        );
+
+        let mut legacy_attempt = serde_json::to_value(&attempt).unwrap();
+        legacy_attempt["receipt"] = legacy_receipt;
+        legacy_attempt["attempt_digest"] = "".into();
+        let parsed_legacy_attempt: CompletionAttempt =
+            serde_json::from_value(legacy_attempt.clone()).unwrap();
+        let attempt_digest =
+            DeliveryStore::digest(&LegacyCompletionAttempt::from(&parsed_legacy_attempt)).unwrap();
+        legacy_attempt["attempt_digest"] = attempt_digest.into();
+        let attempt_path = store.attempt_path(&attempt);
+        fs::create_dir_all(attempt_path.parent().unwrap()).unwrap();
+        fs::write(
+            &attempt_path,
+            serde_json::to_vec_pretty(&legacy_attempt).unwrap(),
+        )
+        .unwrap();
+        let loaded_attempt = store.attempt(&attempt.attempt_id).unwrap();
+        assert_eq!(loaded_attempt.attempt_id, attempt.attempt_id);
+        assert_eq!(loaded_attempt.receipt.unwrap().lifecycle_proofs, vec![]);
+
+        let finalization = FinalizationReceipt {
+            schema: FINALIZATION_RECEIPT_SCHEMA.into(),
+            finalization_id: "finalization-legacy".into(),
+            attempt_id: attempt.attempt_id.clone(),
+            attempt_digest: attempt.attempt_digest.clone(),
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+            pre_workspace_fingerprint: "sha256:before".into(),
+            post_workspace_fingerprint: "sha256:after".into(),
+            promoted_items: vec![],
+            changed_files: vec![],
+            lifecycle_proofs: vec![],
+            completed_at: "2".into(),
+        };
+        let mut legacy_finalization = serde_json::to_value(&finalization).unwrap();
+        legacy_finalization
+            .as_object_mut()
+            .unwrap()
+            .remove("lifecycle_proofs");
+        let parsed_finalization: FinalizationReceipt =
+            serde_json::from_value(legacy_finalization.clone()).expect("legacy finalization");
+        assert_eq!(
+            serde_json::to_value(parsed_finalization).unwrap(),
+            legacy_finalization
+        );
+
+        let target = "FEAT-FIXTURE-001#binding.implementation/target.behavior"
+            .parse()
+            .unwrap();
+        let patch = AgentPatchRecord {
+            schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+            patch_id: "patch-legacy".into(),
+            run_id: "run-legacy".into(),
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+            status: syu_work_model::AgentPatchStatus::Accepted,
+            writes: vec![],
+            changes: vec![AgentTargetChange {
+                reference: target,
+                transition: syu_work_model::TargetTransition::Modify,
+                lifecycle: syu_work_model::TargetLifecycle::Stable,
+                before_content_hash: "".into(),
+                after_content_hash: "".into(),
+                before_excerpt_hash: "sha256:before".into(),
+                after_excerpt_hash: "sha256:after".into(),
+            }],
+            before_workspace_fingerprint: "sha256:before".into(),
+            after_workspace_fingerprint: "sha256:after".into(),
+            blockers: vec![],
+            created_at: "1".into(),
+        };
+        let event = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-legacy".into(),
+            event_digest: String::new(),
+            run_id: patch.run_id.clone(),
+            plan_digest: patch.plan_digest.clone(),
+            slice_id: patch.slice_id.clone(),
+            created_at: "1".into(),
+            event: AgentEventKind::PatchRecorded { patch },
+        };
+        let mut legacy_event = serde_json::to_value(&event).unwrap();
+        let change = &mut legacy_event["event"]["patch"]["changes"][0];
+        for field in [
+            "transition",
+            "lifecycle",
+            "before_content_hash",
+            "after_content_hash",
+        ] {
+            change.as_object_mut().unwrap().remove(field);
+        }
+        legacy_event["event_digest"] = "".into();
+        let mut legacy_event_struct: LegacyAgentEvent =
+            serde_json::from_value(legacy_event.clone()).unwrap();
+        legacy_event_struct.event_digest.clear();
+        let event_digest = DeliveryStore::digest(&legacy_event_struct).unwrap();
+        legacy_event["event_digest"] = event_digest.into();
+        let event_path = store.agent_event_path(&event);
+        fs::create_dir_all(event_path.parent().unwrap()).unwrap();
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&legacy_event).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(store.agent_events("run-legacy").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn legacy_run_started_event_preserves_digest_and_run_reconstruction() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let slice = &plan.slices[0];
+        let planned = slice
+            .editable_targets
+            .first()
+            .expect("fixture editable target");
+        let context =
+            syu_planner::export_context(&plan, &slice.id, &workspace, &index, &revision).unwrap();
+        let run = AgentRun {
+            schema: syu_work_model::AGENT_RUN_SCHEMA.into(),
+            run_id: "run-legacy-started".into(),
+            approval_id: "approval-legacy-started".into(),
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: slice.id.clone(),
+            status: AgentRunStatus::Active,
+            context: AgentContextPack {
+                schema: "syu/agent-context/v1".into(),
+                plan_digest: plan.canonical_digest.clone(),
+                slice_id: slice.id.clone(),
+                context,
+                budget: slice.budget.clone(),
+                editable_targets: vec![AgentTargetDigest {
+                    reference: planned.reference.clone(),
+                    path: planned.resolved_path.clone(),
+                    access: planned.access,
+                    transition: planned.transition,
+                    lifecycle: planned.lifecycle,
+                    content_hash: planned.content_hash.clone(),
+                    excerpt_hash: planned.excerpt_hash.clone(),
+                    container_content_hash: planned.container_content_hash.clone(),
+                    line_start: planned.line_start,
+                    line_end: planned.line_end,
+                    budget_bytes: planned.budget_bytes,
+                    budget_lines: planned.budget_lines,
+                }],
+                verification_targets: vec![],
+                readonly_targets: vec![],
+            },
+            created_at: "1".into(),
+        };
+        let event = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-legacy-started".into(),
+            event_digest: String::new(),
+            run_id: run.run_id.clone(),
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+            created_at: "1".into(),
+            event: AgentEventKind::RunStarted {
+                run: Box::new(run.clone()),
+            },
+        };
+        let mut legacy_event = serde_json::to_value(&event).unwrap();
+        let target = &mut legacy_event["event"]["run"]["context"]["editable_targets"][0];
+        target.as_object_mut().unwrap().remove("lifecycle");
+        target
+            .as_object_mut()
+            .unwrap()
+            .remove("container_content_hash");
+        legacy_event["event_digest"] = "".into();
+        let mut legacy_event_struct: LegacyAgentEvent =
+            serde_json::from_value(legacy_event.clone()).unwrap();
+        legacy_event_struct.event_digest.clear();
+        legacy_event["event_digest"] = DeliveryStore::digest(&legacy_event_struct).unwrap().into();
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let event_path = store.agent_event_path(&event);
+        fs::create_dir_all(event_path.parent().unwrap()).unwrap();
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&legacy_event).unwrap(),
+        )
+        .unwrap();
+
+        let events = store.agent_events(&run.run_id).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(store.agent_run(&run.run_id).unwrap(), run);
+
+        legacy_event["event"]["run"]["status"] = "completed".into();
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&legacy_event).unwrap(),
+        )
+        .unwrap();
+        assert!(store.agent_events(&run.run_id).is_err());
+    }
+
+    #[test]
+    fn legacy_work_plan_and_approval_keep_the_v1_canonical_digest() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let approval = fixture_approval(&workspace, &plan, &revision);
+        let mut legacy_plan = serde_json::to_value(&plan).unwrap();
+        assert!(
+            legacy_plan["slices"][0]["editable_targets"][0]
+                .get("lifecycle")
+                .is_some()
+        );
+        legacy_plan["canonical_digest"] = "".into();
+        let mut parsed: syu_work_model::WorkPlan = serde_json::from_value(legacy_plan).unwrap();
+        assert_eq!(
+            syu_work_model::work_plan_digest(&parsed),
+            plan.canonical_digest
+        );
+        parsed.canonical_digest = plan.canonical_digest.clone();
+
+        let mut legacy_approval = serde_json::to_value(&approval).unwrap();
+        legacy_approval["plan"] = serde_json::to_value(&parsed).unwrap();
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        store.ensure().unwrap();
+        let path = store.approval_path(&approval.plan_digest);
+        fs::write(&path, serde_json::to_vec_pretty(&legacy_approval).unwrap()).unwrap();
+        assert_eq!(store.approval(&approval.plan_digest).unwrap().plan, parsed);
     }
 
     #[test]

@@ -92,6 +92,15 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.spec-model
                 covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document]
                 runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::old_shape_is_rejected } }
+          - id: target-lifecycle-test
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.spec-model
+                covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.target-lifecycle]
+                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent } }
           - id: digest-format-test
             adapter: rust
             path: crates/syu-spec-model/src/lib.rs
