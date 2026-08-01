@@ -4,7 +4,7 @@ workspace:
   excludes: []
 inventory:
   active_profile: default
-  profiles: [{ id: default, providers: { rust: { mode: test, include_tests: true } } }]
+  profiles: [{ id: default, providers: { rust: { mode: test, include_tests: true }, declared: { roots: [remove-file.txt] } } }]
 validation:
   preset: standard
   readiness:

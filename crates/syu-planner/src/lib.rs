@@ -3,13 +3,16 @@ use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 use syu_diagnostics::Diagnostic;
 use syu_project_model::ValidationPreset;
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
-    ArtifactBinding, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, Selector,
-    SpecAnchor, TargetClaim,
+    ArtifactBinding, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
+    LocalAnchorKind, RepoPath, Selector, SpecAnchor, TargetClaim,
 };
 use syu_work_model::*;
 use syu_workspace::{
@@ -43,6 +46,14 @@ pub struct TargetSuggestion {
     pub reference: BoundTargetRef,
     pub role: BindingRole,
     pub transition: TargetTransition,
+    pub lifecycle: TargetLifecycle,
+    pub path: String,
+    pub selector: String,
+    pub existing_file: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_bytes: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_lines: Option<usize>,
     pub confidence: SuggestionConfidence,
     pub evidence: Vec<String>,
     pub evidence_fingerprint: String,
@@ -91,10 +102,7 @@ pub fn suggest_targets(
         .collect::<BTreeSet<_>>();
     let mut ranked = Vec::new();
     for (binding_anchor, binding) in &index.bindings {
-        if matches!(
-            index.item_status.get(&binding_anchor.item),
-            Some(ItemStatus::Deprecated)
-        ) {
+        if index.item_status.get(&binding_anchor.item) == Some(&ItemStatus::Deprecated) {
             continue;
         }
         for target in &binding.targets {
@@ -102,24 +110,46 @@ pub fn suggest_targets(
                 binding: binding_anchor.clone(),
                 target_id: target.id.clone(),
             };
-            if !index.target_to_artifact.contains_key(&reference) {
-                continue;
-            }
+            let current_target = index.target_to_artifact.contains_key(&reference);
+            let artifact_exists = index.all_target_to_artifact.contains_key(&reference);
+            let planned_item =
+                index.item_status.get(&binding_anchor.item) == Some(&ItemStatus::Planned);
+            let planned_missing_target = !current_target
+                && target.lifecycle != ArtifactTargetLifecycle::Absent
+                && planned_item;
             let mut score = 0usize;
             let mut evidence = Vec::new();
-            let directly_claims = target.claims.iter().any(|claim| match claim {
-                TargetClaim::Satisfies { criterion: actual }
-                | TargetClaim::Verifies {
-                    criterion: actual, ..
-                } => actual == criterion,
-                TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => {
-                    anchor == criterion
-                }
-                _ => false,
+            let directly_claims = target.claims.iter().any(|claim| {
+                !matches!(claim, TargetClaim::Enforces { .. })
+                    && claim_anchor(claim).is_some_and(|actual| actual == criterion)
             });
+            let planned_remove_target = target.lifecycle == ArtifactTargetLifecycle::Absent
+                && artifact_exists
+                && planned_item
+                && directly_claims;
+            if target.lifecycle == ArtifactTargetLifecycle::Absent && !planned_remove_target {
+                continue;
+            }
+            if !current_target && !planned_missing_target && !planned_remove_target {
+                continue;
+            }
             if directly_claims {
                 score += 100;
                 evidence.push("The target explicitly claims this criterion.".into());
+            }
+            if planned_missing_target {
+                score += 20;
+                evidence.push(
+                    "This planned target is missing from the current inventory and requires explicit Add approval."
+                        .into(),
+                );
+            }
+            if planned_remove_target {
+                score += 20;
+                evidence.push(
+                    "This planned absent target resolves to a current artifact and requires explicit Remove approval (ensure-absent)."
+                        .into(),
+                );
             }
             if binding_anchor.item == criterion.item {
                 score += 40;
@@ -139,14 +169,12 @@ pub fn suggest_targets(
                     "The target participates in a contract guaranteeing this criterion.".into(),
                 );
             }
-            if target.claims.iter().any(|claim| {
-                claim_anchor(claim).is_some_and(|anchor| anchor.item == criterion.item)
-            }) && !directly_claims
-            {
-                score += 25;
-                evidence.push(
-                    "The target claims another anchor in the same specification item.".into(),
-                );
+            // Suggestions may rank evidence, but executable scope starts from
+            // an exact relation to the selected criterion. A shared
+            // requirement item or coincidental terminology is not authority
+            // to propose another criterion's target.
+            if !directly_claims && !enforces_governing_rule && !supports_contract {
+                continue;
             }
             let searchable = format!(
                 "{} {} {} {} {}",
@@ -182,7 +210,21 @@ pub fn suggest_targets(
             if score == 0 {
                 continue;
             }
-            let transition = transition_for_role(binding.role);
+            let transition = if planned_remove_target {
+                TargetTransition::Remove
+            } else if planned_missing_target {
+                TargetTransition::Add
+            } else {
+                transition_for_role(binding.role)
+            };
+            let lifecycle = match transition {
+                TargetTransition::Add => TargetLifecycle::EnsurePresent,
+                TargetTransition::Remove => TargetLifecycle::EnsureAbsent,
+                _ => TargetLifecycle::Stable,
+            };
+            let path = target.path.to_string_lossy().into_owned();
+            let selector = selector_text(&target.selector);
+            let existing_file = workspace.root.join(target.path.as_path()).is_file();
             let confidence = if directly_claims || enforces_governing_rule || supports_contract {
                 SuggestionConfidence::High
             } else if score >= 40 || matched_terms.len() >= 2 {
@@ -193,6 +235,7 @@ pub fn suggest_targets(
             let artifact_digest = index
                 .target_to_artifact
                 .get(&reference)
+                .or_else(|| index.all_target_to_artifact.get(&reference))
                 .and_then(|identity| {
                     index
                         .artifact_units
@@ -210,6 +253,10 @@ pub fn suggest_targets(
                 reference,
                 binding.role,
                 transition,
+                lifecycle,
+                path,
+                selector,
+                existing_file,
                 confidence,
                 evidence,
                 evidence_fingerprint,
@@ -223,7 +270,20 @@ pub fn suggest_targets(
         .map(
             |(
                 offset,
-                (_, id, reference, role, transition, confidence, evidence, evidence_fingerprint),
+                (
+                    _,
+                    id,
+                    reference,
+                    role,
+                    transition,
+                    lifecycle,
+                    path,
+                    selector,
+                    existing_file,
+                    confidence,
+                    evidence,
+                    evidence_fingerprint,
+                ),
             )| {
                 TargetSuggestion {
                     id,
@@ -231,6 +291,12 @@ pub fn suggest_targets(
                     reference,
                     role,
                     transition,
+                    lifecycle,
+                    path,
+                    selector,
+                    existing_file,
+                    budget_bytes: (transition == TargetTransition::Add).then_some(512),
+                    budget_lines: (transition == TargetTransition::Add).then_some(32),
                     confidence,
                     evidence,
                     evidence_fingerprint,
@@ -338,71 +404,127 @@ pub fn split_work_recommendation(
     index: &SpecIndex,
 ) -> Option<SplitWorkRecommendation> {
     let limits = &workspace.config.work.slicing;
-    let editable = suggestions
-        .iter()
-        .filter(|candidate| candidate.transition == TargetTransition::Modify)
-        .collect::<Vec<_>>();
-    let editable_files = editable
-        .iter()
-        .filter_map(|candidate| index.target(&candidate.reference))
-        .map(|target| target.path.clone())
-        .collect::<BTreeSet<_>>()
-        .len();
-    let verification = suggestions
-        .iter()
-        .filter(|candidate| candidate.transition == TargetTransition::RunOnly)
-        .count();
-    let readonly = suggestions
-        .iter()
-        .filter(|candidate| candidate.transition == TargetTransition::Readonly)
-        .count();
-    let total_bytes = suggestions
-        .iter()
-        .filter_map(|candidate| index.target_to_artifact.get(&candidate.reference))
-        .filter_map(|identity| {
+    let budget = suggestion_budget(suggestions, index);
+    if !suggestion_budget_exceeds(&budget, limits) {
+        return None;
+    }
+
+    let mut groups = Vec::<Vec<TargetSuggestion>>::new();
+    for candidate in suggestions {
+        let can_append = groups.last().is_some_and(|group| {
+            let mut combined = group.clone();
+            combined.push(candidate.clone());
+            !suggestion_budget_exceeds(&suggestion_budget(&combined, index), limits)
+        });
+        if can_append {
+            groups
+                .last_mut()
+                .expect("group exists")
+                .push(candidate.clone());
+        } else {
+            groups.push(vec![candidate.clone()]);
+        }
+    }
+    let suggested_groups = groups
+        .into_iter()
+        .map(|group| group.into_iter().map(|candidate| candidate.id).collect())
+        .collect();
+    Some(SplitWorkRecommendation {
+        reason: format!(
+            "The candidate set exceeds configured slicing limits (editable files {}/{}, editable symbols {}/{}, verification targets {}/{}, readonly targets {}/{}, bytes {}/{}). Review and approve smaller groups.",
+            budget.editable_files,
+            limits.max_editable_files,
+            budget.editable_symbols,
+            limits.max_editable_symbols,
+            budget.verification_targets,
+            limits.max_verification_targets,
+            budget.readonly_targets,
+            limits.max_readonly_targets,
+            budget.total_bytes,
+            limits.max_total_bytes,
+        ),
+        suggested_groups,
+    })
+}
+
+#[derive(Debug, Default)]
+struct SuggestionBudget {
+    editable_files: usize,
+    editable_symbols: usize,
+    verification_targets: usize,
+    readonly_targets: usize,
+    total_bytes: usize,
+}
+
+fn suggestion_budget(suggestions: &[TargetSuggestion], index: &SpecIndex) -> SuggestionBudget {
+    let mut editable_paths = BTreeSet::new();
+    let mut budget = SuggestionBudget::default();
+    for candidate in suggestions {
+        match candidate.transition {
+            TargetTransition::Add => {
+                if candidate.role == BindingRole::Verification {
+                    // A planned verification Add is represented in the plan
+                    // twice: once for the post-write target and once for the
+                    // RunOnly verification phase.
+                    budget.verification_targets += 1;
+                }
+                if let Some(target) = index.target(&candidate.reference) {
+                    editable_paths.insert(target.path.clone());
+                    budget.editable_symbols += match target.selector {
+                        Selector::Symbol { .. } => 1,
+                        _ => 0,
+                    };
+                }
+            }
+            TargetTransition::Modify | TargetTransition::Remove => {
+                if let Some(target) = index.target(&candidate.reference) {
+                    editable_paths.insert(target.path.clone());
+                    budget.editable_symbols += match target.selector {
+                        Selector::Symbol { .. } => 1,
+                        _ => 0,
+                    };
+                }
+            }
+            TargetTransition::RunOnly => budget.verification_targets += 1,
+            TargetTransition::Readonly => budget.readonly_targets += 1,
+        }
+        budget.total_bytes += suggestion_budget_bytes(candidate, index);
+    }
+    budget.editable_files = editable_paths.len();
+    budget
+}
+
+fn suggestion_budget_bytes(candidate: &TargetSuggestion, index: &SpecIndex) -> usize {
+    if candidate.transition == TargetTransition::Add {
+        return candidate.budget_bytes.unwrap_or_default();
+    }
+    let identity = match candidate.transition {
+        TargetTransition::Remove => index.all_target_to_artifact.get(&candidate.reference),
+        TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
+            index.target_to_artifact.get(&candidate.reference)
+        }
+        TargetTransition::Add => unreachable!("Add budgets return above"),
+    };
+    identity
+        .and_then(|identity| {
             index
                 .artifact_units
                 .iter()
                 .find(|unit| &unit.identity == identity)
         })
         .map(|unit| unit.span.byte_end.saturating_sub(unit.span.byte_start))
-        .sum::<usize>();
-    if editable_files <= limits.max_editable_files
-        && editable.len() <= limits.max_editable_symbols
-        && verification <= limits.max_verification_targets
-        && readonly <= limits.max_readonly_targets
-        && total_bytes <= limits.max_total_bytes
-    {
-        return None;
-    }
-    let mut capacities = vec![suggestions.len().max(1)];
-    if !editable.is_empty() {
-        capacities.push(limits.max_editable_symbols.max(1));
-        capacities.push(limits.max_editable_files.max(1));
-    }
-    if verification > 0 {
-        capacities.push(limits.max_verification_targets.max(1));
-    }
-    if readonly > 0 {
-        capacities.push(limits.max_readonly_targets.max(1));
-    }
-    let group_size = capacities.into_iter().min().unwrap_or(1);
-    let suggested_groups = suggestions
-        .chunks(group_size)
-        .map(|group| group.iter().map(|candidate| candidate.id.clone()).collect())
-        .collect();
-    Some(SplitWorkRecommendation {
-        reason: format!(
-            "The candidate set exceeds configured slicing limits (editable files {editable_files}/{}, editable targets {}/{}, verification targets {verification}/{}, readonly targets {readonly}/{}, bytes {total_bytes}/{}). Review and approve smaller groups.",
-            limits.max_editable_files,
-            editable.len(),
-            limits.max_editable_symbols,
-            limits.max_verification_targets,
-            limits.max_readonly_targets,
-            limits.max_total_bytes,
-        ),
-        suggested_groups,
-    })
+        .unwrap_or_default()
+}
+
+fn suggestion_budget_exceeds(
+    budget: &SuggestionBudget,
+    limits: &syu_project_model::SliceLimits,
+) -> bool {
+    budget.editable_files > limits.max_editable_files
+        || budget.editable_symbols > limits.max_editable_symbols
+        || budget.verification_targets > limits.max_verification_targets
+        || budget.readonly_targets > limits.max_readonly_targets
+        || budget.total_bytes > limits.max_total_bytes
 }
 
 fn enabled_adapters(workspace: &SpecWorkspace) -> Vec<String> {
@@ -1768,6 +1890,7 @@ fn apply_changed_artifact_overrides(
             },
             content_hash: resolved.content_hash,
             excerpt_hash: resolved.excerpt_hash,
+            container_content_hash: None,
             adapter: unit.adapter.clone(),
             facet: binding.facet.clone(),
             role: binding.role,
@@ -2167,27 +2290,61 @@ fn criterion_verification_targets(
     // older binding-level index is intentionally not used here: a verification
     // binding may contain tests for several criteria, and expanding the whole
     // binding would make an unrelated test part of this slice.
-    for reference in index
-        .criteria_to_verification_targets
-        .get(criterion)
+    let requested_add = requested_transitions
         .into_iter()
-        .flatten()
-    {
+        .flat_map(|transitions| transitions.values())
+        .any(|transition| *transition == TargetTransition::Add)
+        || requested.is_some_and(|value| {
+            requested_transitions.and_then(|transitions| transitions.get(value.reference()))
+                == Some(&TargetTransition::Add)
+        });
+    let verification_refs = if requested_add {
+        index
+            .all_criteria_to_verification_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+    } else {
+        index
+            .criteria_to_verification_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+    };
+    for reference in verification_refs {
         let Some(binding) = index.bindings.get(&reference.binding) else {
             continue;
         };
         let Some(target) = index.target(reference) else {
             continue;
         };
-        if requested_transitions
-            .and_then(|map| map.get(reference))
-            .is_some()
-        {
+        let requested_ref = requested.map(|value| value.reference());
+        let requested_transition = requested_transitions.and_then(|map| map.get(reference));
+        let exact_target = requested_ref == Some(reference)
+            || requested_transitions.is_some_and(|map| map.contains_key(reference));
+        let requested_verification_add = exact_target
+            && requested_transition == Some(&TargetTransition::Add)
+            && binding.role == BindingRole::Verification;
+        if requested_transition.is_some() && !requested_verification_add {
             continue;
         }
-        let requested_ref = requested.map(|value| value.reference());
-        let exact_target = requested_ref == Some(reference);
-        let policy = if exact_target {
+        let missing_target = !index.target_to_artifact.contains_key(reference)
+            && target.lifecycle != ArtifactTargetLifecycle::Absent;
+        if requested_add && missing_target && !requested_verification_add {
+            blockers.push(Diagnostic::error(
+                "SYU-WORK-014",
+                format!(
+                    "verification target {reference} is planned but missing; approve its exact Add target before including it in the slice"
+                ),
+                target.path.to_string_lossy(),
+            ));
+            continue;
+        }
+        let policy = if requested_verification_add {
+            target_policy(TargetTransition::RunOnly)
+        } else if exact_target {
             requested_policy
         } else {
             target_policy(TargetTransition::RunOnly)
@@ -2468,8 +2625,16 @@ fn one_target(
         blockers.push(diagnostic);
         return vec![];
     }
-    if !matches!(options.policy.transition, TargetTransition::Add)
-        && !index.target_to_artifact.contains_key(reference)
+    let has_active_artifact = index.target_to_artifact.contains_key(reference)
+        || (target.lifecycle == ArtifactTargetLifecycle::Absent
+            && (index.all_target_to_artifact.contains_key(reference)
+                || resolve_target_in_workspace(workspace, target).is_ok()));
+    let planned_missing_target = !has_active_artifact
+        && target.lifecycle != ArtifactTargetLifecycle::Absent
+        && index.item_status.get(&reference.binding.item) == Some(&ItemStatus::Planned);
+    if !(matches!(options.policy.transition, TargetTransition::Add)
+        || has_active_artifact
+        || (options.policy.transition == TargetTransition::RunOnly && planned_missing_target))
     {
         let mut d = Diagnostic::error(
             "SYU-TARGET-002",
@@ -2550,6 +2715,7 @@ fn one_target(
                 },
                 content_hash: r.content_hash,
                 excerpt_hash: r.excerpt_hash,
+                container_content_hash: None,
                 adapter: target.adapter.clone(),
                 facet: binding.facet.clone(),
                 role: binding.role,
@@ -2562,7 +2728,7 @@ fn one_target(
                 reason: options.reason.into(),
             }]
         }
-        Err(_) => match options.policy.transition {
+        Err(error) => match options.policy.transition {
             TargetTransition::Add => {
                 let Some(add_budget_bytes) = options.add_budget_bytes else {
                     let mut d = Diagnostic::error(
@@ -2584,14 +2750,30 @@ fn one_target(
                     blockers.push(d);
                     return vec![];
                 };
+                let container_content_hash = match approved_container_hash(workspace, target) {
+                    Ok(hash) => hash,
+                    Err(error) => {
+                        let mut d = Diagnostic::error(
+                            "SYU-TARGET-003",
+                            format!("cannot inspect add target container: {error}"),
+                            target.path.to_string_lossy(),
+                        );
+                        d.target = Some(reference.clone());
+                        blockers.push(d);
+                        return vec![];
+                    }
+                };
                 vec![declared_target_plan(
                     reference,
                     binding,
                     target,
-                    options.policy,
-                    options.reason,
-                    add_budget_bytes,
-                    add_budget_lines,
+                    DeclaredTargetPlanOptions {
+                        policy: options.policy,
+                        reason: options.reason,
+                        add_budget_bytes,
+                        add_budget_lines,
+                        container_content_hash,
+                    },
                 )]
             }
             TargetTransition::Remove => {
@@ -2604,10 +2786,27 @@ fn one_target(
                 blockers.push(d);
                 vec![]
             }
+            TargetTransition::RunOnly if planned_missing_target => {
+                vec![declared_target_plan(
+                    reference,
+                    binding,
+                    target,
+                    DeclaredTargetPlanOptions {
+                        policy: options.policy,
+                        reason: options.reason,
+                        add_budget_bytes: 0,
+                        add_budget_lines: 0,
+                        container_content_hash: None,
+                    },
+                )]
+            }
             TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
                 let mut d = Diagnostic::error(
                     "SYU-TARGET-002",
-                    format!("target does not resolve: {}", target.path.to_string_lossy()),
+                    format!(
+                        "target does not resolve: {} ({error})",
+                        target.path.to_string_lossy()
+                    ),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
@@ -2622,18 +2821,15 @@ fn declared_target_plan(
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
-    policy: TargetPolicy,
-    reason: &str,
-    add_budget_bytes: usize,
-    add_budget_lines: usize,
+    options: DeclaredTargetPlanOptions<'_>,
 ) -> PlannedTarget {
     PlannedTarget {
         reference: reference.clone(),
         verification_claim: None,
         artifact_identity: None,
-        transition: policy.transition,
-        lifecycle: policy.lifecycle,
-        access: policy.access,
+        transition: options.policy.transition,
+        lifecycle: options.policy.lifecycle,
+        access: options.policy.access,
         resolved_path: target.path.to_string_lossy().into_owned(),
         resolved_selector: ResolvedSelector {
             description: declared_selector(&target.selector).0,
@@ -2641,6 +2837,7 @@ fn declared_target_plan(
         },
         content_hash: String::new(),
         excerpt_hash: String::new(),
+        container_content_hash: options.container_content_hash,
         adapter: target.adapter.clone(),
         facet: binding.facet.clone(),
         role: binding.role,
@@ -2648,10 +2845,52 @@ fn declared_target_plan(
         byte_end: 0,
         line_start: 0,
         line_end: 0,
-        budget_bytes: add_budget_bytes,
-        budget_lines: Some(add_budget_lines),
-        reason: reason.into(),
+        budget_bytes: options.add_budget_bytes,
+        budget_lines: Some(options.add_budget_lines),
+        reason: options.reason.into(),
     }
+}
+
+struct DeclaredTargetPlanOptions<'a> {
+    policy: TargetPolicy,
+    reason: &'a str,
+    add_budget_bytes: usize,
+    add_budget_lines: usize,
+    container_content_hash: Option<String>,
+}
+
+/// A missing semantic target is added to the file state that was reviewed
+/// with the plan. A missing file deliberately has no container snapshot: the
+/// agent must create it with a no-overwrite precondition instead.
+fn approved_container_hash(
+    workspace: &SpecWorkspace,
+    target: &syu_spec_model::ArtifactTarget,
+) -> Result<Option<String>> {
+    if matches!(target.selector, Selector::File) {
+        return Ok(None);
+    }
+    let canonical_root = workspace.root.canonicalize()?;
+    let path = workspace.root.join(target.path.as_path());
+    let ancestor = path
+        .ancestors()
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| anyhow::anyhow!("target path has no existing workspace ancestor"))?;
+    if !ancestor.canonicalize()?.starts_with(&canonical_root) {
+        bail!(
+            "target path escapes workspace through a symlink: {}",
+            path.display()
+        );
+    }
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("read target container {}", path.display()));
+        }
+    };
+    let mut hash = Sha256::new();
+    hash.update(bytes);
+    Ok(Some(format_sha256(hash.finalize())))
 }
 
 fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
@@ -2705,10 +2944,40 @@ fn validate_target_access_uniqueness(
     verification: &[PlannedTarget],
     readonly: &[PlannedTarget],
 ) {
-    let mut seen = BTreeMap::<BoundTargetRef, TargetAccessMode>::new();
-    for target in editable.iter().chain(verification).chain(readonly) {
-        if let Some(access) = seen.insert(target.reference.clone(), target.access)
-            && access != target.access
+    for target in verification {
+        if editable.iter().any(|editable| {
+            editable.reference == target.reference
+                && editable.transition == TargetTransition::Add
+                && target.transition == TargetTransition::RunOnly
+                && target.verification_claim.is_some()
+        }) {
+            // A newly added exact verification target is intentionally both
+            // editable (the post-state write) and run-only (the test that
+            // executes after that write). These are two phases of one
+            // approved target identity, not an ambiguous scope expansion.
+            continue;
+        }
+        if editable
+            .iter()
+            .any(|editable| editable.reference == target.reference)
+        {
+            let mut d = Diagnostic::error(
+                "SYU-WORK-001",
+                format!(
+                    "requested target appears with multiple access modes: {}",
+                    target.reference
+                ),
+                "work-plan",
+            );
+            d.target = Some(target.reference.clone());
+            blockers.push(d);
+        }
+    }
+    for target in readonly {
+        if editable
+            .iter()
+            .chain(verification)
+            .any(|other| other.reference == target.reference)
         {
             let mut d = Diagnostic::error(
                 "SYU-WORK-001",
@@ -2751,8 +3020,20 @@ fn basis(
         spec_fingerprint: workspace
             .spec_fingerprint()
             .expect("plan basis requires readable specification inputs"),
-        ownership_fingerprint: index.ownership_fingerprint(),
-        readonly_fingerprint: readonly_targets_fingerprint(slices),
+        ownership_fingerprint: index.ownership_fingerprint_excluding(
+            &slices
+                .iter()
+                .flat_map(|slice| slice.editable_targets.iter())
+                .filter(|target| {
+                    matches!(
+                        target.transition,
+                        TargetTransition::Add | TargetTransition::Remove
+                    )
+                })
+                .map(|target| target.reference.clone())
+                .collect(),
+        ),
+        readonly_fingerprint: readonly_targets_fingerprint_for_execution(slices),
     }
 }
 fn plan_id(r: &WorkRequest, revision: &str) -> String {
@@ -3204,7 +3485,7 @@ fn build_context_pack(
                 }
                 None => {
                     match target.transition {
-                        TargetTransition::Add => {
+                        TargetTransition::Add | TargetTransition::RunOnly => {
                             artifact_context.push(ArtifactContextEntry::IntendedTarget(
                                 IntendedTargetContext {
                                     reference: target.reference.clone(),
@@ -3235,6 +3516,7 @@ fn build_context_pack(
                                 selector: syu_spec_model::Selector::Marker {
                                     value: "crate".into(),
                                 },
+                                lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
                                 claims: vec![],
                             },
                         )
@@ -3480,6 +3762,235 @@ mod tests {
     }
 
     #[test]
+    fn planned_missing_exact_target_is_an_add_suggestion_with_scope_metadata() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("status: implemented", "status: planned")
+            .replace("name: handler", "name: handler_missing");
+        fs::write(feature_path, feature).expect("planned feature spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn existing_handler() {}\n",
+        )
+        .expect("existing container");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let candidate = suggestions.suggestions.first().expect("add suggestion");
+
+        assert_eq!(candidate.transition, TargetTransition::Add);
+        assert_eq!(candidate.lifecycle, TargetLifecycle::EnsurePresent);
+        assert_eq!(candidate.path, "src/handler.rs");
+        assert_eq!(candidate.selector, "handler_missing");
+        assert!(candidate.existing_file);
+        assert_eq!(candidate.budget_bytes, Some(512));
+        assert_eq!(candidate.budget_lines, Some(32));
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item.contains("planned target"))
+        );
+    }
+
+    #[test]
+    fn planned_absent_exact_target_is_a_remove_suggestion_when_artifact_exists() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace(
+                "          - id: handler-missing\n",
+                concat!(
+                    "          - id: handler-remove\n",
+                    "            adapter: rust\n",
+                    "            path: src/handler.rs\n",
+                    "            selector: { kind: symbol, name: handler }\n",
+                    "            lifecycle: absent\n",
+                    "            claims:\n",
+                    "              - kind: satisfies\n",
+                    "                criterion: REQ-TEST-001#criterion.test\n",
+                    "          - id: handler-missing\n",
+                ),
+            )
+            .replace("status: implemented", "status: planned");
+        fs::write(feature_path, feature).expect("remove target spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let candidate = suggestions
+            .suggestions
+            .iter()
+            .find(|candidate| candidate.reference.target_id.to_string() == "handler-remove")
+            .expect("planned remove suggestion");
+        assert_eq!(candidate.transition, TargetTransition::Remove);
+        assert_eq!(candidate.lifecycle, TargetLifecycle::EnsureAbsent);
+        assert_eq!(candidate.path, "src/handler.rs");
+        assert!(candidate.existing_file);
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item.contains("ensure-absent"))
+        );
+    }
+
+    #[test]
+    fn requested_add_verification_target_is_repeated_as_post_state_run_only() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("    status: implemented", "    status: planned")
+            .replace("        role: implementation", "        role: verification")
+            .replace(
+                "            claims: []\n",
+                concat!(
+                    "            claims:\n",
+                    "              - kind: verifies\n",
+                    "                criterion: REQ-TEST-001#criterion.test\n",
+                    "                covers: []\n",
+                    "                runner: { runner: cargo-test, arguments: { package: sample, test: added_handler } }\n",
+                ),
+            );
+        fs::write(feature_path, feature).expect("verification target spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let reference: BoundTargetRef = "FEAT-TEST-001#binding.impl/target.handler-missing"
+            .parse()
+            .unwrap();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-VERIFICATION-ADD".into(),
+            summary: "Add a verification test".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(512),
+                max_added_lines_per_target: Some(32),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget {
+                reference,
+                criterion: Some(criterion),
+                transition: TargetTransition::Add,
+            }],
+        };
+
+        let plan = plan(&request, &workspace, &index, "rev-verification-add").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
+        let slice = plan.slices.first().expect("verification add slice");
+        assert!(slice.editable_targets.iter().any(|target| {
+            target.reference.target_id.to_string() == "handler-missing"
+                && target.transition == TargetTransition::Add
+                && target.access == TargetAccessMode::Editable
+        }));
+        let verification = slice
+            .verification_targets
+            .iter()
+            .find(|target| target.reference.target_id.to_string() == "handler-missing")
+            .expect("new test is also a verification target");
+        assert_eq!(verification.access, TargetAccessMode::RunOnly);
+        assert_eq!(verification.transition, TargetTransition::RunOnly);
+        assert_eq!(
+            verification.verification_claim.as_ref().unwrap().criterion,
+            "REQ-TEST-001#criterion.test".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn implementation_add_does_not_pull_unapproved_missing_verification_target() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let mut feature = fs::read_to_string(&feature_path).expect("feature spec");
+        feature.push_str(concat!(
+            "\n  - id: FEAT-TEST-VERIFICATION-001\n",
+            "    title: Planned verification\n",
+            "    summary: Add a verification target only after its exact approval.\n",
+            "    status: planned\n",
+            "    bindings:\n",
+            "      - id: verification\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the test criterion.\n",
+            "        targets:\n",
+            "          - id: missing-test\n",
+            "            adapter: rust\n",
+            "            path: tests/behavior.rs\n",
+            "            selector: { kind: symbol, name: missing_test }\n",
+            "            claims:\n",
+            "              - kind: verifies\n",
+            "                criterion: REQ-TEST-001#criterion.test\n",
+            "                covers: [FEAT-TEST-001#binding.impl/target.handler-present]\n",
+            "                runner: { runner: cargo-test, arguments: { package: sample, test: missing_test } }\n",
+        ));
+        fs::write(feature_path, feature).expect("verification feature spec");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn existing_handler() {}\n",
+        )
+        .expect("existing container");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-UNAPPROVED-VERIFICATION".into(),
+            summary: "Add the implementation target".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(512),
+                max_added_lines_per_target: Some(32),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
+                    .parse()
+                    .unwrap(),
+                criterion: Some(criterion),
+                transition: TargetTransition::Add,
+            }],
+        };
+
+        let plan = plan(&request, &workspace, &index, "rev-unapproved-verification").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked, "{plan:?}");
+        assert!(plan.slices.iter().all(|slice| {
+            slice
+                .verification_targets
+                .iter()
+                .all(|target| target.reference.target_id.to_string() != "missing-test")
+        }));
+        assert!(plan.slices.iter().any(|slice| {
+            slice
+                .blockers
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-014")
+        }));
+    }
+
+    #[test]
     fn target_suggestions_recommend_split_when_candidate_budget_overflows() {
         let tempdir = tempdir().expect("tempdir");
         write_minimal_workspace(tempdir.path());
@@ -3500,6 +4011,86 @@ mod tests {
             .expect("split recommendation");
         assert!(split.reason.contains("exceeds configured slicing limits"));
         assert_eq!(split.suggested_groups.len(), 1);
+    }
+
+    #[test]
+    fn missing_add_targets_split_by_declared_budget_and_file_limit() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("status: implemented", "status: planned")
+            .replace(
+                "            selector: { kind: symbol, name: handler_missing }\n            claims: []\n",
+                "            selector: { kind: symbol, name: handler_missing }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n          - id: handler-missing-two\n            adapter: rust\n            path: src/other.rs\n            selector: { kind: symbol, name: handler_missing_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n",
+            );
+        fs::write(feature_path, feature).expect("two missing targets");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let mut workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        workspace.config.work.slicing.max_total_bytes = 700;
+        workspace.config.work.slicing.max_editable_files = 1;
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let adds = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| candidate.transition == TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert_eq!(adds.len(), 2);
+        assert_eq!(adds[0].budget_bytes, Some(512));
+        assert_eq!(adds[1].budget_bytes, Some(512));
+        let split = split_work_recommendation(&adds, &workspace, &index)
+            .expect("lifecycle candidates require a split");
+        assert_eq!(split.suggested_groups.len(), 2);
+        assert!(split.suggested_groups.iter().all(|group| group.len() == 1));
+    }
+
+    #[test]
+    fn verification_add_targets_count_the_post_write_run_only_phase() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("status: implemented", "status: planned")
+            .replace(
+                "            claims: []\n",
+                "            claims: []\n      - id: verification\n        role: verification\n        facet: checks\n        responsibility: Verify the planned targets.\n        targets:\n          - id: verify-one\n            adapter: rust\n            path: tests/verify.rs\n            selector: { kind: symbol, name: verify_one }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n          - id: verify-two\n            adapter: rust\n            path: tests/verify.rs\n            selector: { kind: symbol, name: verify_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n",
+            );
+        fs::write(feature_path, feature).expect("verification Add targets");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let mut workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        workspace.config.work.slicing.max_verification_targets = 1;
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let verification_adds = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| {
+                candidate.transition == TargetTransition::Add
+                    && candidate.role == BindingRole::Verification
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert_eq!(verification_adds.len(), 2);
+        let split = split_work_recommendation(&verification_adds, &workspace, &index)
+            .expect("verification Add phases require a split");
+        assert_eq!(split.suggested_groups.len(), 2);
+        assert!(split.suggested_groups.iter().all(|group| group.len() == 1));
     }
 
     #[test]

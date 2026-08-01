@@ -310,7 +310,7 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
     } else {
         fs::write(
             temp.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
         )
         .unwrap();
     }

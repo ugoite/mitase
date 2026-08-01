@@ -339,8 +339,27 @@ pub struct ArtifactTarget {
     pub adapter: String,
     pub path: RepoPath,
     pub selector: ExactSelector,
+    /// The state this target must have once its owning item is implemented.
+    ///
+    /// `Absent` keeps a removed target in the specification as an explicit
+    /// lifecycle obligation, rather than silently dropping its ownership and
+    /// finalization evidence.
+    #[serde(default, skip_serializing_if = "is_present_target_lifecycle")]
+    pub lifecycle: ArtifactTargetLifecycle,
     #[serde(default)]
     pub claims: Vec<TargetClaim>,
+}
+
+fn is_present_target_lifecycle(value: &ArtifactTargetLifecycle) -> bool {
+    matches!(value, ArtifactTargetLifecycle::Present)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ArtifactTargetLifecycle {
+    #[default]
+    Present,
+    Absent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -618,6 +637,21 @@ mod tests {
             serde_yaml::from_str::<ExactSelector>("kind: symbol\nname: one\nextra: true\n")
                 .is_err()
         );
+    }
+
+    #[test]
+    fn artifact_target_lifecycle_defaults_to_present_and_accepts_absent() {
+        let present: ArtifactTarget = serde_yaml::from_str(
+            "id: subject\nadapter: rust\npath: src/lib.rs\nselector: { kind: symbol, name: subject }\n",
+        )
+        .expect("default lifecycle target");
+        assert_eq!(present.lifecycle, ArtifactTargetLifecycle::Present);
+
+        let absent: ArtifactTarget = serde_yaml::from_str(
+            "id: subject\nadapter: rust\npath: src/lib.rs\nselector: { kind: symbol, name: subject }\nlifecycle: absent\n",
+        )
+        .expect("absent lifecycle target");
+        assert_eq!(absent.lifecycle, ArtifactTargetLifecycle::Absent);
     }
 
     #[test]

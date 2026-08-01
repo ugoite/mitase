@@ -277,6 +277,13 @@ function renderTargetSuggestions(root, state) {
     meta.className = 'meta-line';
     meta.append(enumChip('suggestion.confidence', candidate.confidence), enumChip('target.role', candidate.role));
     if (approved) meta.append(status(t('items.suggestions.approved')));
+    const scope = document.createElement('div');
+    scope.className = 'meta-line';
+    const budget = candidate.budget_bytes || candidate.budget_lines
+      ? ` · ${candidate.budget_bytes || 0}B / ${candidate.budget_lines || 0}L`
+      : '';
+    const container = candidate.existing_file ? 'existing file' : 'new file';
+    scope.textContent = `${candidate.transition} · ${candidate.lifecycle} · ${container} · ${candidate.path} · ${candidate.selector}${budget}`;
     const evidence = document.createElement('ul');
     evidence.className = 'compact-list';
     (candidate.evidence || []).forEach(value => {
@@ -284,7 +291,7 @@ function renderTargetSuggestions(root, state) {
       item.textContent = value;
       evidence.append(item);
     });
-    detail.append(title, meta, evidence);
+    detail.append(title, meta, scope, evidence);
     const reject = button(t('items.suggestions.reject'), '×', () => runBusy(state, async () => {
         state.targetSuggestions = await state.api.rejectTargetSuggestion(
           state.projection,
