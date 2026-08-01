@@ -268,7 +268,15 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
-                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_accessible_navigation
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
+              - **covers**:
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
@@ -601,7 +609,11 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
-                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
+              - kind: verifies
+                criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
+                covers:
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
   - id: REQ-WORKBENCH-009
     title: Durable completion history

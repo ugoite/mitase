@@ -100,15 +100,6 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-014#criterion.canonical-detail-trace
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
-        - **id**: specification-detail-router
-          - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
-          - **selector**:
-            - **kind**: symbol
-            - **name**: bindRouter
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
       - **owns**:
         - **id**: assets-page-specifications-module
           - **adapter**: javascript
@@ -163,22 +154,6 @@ description: "Generated reference for docs/syu/features/workbench/specification-
                 - **arguments**:
                   - **package**: syu-workbench-server
                   - **test**: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps
-        - **id**: detail-browser-contract-test
-          - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_accessible_navigation
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
-              - **covers**:
-                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-router
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-workbench-server
-                  - **test**: tests::workbench_accessible_navigation
       - **owns**:
         - **id**: spec-model-module
           - **adapter**: rust
@@ -320,15 +295,6 @@ features:
         criterion: REQ-WORKBENCH-014#criterion.canonical-detail-trace
       - kind: satisfies
         criterion: REQ-WORKBENCH-014#criterion.declaration-runtime-evidence
-    - id: specification-detail-router
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
-      selector:
-        kind: symbol
-        name: bindRouter
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
     owns:
     - id: assets-page-specifications-module
       adapter: javascript
@@ -371,18 +337,6 @@ features:
         covers:
         - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-nested-edit
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_binding_and_target_edits_round_trip_without_yaml_maps } }
-    - id: detail-browser-contract-test
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_accessible_navigation
-      claims:
-      - kind: verifies
-        criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
-        covers:
-        - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-detail-router
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
     owns:
     - id: spec-model-module
       adapter: rust

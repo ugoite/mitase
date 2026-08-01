@@ -44,14 +44,6 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
-        - **id**: workbench-css
-          - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/workbench.css
-          - **selector**:
-            - **kind**: file
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
         - **id**: javascript-navigation
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/router.js
@@ -61,6 +53,8 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-014#criterion.detail-deep-link
         - **id**: keyboard-navigation
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/router.js
@@ -228,6 +222,11 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
           - **path**: crates/syu-app-ui/assets/workbench.html
           - **selector**:
             - **kind**: file
+        - **id**: workbench-css-file
+          - **adapter**: declared
+          - **path**: crates/syu-app-ui/assets/workbench.css
+          - **selector**:
+            - **kind**: file
         - **id**: locale-en-file
           - **adapter**: declared
           - **path**: crates/syu-app-ui/assets/locales/en.json
@@ -266,14 +265,6 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
-    - id: workbench-css
-      adapter: declared
-      path: crates/syu-app-ui/assets/workbench.css
-      selector:
-        kind: file
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
     - id: javascript-navigation
       adapter: javascript
       path: crates/syu-app-ui/assets/js/router.js
@@ -283,6 +274,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-014#criterion.detail-deep-link
     - id: keyboard-navigation
       adapter: javascript
       path: crates/syu-app-ui/assets/js/router.js
@@ -448,6 +441,11 @@ features:
     - id: declared-html-file
       adapter: declared
       path: crates/syu-app-ui/assets/workbench.html
+      selector:
+        kind: file
+    - id: workbench-css-file
+      adapter: declared
+      path: crates/syu-app-ui/assets/workbench.css
       selector:
         kind: file
     - id: locale-en-file
