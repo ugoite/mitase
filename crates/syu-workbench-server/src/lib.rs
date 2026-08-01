@@ -740,8 +740,6 @@ pub struct TargetSuggestionApprovalCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetSuggestionApprovalView {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request: Option<WorkRequest>,
     pub approved_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub split_recommendation: Option<SplitWorkRecommendation>,
@@ -1749,7 +1747,6 @@ async fn api_target_suggestions_approve(
         // Approval records the exact advisory evidence.  WorkRequest creation
         // remains an explicit journey action so a suggestion can never become
         // executable scope merely by being displayed or approved.
-        request: None,
         approved_ids,
         split_recommendation: None,
     }))
@@ -2326,6 +2323,7 @@ fn specification_patch_content(
                             adapter: target.adapter.clone(),
                             path,
                             selector: target.selector.clone(),
+                            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
                             claims,
                         }],
                     }])
@@ -2383,6 +2381,7 @@ fn specification_patch_content(
                 adapter: target.adapter.clone(),
                 path,
                 selector: target.selector.clone(),
+                lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
                 claims: vec![TargetClaim::Satisfies {
                     criterion: parsed_criterion,
                 }],
@@ -7920,7 +7919,13 @@ mod tests {
         );
         assert_eq!(
             fixture_candidate.stable_anchors,
-            vec!["REQ-FIXTURE-001#criterion.behavior"]
+            vec![
+                "REQ-FIXTURE-001#criterion.behavior",
+                "REQ-FIXTURE-001#criterion.add-symbol",
+                "REQ-FIXTURE-001#criterion.add-file",
+                "REQ-FIXTURE-001#criterion.remove-symbol",
+                "REQ-FIXTURE-001#criterion.remove-file",
+            ]
         );
         assert!(
             service.session.read().unwrap().draft_request.is_none(),
@@ -8441,7 +8446,6 @@ mod tests {
         let approval: TargetSuggestionApprovalView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("approved feature target");
-        assert!(approval.request.is_none());
         assert_eq!(
             approval.approved_ids,
             vec![planned_feature_target.id.clone()]
@@ -8647,6 +8651,11 @@ mod tests {
             "a rejected candidate must reappear when its artifact evidence changes"
         );
         let (basis, csrf, _) = projection_and_basis(&app).await;
+        let approved_ids = refreshed
+            .suggestions
+            .iter()
+            .map(|candidate| candidate.id.clone())
+            .collect::<Vec<_>>();
 
         let response = json_mutation(
             &app,
