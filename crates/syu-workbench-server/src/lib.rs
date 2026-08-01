@@ -7802,8 +7802,11 @@ mod tests {
             )
             .expect("modify unrelated fixture source");
         } else {
-            fs::write(&source, "pub fn behavior() -> bool {\n    1 == 1\n}\n")
-                .expect("modify editable fixture source");
+            fs::write(
+                &source,
+                "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
+            )
+            .expect("modify editable fixture source");
         }
 
         let response = json_mutation(
@@ -9161,7 +9164,7 @@ mod tests {
 
         fs::write(
             temp.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
         )
         .expect("apply editable fixture change");
         let response = json_mutation(
