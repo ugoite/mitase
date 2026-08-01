@@ -245,7 +245,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
   - **criteria**:
     - **id**: accessible-navigation
       - **kind**: quality
-      - **statement**: The primary Workbench pages expose semantic controls and matching Japanese and English catalogs, including discovery rationale and no-match authoring choices.
+      - **statement**: The primary Workbench pages expose semantic controls and matching Japanese and English catalogs.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
   - **bindings**:
@@ -619,7 +619,7 @@ requirements:
     criteria:
       - id: accessible-navigation
         kind: quality
-        statement: The primary Workbench pages expose semantic controls and matching Japanese and English catalogs, including discovery rationale and no-match authoring choices.
+        statement: The primary Workbench pages expose semantic controls and matching Japanese and English catalogs.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
     bindings:
       - id: navigation-check

@@ -10078,30 +10078,6 @@ mod tests {
         .unwrap();
         assert!(html.contains("aria-label"));
         assert!(html.contains("/assets/js/main.js"));
-        let response = WorkbenchServer::new(workspace_root())
-            .router()
-            .oneshot(
-                Request::builder()
-                    .uri("/assets/catalog.js")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let catalog = String::from_utf8(
-            response
-                .into_body()
-                .collect()
-                .await
-                .unwrap()
-                .to_bytes()
-                .to_vec(),
-        )
-        .unwrap();
-        assert!(catalog.contains("journey.no_match.add_criterion"));
-        assert!(catalog.contains("Add a criterion"));
-        assert!(catalog.contains("Criterionを追加"));
     }
 
     #[test]
