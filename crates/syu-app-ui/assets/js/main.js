@@ -122,6 +122,11 @@ export async function startWorkbench() {
   initScope(state);
   state.go = (page) => {
     state.selectedPage = navigate(page, false);
+    if (state.selectedPage === 'work') {
+      const parameters = new URLSearchParams(location.search);
+      parameters.set('page', 'work');
+      history.replaceState({}, '', `?${parameters.toString()}`);
+    }
     state.render();
   };
   state.runAction = (action, onResult, busyLabel) => refreshAfterAction(state, action, onResult, busyLabel);

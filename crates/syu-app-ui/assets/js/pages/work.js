@@ -454,6 +454,7 @@ function renderSpecification(root, workspace, journey, state, work) {
     state.journeySpecificationAnchor = specificationAnchor;
     state.journeySpecificationExpanded = false;
     state.journeyContextTab = 'specification';
+    state.relatedKind = 'specification';
     state.journeyContextItemId = contextAnchor?.split('#')[0] || null;
     state.journeyContextHistory = [];
     resetContextSource(state);
