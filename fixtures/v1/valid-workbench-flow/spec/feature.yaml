@@ -20,3 +20,73 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-FIXTURE-001#criterion.behavior
+  - id: FEAT-LIFECYCLE-ADD-SYMBOL-001
+    title: Add a fixture symbol
+    summary: Keep a planned target advisory until its exact addition is approved.
+    status: planned
+    bindings:
+      - id: lifecycle
+        role: implementation
+        facet: work
+        responsibility: Add one approved symbol to the fixture module.
+        targets:
+          - id: added-symbol
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: symbol, name: added_behavior }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FIXTURE-001#criterion.add-symbol
+  - id: FEAT-LIFECYCLE-ADD-FILE-001
+    title: Add a fixture file
+    summary: Keep a planned file target advisory until its exact addition is approved.
+    status: planned
+    bindings:
+      - id: lifecycle
+        role: implementation
+        facet: work
+        responsibility: Add one approved fixture file.
+        targets:
+          - id: added-file
+            adapter: rust
+            path: src/added.rs
+            selector: { kind: file }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FIXTURE-001#criterion.add-file
+  - id: FEAT-LIFECYCLE-REMOVE-SYMBOL-001
+    title: Remove a fixture symbol
+    summary: Keep a planned removal target advisory until its exact deletion is approved.
+    status: planned
+    bindings:
+      - id: lifecycle
+        role: implementation
+        facet: work
+        responsibility: Remove one approved symbol from the fixture.
+        targets:
+          - id: removed-symbol
+            adapter: rust
+            path: src/removable.rs
+            selector: { kind: symbol, name: remove_me }
+            lifecycle: absent
+            claims:
+              - kind: satisfies
+                criterion: REQ-FIXTURE-001#criterion.remove-symbol
+  - id: FEAT-LIFECYCLE-REMOVE-FILE-001
+    title: Remove a fixture file
+    summary: Keep a planned file removal advisory until its exact deletion is approved.
+    status: planned
+    bindings:
+      - id: lifecycle
+        role: implementation
+        facet: work
+        responsibility: Remove one approved fixture file.
+        targets:
+          - id: removed-file
+            adapter: declared
+            path: remove-file.txt
+            selector: { kind: file }
+            lifecycle: absent
+            claims:
+              - kind: satisfies
+                criterion: REQ-FIXTURE-001#criterion.remove-file
