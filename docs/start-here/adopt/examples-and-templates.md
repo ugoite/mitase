@@ -4,6 +4,8 @@ The active v1 CLI ships executable validation and work-planning commands. It doe
 
 Use the checked-in `examples/` directories as the source of truth for starter layouts.
 
+Do not copy the repository root `syu.yaml` as a starter. It is Syu's self-hosting dogfood profile: it governs a mature, multi-language repository with explicit inventory and readiness probes. Start from the closest example, then expand its scope only as exact ownership, verification, and plans become real.
+
 Recommended flow:
 
 - copy the closest example into your repository structure

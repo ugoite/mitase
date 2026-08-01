@@ -217,6 +217,30 @@ work:
                 .map(|probe| probe.level),
             Some(ReadinessLevel::Seedable)
         );
+        let root_source = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../syu.yaml"),
+        )
+        .expect("root syu.yaml");
+        let root_config: ProjectConfig =
+            serde_yaml::from_str(&root_source).expect("root project config");
+        assert_eq!(
+            root_config.validation.readiness.limits,
+            ReadinessLimits {
+                max_ownership_scope_units: 64,
+                max_targets_per_binding: 12,
+                max_slices_per_seed: 4,
+            }
+        );
+        assert_eq!(
+            root_config.work.slicing,
+            SliceLimits {
+                max_editable_files: 4,
+                max_editable_symbols: 8,
+                max_verification_targets: 8,
+                max_readonly_targets: 12,
+                max_total_bytes: 80_000,
+            }
+        );
         assert!(
             serde_yaml::from_str::<ProjectConfig>(&format!("{source}unknown: true\n")).is_err()
         );
