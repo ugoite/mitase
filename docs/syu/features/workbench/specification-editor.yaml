@@ -61,6 +61,90 @@ features:
       - kind: satisfies
         criterion: REQ-WORKBENCH-014#criterion.recovery-authoring
     owns:
+    - id: server-candidate-evidence
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::CandidateEvidence' }
+    - id: server-discovery-concepts
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::DISCOVERY_CONCEPTS' }
+    - id: server-discovery-concept
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::DiscoveryConcept' }
+    - id: server-edit-patch
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::EditPatch' }
+    - id: server-feature-target-draft
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::FeatureTargetDraft' }
+    - id: server-specification-candidate-query
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SpecificationCandidateQuery' }
+    - id: server-specification-candidate-view
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SpecificationCandidateView' }
+    - id: server-api-specification
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_specification' }
+    - id: server-api-specification-candidate-apply
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_specification_candidate_apply' }
+    - id: server-ascii-tokens
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ascii_tokens' }
+    - id: server-candidate-field-weight
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::candidate_field_weight' }
+    - id: server-changed-specification-anchors
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::changed_specification_anchors' }
+    - id: server-discovery-history
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_history' }
+    - id: server-discovery-query-exact-matches
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_query_exact_matches' }
+    - id: server-discovery-query-matches
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_query_matches' }
+    - id: server-discovery-term-matches
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::discovery_term_matches' }
+    - id: server-edit-content
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::edit_content' }
+    - id: server-matching-discovery-concepts
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::matching_discovery_concepts' }
+    - id: server-patch-path
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::patch_path' }
+    - id: server-specification-impact
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::specification_impact' }
+    - id: server-validate-feature-criterion-link
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::validate_feature_criterion_link' }
     - id: app-ui-components-module
       adapter: rust
       path: crates/syu-app-ui/src/components.rs
