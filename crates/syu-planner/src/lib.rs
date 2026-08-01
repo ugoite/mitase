@@ -119,15 +119,9 @@ pub fn suggest_targets(
                 && planned_item;
             let mut score = 0usize;
             let mut evidence = Vec::new();
-            let directly_claims = target.claims.iter().any(|claim| match claim {
-                TargetClaim::Satisfies { criterion: actual }
-                | TargetClaim::Verifies {
-                    criterion: actual, ..
-                } => actual == criterion,
-                TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => {
-                    anchor == criterion
-                }
-                _ => false,
+            let directly_claims = target.claims.iter().any(|claim| {
+                !matches!(claim, TargetClaim::Enforces { .. })
+                    && claim_anchor(claim).is_some_and(|actual| actual == criterion)
             });
             let planned_remove_target = target.lifecycle == ArtifactTargetLifecycle::Absent
                 && artifact_exists
@@ -318,6 +312,17 @@ pub fn suggest_targets(
         split_recommendation,
         suggestion_token,
     })
+}
+
+fn claim_anchor(claim: &TargetClaim) -> Option<&SpecAnchor> {
+    match claim {
+        TargetClaim::Satisfies { criterion } | TargetClaim::Verifies { criterion, .. } => {
+            Some(criterion)
+        }
+        TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => Some(anchor),
+        TargetClaim::Enforces { rule } => Some(rule),
+        TargetClaim::GeneratedFrom { .. } | TargetClaim::Exposes { .. } => None,
+    }
 }
 
 fn transition_for_role(role: BindingRole) -> TargetTransition {
