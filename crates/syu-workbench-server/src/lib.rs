@@ -9174,6 +9174,12 @@ mod tests {
                 .len(),
             2
         );
+        let split_groups = bulk_approval
+            .split_recommendation
+            .as_ref()
+            .expect("budget split recommendation")
+            .suggested_groups
+            .clone();
         assert!(
             service
                 .session
@@ -9183,6 +9189,43 @@ mod tests {
                 .is_empty(),
             "over-budget bulk approval must not persist any candidate"
         );
+        for group in &split_groups {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                &format!("{suggestion_path}/approve"),
+                &csrf,
+                &TargetSuggestionApprovalCommand {
+                    basis: basis.clone(),
+                    suggestion_token: suggestions.suggestion_token.clone(),
+                    suggestion_ids: group.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-PLANNED-001#criterion.behavior",
+                "summary": "reject accumulated over-budget groups"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(service.session.read().unwrap().draft_request.is_none());
+        service
+            .session
+            .write()
+            .unwrap()
+            .approved_target_suggestions
+            .clear();
         fs::write(&config_path, config).expect("restore slicing budget");
         let response = app
             .clone()
