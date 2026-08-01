@@ -7963,6 +7963,24 @@ mod tests {
             .join("fixtures/v1/valid-workbench-flow");
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
+        let feature_path = temp.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path).expect("feature fixture");
+        fs::write(
+            feature_path,
+            feature.replacen(
+                "criterion: REQ-FIXTURE-001#criterion.add-file",
+                "criterion: REQ-FIXTURE-001#criterion.add-symbol",
+                1,
+            ),
+        )
+        .expect("two Add targets fixture");
+        let config_path = temp.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path).expect("config fixture");
+        fs::write(
+            &config_path,
+            config.replace("max_total_bytes: 120000", "max_total_bytes: 700"),
+        )
+        .expect("small slicing budget");
         let requirement_path = temp.path().join("spec/requirement.yaml");
         let requirement = fs::read_to_string(&requirement_path).expect("requirement fixture");
         fs::write(
@@ -7991,10 +8009,16 @@ mod tests {
         let suggestions: TargetSuggestionSet =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("planned add suggestions");
-        let add = suggestions
+        let add_candidates = suggestions
             .suggestions
             .iter()
-            .find(|candidate| candidate.transition == syu_work_model::TargetTransition::Add)
+            .filter(|candidate| candidate.transition == syu_work_model::TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(add_candidates.len(), 2);
+        let add = add_candidates
+            .first()
+            .cloned()
             .expect("planned Add suggestion");
         assert_eq!(
             add.lifecycle,
@@ -8013,8 +8037,63 @@ mod tests {
             &format!("{suggestion_path}/approve"),
             &csrf,
             &TargetSuggestionApprovalCommand {
+                basis: basis.clone(),
+                suggestion_token: suggestions.suggestion_token.clone(),
+                suggestion_ids: add_candidates
+                    .iter()
+                    .map(|candidate| candidate.id.clone())
+                    .collect(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bulk_approval: TargetSuggestionApprovalView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("bulk planned add approval");
+        assert!(bulk_approval.approved_ids.is_empty());
+        assert_eq!(
+            bulk_approval
+                .split_recommendation
+                .as_ref()
+                .expect("budget split recommendation")
+                .suggested_groups
+                .len(),
+            2
+        );
+        assert!(
+            service
+                .session
+                .read()
+                .unwrap()
+                .approved_target_suggestions
+                .is_empty(),
+            "over-budget bulk approval must not persist any candidate"
+        );
+        fs::write(&config_path, config).expect("restore slicing budget");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(suggestion_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let restored_suggestions: TargetSuggestionSet =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("restored planned add suggestions");
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            &format!("{suggestion_path}/approve"),
+            &csrf,
+            &TargetSuggestionApprovalCommand {
                 basis,
-                suggestion_token: suggestions.suggestion_token,
+                suggestion_token: restored_suggestions.suggestion_token,
                 suggestion_ids: vec![add.id.clone()],
             },
         )

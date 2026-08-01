@@ -399,71 +399,112 @@ pub fn split_work_recommendation(
     index: &SpecIndex,
 ) -> Option<SplitWorkRecommendation> {
     let limits = &workspace.config.work.slicing;
-    let editable = suggestions
-        .iter()
-        .filter(|candidate| candidate.transition == TargetTransition::Modify)
-        .collect::<Vec<_>>();
-    let editable_files = editable
-        .iter()
-        .filter_map(|candidate| index.target(&candidate.reference))
-        .map(|target| target.path.clone())
-        .collect::<BTreeSet<_>>()
-        .len();
-    let verification = suggestions
-        .iter()
-        .filter(|candidate| candidate.transition == TargetTransition::RunOnly)
-        .count();
-    let readonly = suggestions
-        .iter()
-        .filter(|candidate| candidate.transition == TargetTransition::Readonly)
-        .count();
-    let total_bytes = suggestions
-        .iter()
-        .filter_map(|candidate| index.target_to_artifact.get(&candidate.reference))
-        .filter_map(|identity| {
+    let budget = suggestion_budget(suggestions, index);
+    if !suggestion_budget_exceeds(&budget, limits) {
+        return None;
+    }
+
+    let mut groups = Vec::<Vec<TargetSuggestion>>::new();
+    for candidate in suggestions {
+        let can_append = groups.last().is_some_and(|group| {
+            let mut combined = group.clone();
+            combined.push(candidate.clone());
+            !suggestion_budget_exceeds(&suggestion_budget(&combined, index), limits)
+        });
+        if can_append {
+            groups
+                .last_mut()
+                .expect("group exists")
+                .push(candidate.clone());
+        } else {
+            groups.push(vec![candidate.clone()]);
+        }
+    }
+    let suggested_groups = groups
+        .into_iter()
+        .map(|group| group.into_iter().map(|candidate| candidate.id).collect())
+        .collect();
+    Some(SplitWorkRecommendation {
+        reason: format!(
+            "The candidate set exceeds configured slicing limits (editable files {}/{}, editable symbols {}/{}, verification targets {}/{}, readonly targets {}/{}, bytes {}/{}). Review and approve smaller groups.",
+            budget.editable_files,
+            limits.max_editable_files,
+            budget.editable_symbols,
+            limits.max_editable_symbols,
+            budget.verification_targets,
+            limits.max_verification_targets,
+            budget.readonly_targets,
+            limits.max_readonly_targets,
+            budget.total_bytes,
+            limits.max_total_bytes,
+        ),
+        suggested_groups,
+    })
+}
+
+#[derive(Debug, Default)]
+struct SuggestionBudget {
+    editable_files: usize,
+    editable_symbols: usize,
+    verification_targets: usize,
+    readonly_targets: usize,
+    total_bytes: usize,
+}
+
+fn suggestion_budget(suggestions: &[TargetSuggestion], index: &SpecIndex) -> SuggestionBudget {
+    let mut editable_paths = BTreeSet::new();
+    let mut budget = SuggestionBudget::default();
+    for candidate in suggestions {
+        match candidate.transition {
+            TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove => {
+                if let Some(target) = index.target(&candidate.reference) {
+                    editable_paths.insert(target.path.clone());
+                    budget.editable_symbols += match target.selector {
+                        Selector::Symbol { .. } => 1,
+                        _ => 0,
+                    };
+                }
+            }
+            TargetTransition::RunOnly => budget.verification_targets += 1,
+            TargetTransition::Readonly => budget.readonly_targets += 1,
+        }
+        budget.total_bytes += suggestion_budget_bytes(candidate, index);
+    }
+    budget.editable_files = editable_paths.len();
+    budget
+}
+
+fn suggestion_budget_bytes(candidate: &TargetSuggestion, index: &SpecIndex) -> usize {
+    if candidate.transition == TargetTransition::Add {
+        return candidate.budget_bytes.unwrap_or_default();
+    }
+    let identity = match candidate.transition {
+        TargetTransition::Remove => index.all_target_to_artifact.get(&candidate.reference),
+        TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
+            index.target_to_artifact.get(&candidate.reference)
+        }
+        TargetTransition::Add => unreachable!("Add budgets return above"),
+    };
+    identity
+        .and_then(|identity| {
             index
                 .artifact_units
                 .iter()
                 .find(|unit| &unit.identity == identity)
         })
         .map(|unit| unit.span.byte_end.saturating_sub(unit.span.byte_start))
-        .sum::<usize>();
-    if editable_files <= limits.max_editable_files
-        && editable.len() <= limits.max_editable_symbols
-        && verification <= limits.max_verification_targets
-        && readonly <= limits.max_readonly_targets
-        && total_bytes <= limits.max_total_bytes
-    {
-        return None;
-    }
-    let mut capacities = vec![suggestions.len().max(1)];
-    if !editable.is_empty() {
-        capacities.push(limits.max_editable_symbols.max(1));
-        capacities.push(limits.max_editable_files.max(1));
-    }
-    if verification > 0 {
-        capacities.push(limits.max_verification_targets.max(1));
-    }
-    if readonly > 0 {
-        capacities.push(limits.max_readonly_targets.max(1));
-    }
-    let group_size = capacities.into_iter().min().unwrap_or(1);
-    let suggested_groups = suggestions
-        .chunks(group_size)
-        .map(|group| group.iter().map(|candidate| candidate.id.clone()).collect())
-        .collect();
-    Some(SplitWorkRecommendation {
-        reason: format!(
-            "The candidate set exceeds configured slicing limits (editable files {editable_files}/{}, editable targets {}/{}, verification targets {verification}/{}, readonly targets {readonly}/{}, bytes {total_bytes}/{}). Review and approve smaller groups.",
-            limits.max_editable_files,
-            editable.len(),
-            limits.max_editable_symbols,
-            limits.max_verification_targets,
-            limits.max_readonly_targets,
-            limits.max_total_bytes,
-        ),
-        suggested_groups,
-    })
+        .unwrap_or_default()
+}
+
+fn suggestion_budget_exceeds(
+    budget: &SuggestionBudget,
+    limits: &syu_project_model::SliceLimits,
+) -> bool {
+    budget.editable_files > limits.max_editable_files
+        || budget.editable_symbols > limits.max_editable_symbols
+        || budget.verification_targets > limits.max_verification_targets
+        || budget.readonly_targets > limits.max_readonly_targets
+        || budget.total_bytes > limits.max_total_bytes
 }
 
 fn enabled_adapters(workspace: &SpecWorkspace) -> Vec<String> {
@@ -3950,6 +3991,46 @@ mod tests {
             .expect("split recommendation");
         assert!(split.reason.contains("exceeds configured slicing limits"));
         assert_eq!(split.suggested_groups.len(), 1);
+    }
+
+    #[test]
+    fn missing_add_targets_split_by_declared_budget_and_file_limit() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace("status: implemented", "status: planned")
+            .replace(
+                "            selector: { kind: symbol, name: handler_missing }\n            claims: []\n",
+                "            selector: { kind: symbol, name: handler_missing }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n          - id: handler-missing-two\n            adapter: rust\n            path: src/other.rs\n            selector: { kind: symbol, name: handler_missing_two }\n            claims:\n              - kind: satisfies\n                criterion: REQ-TEST-001#criterion.test\n",
+            );
+        fs::write(feature_path, feature).expect("two missing targets");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let mut workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        workspace.config.work.slicing.max_total_bytes = 700;
+        workspace.config.work.slicing.max_editable_files = 1;
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+        let adds = suggestions
+            .suggestions
+            .iter()
+            .filter(|candidate| candidate.transition == TargetTransition::Add)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert_eq!(adds.len(), 2);
+        assert_eq!(adds[0].budget_bytes, Some(512));
+        assert_eq!(adds[1].budget_bytes, Some(512));
+        let split = split_work_recommendation(&adds, &workspace, &index)
+            .expect("lifecycle candidates require a split");
+        assert_eq!(split.suggested_groups.len(), 2);
+        assert!(split.suggested_groups.iter().all(|group| group.len() == 1));
     }
 
     #[test]
