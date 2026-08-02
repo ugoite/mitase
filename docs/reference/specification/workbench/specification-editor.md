@@ -280,6 +280,8 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.canonical-detail-trace
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-016#criterion.bounded-detail-context
         - **id**: detail-nested-edit
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -300,15 +302,6 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.canonical-detail-trace
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
-            - **kind**: satisfies
-              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
-        - **id**: detail-specification-route-state
-          - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
-          - **selector**:
-            - **kind**: symbol
-            - **name**: bindRouter
-          - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
         - **id**: detail-specification-location-sync
@@ -385,7 +378,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
               - **covers**:
                 - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
-                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-route-state
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                 - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
                 - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
                 - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
@@ -425,6 +418,34 @@ description: "Generated reference for docs/syu/features/workbench/specification-
                 - **arguments**:
                   - **package**: syu-workbench-server
                   - **test**: tests::specification_trace_is_deterministic_and_preserves_canonical_claims
+    - **id**: detail-contract-source
+      - **role**: contract-source
+      - **facet**: specification-detail
+      - **responsibility**: Define the route coordination boundary shared by the detail workspace and Workbench navigation.
+      - **targets**:
+        - **id**: detail-route-coordination-source
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: workSpecificationWorkspaceAdapter
+  - **contracts**:
+    - **id**: detail-route-coordination
+      - **kind**: function
+      - **source**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-contract-source/target.detail-route-coordination-source
+      - **participants**:
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+          - **role**: consumer
+      - **guarantees**:
+        - REQ-WORKBENCH-015#criterion.detail-deep-link
 
 ## Source YAML
 
@@ -646,6 +667,8 @@ features:
         criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-016#criterion.bounded-detail-context
     - id: detail-nested-edit
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -662,13 +685,6 @@ features:
         criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
-    - id: detail-specification-route-state
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
-      selector: { kind: symbol, name: bindRouter }
-      claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
     - id: detail-specification-location-sync
@@ -726,7 +742,7 @@ features:
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
         covers:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
-        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-route-state
+        - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
@@ -751,4 +767,30 @@ features:
         covers:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_is_deterministic_and_preserves_canonical_claims } }
+  - id: detail-contract-source
+    role: contract-source
+    facet: specification-detail
+    responsibility: Define the route coordination boundary shared by the detail workspace and Workbench navigation.
+    targets:
+    - id: detail-route-coordination-source
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: workSpecificationWorkspaceAdapter }
+  contracts:
+  - id: detail-route-coordination
+    kind: function
+    source: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-contract-source/target.detail-route-coordination-source
+    participants:
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+      role: producer
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+      role: producer
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+      role: producer
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+      role: producer
+    - target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+      role: consumer
+    guarantees:
+    - REQ-WORKBENCH-015#criterion.detail-deep-link
 ```

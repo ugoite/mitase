@@ -8197,6 +8197,15 @@ mod tests {
     }
 
     #[test]
+    fn workbench_detail_context_budget_is_explicitly_bounded() {
+        let workspace = SpecWorkspace::load(workspace_root()).expect("repository loads");
+        assert_eq!(
+            workspace.config.work.slicing.max_total_bytes, 120_000,
+            "the detail workspace budget is measured and explicitly bounded"
+        );
+    }
+
+    #[test]
     fn typed_nested_binding_and_target_edits_round_trip_without_yaml_maps() {
         let fixture = workspace_root().join("fixtures/v1/valid-web-app");
         let workspace = SpecWorkspace::load(fixture).expect("trace fixture loads");

@@ -271,4 +271,6 @@ work:
     max_editable_symbols: 8
     max_verification_targets: 8
     max_readonly_targets: 12
-    max_total_bytes: 80000
+    # Measured envelope for the detail workspace context pack, including
+    # declared trace/evidence and the existing public Workbench context.
+    max_total_bytes: 120000
