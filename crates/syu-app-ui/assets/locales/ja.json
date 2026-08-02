@@ -203,6 +203,7 @@
   "items.detail.trace_empty": "このitemにはcanonical relationがありません。",
   "items.detail.edge": "relation",
   "items.detail.closed": "Closed",
+  "items.detail.declaration_only": "宣言のみ",
   "items.detail.implementation_missing": "実装不足",
   "items.detail.verification_missing": "検証不足",
   "items.detail.target_unresolved": "target未解決",

@@ -203,6 +203,7 @@
   "items.detail.trace_empty": "No canonical relations are available for this item.",
   "items.detail.edge": "Relation",
   "items.detail.closed": "Closed",
+  "items.detail.declaration_only": "Declaration only",
   "items.detail.implementation_missing": "Implementation missing",
   "items.detail.verification_missing": "Verification missing",
   "items.detail.target_unresolved": "Target unresolved",

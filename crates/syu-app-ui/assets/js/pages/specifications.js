@@ -1362,7 +1362,13 @@ function renderTrace(root, state, selected, onSelect, onLocationChange = syncSpe
 }
 
 function closureLabel(state) {
-  return t(`items.detail.${state}`) || state;
+  const key = {
+    'declaration-only': 'items.detail.declaration_only',
+    'implementation-missing': 'items.detail.implementation_missing',
+    'verification-missing': 'items.detail.verification_missing',
+    'target-unresolved': 'items.detail.target_unresolved',
+  }[state];
+  return key ? t(key) : state;
 }
 
 function renderEvidence(root, state, selected) {

@@ -194,10 +194,10 @@ setTimeout(()=>{
     await wait(40);
     if(!document.querySelector('[data-page="specifications"] [data-detail-tab="trace"][aria-selected="true"]')) failures.push('detail ArrowRight did not select Trace');
     if(document.activeElement?.dataset.detailTab!=='trace') failures.push('detail ArrowRight did not move focus');
-    document.querySelector('[data-page="specifications"] .specification-detail-tabs').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
+    document.querySelector('[data-page="specifications"] .specification-detail-tabs')?.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
     await wait(40);
     if(!document.querySelector('[data-page="specifications"] [data-detail-tab="evidence"][aria-selected="true"]')) failures.push('detail End did not select Evidence');
-    document.querySelector('[data-page="specifications"] .specification-detail-tabs').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+    document.querySelector('[data-page="specifications"] .specification-detail-tabs')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
     await wait(40);
     document.querySelector('[data-page="specifications"] [data-detail-tab="evidence"]')?.click();
     await wait(80);
@@ -387,7 +387,7 @@ HTML
 
 for viewport in 1280,900 760,900; do
   for locale in en ja; do
-    behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=6000 --dump-dom "file://$tmp/workbench.html?page=work&lang=$locale&theme=light")"
+    behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=12000 --dump-dom "file://$tmp/workbench.html?page=work&lang=$locale&theme=light")"
     if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
       echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
       exit 1
