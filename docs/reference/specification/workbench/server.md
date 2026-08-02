@@ -40,6 +40,186 @@ description: "Generated reference for docs/syu/features/workbench/server.yaml"
           - **path**: crates/syu-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: file
+        - **id**: server-ci-owned-001
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::BranchScopeQuery
+        - **id**: server-ci-owned-002
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::ScopeDiffFileView
+        - **id**: server-ci-owned-003
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::ScopeDiffView
+        - **id**: server-ci-owned-004
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::SourceQuery
+        - **id**: server-ci-owned-005
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::SourceView
+        - **id**: server-ci-owned-006
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_agent_blocker
+        - **id**: server-ci-owned-007
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_agent_scope_expansion
+        - **id**: server-ci-owned-008
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_agent_verify
+        - **id**: server-ci-owned-009
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_branch_scope
+        - **id**: server-ci-owned-010
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_config
+        - **id**: server-ci-owned-011
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_config_preview
+        - **id**: server-ci-owned-012
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_context
+        - **id**: server-ci-owned-013
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_scope_diff
+        - **id**: server-ci-owned-014
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_specification_preview
+        - **id**: server-ci-owned-015
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_validate
+        - **id**: server-ci-owned-016
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::atomic_replace
+        - **id**: server-ci-owned-017
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::branch_changed_files
+        - **id**: server-ci-owned-018
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::collect_branch_patch
+        - **id**: server-ci-owned-019
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::collect_branch_status
+        - **id**: server-ci-owned-020
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::configured_change_range
+        - **id**: server-ci-owned-021
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::diff_base_revision
+        - **id**: server-ci-owned-022
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::git_merge_base
+        - **id**: server-ci-owned-023
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::git_output
+        - **id**: server-ci-owned-024
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::parent_or_current
+        - **id**: server-ci-owned-025
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::scope_diff_view
+        - **id**: server-ci-owned-026
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::run_config_transaction
+        - **id**: server-ci-owned-027
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::workbench_completed_empty_run_distinguishes_applicable_and_skipped_phases
+        - **id**: server-ci-owned-028
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::workbench_diagnostic_views_carry_server_classified_phase_and_severity_counts
+        - **id**: server-ci-owned-029
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::workbench_initial_validation_has_no_passed_or_issue_counts
+        - **id**: server-ci-owned-030
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::validate_diff_range
         - **id**: server-homogeneous-transitions
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -1144,6 +1324,126 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: file }
+    - id: server-ci-owned-001
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::BranchScopeQuery' }
+    - id: server-ci-owned-002
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ScopeDiffFileView' }
+    - id: server-ci-owned-003
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::ScopeDiffView' }
+    - id: server-ci-owned-004
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SourceQuery' }
+    - id: server-ci-owned-005
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::SourceView' }
+    - id: server-ci-owned-006
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_agent_blocker' }
+    - id: server-ci-owned-007
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_agent_scope_expansion' }
+    - id: server-ci-owned-008
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_agent_verify' }
+    - id: server-ci-owned-009
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_branch_scope' }
+    - id: server-ci-owned-010
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_config' }
+    - id: server-ci-owned-011
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_config_preview' }
+    - id: server-ci-owned-012
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_context' }
+    - id: server-ci-owned-013
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_scope_diff' }
+    - id: server-ci-owned-014
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_specification_preview' }
+    - id: server-ci-owned-015
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_validate' }
+    - id: server-ci-owned-016
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::atomic_replace' }
+    - id: server-ci-owned-017
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::branch_changed_files' }
+    - id: server-ci-owned-018
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::collect_branch_patch' }
+    - id: server-ci-owned-019
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::collect_branch_status' }
+    - id: server-ci-owned-020
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::configured_change_range' }
+    - id: server-ci-owned-021
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::diff_base_revision' }
+    - id: server-ci-owned-022
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::git_merge_base' }
+    - id: server-ci-owned-023
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::git_output' }
+    - id: server-ci-owned-024
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::parent_or_current' }
+    - id: server-ci-owned-025
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::scope_diff_view' }
+    - id: server-ci-owned-026
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::run_config_transaction' }
+    - id: server-ci-owned-027
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::workbench_completed_empty_run_distinguishes_applicable_and_skipped_phases' }
+    - id: server-ci-owned-028
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::workbench_diagnostic_views_carry_server_classified_phase_and_severity_counts' }
+    - id: server-ci-owned-029
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::workbench_initial_validation_has_no_passed_or_issue_counts' }
+    - id: server-ci-owned-030
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::validate_diff_range' }
     - id: server-homogeneous-transitions
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
