@@ -185,6 +185,13 @@ setTimeout(()=>{
   if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
   await click('[data-page="work"] .work-start .journey-action');
   if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
+  if(new URL(location.href).searchParams.get('page')!=='specifications') failures.push('programmatic Work start did not synchronize the Specifications URL');
+  history.back();
+  await wait(100);
+  if(new URL(location.href).searchParams.get('page')!=='work' || !visible('[data-page="work"]')) failures.push('back navigation did not restore the Work route after programmatic transition');
+  history.forward();
+  await wait(100);
+  if(new URL(location.href).searchParams.get('page')!=='specifications' || !visible('[data-page="specifications"]')) failures.push('forward navigation did not restore the Specifications route after programmatic transition');
   const detailTabs=document.querySelector('[data-page="specifications"] .specification-detail-tabs');
   const detailTabButtons=[...(detailTabs?.querySelectorAll('[role="tab"]')||[])];
   if(detailTabButtons.length!==3) failures.push('Specification detail tabs are incomplete');
@@ -270,6 +277,7 @@ setTimeout(()=>{
   await click('[data-page="specifications"] .target-suggestions .btn.ghost');
   await click('[data-page="specifications"] [data-create-work]');
   if(!visible('[data-page="work"]')) failures.push('specification Create Work did not open Work');
+  if(new URL(location.href).searchParams.get('page')!=='work' || !new URL(location.href).searchParams.get('workItem')) failures.push('Create Work did not synchronize page=work and workItem');
   if(document.querySelector('[data-page="work"] .journey-header h2')?.textContent.startsWith('Change ')) failures.push('Create Work title still has the English Change prefix');
   if(document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent!==selectedSpecificationTitle) failures.push('related specification does not match the selected specification');
   if(document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent!==selectedCriterionStatement) failures.push('related criterion does not match the selected criterion');
@@ -585,12 +593,16 @@ async function main() {
         const initialWorkTitle = initialWorkStart?.querySelector('h2')?.textContent || '';
         const initialWorkCta = initialWorkStart?.querySelector('.journey-action-label')?.textContent || '';
         const initialWorkExplanation = initialWorkStart?.querySelector('p')?.textContent || '';
-        await click('specifications', '[data-route="specifications"]');
+        await click('specifications', '[data-page="work"] .work-start .journey-action');
+        const specificationUrl = location.href;
+        if (new URL(specificationUrl).searchParams.get('page') !== 'specifications') throw new Error('programmatic Specifications transition did not update URL: ' + specificationUrl);
         const selectedSpecificationTitle = document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent || '';
         const selectedCriterion = document.querySelector('[data-page="specifications"] .specification-criterion');
         const selectedCriterionAnchor = selectedCriterion?.querySelector('strong')?.textContent || '';
         const selectedCriterionStatement = selectedCriterion?.querySelector('p')?.textContent || '';
         await click('create', '[data-page="specifications"] [data-create-work]');
+        const workUrl = location.href;
+        if (new URL(workUrl).searchParams.get('page') !== 'work' || !new URL(workUrl).searchParams.get('workItem')) throw new Error('Create Work did not update canonical URL: ' + workUrl);
         await click('prepare', '[data-page="work"] .journey-action.primary');
         const approvalStep = document.documentElement.lang === 'ja' ? '承認' : 'Approve';
         await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === approvalStep);
@@ -606,6 +618,8 @@ async function main() {
           selectedSpecificationTitle,
           selectedCriterionAnchor,
           selectedCriterionStatement,
+          specificationUrl,
+          workUrl,
           workSpecificationTitle: document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent || '',
           workSpecificationCriterion: document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent || '',
           workSpecificationAnchor: document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor || '',
@@ -619,6 +633,57 @@ async function main() {
   });
   if (evaluation.exceptionDetails) throw new Error(evaluation.exceptionDetails.text || 'browser flow failed');
   const result = { ...evaluation.result.value, mutationResponses };
+  const navigateAndWait = async url => {
+    const loaded = new Promise(resolve => {
+      const handler = () => resolve();
+      devtools.on('Page.loadEventFired', handler);
+    });
+    await devtools.send('Page.navigate', { url });
+    await loaded;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  };
+  await navigateAndWait(result.specificationUrl);
+  const specificationRestore = await devtools.send('Runtime.evaluate', {
+    awaitPromise: true,
+    returnByValue: true,
+    expression: `(async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const page = document.querySelector('[data-page]:not([hidden])')?.dataset.page;
+        if (page === 'specifications') return { page, url: location.href };
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return { page: document.querySelector('[data-page]:not([hidden])')?.dataset.page || '', url: location.href };
+    })()`,
+  });
+  await navigateAndWait(result.workUrl);
+  const workRestore = await devtools.send('Runtime.evaluate', {
+    awaitPromise: true,
+    returnByValue: true,
+    expression: `(async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const page = document.querySelector('[data-page]:not([hidden])')?.dataset.page;
+        const title = document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent || '';
+        const criterion = document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent || '';
+        if (page === 'work' && title && criterion) return { page, title, criterion, url: location.href };
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return { page: document.querySelector('[data-page]:not([hidden])')?.dataset.page || '', title: '', criterion: '', url: location.href };
+    })()`,
+  });
+  const restoredSpecifications = specificationRestore.result?.value || {};
+  const restoredWork = workRestore.result?.value || {};
+  if (restoredSpecifications.page !== 'specifications' || new URL(restoredSpecifications.url).searchParams.get('page') !== 'specifications') {
+    throw new Error(`Specifications route did not survive reload: ${JSON.stringify(restoredSpecifications)}`);
+  }
+  if (
+    restoredWork.page !== 'work'
+    || new URL(restoredWork.url).searchParams.get('page') !== 'work'
+    || !new URL(restoredWork.url).searchParams.get('workItem')
+    || restoredWork.title !== result.workSpecificationTitle
+    || restoredWork.criterion !== result.workSpecificationCriterion
+  ) {
+    throw new Error(`Work context did not survive reload: ${JSON.stringify({ restoredWork, expectedTitle: result.workSpecificationTitle, expectedCriterion: result.workSpecificationCriterion })}`);
+  }
   const expectedFlow = ['specifications', 'create', 'prepare'];
   if (JSON.stringify(result.flow) !== JSON.stringify(expectedFlow)) {
     throw new Error(`unexpected Workbench browser flow: ${JSON.stringify(result)}`);

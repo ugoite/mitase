@@ -981,7 +981,15 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
             anchor: value.anchor,
             summary: `${t('work.request.summary_from_anchor').replace('{anchor}', localizeSpecificationTitle(selected))}`,
           }),
-          () => { state.selectedSlice = null; state.go('work'); },
+          (result) => {
+            state.selectedSlice = null;
+            const anchor = result?.journey?.advanced?.specification_anchor || '';
+            const workItem = anchor.split('#')[0] || null;
+            state.journeyRouteItemId = workItem;
+            state.journeyContextItemId = workItem;
+            state.journeySpecificationAnchor = null;
+            state.go('work');
+          },
         ), 'btn small');
         createWork.setAttribute('data-create-work', '');
         createWork.setAttribute('data-create-work-anchor', value.anchor);

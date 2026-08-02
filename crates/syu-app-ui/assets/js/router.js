@@ -10,6 +10,50 @@ export function navigate(page, push = true) {
   return selected;
 }
 
+// Programmatic page changes use the same canonical query namespace as direct
+// navigation.  Keeping this coordinator at the router boundary prevents a
+// render-only state transition from diverging from the URL that reload and
+// history restoration consume.
+export function syncPageLocation(state, page, routeState = {}, push = true) {
+  const selected = PAGES.includes(page) ? page : 'work';
+  const parameters = new URLSearchParams(location.search);
+  parameters.set('page', selected);
+  if (selected === 'specifications') {
+    ['workItem', 'workDetailTab', 'workNode', 'workTraceMode', 'workDepth'].forEach(key => parameters.delete(key));
+    parameters.set('specificationsTab', state.specificationKind || 'all');
+    if (state.selectedSpecification) parameters.set('item', state.selectedSpecification);
+    else parameters.delete('item');
+    if (SPECIFICATION_DETAIL_TABS.includes(state.specificationDetailTab)) parameters.set('detailTab', state.specificationDetailTab);
+    else parameters.delete('detailTab');
+    if (state.specificationTraceNode) parameters.set('node', state.specificationTraceNode);
+    else parameters.delete('node');
+    if (state.specificationDetailTab === 'trace' && state.specificationTraceMode === 'exact') parameters.set('traceMode', 'exact');
+    else parameters.delete('traceMode');
+    if (state.specificationDetailTab === 'trace' && state.specificationTraceDepth > 1) parameters.set('depth', String(state.specificationTraceDepth));
+    else parameters.delete('depth');
+  } else if (selected === 'work') {
+    ['item', 'detailTab', 'node', 'traceMode', 'depth', 'specificationsTab'].forEach(key => parameters.delete(key));
+    const workItem = Object.prototype.hasOwnProperty.call(routeState, 'workItem')
+      ? routeState.workItem
+      : state.journeyContextItemId;
+    if (workItem) parameters.set('workItem', workItem);
+    else parameters.delete('workItem');
+    if (state.specificationDetailTab) parameters.set('workDetailTab', state.specificationDetailTab);
+    else parameters.delete('workDetailTab');
+    if (state.specificationTraceNode) parameters.set('workNode', state.specificationTraceNode);
+    else parameters.delete('workNode');
+    if (state.specificationTraceMode === 'exact') parameters.set('workTraceMode', 'exact');
+    else parameters.delete('workTraceMode');
+    if (state.specificationTraceDepth > 1) parameters.set('workDepth', String(state.specificationTraceDepth));
+    else parameters.delete('workDepth');
+  } else {
+    ['item', 'detailTab', 'node', 'traceMode', 'depth', 'specificationsTab', 'workItem', 'workDetailTab', 'workNode', 'workTraceMode', 'workDepth'].forEach(key => parameters.delete(key));
+  }
+  const url = `?${parameters.toString()}`;
+  if (push) history.pushState({}, '', url); else history.replaceState({}, '', url);
+  return selected;
+}
+
 function selectTab(group, tab, push = true) {
   const tabs = [...document.querySelectorAll(`[data-tab-group="${group}"]`)];
   if (!tabs.some(node => node.dataset.tab === tab)) return;
