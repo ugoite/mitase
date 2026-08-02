@@ -136,11 +136,15 @@ function localIdFromAnchor(anchor) {
 }
 
 function targetPatchModel(target) {
+  if (!['present', 'absent'].includes(target.lifecycle)) {
+    throw new Error('Target lifecycle is required and must be present or absent.');
+  }
   return {
     id: localIdFromAnchor(String(target.reference || '').split('/target.').pop()),
     adapter: target.adapter,
     path: target.path,
     selector: target.selector,
+    lifecycle: target.lifecycle,
     claims: target.claims || [],
   };
 }
@@ -273,6 +277,9 @@ function createNestedPatch(editor, form) {
     adapter: draft.adapter,
     path: draft.path,
     selector: selectorFromDraft(draft),
+    lifecycle: ['present', 'absent'].includes(draft.lifecycle)
+      ? draft.lifecycle
+      : (() => { throw new Error('Target lifecycle is required and must be present or absent.'); })(),
     claims: editor.target?.claims || [],
   };
   if (editor.entity === 'claim') edit.claim = claimFromDraft(draft);
@@ -384,6 +391,10 @@ function appendNestedEditorFields(form, editor) {
     form.append(immutableId(draftValue(editor, draft, 'id', editor.target?.id)));
     form.append(field(t('items.detail.adapter'), draftValue(editor, draft, 'adapter', editor.target?.adapter), 'adapter'));
     form.append(field(t('items.detail.path'), draftValue(editor, draft, 'path', editor.target?.path), 'path'));
+    form.append(field(t('items.detail.lifecycle'), draftValue(editor, draft, 'lifecycle', editor.target?.lifecycle), 'lifecycle', 'select', [
+      { value: 'present', label: t('items.detail.lifecycle_present') },
+      { value: 'absent', label: t('items.detail.lifecycle_absent') },
+    ]));
     appendSelectorEditor(form, editor, draft, editor.target?.selector);
     return;
   }
@@ -1099,6 +1110,7 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
       targetFields.append(
         detailLabel(t('items.detail.adapter'), target.adapter),
         detailLabel(t('items.detail.path'), target.path),
+        detailLabel(t('items.detail.lifecycle'), target.lifecycle),
         detailLabel(t('items.detail.selector'), JSON.stringify(target.selector)),
         detailList(t('items.detail.claims'), (target.claims || []).map(claimLabel)),
       );
@@ -1122,7 +1134,7 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
     });
     if (!options.readOnly) bindingSection.append(button(t('items.detail.add_target'), '+', () => beginNestedEditor(state, {
       entity: 'target', itemId: selected.id, bindingId: localIdFromAnchor(binding.anchor),
-      target: { id: '', adapter: '', path: '', selector: { kind: 'file' }, claims: [] },
+      target: { id: '', adapter: '', path: '', selector: { kind: 'file' }, lifecycle: 'present', claims: [] },
     }), 'btn small ghost'));
     bindingSection.append(targetList);
     bindingCard.append(bindingSection);
@@ -1380,6 +1392,11 @@ function renderEvidence(root, state, selected) {
     card.append(detailLabel(t('items.detail.runtime_timestamp'), closure.runtime_timestamp || t('items.detail.not_available')));
     card.append(detailLabel(t('items.detail.runtime_revision'), closure.runtime_revision || t('items.detail.not_available')));
     card.append(detailLabel(t('items.detail.runtime_receipt'), closure.runtime_receipt || t('items.detail.not_available')));
+    if (closure.runtime_executions?.length) {
+      card.append(detailList(t('items.detail.runtime_executions'), closure.runtime_executions.map(execution =>
+        `${execution.identity} · ${execution.target} · ${execution.status}`,
+      )));
+    }
     if (closure.runtime_status === 'unavailable') {
       const note = document.createElement('p');
       note.className = 'spec-detail-evidence-note';

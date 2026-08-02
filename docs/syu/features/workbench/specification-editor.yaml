@@ -213,6 +213,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
     - id: detail-nested-edit
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -229,6 +231,34 @@ features:
         criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-specification-route-state
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/router.js
+      selector: { kind: symbol, name: bindRouter }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-specification-location-sync
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/router.js
+      selector: { kind: symbol, name: syncSpecificationLocation }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-work-route-state
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: syncWorkSpecificationLocation }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-work-workspace-adapter
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: workSpecificationWorkspaceAdapter }
+      claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
   - id: detail-verification
@@ -257,22 +287,36 @@ features:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-nested-edit
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_edit_round_trip_covers_all_entity_variants } }
     - id: detail-browser-test
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: symbol, name: tests::workbench_http_projection_readiness_and_esm_flow }
+      adapter: declared
+      path: scripts/ci/workbench-visual.sh
+      selector: { kind: file }
       claims:
-      - kind: verifies
-        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
-        covers:
-        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_http_projection_readiness_and_esm_flow } }
-      - kind: verifies
-        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
-        covers:
-        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
       - kind: verifies
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
         covers:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_http_projection_readiness_and_esm_flow } }
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-route-state
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+        runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
+    - id: detail-evidence-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::specification_trace_is_deterministic_and_preserves_canonical_claims }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_is_deterministic_and_preserves_canonical_claims } }

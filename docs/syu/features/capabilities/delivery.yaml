@@ -5,18 +5,74 @@ category: Syu functional units
 features:
   - id: FEAT-DELIVERY-001
     title: Durable completion delivery
-    summary: Persist completion attempts, enforce reviewed plan scope, and finalize complete work safely.
+    summary: Persist completion attempts, enforce reviewed plan scope, retain lifecycle proofs, and finalize complete work safely.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: delivery
-        responsibility: Store immutable attempts and perform the planned-to-implemented handoff.
+        responsibility: Store immutable attempts, retain target lifecycle proofs, and perform the planned-to-implemented handoff.
         owns:
           - id: delivery-manifest-file
             adapter: declared
             path: crates/syu-delivery/Cargo.toml
             selector: { kind: file }
+          - id: delivery-legacy-agent-event
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentEvent' }
+          - id: delivery-legacy-agent-event-kind
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentEventKind' }
+          - id: delivery-legacy-agent-patch-record
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentPatchRecord' }
+          - id: delivery-legacy-agent-target-change
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyAgentTargetChange' }
+          - id: delivery-legacy-completion-attempt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyCompletionAttempt' }
+          - id: delivery-legacy-verification-receipt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::LegacyVerificationReceipt' }
+          - id: delivery-agent-events-all
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(DeliveryStore)::agent_events_all' }
+          - id: delivery-legacy-completion-from
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(From<&CompletionAttempt>forLegacyCompletionAttempt)::from' }
+          - id: delivery-fixture-attempt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::fixture_attempt' }
+          - id: delivery-legacy-evidence-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::legacy_evidence_shapes_preserve_digests_and_round_trip' }
+          - id: delivery-legacy-run-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::legacy_run_started_event_preserves_digest_and_run_reconstruction' }
+          - id: delivery-legacy-plan-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::legacy_work_plan_and_approval_keep_the_v1_canonical_digest' }
+          - id: delivery-tests-module
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::tests[cfg(test)]' }
+          - id: delivery-validate-event-digest
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::validate_agent_event_digest' }
         targets:
           - id: delivery-store
             adapter: rust
@@ -278,13 +334,13 @@ features:
 
   - id: FEAT-AGENT-001
     title: Scoped implementation agent
-    summary: Provide provider-neutral context, preflight-checked target writes, and append-only agent evidence.
+    summary: Provide provider-neutral context, preflight-checked Modify/Add/Remove target writes, and append-only agent evidence.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: scoped-agent
-        responsibility: Bind every agent write and expansion request to one approved plan slice.
+        responsibility: Bind every agent lifecycle write and expansion request to one approved plan slice.
         owns:
           - id: agent-module
             adapter: rust
@@ -326,7 +382,7 @@ features:
       - id: verification
         role: verification
         facet: scoped-agent
-        responsibility: Reject unrelated writes and retain blocker and expansion evidence.
+        responsibility: Reject unrelated writes, prove lifecycle writes, and retain blocker and expansion evidence.
         targets:
           - id: agent-http-test
             adapter: rust
@@ -357,3 +413,37 @@ features:
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-ui
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+          - id: agent-lifecycle-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_agent_applies_all_approved_lifecycle_writes }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-003#criterion.scoped-write
+                covers:
+                  - FEAT-AGENT-001#binding.implementation/target.agent-start
+                  - FEAT-AGENT-001#binding.implementation/target.agent-patch
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
+              - kind: verifies
+                criterion: REQ-WORKBENCH-011#criterion.scoped-agent
+                covers:
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-start
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-patch
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.receipt-validation
+                covers:
+                  - FEAT-RESULT-VALIDATION-001#binding.implementation/target.lifecycle-proofs
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
+          - id: agent-lifecycle-precondition-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-003#criterion.scoped-write
+                covers:
+                  - FEAT-AGENT-001#binding.implementation/target.agent-start
+                  - FEAT-AGENT-001#binding.implementation/target.agent-patch
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets } }

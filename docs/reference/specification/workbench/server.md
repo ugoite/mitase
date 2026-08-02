@@ -35,6 +35,11 @@ description: "Generated reference for docs/syu/features/workbench/server.yaml"
       - **facet**: server
       - **responsibility**: Serve canonical Workbench HTTP routes and mutation guards.
       - **owns**:
+        - **id**: server-file
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: file
         - **id**: server-homogeneous-transitions
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -1135,6 +1140,10 @@ features:
     facet: server
     responsibility: Serve canonical Workbench HTTP routes and mutation guards.
     owns:
+    - id: server-file
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: file }
     - id: server-homogeneous-transitions
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
