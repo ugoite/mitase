@@ -27,13 +27,26 @@ description: "Generated reference for docs/syu/features/workbench/target-suggest
 
 - **id**: FEAT-WORKBENCH-TARGET-SUGGESTIONS-001
   - **title**: Workbench target suggestions
-  - **summary**: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through criterion-level Create Work.
+  - **summary**: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through a server-projected exact-origin Create Work capability.
   - **status**: implemented
   - **bindings**:
     - **id**: suggestions
       - **role**: implementation
       - **facet**: planning
       - **responsibility**: Derive, review, reject, and approve exact target candidates without silently widening executable scope.
+      - **owns**:
+        - **id**: planner-implemented-missing-target-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::implemented_missing_exact_target_is_not_reframed_as_add
+        - **id**: server-target-suggestions-api
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_target_suggestions
       - **targets**:
         - **id**: rank-candidates
           - **adapter**: rust
@@ -73,13 +86,22 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-TARGET-SUGGESTIONS-001
   title: Workbench target suggestions
-  summary: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through criterion-level Create Work.
+  summary: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through a server-projected exact-origin Create Work capability.
   status: implemented
   bindings:
   - id: suggestions
     role: implementation
     facet: planning
     responsibility: Derive, review, reject, and approve exact target candidates without silently widening executable scope.
+    owns:
+    - id: planner-implemented-missing-target-test
+      adapter: rust
+      path: crates/syu-planner/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::implemented_missing_exact_target_is_not_reframed_as_add' }
+    - id: server-target-suggestions-api
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_target_suggestions' }
     targets:
     - id: rank-candidates
       adapter: rust

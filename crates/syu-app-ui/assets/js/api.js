@@ -19,7 +19,13 @@ export async function request(url, options = {}) {
   const text = await response.text();
   let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if (!response.ok) throw new Error(body?.error || String(body || response.status));
+  if (!response.ok) {
+    const error = new Error(body?.message || body?.error || String(body || response.status));
+    error.code = body?.code;
+    error.kind = body?.kind;
+    error.payload = body;
+    throw error;
+  }
   return body;
 }
 
@@ -105,3 +111,6 @@ export const runJourneyAction = (projection, action) => post('/api/work/action',
   basis: mutationBasis(projection),
   ...action,
 });
+
+export const workOriginCapabilitySchema = 'syu/work-origin-capability/v1';
+export const workSelectSliceSchema = 'syu/work-select-slice/v1';

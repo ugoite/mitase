@@ -16,8 +16,8 @@ use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
     AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun,
     AgentRunStatus, AgentTargetChange, AgentTargetDigest, AgentTargetWrite, ContextPack,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetAccessMode, TargetLifecycle,
-    TargetTransition,
+    ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetAccessMode,
+    TargetLifecycle, TargetTransition,
 };
 use syu_workspace::SpecWorkspace;
 
@@ -222,8 +222,12 @@ pub fn record_verification(
     )
 }
 
-pub fn events(workspace: &SpecWorkspace, run_id: &str) -> Result<Vec<AgentEvent>> {
-    DeliveryStore::for_workspace(&workspace.root)?.agent_events(run_id)
+pub fn events(workspace: &SpecWorkspace, run: &AgentRun) -> Result<Vec<AgentEvent>> {
+    let identity = ExecutionIdentity {
+        plan_digest: run.plan_digest.clone(),
+        slice_id: run.slice_id.clone(),
+    };
+    DeliveryStore::for_workspace(&workspace.root)?.agent_events(&identity, &run.run_id)
 }
 
 pub fn current_run(workspace: &SpecWorkspace, run: &AgentRun) -> Result<AgentRun> {
@@ -477,7 +481,11 @@ fn apply_patch_inner(
 
 fn approved_plan(workspace: &SpecWorkspace, run: &AgentRun) -> Result<syu_work_model::WorkPlan> {
     let store = DeliveryStore::for_workspace(&workspace.root)?;
-    let approval = store.approval(&run.plan_digest)?;
+    let identity = ExecutionIdentity {
+        plan_digest: run.plan_digest.clone(),
+        slice_id: run.slice_id.clone(),
+    };
+    let approval = store.approval(&identity)?;
     if approval.schema != PLAN_APPROVAL_SCHEMA {
         bail!("stored agent approval schema must be {PLAN_APPROVAL_SCHEMA}");
     }
@@ -503,7 +511,12 @@ fn validate_run(workspace: &SpecWorkspace, run: &AgentRun) -> Result<AgentRun> {
     {
         bail!("agent run context does not match its plan and slice");
     }
-    let stored = DeliveryStore::for_workspace(&workspace.root)?.agent_run(&run.run_id)?;
+    let identity = ExecutionIdentity {
+        plan_digest: run.plan_digest.clone(),
+        slice_id: run.slice_id.clone(),
+    };
+    let stored =
+        DeliveryStore::for_workspace(&workspace.root)?.agent_run(&identity, &run.run_id)?;
     let mut expected = run.clone();
     expected.status = stored.status.clone();
     if stored != expected {

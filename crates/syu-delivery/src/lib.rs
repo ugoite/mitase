@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -12,123 +12,14 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
-    AgentBlocker, AgentEvent, AgentEventKind, AgentPatchStatus, AgentRun, AgentRunStatus,
-    AgentTargetWrite, CompletionAttempt, CompletionBlocker, CompletionStatus,
-    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PlanApproval,
-    ScopeExpansionRequest, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult,
-    VerificationExecution,
+    AgentEvent, AgentEventKind, AgentRun, AgentRunStatus, CompletionAttempt, CompletionBlocker,
+    CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview,
+    FinalizationReceipt, PlanApproval,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
 
 pub const STORE_SCHEMA: &str = "syu/completion/v1";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LegacyAgentTargetChange {
-    #[serde(rename = "ref")]
-    reference: syu_spec_model::BoundTargetRef,
-    before_excerpt_hash: String,
-    after_excerpt_hash: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LegacyAgentPatchRecord {
-    schema: String,
-    patch_id: String,
-    run_id: String,
-    plan_digest: String,
-    slice_id: String,
-    status: AgentPatchStatus,
-    writes: Vec<AgentTargetWrite>,
-    changes: Vec<LegacyAgentTargetChange>,
-    before_workspace_fingerprint: String,
-    after_workspace_fingerprint: String,
-    blockers: Vec<AgentBlocker>,
-    created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-enum LegacyAgentEventKind {
-    RunStarted { run: Box<AgentRun> },
-    PatchRecorded { patch: LegacyAgentPatchRecord },
-    BlockerRecorded { blocker: AgentBlocker },
-    ScopeExpansionRequested { request: ScopeExpansionRequest },
-    VerificationRecorded { attempt_id: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LegacyAgentEvent {
-    schema: String,
-    event_id: String,
-    event_digest: String,
-    run_id: String,
-    plan_digest: String,
-    slice_id: String,
-    created_at: String,
-    event: LegacyAgentEventKind,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct LegacyVerificationReceipt {
-    schema: String,
-    plan_digest: String,
-    slice_id: String,
-    revision: String,
-    workspace_fingerprint: String,
-    started_at: String,
-    completed_at: String,
-    executions: Vec<VerificationExecution>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct LegacyCompletionAttempt {
-    schema: String,
-    attempt_id: String,
-    attempt_digest: String,
-    plan_digest: String,
-    slice_id: String,
-    approved_plan_digest: String,
-    started_at: String,
-    completed_at: String,
-    verification: VerificationAttemptResult,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    receipt: Option<LegacyVerificationReceipt>,
-    report: syu_work_model::CompletionReport,
-}
-
-impl From<&CompletionAttempt> for LegacyCompletionAttempt {
-    fn from(attempt: &CompletionAttempt) -> Self {
-        Self {
-            schema: attempt.schema.clone(),
-            attempt_id: attempt.attempt_id.clone(),
-            attempt_digest: attempt.attempt_digest.clone(),
-            plan_digest: attempt.plan_digest.clone(),
-            slice_id: attempt.slice_id.clone(),
-            approved_plan_digest: attempt.approved_plan_digest.clone(),
-            started_at: attempt.started_at.clone(),
-            completed_at: attempt.completed_at.clone(),
-            verification: attempt.verification.clone(),
-            receipt: attempt
-                .receipt
-                .as_ref()
-                .map(|receipt| LegacyVerificationReceipt {
-                    schema: receipt.schema.clone(),
-                    plan_digest: receipt.plan_digest.clone(),
-                    slice_id: receipt.slice_id.clone(),
-                    revision: receipt.revision.clone(),
-                    workspace_fingerprint: receipt.workspace_fingerprint.clone(),
-                    started_at: receipt.started_at.clone(),
-                    completed_at: receipt.completed_at.clone(),
-                    executions: receipt.executions.clone(),
-                }),
-            report: attempt.report.clone(),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct DeliveryStore {
@@ -176,9 +67,16 @@ impl DeliveryStore {
         if approval.plan_digest != approval.plan.canonical_digest {
             bail!("approval plan digest does not match its canonical plan");
         }
-        let path = self.approval_path(&approval.plan_digest);
+        if approval.plan.slices.len() != 1 || approval.slice_id != approval.plan.slices[0].id {
+            bail!("approval must bind exactly one canonical execution slice");
+        }
+        let identity = ExecutionIdentity {
+            plan_digest: approval.plan_digest.clone(),
+            slice_id: approval.slice_id.clone(),
+        };
+        let path = self.approval_path(&identity);
         if path.exists() {
-            let existing: PlanApproval = read_json(&path)?;
+            let existing = self.approval(&identity)?;
             if existing.plan_digest != approval.plan_digest || existing.plan != approval.plan {
                 bail!(
                     "a different approval already exists for plan {}",
@@ -190,14 +88,33 @@ impl DeliveryStore {
         write_immutable_json(&path, approval)
     }
 
-    pub fn approval(&self, plan_digest: &str) -> Result<PlanApproval> {
-        let approval: PlanApproval = read_json(&self.approval_path(plan_digest))?;
-        if approval.plan_digest != plan_digest
+    pub fn approval(&self, identity: &ExecutionIdentity) -> Result<PlanApproval> {
+        let approval: PlanApproval = read_json(&self.approval_path(identity))?;
+        if approval.plan_digest != identity.plan_digest
+            || approval.slice_id != identity.slice_id
             || approval.plan_digest != approval.plan.canonical_digest
+            || approval.plan.slices.len() != 1
+            || approval.plan.slices[0].id != identity.slice_id
         {
-            bail!("stored approval for {plan_digest} is invalid");
+            bail!("stored approval for execution identity is invalid");
         }
         Ok(approval)
+    }
+
+    pub fn has_approval_for_plan(&self, plan_digest: &str) -> Result<bool> {
+        for path in json_files(&self.approvals_dir())? {
+            let approval: PlanApproval = read_json(&path)?;
+            if approval.plan_digest == plan_digest {
+                if approval.plan_digest != approval.plan.canonical_digest
+                    || approval.plan.slices.len() != 1
+                    || approval.slice_id != approval.plan.slices[0].id
+                {
+                    bail!("stored approval for {plan_digest} is invalid");
+                }
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub fn append_attempt(&self, attempt: &CompletionAttempt) -> Result<CompletionAttempt> {
@@ -207,15 +124,22 @@ impl DeliveryStore {
         write_immutable_json(&path, attempt)
     }
 
-    pub fn attempt(&self, attempt_id: &str) -> Result<CompletionAttempt> {
+    pub fn attempt(
+        &self,
+        identity: &ExecutionIdentity,
+        attempt_id: &str,
+    ) -> Result<CompletionAttempt> {
         for path in json_files(&self.attempts_dir())? {
             let value: CompletionAttempt = read_json(&path)?;
             validate_attempt_digest(&value)?;
-            if value.attempt_id == attempt_id {
+            if value.attempt_id == attempt_id
+                && value.plan_digest == identity.plan_digest
+                && value.slice_id == identity.slice_id
+            {
                 return Ok(value);
             }
         }
-        bail!("completion attempt {attempt_id} not found")
+        bail!("completion attempt {attempt_id} not found for execution identity")
     }
 
     pub fn attempts(&self) -> Result<Vec<CompletionAttempt>> {
@@ -238,19 +162,49 @@ impl DeliveryStore {
         receipt: &FinalizationReceipt,
     ) -> Result<FinalizationReceipt> {
         self.ensure()?;
-        let path = self.finalization_path(&receipt.attempt_id);
+        let mut without_digest = receipt.clone();
+        let supplied = without_digest.finalization_digest.clone();
+        without_digest.finalization_digest.clear();
+        if supplied != Self::finalization_digest(&without_digest)? {
+            bail!("finalization receipt has an invalid digest");
+        }
+        let identity = ExecutionIdentity {
+            plan_digest: receipt.plan_digest.clone(),
+            slice_id: receipt.slice_id.clone(),
+        };
+        let path = self.finalization_path(&identity, &receipt.attempt_id);
         if path.exists() {
-            return read_json(&path);
+            return self
+                .finalization(&identity, &receipt.attempt_id)?
+                .context("stored finalization disappeared while reading immutable evidence");
         }
         write_immutable_json(&path, receipt)
     }
 
-    pub fn finalization(&self, attempt_id: &str) -> Result<Option<FinalizationReceipt>> {
-        let path = self.finalization_path(attempt_id);
+    pub fn finalization(
+        &self,
+        identity: &ExecutionIdentity,
+        attempt_id: &str,
+    ) -> Result<Option<FinalizationReceipt>> {
+        let path = self.finalization_path(identity, attempt_id);
         if !path.exists() {
             return Ok(None);
         }
-        Ok(Some(read_json(&path)?))
+        let receipt: FinalizationReceipt = read_json(&path)?;
+        if receipt.plan_digest != identity.plan_digest
+            || receipt.slice_id != identity.slice_id
+            || receipt.attempt_id != attempt_id
+        {
+            bail!("stored finalization does not match execution identity");
+        }
+        let mut without_digest = receipt.clone();
+        let supplied = without_digest.finalization_digest.clone();
+        without_digest.finalization_digest.clear();
+        let expected = Self::finalization_digest(&without_digest)?;
+        if supplied != expected {
+            bail!("stored finalization has an invalid digest: {supplied} != {expected}");
+        }
+        Ok(Some(receipt))
     }
 
     pub fn finalization_preview(
@@ -258,7 +212,11 @@ impl DeliveryStore {
         workspace: &SpecWorkspace,
         attempt: &CompletionAttempt,
     ) -> Result<FinalizationPreview> {
-        let approval = self.approval(&attempt.plan_digest)?;
+        let identity = ExecutionIdentity {
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+        };
+        let approval = self.approval(&identity)?;
         if approval.plan != attempt_plan(&approval, attempt)? {
             bail!("attempt is not tied to its approved plan");
         }
@@ -337,7 +295,7 @@ impl DeliveryStore {
             changed_files,
             blockers,
         };
-        preview.preview_token = Self::digest(&preview_without_token(&preview))?;
+        preview.preview_token = Self::finalization_digest(&preview_without_token(&preview))?;
         Ok(preview)
     }
 
@@ -352,12 +310,16 @@ impl DeliveryStore {
             bail!("finalization preview token is stale or blocked");
         }
         let current = self.finalization_preview(workspace, attempt)?;
+        let identity = ExecutionIdentity {
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+        };
         if current.preview_token != token
             || current.pre_workspace_fingerprint != preview.pre_workspace_fingerprint
         {
             bail!("workspace changed after finalization preview; preview again");
         }
-        if let Some(existing) = self.finalization(&attempt.attempt_id)? {
+        if let Some(existing) = self.finalization(&identity, &attempt.attempt_id)? {
             return Ok(existing);
         }
         let old = apply_status_overlay(workspace, &preview.promoted_items)?;
@@ -371,6 +333,7 @@ impl DeliveryStore {
         let receipt = FinalizationReceipt {
             schema: FINALIZATION_RECEIPT_SCHEMA.into(),
             finalization_id: self.new_id("finalization"),
+            finalization_digest: String::new(),
             attempt_id: attempt.attempt_id.clone(),
             attempt_digest: attempt.attempt_digest.clone(),
             plan_digest: attempt.plan_digest.clone(),
@@ -386,6 +349,9 @@ impl DeliveryStore {
                 .unwrap_or_default(),
             completed_at: now_nanos().to_string(),
         };
+        let mut receipt = receipt;
+        receipt.finalization_digest =
+            Self::finalization_digest(&finalization_without_digest(&receipt))?;
         match self.append_finalization(&receipt) {
             Ok(receipt) => Ok(receipt),
             Err(error) => {
@@ -413,12 +379,19 @@ impl DeliveryStore {
         write_immutable_json(&path, &canonical)
     }
 
-    pub fn agent_events(&self, run_id: &str) -> Result<Vec<AgentEvent>> {
+    pub fn agent_events(
+        &self,
+        identity: &ExecutionIdentity,
+        run_id: &str,
+    ) -> Result<Vec<AgentEvent>> {
         let mut events = Vec::new();
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
             validate_agent_event_digest(&path, &event)?;
-            if event.run_id == run_id {
+            if event.run_id == run_id
+                && event.plan_digest == identity.plan_digest
+                && event.slice_id == identity.slice_id
+            {
                 events.push(event);
             }
         }
@@ -433,8 +406,8 @@ impl DeliveryStore {
     /// Reconstruct the authoritative state of an agent run from its immutable
     /// event stream. Callers must not trust a process-local `AgentRun` after a
     /// terminal event has been recorded.
-    pub fn agent_run(&self, run_id: &str) -> Result<AgentRun> {
-        let events = self.agent_events(run_id)?;
+    pub fn agent_run(&self, identity: &ExecutionIdentity, run_id: &str) -> Result<AgentRun> {
+        let events = self.agent_events(identity, run_id)?;
         let started = events.iter().find_map(|event| match &event.event {
             AgentEventKind::RunStarted { run } => Some((**run).clone()),
             _ => None,
@@ -448,7 +421,7 @@ impl DeliveryStore {
                 | AgentEventKind::ScopeExpansionRequested { .. } => {}
                 AgentEventKind::BlockerRecorded { .. } => run.status = AgentRunStatus::Blocked,
                 AgentEventKind::VerificationRecorded { attempt_id } => {
-                    run.status = match self.attempt(&attempt_id)?.report.status {
+                    run.status = match self.attempt(identity, &attempt_id)?.report.status {
                         CompletionStatus::Complete => AgentRunStatus::Completed,
                         CompletionStatus::Blocked => AgentRunStatus::Blocked,
                     };
@@ -463,16 +436,22 @@ impl DeliveryStore {
             .agent_events_all()?
             .into_iter()
             .filter_map(|event| match event.event {
-                AgentEventKind::RunStarted { run } => {
-                    Some((event.created_at, event.event_id, run.run_id.clone()))
-                }
+                AgentEventKind::RunStarted { run } => Some((
+                    event.created_at,
+                    event.event_id,
+                    ExecutionIdentity {
+                        plan_digest: run.plan_digest.clone(),
+                        slice_id: run.slice_id.clone(),
+                    },
+                    run.run_id.clone(),
+                )),
                 _ => None,
             })
             .collect::<Vec<_>>();
         started.sort();
         started
             .last()
-            .map(|(_, _, run_id)| self.agent_run(run_id))
+            .map(|(_, _, identity, run_id)| self.agent_run(identity, run_id))
             .transpose()
     }
 
@@ -487,8 +466,21 @@ impl DeliveryStore {
     }
 
     pub fn digest<T: Serialize>(value: &T) -> Result<String> {
-        let bytes = serde_json::to_vec(value)?;
+        Self::digest_with_domain("syu/agent-event-digest/v1\0", value)
+    }
+
+    pub fn verification_digest<T: Serialize>(value: &T) -> Result<String> {
+        Self::digest_with_domain(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN, value)
+    }
+
+    pub fn finalization_digest<T: Serialize>(value: &T) -> Result<String> {
+        Self::digest_with_domain(syu_work_model::FINALIZATION_RECEIPT_DIGEST_DOMAIN, value)
+    }
+
+    fn digest_with_domain<T: Serialize>(domain: &str, value: &T) -> Result<String> {
+        let bytes = syu_work_model::canonical_json_bytes(serde_json::to_value(value)?);
         let mut hash = Sha256::new();
+        hash.update(domain.as_bytes());
         hash.update(bytes);
         Ok(format_sha256(hash.finalize()))
     }
@@ -505,9 +497,10 @@ impl DeliveryStore {
     fn agent_events_dir(&self) -> PathBuf {
         self.root.join("agent/v1/events")
     }
-    fn approval_path(&self, digest: &str) -> PathBuf {
+    fn approval_path(&self, identity: &ExecutionIdentity) -> PathBuf {
         self.approvals_dir()
-            .join(component(digest))
+            .join(component(&identity.plan_digest))
+            .join(component(&identity.slice_id))
             .with_extension("json")
     }
     fn attempt_path(&self, attempt: &CompletionAttempt) -> PathBuf {
@@ -516,8 +509,10 @@ impl DeliveryStore {
             .join(component(&attempt.slice_id))
             .join(format!("{}.json", component(&attempt.attempt_id)))
     }
-    fn finalization_path(&self, attempt_id: &str) -> PathBuf {
+    fn finalization_path(&self, identity: &ExecutionIdentity, attempt_id: &str) -> PathBuf {
         self.finalizations_dir()
+            .join(component(&identity.plan_digest))
+            .join(component(&identity.slice_id))
             .join(format!("{}.json", component(attempt_id)))
     }
     fn agent_event_path(&self, event: &AgentEvent) -> PathBuf {
@@ -547,23 +542,11 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
 }
 
 fn validate_agent_event_digest(path: &Path, event: &AgentEvent) -> Result<()> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    let raw: serde_json::Value = serde_json::from_slice(&bytes)
-        .with_context(|| format!("parse event envelope {}", event.event_id))?;
+    fs::read(path).with_context(|| format!("read {}", path.display()))?;
     let mut digest = event.clone();
     let expected = digest.event_digest.clone();
     digest.event_digest.clear();
-    let legacy_patch = raw.pointer("/event/kind").and_then(|value| value.as_str())
-        == Some("patch-recorded")
-        && raw.pointer("/event/patch/changes/0/transition").is_none();
-    let actual = if legacy_patch {
-        let mut legacy: LegacyAgentEvent = serde_json::from_slice(&bytes)
-            .with_context(|| format!("parse legacy agent event {}", event.event_id))?;
-        legacy.event_digest.clear();
-        DeliveryStore::digest(&legacy)?
-    } else {
-        DeliveryStore::digest(&digest)?
-    };
+    let actual = DeliveryStore::digest(&digest)?;
     if expected != actual {
         bail!("agent event {} has an invalid digest", event.event_id);
     }
@@ -574,15 +557,7 @@ fn validate_attempt_digest(attempt: &CompletionAttempt) -> Result<()> {
     let mut copy = attempt.clone();
     let expected = copy.attempt_digest.clone();
     copy.attempt_digest.clear();
-    let actual = if copy
-        .receipt
-        .as_ref()
-        .is_some_and(|receipt| receipt.schema != VERIFICATION_RECEIPT_SCHEMA)
-    {
-        DeliveryStore::digest(&LegacyCompletionAttempt::from(&copy))?
-    } else {
-        DeliveryStore::digest(&copy)?
-    };
+    let actual = DeliveryStore::verification_digest(&copy)?;
     if expected != actual {
         bail!(
             "completion attempt {} has an invalid digest",
@@ -642,6 +617,12 @@ fn attempt_plan(
 fn preview_without_token(preview: &FinalizationPreview) -> FinalizationPreview {
     let mut copy = preview.clone();
     copy.preview_token.clear();
+    copy
+}
+
+fn finalization_without_digest(receipt: &FinalizationReceipt) -> FinalizationReceipt {
+    let mut copy = receipt.clone();
+    copy.finalization_digest.clear();
     copy
 }
 
@@ -784,12 +765,11 @@ fn atomic_write(path: &Path, content: impl AsRef<[u8]>) -> Result<()> {
 mod tests {
     use super::*;
     use std::{fs, process::Command};
-    use syu_work_model::{AgentContextPack, AgentTargetDigest};
     use syu_work_model::{
-        AgentPatchRecord, AgentTargetChange, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
-        CompletionReport, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
-        VerificationAttemptResult, VerificationAttemptStatus, VerificationReceipt,
-        WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest, WorkSeed,
+        COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionReport,
+        PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult,
+        VerificationAttemptStatus, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation,
+        WorkOrigin, WorkRequest,
     };
 
     fn workbench_fixture_root() -> PathBuf {
@@ -843,11 +823,11 @@ mod tests {
             &WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: "WORK-DELIVERY-TEST".into(),
-                summary: "modify fixture behavior".into(),
+                title: "modify fixture behavior".into(),
                 operation: WorkOperation::Modify,
-                seeds: vec![WorkSeed::Anchor(
-                    "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-                )],
+                origin: WorkOrigin::RequirementCriterion {
+                    criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                },
                 constraints: Default::default(),
                 requested_targets: vec![],
             },
@@ -867,6 +847,7 @@ mod tests {
             schema: PLAN_APPROVAL_SCHEMA.into(),
             approval_id: "approval-test".into(),
             plan_digest: plan.canonical_digest.clone(),
+            slice_id: plan.slices[0].id.clone(),
             workspace_fingerprint: workspace.try_fingerprint().unwrap(),
             revision: revision.into(),
             reviewed_at: "0".into(),
@@ -919,7 +900,7 @@ mod tests {
             },
         };
         attempt.attempt_digest =
-            DeliveryStore::digest(&attempt_with_empty_digest(&attempt)).unwrap();
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&attempt)).unwrap();
         attempt
     }
 
@@ -942,6 +923,22 @@ mod tests {
     }
 
     #[test]
+    fn receipt_digest_domains_have_literal_vectors() {
+        let value = serde_json::json!({
+            "attempt_id": "attempt-1",
+            "status": "complete"
+        });
+        assert_eq!(
+            DeliveryStore::verification_digest(&value).unwrap(),
+            "sha256:780571812383f90ca481a3c73f061a3d14fe4072e5f7041dbfe0afbd0396045f"
+        );
+        assert_eq!(
+            DeliveryStore::finalization_digest(&value).unwrap(),
+            "sha256:0ceffac2ca2472e2edc56ad1fc83efbc300de44820369343a88e974605872ace"
+        );
+    }
+
+    #[test]
     fn approvals_require_canonical_scope_and_are_idempotent() {
         let temp = tempfile::tempdir().unwrap();
         copy_dir(&workbench_fixture_root(), temp.path());
@@ -957,7 +954,15 @@ mod tests {
 
         assert_eq!(store.approve(&approval).unwrap(), approval);
         assert_eq!(store.approve(&approval).unwrap(), approval);
-        assert_eq!(store.approval(&approval.plan_digest).unwrap(), approval);
+        assert_eq!(
+            store
+                .approval(&ExecutionIdentity {
+                    plan_digest: approval.plan_digest.clone(),
+                    slice_id: approval.slice_id.clone(),
+                })
+                .unwrap(),
+            approval
+        );
     }
 
     #[test]
@@ -974,267 +979,24 @@ mod tests {
         let attempt = fixture_attempt(&plan, &approval, &revision);
 
         assert_eq!(store.append_attempt(&attempt).unwrap(), attempt);
-        assert_eq!(store.attempt(&attempt.attempt_id).unwrap(), attempt);
+        assert_eq!(
+            store
+                .attempt(
+                    &ExecutionIdentity {
+                        plan_digest: attempt.plan_digest.clone(),
+                        slice_id: attempt.slice_id.clone(),
+                    },
+                    &attempt.attempt_id,
+                )
+                .unwrap(),
+            attempt
+        );
         assert_eq!(store.attempts().unwrap(), vec![attempt.clone()]);
         assert!(store.append_attempt(&attempt).is_err());
 
         let mut tampered = attempt;
         tampered.completed_at = "later".into();
         assert!(store.append_attempt(&tampered).is_err());
-    }
-
-    #[test]
-    fn legacy_evidence_shapes_preserve_digests_and_round_trip() {
-        let temp = tempfile::tempdir().unwrap();
-        copy_dir(&workbench_fixture_root(), temp.path());
-        let revision = init_git_repo(temp.path());
-        let workspace = SpecWorkspace::load(temp.path()).unwrap();
-        let plan = fixture_plan(temp.path(), &revision);
-        let approval = fixture_approval(&workspace, &plan, &revision);
-        let attempt = fixture_attempt(&plan, &approval, &revision);
-        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
-
-        let mut legacy_receipt = serde_json::to_value(attempt.receipt.as_ref().unwrap()).unwrap();
-        legacy_receipt["schema"] = "syu/verification-receipt/v2".into();
-        legacy_receipt
-            .as_object_mut()
-            .unwrap()
-            .remove("lifecycle_proofs");
-        let parsed_receipt: VerificationReceipt =
-            serde_json::from_value(legacy_receipt.clone()).expect("legacy verification receipt");
-        assert_eq!(
-            serde_json::to_value(parsed_receipt).unwrap(),
-            legacy_receipt
-        );
-
-        let mut legacy_attempt = serde_json::to_value(&attempt).unwrap();
-        legacy_attempt["receipt"] = legacy_receipt;
-        legacy_attempt["attempt_digest"] = "".into();
-        let parsed_legacy_attempt: CompletionAttempt =
-            serde_json::from_value(legacy_attempt.clone()).unwrap();
-        let attempt_digest =
-            DeliveryStore::digest(&LegacyCompletionAttempt::from(&parsed_legacy_attempt)).unwrap();
-        legacy_attempt["attempt_digest"] = attempt_digest.into();
-        let attempt_path = store.attempt_path(&attempt);
-        fs::create_dir_all(attempt_path.parent().unwrap()).unwrap();
-        fs::write(
-            &attempt_path,
-            serde_json::to_vec_pretty(&legacy_attempt).unwrap(),
-        )
-        .unwrap();
-        let loaded_attempt = store.attempt(&attempt.attempt_id).unwrap();
-        assert_eq!(loaded_attempt.attempt_id, attempt.attempt_id);
-        assert_eq!(loaded_attempt.receipt.unwrap().lifecycle_proofs, vec![]);
-
-        let finalization = FinalizationReceipt {
-            schema: FINALIZATION_RECEIPT_SCHEMA.into(),
-            finalization_id: "finalization-legacy".into(),
-            attempt_id: attempt.attempt_id.clone(),
-            attempt_digest: attempt.attempt_digest.clone(),
-            plan_digest: attempt.plan_digest.clone(),
-            slice_id: attempt.slice_id.clone(),
-            pre_workspace_fingerprint: "sha256:before".into(),
-            post_workspace_fingerprint: "sha256:after".into(),
-            promoted_items: vec![],
-            changed_files: vec![],
-            lifecycle_proofs: vec![],
-            completed_at: "2".into(),
-        };
-        let mut legacy_finalization = serde_json::to_value(&finalization).unwrap();
-        legacy_finalization
-            .as_object_mut()
-            .unwrap()
-            .remove("lifecycle_proofs");
-        let parsed_finalization: FinalizationReceipt =
-            serde_json::from_value(legacy_finalization.clone()).expect("legacy finalization");
-        assert_eq!(
-            serde_json::to_value(parsed_finalization).unwrap(),
-            legacy_finalization
-        );
-
-        let target = "FEAT-FIXTURE-001#binding.implementation/target.behavior"
-            .parse()
-            .unwrap();
-        let patch = AgentPatchRecord {
-            schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
-            patch_id: "patch-legacy".into(),
-            run_id: "run-legacy".into(),
-            plan_digest: attempt.plan_digest.clone(),
-            slice_id: attempt.slice_id.clone(),
-            status: syu_work_model::AgentPatchStatus::Accepted,
-            writes: vec![],
-            changes: vec![AgentTargetChange {
-                reference: target,
-                transition: syu_work_model::TargetTransition::Modify,
-                lifecycle: syu_work_model::TargetLifecycle::Stable,
-                before_content_hash: "".into(),
-                after_content_hash: "".into(),
-                before_excerpt_hash: "sha256:before".into(),
-                after_excerpt_hash: "sha256:after".into(),
-            }],
-            before_workspace_fingerprint: "sha256:before".into(),
-            after_workspace_fingerprint: "sha256:after".into(),
-            blockers: vec![],
-            created_at: "1".into(),
-        };
-        let event = AgentEvent {
-            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
-            event_id: "event-legacy".into(),
-            event_digest: String::new(),
-            run_id: patch.run_id.clone(),
-            plan_digest: patch.plan_digest.clone(),
-            slice_id: patch.slice_id.clone(),
-            created_at: "1".into(),
-            event: AgentEventKind::PatchRecorded { patch },
-        };
-        let mut legacy_event = serde_json::to_value(&event).unwrap();
-        let change = &mut legacy_event["event"]["patch"]["changes"][0];
-        for field in [
-            "transition",
-            "lifecycle",
-            "before_content_hash",
-            "after_content_hash",
-        ] {
-            change.as_object_mut().unwrap().remove(field);
-        }
-        legacy_event["event_digest"] = "".into();
-        let mut legacy_event_struct: LegacyAgentEvent =
-            serde_json::from_value(legacy_event.clone()).unwrap();
-        legacy_event_struct.event_digest.clear();
-        let event_digest = DeliveryStore::digest(&legacy_event_struct).unwrap();
-        legacy_event["event_digest"] = event_digest.into();
-        let event_path = store.agent_event_path(&event);
-        fs::create_dir_all(event_path.parent().unwrap()).unwrap();
-        fs::write(
-            &event_path,
-            serde_json::to_vec_pretty(&legacy_event).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(store.agent_events("run-legacy").unwrap().len(), 1);
-    }
-
-    #[test]
-    fn legacy_run_started_event_preserves_digest_and_run_reconstruction() {
-        let temp = tempfile::tempdir().unwrap();
-        copy_dir(&workbench_fixture_root(), temp.path());
-        let revision = init_git_repo(temp.path());
-        let workspace = SpecWorkspace::load(temp.path()).unwrap();
-        let index = workspace.index().unwrap();
-        let plan = fixture_plan(temp.path(), &revision);
-        let slice = &plan.slices[0];
-        let planned = slice
-            .editable_targets
-            .first()
-            .expect("fixture editable target");
-        let context =
-            syu_planner::export_context(&plan, &slice.id, &workspace, &index, &revision).unwrap();
-        let run = AgentRun {
-            schema: syu_work_model::AGENT_RUN_SCHEMA.into(),
-            run_id: "run-legacy-started".into(),
-            approval_id: "approval-legacy-started".into(),
-            plan_digest: plan.canonical_digest.clone(),
-            slice_id: slice.id.clone(),
-            status: AgentRunStatus::Active,
-            context: AgentContextPack {
-                schema: "syu/agent-context/v1".into(),
-                plan_digest: plan.canonical_digest.clone(),
-                slice_id: slice.id.clone(),
-                context,
-                budget: slice.budget.clone(),
-                editable_targets: vec![AgentTargetDigest {
-                    reference: planned.reference.clone(),
-                    path: planned.resolved_path.clone(),
-                    access: planned.access,
-                    transition: planned.transition,
-                    lifecycle: planned.lifecycle,
-                    content_hash: planned.content_hash.clone(),
-                    excerpt_hash: planned.excerpt_hash.clone(),
-                    container_content_hash: planned.container_content_hash.clone(),
-                    line_start: planned.line_start,
-                    line_end: planned.line_end,
-                    budget_bytes: planned.budget_bytes,
-                    budget_lines: planned.budget_lines,
-                }],
-                verification_targets: vec![],
-                readonly_targets: vec![],
-            },
-            created_at: "1".into(),
-        };
-        let event = AgentEvent {
-            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
-            event_id: "event-legacy-started".into(),
-            event_digest: String::new(),
-            run_id: run.run_id.clone(),
-            plan_digest: run.plan_digest.clone(),
-            slice_id: run.slice_id.clone(),
-            created_at: "1".into(),
-            event: AgentEventKind::RunStarted {
-                run: Box::new(run.clone()),
-            },
-        };
-        let mut legacy_event = serde_json::to_value(&event).unwrap();
-        let target = &mut legacy_event["event"]["run"]["context"]["editable_targets"][0];
-        target.as_object_mut().unwrap().remove("lifecycle");
-        target
-            .as_object_mut()
-            .unwrap()
-            .remove("container_content_hash");
-        legacy_event["event_digest"] = "".into();
-        let mut legacy_event_struct: LegacyAgentEvent =
-            serde_json::from_value(legacy_event.clone()).unwrap();
-        legacy_event_struct.event_digest.clear();
-        legacy_event["event_digest"] = DeliveryStore::digest(&legacy_event_struct).unwrap().into();
-        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
-        let event_path = store.agent_event_path(&event);
-        fs::create_dir_all(event_path.parent().unwrap()).unwrap();
-        fs::write(
-            &event_path,
-            serde_json::to_vec_pretty(&legacy_event).unwrap(),
-        )
-        .unwrap();
-
-        let events = store.agent_events(&run.run_id).unwrap();
-        assert_eq!(events.len(), 1);
-        assert_eq!(store.agent_run(&run.run_id).unwrap(), run);
-
-        legacy_event["event"]["run"]["status"] = "completed".into();
-        fs::write(
-            &event_path,
-            serde_json::to_vec_pretty(&legacy_event).unwrap(),
-        )
-        .unwrap();
-        assert!(store.agent_events(&run.run_id).is_err());
-    }
-
-    #[test]
-    fn legacy_work_plan_and_approval_keep_the_v1_canonical_digest() {
-        let temp = tempfile::tempdir().unwrap();
-        copy_dir(&workbench_fixture_root(), temp.path());
-        let revision = init_git_repo(temp.path());
-        let workspace = SpecWorkspace::load(temp.path()).unwrap();
-        let plan = fixture_plan(temp.path(), &revision);
-        let approval = fixture_approval(&workspace, &plan, &revision);
-        let mut legacy_plan = serde_json::to_value(&plan).unwrap();
-        assert!(
-            legacy_plan["slices"][0]["editable_targets"][0]
-                .get("lifecycle")
-                .is_some()
-        );
-        legacy_plan["canonical_digest"] = "".into();
-        let mut parsed: syu_work_model::WorkPlan = serde_json::from_value(legacy_plan).unwrap();
-        assert_eq!(
-            syu_work_model::work_plan_digest(&parsed),
-            plan.canonical_digest
-        );
-        parsed.canonical_digest = plan.canonical_digest.clone();
-
-        let mut legacy_approval = serde_json::to_value(&approval).unwrap();
-        legacy_approval["plan"] = serde_json::to_value(&parsed).unwrap();
-        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
-        store.ensure().unwrap();
-        let path = store.approval_path(&approval.plan_digest);
-        fs::write(&path, serde_json::to_vec_pretty(&legacy_approval).unwrap()).unwrap();
-        assert_eq!(store.approval(&approval.plan_digest).unwrap().plan, parsed);
     }
 
     #[test]
@@ -1268,7 +1030,7 @@ mod tests {
         incomplete.report.attempt_id = incomplete.attempt_id.clone();
         incomplete.report.status = CompletionStatus::Blocked;
         incomplete.attempt_digest =
-            DeliveryStore::digest(&attempt_with_empty_digest(&incomplete)).unwrap();
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&incomplete)).unwrap();
         let incomplete = store.append_attempt(&incomplete).unwrap();
         let preview = store.finalization_preview(&workspace, &incomplete).unwrap();
         assert_eq!(preview.status, CompletionStatus::Blocked);

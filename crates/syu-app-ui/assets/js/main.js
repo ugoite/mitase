@@ -32,8 +32,11 @@ async function refreshAfterAction(state, action, onResult, busyLabel) {
   state.render();
   try {
     const result = await action();
-    state.projection = result?.snapshot && result?.work
-      ? result
+    const returnedProjection = result?.schema === 'syu/work-select-slice-response/v1'
+      ? result.projection
+      : result;
+    state.projection = returnedProjection?.snapshot && returnedProjection?.work
+      ? returnedProjection
       : await api.readProjection();
     onResult?.(result);
   } catch (error) {

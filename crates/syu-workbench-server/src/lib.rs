@@ -14,7 +14,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, path::Path};
@@ -35,10 +34,10 @@ use syu_spec_model::{
 use syu_validation::{ChangeStatus, PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
     AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA,
-    CompletionAttempt, CompletionStatus, FinalizationPreview, FinalizationReceipt,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, TargetAccessMode,
-    TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints, WorkOperation,
-    WorkPlan, WorkRequest, WorkSeed,
+    CompletionAttempt, CompletionStatus, ExecutionIdentity, FinalizationPreview,
+    FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget,
+    TargetAccessMode, TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints,
+    WorkOperation, WorkOrigin, WorkPlan, WorkRequest,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -434,35 +433,170 @@ pub struct MutationBasis {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum JourneyAction {
-    Create { anchor: String, summary: String },
-    Rename { title: String },
+    Create {
+        schema: String,
+        origin: WorkOrigin,
+        title: String,
+    },
+    SelectSlice {
+        schema: String,
+        candidate_plan_digest: String,
+        slice_id: String,
+    },
+    Rename {
+        title: String,
+    },
     Prepare,
-    Approve,
-    Start,
-    Retry,
-    Verify,
-    Finalize,
+    Approve {
+        execution: ExecutionIdentity,
+    },
+    Start {
+        execution: ExecutionIdentity,
+    },
+    Retry {
+        execution: ExecutionIdentity,
+    },
+    Verify {
+        execution: ExecutionIdentity,
+    },
+    Finalize {
+        execution: ExecutionIdentity,
+        attempt_id: String,
+        #[serde(default)]
+        preview_token: Option<String>,
+    },
     Restart,
     Cancel,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct JourneyActionCommand {
-    pub basis: MutationBasis,
-    #[serde(flatten)]
-    pub action: JourneyAction,
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+pub enum JourneyActionCommand {
+    Create {
+        basis: MutationBasis,
+        schema: String,
+        origin: WorkOrigin,
+        title: String,
+    },
+    SelectSlice {
+        basis: MutationBasis,
+        schema: String,
+        candidate_plan_digest: String,
+        slice_id: String,
+    },
+    Rename {
+        basis: MutationBasis,
+        title: String,
+    },
+    Prepare {
+        basis: MutationBasis,
+    },
+    Approve {
+        basis: MutationBasis,
+        execution: ExecutionIdentity,
+    },
+    Start {
+        basis: MutationBasis,
+        execution: ExecutionIdentity,
+    },
+    Retry {
+        basis: MutationBasis,
+        execution: ExecutionIdentity,
+    },
+    Verify {
+        basis: MutationBasis,
+        execution: ExecutionIdentity,
+    },
+    Finalize {
+        basis: MutationBasis,
+        execution: ExecutionIdentity,
+        attempt_id: String,
+        preview_token: Option<String>,
+    },
+    Restart {
+        basis: MutationBasis,
+    },
+    Cancel {
+        basis: MutationBasis,
+    },
+}
+
+impl JourneyActionCommand {
+    fn into_parts(self) -> (MutationBasis, JourneyAction) {
+        match self {
+            Self::Create {
+                basis,
+                schema,
+                origin,
+                title,
+            } => (
+                basis,
+                JourneyAction::Create {
+                    schema,
+                    origin,
+                    title,
+                },
+            ),
+            Self::SelectSlice {
+                basis,
+                schema,
+                candidate_plan_digest,
+                slice_id,
+            } => (
+                basis,
+                JourneyAction::SelectSlice {
+                    schema,
+                    candidate_plan_digest,
+                    slice_id,
+                },
+            ),
+            Self::Rename { basis, title } => (basis, JourneyAction::Rename { title }),
+            Self::Prepare { basis } => (basis, JourneyAction::Prepare),
+            Self::Approve { basis, execution } => (basis, JourneyAction::Approve { execution }),
+            Self::Start { basis, execution } => (basis, JourneyAction::Start { execution }),
+            Self::Retry { basis, execution } => (basis, JourneyAction::Retry { execution }),
+            Self::Verify { basis, execution } => (basis, JourneyAction::Verify { execution }),
+            Self::Finalize {
+                basis,
+                execution,
+                attempt_id,
+                preview_token,
+            } => (
+                basis,
+                JourneyAction::Finalize {
+                    execution,
+                    attempt_id,
+                    preview_token,
+                },
+            ),
+            Self::Restart { basis } => (basis, JourneyAction::Restart),
+            Self::Cancel { basis } => (basis, JourneyAction::Cancel),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectSliceResponse {
+    pub schema: String,
+    pub action: String,
+    pub candidate_plan_digest: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub projection: WorkspaceProjection,
 }
 
 fn journey_action_key(action: &JourneyAction) -> &'static str {
     match action {
         JourneyAction::Create { .. } => "create",
+        JourneyAction::SelectSlice { .. } => "select_slice",
         JourneyAction::Rename { .. } => "rename",
         JourneyAction::Prepare => "prepare",
-        JourneyAction::Approve => "approve",
-        JourneyAction::Start => "start",
-        JourneyAction::Retry => "retry",
-        JourneyAction::Verify => "verify",
-        JourneyAction::Finalize => "finalize",
+        JourneyAction::Approve { .. } => "approve",
+        JourneyAction::Start { .. } => "start",
+        JourneyAction::Retry { .. } => "retry",
+        JourneyAction::Verify { .. } => "verify",
+        JourneyAction::Finalize { .. } => "finalize",
         JourneyAction::Restart => "restart",
         JourneyAction::Cancel => "cancel",
     }
@@ -474,7 +608,7 @@ fn ensure_journey_transition(
     action: &JourneyAction,
 ) -> Result<(), ApiError> {
     let snapshot = match action {
-        JourneyAction::Verify | JourneyAction::Finalize => {
+        JourneyAction::Verify { .. } | JourneyAction::Finalize { .. } => {
             execution_basis(service, basis_command).map_err(ApiError::from)?
         }
         _ => basis(service, basis_command).map_err(ApiError::from)?,
@@ -506,26 +640,49 @@ fn ensure_journey_transition(
 #[serde(deny_unknown_fields)]
 pub struct SliceCommand {
     pub basis: MutationBasis,
-    pub slice_id: String,
+    pub execution: ExecutionIdentity,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResultCommand {
     pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
     pub receipt: VerificationReceipt,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContextCommand {
+    pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValidateCommand {
+    pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApproveCommand {
+    pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentStartCommand {
     pub basis: MutationBasis,
-    pub slice_id: String,
+    pub execution: ExecutionIdentity,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentPatchCommand {
     pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
     pub run_id: String,
     pub patch: AgentPatch,
 }
@@ -534,6 +691,7 @@ pub struct AgentPatchCommand {
 #[serde(deny_unknown_fields)]
 pub struct AgentBlockerCommand {
     pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
     pub run_id: String,
     pub blocker: AgentBlocker,
 }
@@ -542,6 +700,7 @@ pub struct AgentBlockerCommand {
 #[serde(deny_unknown_fields)]
 pub struct AgentScopeExpansionCommand {
     pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
     pub run_id: String,
     pub reason: String,
     pub requested_targets: Vec<BoundTargetRef>,
@@ -551,8 +710,8 @@ pub struct AgentScopeExpansionCommand {
 #[serde(deny_unknown_fields)]
 pub struct FinalizeCommand {
     pub basis: MutationBasis,
+    pub execution: ExecutionIdentity,
     pub attempt_id: String,
-    #[serde(default)]
     pub preview_token: Option<String>,
 }
 
@@ -748,12 +907,63 @@ pub struct TargetSuggestionApprovalView {
 struct ApiError(StatusCode, anyhow::Error);
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        (
-            self.0,
-            Json(serde_json::json!({"error": self.1.to_string()})),
-        )
-            .into_response()
+        let message = self.1.to_string();
+        if let Some(payload) = message.strip_prefix("__SYU_STRUCTURED__")
+            && let Ok(value) = serde_json::from_str::<serde_json::Value>(payload)
+        {
+            return (self.0, Json(value)).into_response();
+        }
+        (self.0, Json(serde_json::json!({"error": message}))).into_response()
     }
+}
+fn structured_api_error(status: StatusCode, value: serde_json::Value) -> ApiError {
+    ApiError(
+        status,
+        anyhow::anyhow!(format!("__SYU_STRUCTURED__{}", value)),
+    )
+}
+
+fn work_action_error(
+    status: StatusCode,
+    action: &str,
+    code: &str,
+    message: impl Into<String>,
+    candidate_plan_digest: Option<String>,
+    nearest: Vec<serde_json::Value>,
+) -> ApiError {
+    structured_api_error(
+        status,
+        serde_json::json!({
+            "schema": syu_work_model::WORK_ERROR_SCHEMA,
+            "kind": "work-action",
+            "action": action,
+            "code": code,
+            "message": message.into(),
+            "candidate_plan_digest": candidate_plan_digest,
+            "nearest": nearest,
+        }),
+    )
+}
+
+fn origin_error(
+    status: StatusCode,
+    code: &str,
+    message: impl Into<String>,
+    origin: Option<&WorkOrigin>,
+    nearest: Vec<serde_json::Value>,
+) -> ApiError {
+    structured_api_error(
+        status,
+        serde_json::json!({
+            "schema": syu_work_model::WORK_ERROR_SCHEMA,
+            "kind": "origin",
+            "action": "create",
+            "code": code,
+            "message": message.into(),
+            "origin": origin.and_then(|value| serde_json::to_value(value).ok()),
+            "nearest": nearest,
+        }),
+    )
 }
 impl From<anyhow::Error> for ApiError {
     fn from(value: anyhow::Error) -> Self {
@@ -1113,7 +1323,7 @@ async fn api_diagnostics_run(
         }
         _ => {
             return Err(ApiError(
-                StatusCode::BAD_REQUEST,
+                StatusCode::UNPROCESSABLE_ENTITY,
                 anyhow::anyhow!("unknown diagnostics context"),
             ));
         }
@@ -3232,42 +3442,281 @@ async fn api_source(
         is_excerpt: false,
     }))
 }
-fn validate_create_work_criterion(
-    snapshot: &CachedWorkspaceSnapshot,
-    anchor: &SpecAnchor,
-    approved_candidates: &[TargetSuggestion],
-) -> Result<()> {
-    validate_work_criterion_anchor(snapshot, anchor)?;
-    match snapshot.index.criterion_status.get(anchor) {
-        Some(ItemStatus::Implemented) => Ok(()),
-        Some(ItemStatus::Planned)
-            if approved_candidates
-                .iter()
-                .all(|candidate| candidate.transition == TargetTransition::Add)
-                && approved_candidates
-                    .iter()
-                    .any(|candidate| candidate.role == BindingRole::Implementation) =>
-        {
-            Ok(())
-        }
-        _ => anyhow::bail!(
-            "Work can only start from an implemented requirement criterion, or a planned criterion with an approved exact implementation Add target"
-        ),
-    }
-}
-
-fn validate_work_criterion_anchor(
-    snapshot: &CachedWorkspaceSnapshot,
-    anchor: &SpecAnchor,
-) -> Result<()> {
+fn validate_work_criterion_anchor(index: &SpecIndex, anchor: &SpecAnchor) -> Result<()> {
     if anchor.kind != LocalAnchorKind::Criterion {
         anyhow::bail!("Work must start from an exact requirement criterion");
     }
     if !matches!(
-        snapshot.index.anchor(anchor),
+        index.anchor(anchor),
         Some(syu_workspace::AnchorValue::Criterion(_))
     ) {
         anyhow::bail!("Work criterion anchor does not resolve to an exact requirement criterion");
+    }
+    Ok(())
+}
+
+fn validate_work_origin(
+    _workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    origin: &WorkOrigin,
+) -> Result<()> {
+    let criterion = origin.criterion();
+    validate_work_criterion_anchor(index, criterion)?;
+    if index.criterion_status.get(criterion) != Some(&ItemStatus::Implemented) {
+        anyhow::bail!("origin criterion {criterion} is not implemented");
+    }
+    match origin {
+        WorkOrigin::RequirementCriterion { criterion } => {
+            validate_requirement_origin(index, criterion)
+        }
+        WorkOrigin::FeatureImplementationBinding {
+            binding,
+            criterion,
+            targets,
+        } => {
+            let artifact_binding = index
+                .bindings
+                .get(binding)
+                .ok_or_else(|| anyhow::anyhow!("implementation binding {binding} is unknown"))?;
+            if artifact_binding.role != BindingRole::Implementation {
+                anyhow::bail!("origin binding {binding} is not an implementation binding");
+            }
+            if index.item_status.get(&binding.item) != Some(&ItemStatus::Implemented) {
+                anyhow::bail!("origin binding {binding} is not implemented");
+            }
+            let mut expected = artifact_binding
+                .targets
+                .iter()
+                .filter(|target| {
+                    !matches!(
+                        target.lifecycle,
+                        syu_spec_model::ArtifactTargetLifecycle::Absent
+                    )
+                })
+                .map(|target| BoundTargetRef {
+                    binding: binding.clone(),
+                    target_id: target.id.clone(),
+                })
+                .collect::<Vec<_>>();
+            expected.sort();
+            let mut actual = targets.clone();
+            if actual.windows(2).any(|window| window[0] >= window[1]) {
+                anyhow::bail!(
+                    "implementation binding origin target list is not canonically sorted"
+                );
+            }
+            actual.sort();
+            if expected != actual {
+                anyhow::bail!(
+                    "implementation binding origin must contain its complete active target set"
+                );
+            }
+            if targets.is_empty() {
+                anyhow::bail!("implementation binding origin has no active implementation target");
+            }
+            let binding_criteria = targets
+                .iter()
+                .filter_map(|target| index.target(target))
+                .flat_map(|artifact| artifact.claims.iter())
+                .filter_map(|claim| match claim {
+                    TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
+                    _ => None,
+                })
+                .collect::<BTreeSet<_>>();
+            if binding_criteria.len() != 1 {
+                anyhow::bail!("implementation binding origin has an ambiguous criterion");
+            }
+            if binding_criteria.iter().next() != Some(criterion) {
+                anyhow::bail!("implementation binding origin has no exact satisfies criterion");
+            }
+            for target in targets {
+                validate_origin_target(index, target, binding, criterion)?;
+            }
+            validate_origin_contract_closure(index, criterion, targets)?;
+            Ok(())
+        }
+        WorkOrigin::FeatureImplementationTarget {
+            target,
+            binding,
+            criterion,
+        } => validate_origin_target(index, target, binding, criterion),
+    }
+}
+
+fn validate_requirement_origin(index: &SpecIndex, criterion: &SpecAnchor) -> Result<()> {
+    let implementations = index
+        .criteria_to_implementation_targets
+        .get(criterion)
+        .into_iter()
+        .flatten()
+        .filter(|target| {
+            index.bindings.get(&target.binding).is_some_and(|binding| {
+                binding.role == BindingRole::Implementation
+                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
+                    && binding.targets.iter().any(|candidate| {
+                        candidate.id == target.target_id
+                            && !matches!(
+                                candidate.lifecycle,
+                                syu_spec_model::ArtifactTargetLifecycle::Absent
+                            )
+                    })
+            })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if implementations.is_empty() {
+        anyhow::bail!(
+            "origin criterion {criterion} has no active implemented implementation target"
+        );
+    }
+    let verifications = index
+        .criteria_to_verification_targets
+        .get(criterion)
+        .into_iter()
+        .flatten()
+        .filter(|target| {
+            index.bindings.get(&target.binding).is_some_and(|binding| {
+                binding.role == BindingRole::Verification
+                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
+                    && index.target(target).is_some_and(|artifact| {
+                        !matches!(
+                            artifact.lifecycle,
+                            syu_spec_model::ArtifactTargetLifecycle::Absent
+                        )
+                    })
+            })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if verifications.is_empty() {
+        anyhow::bail!("origin criterion {criterion} has no active implemented verification target");
+    }
+    for implementation in &implementations {
+        if !verifications.iter().any(|verification| {
+            index
+                .verification_by_target
+                .get(implementation)
+                .is_some_and(|covered| covered.contains(verification))
+        }) {
+            anyhow::bail!(
+                "origin criterion {criterion} has no exact verification coverage for {implementation}"
+            );
+        }
+    }
+    validate_origin_contract_closure(index, criterion, &implementations)?;
+    Ok(())
+}
+
+fn validate_origin_target(
+    index: &SpecIndex,
+    target: &BoundTargetRef,
+    binding: &SpecAnchor,
+    criterion: &SpecAnchor,
+) -> Result<()> {
+    if &target.binding != binding {
+        anyhow::bail!("origin target {target} does not belong to binding {binding}");
+    }
+    let artifact_binding = index
+        .bindings
+        .get(binding)
+        .ok_or_else(|| anyhow::anyhow!("implementation binding {binding} is unknown"))?;
+    if artifact_binding.role != BindingRole::Implementation {
+        anyhow::bail!("origin binding {binding} is not an implementation binding");
+    }
+    if index.item_status.get(&binding.item) != Some(&ItemStatus::Implemented) {
+        anyhow::bail!("origin binding {binding} is not implemented");
+    }
+    let artifact = index
+        .target(target)
+        .ok_or_else(|| anyhow::anyhow!("origin target {target} is unknown"))?;
+    if matches!(
+        artifact.lifecycle,
+        syu_spec_model::ArtifactTargetLifecycle::Absent
+    ) {
+        anyhow::bail!("origin target {target} is absent");
+    }
+    let claims = artifact
+        .claims
+        .iter()
+        .filter_map(|claim| match claim {
+            syu_spec_model::TargetClaim::Satisfies { criterion: actual } => Some(actual),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if claims.len() != 1 || claims[0] != criterion {
+        anyhow::bail!("origin target {target} must have exactly one matching satisfies criterion");
+    }
+    let mut verification_targets = index
+        .criteria_to_verification_targets
+        .get(criterion)
+        .into_iter()
+        .flatten();
+    if !verification_targets.any(|verification| {
+        index
+            .verification_by_target
+            .get(target)
+            .is_some_and(|covered| covered.contains(verification))
+    }) {
+        anyhow::bail!("origin target {target} has no exact verification coverage");
+    }
+    validate_origin_contract_closure(index, criterion, std::slice::from_ref(target))?;
+    Ok(())
+}
+
+fn validate_origin_contract_closure(
+    index: &SpecIndex,
+    criterion: &SpecAnchor,
+    roots: &[BoundTargetRef],
+) -> Result<()> {
+    let mut pending = roots.to_vec();
+    let mut visited_targets = BTreeSet::new();
+    let mut visited_contracts = BTreeSet::new();
+    while let Some(target) = pending.pop() {
+        if !visited_targets.insert(target.clone()) {
+            continue;
+        }
+        let Some(contracts) = index.contracts_by_target.get(&target) else {
+            continue;
+        };
+        for contract_anchor in contracts {
+            if !visited_contracts.insert(contract_anchor.clone()) {
+                continue;
+            }
+            let contract = index.contracts.get(contract_anchor).ok_or_else(|| {
+                anyhow::anyhow!("origin target {target} has an unresolved contract closure")
+            })?;
+            if contract.guarantees.is_empty()
+                || contract
+                    .guarantees
+                    .iter()
+                    .any(|guarantee| guarantee != criterion)
+            {
+                anyhow::bail!(
+                    "origin target {target} has a contract without the exact criterion guarantee"
+                );
+            }
+            let mut related = vec![contract.source.clone()];
+            related.extend(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| participant.target.clone()),
+            );
+            for related_target in related {
+                let artifact = index.target(&related_target).ok_or_else(|| {
+                    anyhow::anyhow!("origin target {target} has an unresolved contract participant")
+                })?;
+                if matches!(
+                    artifact.lifecycle,
+                    syu_spec_model::ArtifactTargetLifecycle::Absent
+                ) {
+                    anyhow::bail!(
+                        "origin target {related_target} has an absent contract participant"
+                    );
+                }
+                pending.push(related_target);
+            }
+        }
     }
     Ok(())
 }
@@ -3302,6 +3751,38 @@ fn resolve_requested_targets(
     )
 }
 
+fn resolve_feature_origin_targets(
+    index: &SpecIndex,
+    origin: &WorkOrigin,
+) -> Result<Vec<RequestedTarget>> {
+    let targets = match origin {
+        WorkOrigin::FeatureImplementationBinding { targets, .. } => targets.clone(),
+        WorkOrigin::FeatureImplementationTarget { target, .. } => vec![target.clone()],
+        WorkOrigin::RequirementCriterion { .. } => {
+            anyhow::bail!("feature origin targets require a Feature implementation origin")
+        }
+    };
+    targets
+        .into_iter()
+        .map(|reference| {
+            let artifact = index
+                .target(&reference)
+                .ok_or_else(|| anyhow::anyhow!("feature origin target {reference} is unknown"))?;
+            if matches!(
+                artifact.lifecycle,
+                syu_spec_model::ArtifactTargetLifecycle::Absent
+            ) {
+                anyhow::bail!("feature origin target {reference} is absent");
+            }
+            Ok(RequestedTarget {
+                reference,
+                criterion: Some(origin.criterion().clone()),
+                transition: TargetTransition::Modify,
+            })
+        })
+        .collect()
+}
+
 fn resolve_approved_target_candidates(
     anchor: &SpecAnchor,
     suggestions: Result<Vec<TargetSuggestion>>,
@@ -3326,24 +3807,66 @@ fn resolve_approved_target_candidates(
 async fn api_journey_action(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<JourneyActionCommand>,
-) -> Result<Json<WorkspaceProjection>, ApiError> {
+) -> Result<Response, ApiError> {
+    let (basis_command, action) = command.into_parts();
+    let selection_candidate_digest = match &action {
+        JourneyAction::SelectSlice {
+            candidate_plan_digest,
+            ..
+        } => Some(candidate_plan_digest.clone()),
+        _ => None,
+    };
     if !matches!(
-        &command.action,
-        JourneyAction::Create { .. } | JourneyAction::Rename { .. }
+        &action,
+        JourneyAction::Create { .. }
+            | JourneyAction::SelectSlice { .. }
+            | JourneyAction::Rename { .. }
     ) {
-        ensure_journey_transition(&service, &command.basis, &command.action)?;
+        ensure_journey_transition(&service, &basis_command, &action)?;
     }
-    match command.action {
-        JourneyAction::Create { anchor, summary } => {
-            let snapshot = basis(&service, &command.basis)?;
-            let anchor = SpecAnchor::from_str(&anchor)
-                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
-            validate_work_criterion_anchor(&snapshot, &anchor)
-                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
-            if summary.trim().is_empty() {
-                return Err(ApiError(
+    match action {
+        JourneyAction::Create {
+            schema,
+            origin,
+            title,
+        } => {
+            let snapshot = basis(&service, &basis_command).map_err(|error| {
+                origin_error(
+                    StatusCode::CONFLICT,
+                    "stale-basis",
+                    error.to_string(),
+                    Some(&origin),
+                    vec![],
+                )
+            })?;
+            if schema != syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA {
+                return Err(origin_error(
                     StatusCode::BAD_REQUEST,
-                    anyhow::anyhow!("provide a work summary before continuing"),
+                    "unsupported-origin-shape",
+                    "origin capability schema is invalid",
+                    Some(&origin),
+                    vec![],
+                ));
+            }
+            let anchor = origin.criterion().clone();
+            validate_work_origin(&snapshot.workspace, &snapshot.index, &origin).map_err(
+                |error| {
+                    origin_error(
+                        origin_error_status(&error),
+                        &origin_error_code(&error),
+                        error.to_string(),
+                        Some(&origin),
+                        vec![],
+                    )
+                },
+            )?;
+            if title.trim().is_empty() {
+                return Err(origin_error(
+                    StatusCode::BAD_REQUEST,
+                    "unsupported-origin-shape",
+                    "provide a work title before continuing",
+                    Some(&origin),
+                    vec![],
                 ));
             }
             let approvals = service
@@ -3352,65 +3875,87 @@ async fn api_journey_action(
                 .map_err(|_| anyhow::anyhow!("workbench session lock"))?
                 .approved_target_suggestions
                 .clone();
-            let suggestions = suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
-                .map(|set| set.suggestions)
-                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
-            let approved_candidates =
-                resolve_approved_target_candidates(&anchor, Ok(suggestions.clone()), &approvals)
+            let (
+                requested_targets,
+                operation,
+                max_added_bytes_per_target,
+                max_added_lines_per_target,
+            ) = match &origin {
+                WorkOrigin::RequirementCriterion { .. } => {
+                    let suggestions =
+                        suggest_targets(&anchor, &snapshot.workspace, &snapshot.index)
+                            .map(|set| set.suggestions)
+                            .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+                    let approved_candidates = resolve_approved_target_candidates(
+                        &anchor,
+                        Ok(suggestions.clone()),
+                        &approvals,
+                    )
                     .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
-            ensure_homogeneous_approved_transitions(&approved_candidates)
-                .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
-            if let Some(split_recommendation) = split_work_recommendation(
-                &approved_candidates,
-                &snapshot.workspace,
-                &snapshot.index,
-            ) {
-                return Err(ApiError(
-                    StatusCode::CONFLICT,
-                    anyhow::anyhow!(
-                        "approved target group exceeds slicing budget: {}",
-                        split_recommendation.reason
-                    ),
-                ));
-            }
-            validate_create_work_criterion(&snapshot, &anchor, &approved_candidates)
-                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error))?;
-            let requested_targets = resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
-                .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
-            let operation = match approved_candidates
-                .first()
-                .map(|candidate| candidate.transition)
-            {
-                Some(TargetTransition::Add) => WorkOperation::Add,
-                Some(TargetTransition::Remove) => WorkOperation::Remove,
-                _ => WorkOperation::Modify,
+                    ensure_homogeneous_approved_transitions(&approved_candidates).map_err(
+                        |error| {
+                            origin_error(
+                                StatusCode::UNPROCESSABLE_ENTITY,
+                                "mixed-transition",
+                                error.to_string(),
+                                Some(&origin),
+                                vec![],
+                            )
+                        },
+                    )?;
+                    let requested_targets =
+                        resolve_requested_targets(&anchor, Ok(suggestions), &approvals)
+                            .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+                    let operation = match approved_candidates
+                        .first()
+                        .map(|candidate| candidate.transition)
+                    {
+                        Some(TargetTransition::Add) => WorkOperation::Add,
+                        Some(TargetTransition::Remove) => WorkOperation::Remove,
+                        _ => WorkOperation::Modify,
+                    };
+                    let max_added_bytes_per_target = approved_candidates
+                        .iter()
+                        .filter_map(|candidate| candidate.budget_bytes)
+                        .max();
+                    let max_added_lines_per_target = approved_candidates
+                        .iter()
+                        .filter_map(|candidate| candidate.budget_lines)
+                        .max();
+                    (
+                        requested_targets,
+                        operation,
+                        max_added_bytes_per_target,
+                        max_added_lines_per_target,
+                    )
+                }
+                WorkOrigin::FeatureImplementationBinding { .. }
+                | WorkOrigin::FeatureImplementationTarget { .. } => (
+                    resolve_feature_origin_targets(&snapshot.index, &origin).map_err(|error| {
+                        origin_error(
+                            StatusCode::UNPROCESSABLE_ENTITY,
+                            &origin_error_code(&error),
+                            error.to_string(),
+                            Some(&origin),
+                            vec![],
+                        )
+                    })?,
+                    WorkOperation::Modify,
+                    None,
+                    None,
+                ),
             };
-            let max_added_bytes_per_target = approved_candidates
-                .iter()
-                .filter_map(|candidate| candidate.budget_bytes)
-                .max();
-            let max_added_lines_per_target = approved_candidates
-                .iter()
-                .filter_map(|candidate| candidate.budget_lines)
-                .max();
+            let requirement_origin = matches!(&origin, WorkOrigin::RequirementCriterion { .. });
             let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-            let summary = summary.trim().to_owned();
-            let seeds = if requested_targets.is_empty() {
-                vec![WorkSeed::Anchor(anchor.clone())]
-            } else {
-                vec![]
-            };
+            let title = title.trim().to_owned();
             let request = WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: store.new_id("work"),
-                summary,
+                title,
                 operation,
-                seeds,
-                // A guided journey has one executable change boundary.  Plans
-                // with several isolated slices need separate worktrees, so do
-                // not silently pick and execute their first slice here.
+                origin,
                 constraints: WorkConstraints {
-                    max_slices: Some(1),
+                    max_slices: None,
                     max_added_bytes_per_target,
                     max_added_lines_per_target,
                     ..WorkConstraints::default()
@@ -3427,10 +3972,12 @@ async fn api_journey_action(
                     anyhow::anyhow!("target suggestions changed; review the refreshed evidence"),
                 ));
             }
-            session
-                .approved_target_suggestions
-                .retain(|approval| approval.criterion != anchor);
-            session.work_title = Some(request.summary.clone());
+            if requirement_origin {
+                session
+                    .approved_target_suggestions
+                    .retain(|approval| approval.criterion != anchor);
+            }
+            session.work_title = Some(request.title.clone());
             session.draft_request = Some(request);
             session.plan = None;
             session.selected_slice = None;
@@ -3439,8 +3986,21 @@ async fn api_journey_action(
             session.agent_run = None;
             session.last_validation = None;
         }
+        JourneyAction::SelectSlice {
+            schema,
+            candidate_plan_digest,
+            slice_id,
+        } => {
+            if schema != syu_work_model::WORK_SELECT_SLICE_SCHEMA {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    anyhow::anyhow!("invalid select_slice schema"),
+                ));
+            }
+            select_slice(&service, &basis_command, &candidate_plan_digest, &slice_id)?;
+        }
         JourneyAction::Rename { title } => {
-            let _ = basis(&service, &command.basis)?;
+            let _ = basis(&service, &basis_command)?;
             let title = title.trim();
             if title.is_empty() || title.chars().count() > 120 {
                 return Err(ApiError(
@@ -3461,7 +4021,7 @@ async fn api_journey_action(
             session.work_title = Some(title.to_owned());
         }
         JourneyAction::Prepare => {
-            let Json(plan) = api_plan(State(service.clone()), Json(command.basis.clone())).await?;
+            let Json(plan) = api_plan(State(service.clone()), Json(basis_command.clone())).await?;
             // A guided journey owns one focused change boundary. Requests
             // supplied by a CLI caller can legitimately plan multiple ready
             // slices, so do not quietly pick the first one here.
@@ -3473,93 +4033,87 @@ async fn api_journey_action(
                     .ok_or_else(|| anyhow::anyhow!("the plan has no executable slice"))?;
                 let _ = api_context(
                     State(service.clone()),
-                    Json(SliceCommand {
-                        basis: command.basis.clone(),
-                        slice_id,
+                    Json(ContextCommand {
+                        basis: basis_command.clone(),
+                        execution: ExecutionIdentity {
+                            plan_digest: plan.canonical_digest.clone(),
+                            slice_id,
+                        },
                     }),
                 )
                 .await?;
-                let _ = api_validate(State(service.clone()), Json(command.basis.clone())).await?;
+                let selected_slice = service
+                    .session
+                    .read()
+                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+                    .selected_slice
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("context selection was not stored"))?;
+                let _ = api_validate(
+                    State(service.clone()),
+                    Json(ValidateCommand {
+                        basis: basis_command.clone(),
+                        execution: ExecutionIdentity {
+                            plan_digest: plan.canonical_digest.clone(),
+                            slice_id: selected_slice,
+                        },
+                    }),
+                )
+                .await?;
             }
         }
-        JourneyAction::Approve => {
-            let _ = api_approve(State(service.clone()), Json(command.basis.clone())).await?;
+        JourneyAction::Approve { execution } => {
+            let _ = api_approve(
+                State(service.clone()),
+                Json(ApproveCommand {
+                    basis: basis_command.clone(),
+                    execution,
+                }),
+            )
+            .await?;
         }
-        JourneyAction::Start | JourneyAction::Retry => {
-            let slice_id = service
-                .session
-                .read()
-                .map_err(|_| anyhow::anyhow!("workbench session lock"))?
-                .selected_slice
-                .clone()
-                .ok_or_else(|| anyhow::anyhow!("prepare a selected slice before implementation"))?;
+        JourneyAction::Start { execution } | JourneyAction::Retry { execution } => {
             let _ = api_agent_start(
                 State(service.clone()),
                 Json(AgentStartCommand {
-                    basis: command.basis.clone(),
-                    slice_id,
+                    basis: basis_command.clone(),
+                    execution,
                 }),
             )
             .await?;
         }
-        JourneyAction::Verify => {
-            let slice_id = service
-                .session
-                .read()
-                .map_err(|_| anyhow::anyhow!("workbench session lock"))?
-                .selected_slice
-                .clone()
-                .ok_or_else(|| anyhow::anyhow!("select a prepared slice before verification"))?;
+        JourneyAction::Verify { execution } => {
             let _ = api_agent_verify(
                 State(service.clone()),
                 Json(SliceCommand {
-                    basis: command.basis.clone(),
-                    slice_id,
+                    basis: basis_command.clone(),
+                    execution,
                 }),
             )
             .await?;
         }
-        JourneyAction::Finalize => {
-            let snapshot = basis(&service, &command.basis)?;
-            let (plan_digest, slice_id) = {
-                let session = service
-                    .session
-                    .read()
-                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-                (
-                    session
-                        .plan
-                        .as_ref()
-                        .map(|plan| plan.canonical_digest.clone())
-                        .ok_or_else(|| anyhow::anyhow!("prepare a work plan before finalizing"))?,
-                    session
-                        .selected_slice
-                        .clone()
-                        .ok_or_else(|| anyhow::anyhow!("select a work slice before finalizing"))?,
-                )
-            };
-            let attempt_id = completion_history(&snapshot.workspace)?
-                .current_for(&plan_digest, &slice_id)
-                .filter(|attempt| {
-                    attempt.status == CompletionStatus::Complete && !attempt.finalized
-                })
-                .map(|attempt| attempt.attempt_id.clone())
-                .ok_or_else(|| anyhow::anyhow!("there is no completed work ready to finish"))?;
+        JourneyAction::Finalize {
+            execution,
+            attempt_id,
+            preview_token,
+        } => {
             let Json(preview) = api_finalize_preview(
                 State(service.clone()),
                 Json(FinalizeCommand {
-                    basis: command.basis.clone(),
+                    basis: basis_command.clone(),
+                    execution: execution.clone(),
                     attempt_id: attempt_id.clone(),
-                    preview_token: None,
+                    preview_token: preview_token.clone(),
                 }),
             )
             .await?;
             let _ = api_finalize_apply(
                 State(service.clone()),
                 Json(FinalizeCommand {
-                    basis: command.basis.clone(),
+                    basis: basis_command.clone(),
+                    execution,
                     attempt_id,
-                    preview_token: Some(preview.preview_token),
+                    preview_token: preview_token.or(Some(preview.preview_token)),
                 }),
             )
             .await?;
@@ -3577,8 +4131,320 @@ async fn api_journey_action(
         .session
         .read()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-    Ok(Json(project_session(&snapshot, &session)?))
+    let projection = project_session(&snapshot, &session)?;
+    if let Some(candidate_plan_digest) = selection_candidate_digest {
+        let plan_digest = projection
+            .work
+            .plan
+            .as_ref()
+            .map(|plan| plan.digest.clone())
+            .ok_or_else(|| anyhow::anyhow!("selected work plan is missing"))?;
+        let slice_id = projection
+            .work
+            .selected_slice
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("selected work slice is missing"))?;
+        return Ok(Json(SelectSliceResponse {
+            schema: syu_work_model::WORK_SELECT_SLICE_RESPONSE_SCHEMA.into(),
+            action: "select_slice".into(),
+            candidate_plan_digest,
+            plan_digest,
+            slice_id,
+            projection,
+        })
+        .into_response());
+    }
+    Ok(Json(projection).into_response())
 }
+
+fn select_slice(
+    service: &WorkbenchService,
+    basis_command: &MutationBasis,
+    candidate_plan_digest: &str,
+    slice_id: &str,
+) -> Result<(), ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root).map_err(ApiError::from)?;
+    if store
+        .has_approval_for_plan(candidate_plan_digest)
+        .map_err(ApiError::from)?
+    {
+        return Err(work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "selection-locked",
+            "slice selection is locked after approval",
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        ));
+    }
+    let snapshot = basis(service, basis_command).map_err(|error| {
+        work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "stale-basis",
+            error.to_string(),
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        )
+    })?;
+    let (request, candidate_plan) = {
+        let session = service
+            .session
+            .read()
+            .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+        let request = session
+            .draft_request
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no work request is available"))?;
+        let plan = session
+            .plan
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no candidate work plan is available"))?;
+        if plan.canonical_digest != candidate_plan_digest {
+            return Err(work_action_error(
+                StatusCode::CONFLICT,
+                "select_slice",
+                "stale-candidate-plan",
+                "candidate plan digest is stale",
+                Some(candidate_plan_digest.to_owned()),
+                vec![],
+            ));
+        }
+        (request, plan)
+    };
+    let candidate = candidate_plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == slice_id)
+        .ok_or_else(|| {
+            work_action_error(
+                StatusCode::NOT_FOUND,
+                "select_slice",
+                "unknown-slice",
+                "the requested execution slice is not in the candidate plan",
+                Some(candidate_plan_digest.to_owned()),
+                slice_nearest(&candidate_plan, candidate_plan_digest),
+            )
+        })?;
+    let canonical_candidate_plan = syu_planner::plan(
+        &request,
+        &snapshot.workspace,
+        &snapshot.index,
+        &snapshot.revision,
+    )
+    .map_err(|error| {
+        work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "replan-failed",
+            error.to_string(),
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        )
+    })?;
+    let canonical_candidate = canonical_candidate_plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == slice_id)
+        .ok_or_else(|| {
+            work_action_error(
+                StatusCode::CONFLICT,
+                "select_slice",
+                "non-canonical-slice",
+                "the candidate slice is not present in the canonical planner output",
+                Some(candidate_plan_digest.to_owned()),
+                vec![],
+            )
+        })?;
+    if canonical_candidate != candidate {
+        return Err(work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "non-canonical-slice",
+            "the candidate slice differs from the canonical planner output",
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        ));
+    }
+    let editable_transitions = candidate
+        .editable_targets
+        .iter()
+        .map(|target| format!("{:?}", target.transition))
+        .collect::<BTreeSet<_>>();
+    if editable_transitions.len() > 1 {
+        return Err(work_action_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "select_slice",
+            "mixed-transition",
+            "the selected slice contains multiple editable transitions",
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        ));
+    }
+    let candidate_blockers = split_candidate_blockers(
+        &candidate_plan,
+        candidate,
+        &request,
+        &snapshot.workspace.config,
+        &snapshot.index,
+    );
+    if !split_candidate_selectable(
+        &candidate_plan,
+        candidate,
+        &request,
+        &snapshot.workspace.config,
+        &snapshot.index,
+        &candidate_blockers,
+    ) {
+        return Err(work_action_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "select_slice",
+            "non-selectable-slice",
+            "the selected slice is not selectable",
+            Some(candidate_plan_digest.to_owned()),
+            vec![slice_nearest_entry(candidate, candidate_plan_digest)],
+        ));
+    }
+    let mut requested_targets = candidate
+        .editable_targets
+        .iter()
+        .chain(candidate.verification_targets.iter())
+        .map(|target| RequestedTarget {
+            reference: target.reference.clone(),
+            criterion: Some(request.origin.criterion().clone()),
+            transition: target.transition,
+        })
+        .collect::<Vec<_>>();
+    requested_targets.sort_by(|left, right| {
+        left.reference.cmp(&right.reference).then_with(|| {
+            requested_transition_rank(left.transition)
+                .cmp(&requested_transition_rank(right.transition))
+        })
+    });
+    let mut deduplicated: Vec<RequestedTarget> = Vec::with_capacity(requested_targets.len());
+    for requested in requested_targets {
+        if let Some(previous) = deduplicated.last()
+            && previous.reference == requested.reference
+        {
+            let same_editable_boundary = is_editable_transition(previous.transition)
+                && is_editable_transition(requested.transition)
+                && previous.transition == requested.transition;
+            let editable_with_derived_verification = is_editable_transition(previous.transition)
+                && requested.transition == TargetTransition::RunOnly;
+            if same_editable_boundary || editable_with_derived_verification {
+                continue;
+            }
+            return Err(work_action_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "select_slice",
+                "mixed-transition",
+                "the selected slice derives conflicting transitions for one exact target",
+                Some(candidate_plan_digest.to_owned()),
+                vec![],
+            ));
+        }
+        deduplicated.push(requested);
+    }
+    let requested_targets = deduplicated;
+    if requested_targets.is_empty() && request.operation != WorkOperation::Investigate {
+        return Err(work_action_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "select_slice",
+            "non-selectable-slice",
+            "the selected slice has no exact target boundary",
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        ));
+    }
+    let mut selected_request = request;
+    selected_request.requested_targets = requested_targets;
+    selected_request.constraints.max_slices = Some(1);
+    let replanned = syu_planner::plan(
+        &selected_request,
+        &snapshot.workspace,
+        &snapshot.index,
+        &snapshot.revision,
+    )
+    .map_err(|error| {
+        work_action_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "select_slice",
+            "replan-failed",
+            error.to_string(),
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        )
+    })?;
+    if replanned.status != PlanStatus::Ready || replanned.slices.len() != 1 {
+        return Err(work_action_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "select_slice",
+            "replan-failed",
+            "selected slice could not be replanned as one ready slice",
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        ));
+    }
+    let returned_slice_id = replanned.slices[0].id.clone();
+    let mut session = service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    if session
+        .plan
+        .as_ref()
+        .is_none_or(|plan| plan.canonical_digest != candidate_plan_digest)
+    {
+        return Err(work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "stale-candidate-plan",
+            "candidate plan changed during selection",
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        ));
+    }
+    session.draft_request = Some(selected_request);
+    session.plan = Some(replanned);
+    session.selected_slice = Some(returned_slice_id);
+    session.context_pack = None;
+    session.last_validation = None;
+    Ok(())
+}
+
+fn slice_nearest(plan: &WorkPlan, candidate_plan_digest: &str) -> Vec<serde_json::Value> {
+    plan.slices
+        .iter()
+        .map(|slice| slice_nearest_entry(slice, candidate_plan_digest))
+        .collect()
+}
+
+fn is_editable_transition(transition: TargetTransition) -> bool {
+    matches!(
+        transition,
+        TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove
+    )
+}
+
+fn requested_transition_rank(transition: TargetTransition) -> u8 {
+    match transition {
+        TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove => 0,
+        TargetTransition::RunOnly => 1,
+        TargetTransition::Readonly => 2,
+    }
+}
+
+fn slice_nearest_entry(
+    slice: &syu_work_model::ExecutionSlice,
+    candidate_plan_digest: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "slice",
+        "id": slice.id,
+        "candidate_plan_digest": candidate_plan_digest,
+    })
+}
+
 async fn api_plan(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<MutationBasis>,
@@ -3608,7 +4474,7 @@ async fn api_plan(
 }
 async fn api_context(
     State(service): State<Arc<WorkbenchService>>,
-    Json(command): Json<SliceCommand>,
+    Json(command): Json<ContextCommand>,
 ) -> Result<Json<syu_work_model::ContextPack>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let mut session = service
@@ -3619,22 +4485,36 @@ async fn api_context(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    if plan.canonical_digest != command.execution.plan_digest {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("execution plan digest does not match the session plan"),
+        ));
+    }
+    if let Some(selected) = &session.selected_slice
+        && selected != &command.execution.slice_id
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("execution slice does not match the selected session slice"),
+        ));
+    }
     let context = syu_planner::export_context(
         plan,
-        &command.slice_id,
+        &command.execution.slice_id,
         &snapshot.workspace,
         &snapshot.index,
         &snapshot.revision,
     )?;
     session.context_pack = Some(context.clone());
-    session.selected_slice = Some(command.slice_id.clone());
+    session.selected_slice = Some(command.execution.slice_id.clone());
     Ok(Json(context))
 }
 async fn api_approve(
     State(service): State<Arc<WorkbenchService>>,
-    Json(command): Json<MutationBasis>,
+    Json(command): Json<ApproveCommand>,
 ) -> Result<Json<PlanApproval>, ApiError> {
-    let snapshot = basis(&service, &command)?;
+    let snapshot = basis(&service, &command.basis)?;
     let session = service
         .session
         .write()
@@ -3643,6 +4523,14 @@ async fn api_approve(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    if plan.canonical_digest != command.execution.plan_digest
+        || session.selected_slice.as_deref() != Some(command.execution.slice_id.as_str())
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("approval execution identity does not match the selected plan slice"),
+        ));
+    }
     let canonical = syu_validation::canonical_plan_for_execution(
         &snapshot.workspace,
         &snapshot.index,
@@ -3657,10 +4545,17 @@ async fn api_approve(
         ));
     }
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
+    if canonical.slices.len() != 1 || canonical.slices[0].id != command.execution.slice_id {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("approval requires exactly one canonical execution slice"),
+        ));
+    }
     let approval = PlanApproval {
         schema: PLAN_APPROVAL_SCHEMA.into(),
         approval_id: store.new_id("approval"),
         plan_digest: canonical.canonical_digest.clone(),
+        slice_id: command.execution.slice_id.clone(),
         workspace_fingerprint: snapshot.projection.snapshot.fingerprint.clone(),
         revision: snapshot.revision.clone(),
         reviewed_at: timestamp(),
@@ -3687,14 +4582,16 @@ async fn api_agent_start(
             session.selected_slice.clone(),
         )
     };
-    if selected_slice.as_deref() != Some(command.slice_id.as_str()) {
+    if plan.canonical_digest != command.execution.plan_digest
+        || selected_slice.as_deref() != Some(command.execution.slice_id.as_str())
+    {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("select the requested slice before starting the agent"),
         ));
     }
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-    let approval = store.approval(&plan.canonical_digest).map_err(|error| {
+    let approval = store.approval(&command.execution).map_err(|error| {
         ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("agent start requires an approved plan: {error}"),
@@ -3706,7 +4603,7 @@ async fn api_agent_start(
             anyhow::anyhow!("session plan differs from the approved plan"),
         ));
     }
-    let run = syu_agent::start_run(&snapshot.workspace, &approval, &command.slice_id)?;
+    let run = syu_agent::start_run(&snapshot.workspace, &approval, &command.execution.slice_id)?;
     service
         .session
         .write()
@@ -3734,6 +4631,14 @@ async fn api_agent_patch(
             anyhow::anyhow!("agent run does not match the active Workbench session"),
         ));
     }
+    if run.plan_digest != command.execution.plan_digest
+        || run.slice_id != command.execution.slice_id
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run does not match the requested execution identity"),
+        ));
+    }
     match syu_agent::apply_scoped_patch(&snapshot.workspace, &run, &command.patch) {
         Ok(record) => Ok(Json(record)),
         Err(error) => Err(ApiError(StatusCode::CONFLICT, error)),
@@ -3759,6 +4664,14 @@ async fn api_agent_blocker(
             anyhow::anyhow!("agent run does not match the active Workbench session"),
         ));
     }
+    if run.plan_digest != command.execution.plan_digest
+        || run.slice_id != command.execution.slice_id
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run does not match the requested execution identity"),
+        ));
+    }
     let event = syu_agent::record_blocker(&snapshot.workspace, &run, command.blocker)?;
     Ok(Json(event))
 }
@@ -3782,6 +4695,14 @@ async fn api_agent_scope_expansion(
             anyhow::anyhow!("agent run does not match the active Workbench session"),
         ));
     }
+    if run.plan_digest != command.execution.plan_digest
+        || run.slice_id != command.execution.slice_id
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run does not match the requested execution identity"),
+        ));
+    }
     Ok(Json(syu_agent::request_scope_expansion(
         &snapshot.workspace,
         &run,
@@ -3803,7 +4724,9 @@ async fn api_agent_verify(
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
     let run = syu_agent::current_run(&snapshot.workspace, &run)?;
-    if run.slice_id != command.slice_id {
+    if run.plan_digest != command.execution.plan_digest
+        || run.slice_id != command.execution.slice_id
+    {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("verification slice does not match the active agent run"),
@@ -3816,19 +4739,24 @@ async fn api_agent_verify(
         ));
     }
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-    let approval = store.approval(&run.plan_digest).map_err(|error| {
-        ApiError(
-            StatusCode::CONFLICT,
-            anyhow::anyhow!("agent verification requires an approved plan: {error}"),
-        )
-    })?;
+    let approval = store
+        .approval(&ExecutionIdentity {
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+        })
+        .map_err(|error| {
+            ApiError(
+                StatusCode::CONFLICT,
+                anyhow::anyhow!("agent verification requires an approved plan: {error}"),
+            )
+        })?;
     let attempt_id = store.new_id("attempt");
     let started_at = timestamp();
     let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
         &snapshot.workspace,
         &snapshot.index,
         &approval.plan,
-        &command.slice_id,
+        &command.execution.slice_id,
         &snapshot.revision,
         &attempt_id,
     )?;
@@ -3838,7 +4766,7 @@ async fn api_agent_verify(
         attempt_id,
         attempt_digest: String::new(),
         plan_digest: approval.plan_digest.clone(),
-        slice_id: command.slice_id,
+        slice_id: command.execution.slice_id,
         approved_plan_digest: approval.plan_digest,
         started_at,
         completed_at: timestamp(),
@@ -3846,7 +4774,7 @@ async fn api_agent_verify(
         receipt,
         report,
     };
-    attempt.attempt_digest = DeliveryStore::digest(&{
+    attempt.attempt_digest = DeliveryStore::verification_digest(&{
         let mut copy = attempt.clone();
         copy.attempt_digest.clear();
         copy
@@ -3863,9 +4791,9 @@ async fn api_agent_verify(
 
 async fn api_validate(
     State(service): State<Arc<WorkbenchService>>,
-    Json(command): Json<MutationBasis>,
+    Json(command): Json<ValidateCommand>,
 ) -> Result<Json<ValidationRunView>, ApiError> {
-    let snapshot = basis(&service, &command)?;
+    let snapshot = basis(&service, &command.basis)?;
     let started = SystemTime::now();
     let mut session = service
         .session
@@ -3875,6 +4803,14 @@ async fn api_validate(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    if plan.canonical_digest != command.execution.plan_digest
+        || session.selected_slice.as_deref() != Some(command.execution.slice_id.as_str())
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("validation execution identity does not match the selected plan slice"),
+        ));
+    }
     let canonical_plan = syu_validation::canonical_plan_for_execution(
         &snapshot.workspace,
         &snapshot.index,
@@ -3924,7 +4860,7 @@ async fn api_verify(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-    let approval = store.approval(&plan.canonical_digest).map_err(|error| {
+    let approval = store.approval(&command.execution).map_err(|error| {
         ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("plan approval required before verification: {error}"),
@@ -3936,10 +4872,11 @@ async fn api_verify(
             anyhow::anyhow!("session plan differs from approved plan"),
         ));
     }
-    if session
-        .selected_slice
-        .as_deref()
-        .is_none_or(|selected| selected != command.slice_id)
+    if plan.canonical_digest != command.execution.plan_digest
+        || session
+            .selected_slice
+            .as_deref()
+            .is_none_or(|selected| selected != command.execution.slice_id)
         || !session
             .last_validation
             .as_ref()
@@ -3956,7 +4893,7 @@ async fn api_verify(
         &snapshot.workspace,
         &snapshot.index,
         plan,
-        &command.slice_id,
+        &command.execution.slice_id,
         &snapshot.revision,
         &attempt_id,
     )?;
@@ -3966,7 +4903,7 @@ async fn api_verify(
         attempt_id,
         attempt_digest: String::new(),
         plan_digest: plan.canonical_digest.clone(),
-        slice_id: command.slice_id,
+        slice_id: command.execution.slice_id,
         approved_plan_digest: approval.plan_digest,
         started_at,
         completed_at: timestamp(),
@@ -3974,7 +4911,7 @@ async fn api_verify(
         receipt,
         report,
     };
-    attempt.attempt_digest = DeliveryStore::digest(&{
+    attempt.attempt_digest = DeliveryStore::verification_digest(&{
         let mut copy = attempt.clone();
         copy.attempt_digest.clear();
         copy
@@ -3990,7 +4927,15 @@ async fn api_finalize_preview(
 ) -> Result<Json<FinalizationPreview>, ApiError> {
     let snapshot = execution_basis(&service, &command.basis)?;
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-    let attempt = store.attempt(&command.attempt_id)?;
+    let attempt = store.attempt(&command.execution, &command.attempt_id)?;
+    if attempt.plan_digest != command.execution.plan_digest
+        || attempt.slice_id != command.execution.slice_id
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("attempt does not match execution identity"),
+        ));
+    }
     Ok(Json(
         store.finalization_preview(&snapshot.workspace, &attempt)?,
     ))
@@ -4008,7 +4953,15 @@ async fn api_finalize_apply(
     })?;
     let snapshot = execution_basis(&service, &command.basis)?;
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-    let attempt = store.attempt(&command.attempt_id)?;
+    let attempt = store.attempt(&command.execution, &command.attempt_id)?;
+    if attempt.plan_digest != command.execution.plan_digest
+        || attempt.slice_id != command.execution.slice_id
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("attempt does not match execution identity"),
+        ));
+    }
     let preview = store.finalization_preview(&snapshot.workspace, &attempt)?;
     Ok(Json(store.apply_finalization(
         &snapshot.workspace,
@@ -4038,7 +4991,10 @@ async fn api_result(
                 })?,
             ))
         })?;
-    if command.receipt != canonical {
+    if command.execution.plan_digest != plan.canonical_digest
+        || command.execution.slice_id != canonical.slice_id
+        || command.receipt != canonical
+    {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("verification receipt does not close the selected plan"),
@@ -4222,6 +5178,90 @@ pub struct WorkSessionView {
     pub context_pack: Option<ContextPackView>,
     pub selected_slice: Option<String>,
     pub validation: ValidationRunView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub split_recovery: Option<SplitRecoveryView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SplitRecoveryView {
+    pub schema: String,
+    pub candidate_plan_digest: String,
+    pub criterion: SplitCriterionView,
+    pub reason: SplitReasonView,
+    pub candidates: Vec<SplitRecoveryCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SplitCriterionView {
+    pub anchor: SpecAnchor,
+    pub statement: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SplitReasonView {
+    pub code: String,
+    pub message: String,
+    pub planner_basis_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SplitRecoveryCandidate {
+    pub id: String,
+    pub selectable: bool,
+    pub goal: String,
+    pub anchors: Vec<SpecAnchor>,
+    pub editable_targets: Vec<PlannedTargetView>,
+    pub verification_targets: Vec<PlannedTargetView>,
+    pub readonly_context: Vec<PlannedTargetView>,
+    pub acceptance: Vec<syu_work_model::AcceptanceRef>,
+    pub contracts: Vec<ContractRefView>,
+    pub origin_closure: syu_work_model::OriginClosure,
+    pub origin_closure_digest: String,
+    pub budget: syu_work_model::SliceBudgetUsage,
+    pub confidence: syu_work_model::PlanConfidence,
+    pub blockers: Vec<DiagnosticView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PlannedTargetView {
+    pub reference: BoundTargetRef,
+    pub access: TargetAccessMode,
+    pub transition: TargetTransition,
+    pub lifecycle: syu_work_model::TargetLifecycle,
+    pub path: String,
+    pub selector: syu_work_model::ResolvedSelector,
+    pub artifact_identity: Option<String>,
+    pub adapter: String,
+    pub facet: String,
+    pub role: String,
+    pub verification_claim: Option<syu_work_model::VerificationClaimRef>,
+    pub content_hash: String,
+    pub excerpt_hash: String,
+    pub line_start: usize,
+    pub line_end: usize,
+    pub budget_bytes: usize,
+    pub budget_lines: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContractRefView {
+    pub anchor: SpecAnchor,
+    pub kind: String,
+    pub source: BoundTargetRef,
+    pub participants: Vec<BoundTargetRef>,
+    pub guarantees: Vec<SpecAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DiagnosticView {
+    pub rule_id: String,
+    pub phase: String,
+    pub severity: String,
+    pub message: String,
+    pub primary: syu_diagnostics::Location,
+    pub related: Vec<syu_diagnostics::RelatedLocation>,
+    pub anchor: Option<SpecAnchor>,
+    pub target: Option<BoundTargetRef>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct CompletionHistoryView {
@@ -4250,9 +5290,9 @@ pub struct CompletionAttemptView {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkRequestView {
-    pub summary: String,
+    pub title: String,
+    pub origin: WorkOrigin,
     pub operation: WorkOperation,
-    pub seed_count: usize,
     pub requested_target_count: usize,
 }
 #[derive(Debug, Clone, Serialize)]
@@ -4280,6 +5320,7 @@ pub struct VerificationReceiptView {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct ContextPackView {
+    pub plan_digest: String,
     pub slice_id: String,
     pub entry_count: usize,
 }
@@ -4300,6 +5341,19 @@ pub struct ScopeView {
 pub struct SpecificationCatalogView {
     pub specifications: Vec<ItemSummary>,
     pub documents: Vec<SpecificationDocumentView>,
+    pub origin_capabilities: Vec<OriginCapabilityView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OriginCapabilityView {
+    pub schema: String,
+    pub origin: Option<WorkOrigin>,
+    pub label: String,
+    pub enabled: bool,
+    pub disabled_code: Option<String>,
+    pub disabled_message: Option<String>,
+    pub nearest: Vec<WorkOrigin>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -4605,9 +5659,11 @@ pub struct ItemSummary {
     pub criteria: Vec<CriterionSummary>,
     pub bindings: Vec<BindingSummary>,
     pub contracts: Vec<ContractSummary>,
-    /// Exact canonical anchors that may seed a WorkRequest. Item ids alone are
+    /// Exact origin anchors exposed by the server. Item ids alone are
     /// intentionally not accepted by the browser create-work flow.
     pub anchors: Vec<String>,
+    #[serde(default)]
+    pub origin_capabilities: Vec<OriginCapabilityView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -4689,6 +5745,7 @@ pub struct BindingTargetSummary {
     pub path: String,
     pub selector: Selector,
     pub adapter: String,
+    pub lifecycle: syu_spec_model::ArtifactTargetLifecycle,
     pub claims: Vec<TargetClaim>,
 }
 
@@ -4783,6 +5840,20 @@ fn project_with_index(
     let plan: Option<WorkPlan> = None;
     let validation = ValidationRunView::not_run();
     let readiness = readiness_not_run(&workspace.config);
+    let origin_capabilities = origin_capabilities(workspace, index, &specifications);
+    for item in &mut specifications {
+        item.origin_capabilities = origin_capabilities
+            .iter()
+            .filter(|capability| {
+                capability
+                    .origin
+                    .as_ref()
+                    .or_else(|| capability.nearest.first())
+                    .is_some_and(|origin| origin_owner_item(origin).to_string() == item.id)
+            })
+            .cloned()
+            .collect();
+    }
     Ok(WorkspaceProjection {
         snapshot: WorkspaceSummary {
             root: workspace
@@ -4841,6 +5912,7 @@ fn project_with_index(
             context_pack: None,
             selected_slice: None,
             validation: validation.clone(),
+            split_recovery: None,
         },
         readiness,
         scope: ScopeView::default(),
@@ -4865,6 +5937,7 @@ fn project_with_index(
                         .into_owned(),
                 })
                 .collect(),
+            origin_capabilities,
         },
         diagnostics: DiagnosticsView { validation },
     })
@@ -4926,9 +5999,9 @@ fn journey_steps(current: &str) -> Vec<JourneyStepView> {
 
 fn request_view(request: &WorkRequest) -> WorkRequestView {
     WorkRequestView {
-        summary: request.summary.clone(),
+        title: request.title.clone(),
+        origin: request.origin.clone(),
         operation: request.operation,
-        seed_count: request.seeds.len(),
         requested_target_count: request.requested_targets.len(),
     }
 }
@@ -4958,6 +6031,465 @@ fn plan_view(plan: &WorkPlan) -> PlanView {
     }
 }
 
+fn split_recovery_view(
+    plan: &WorkPlan,
+    request: &WorkRequest,
+    config: &syu_project_model::ProjectConfig,
+    index: &SpecIndex,
+) -> SplitRecoveryView {
+    let criterion = request.origin.criterion().clone();
+    let statement = index
+        .anchors
+        .get(&criterion)
+        .and_then(|value| match value {
+            syu_workspace::AnchorValue::Criterion(value) => Some(value.statement.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| criterion.to_string());
+    let reason = split_reason(plan, config);
+    SplitRecoveryView {
+        schema: syu_work_model::WORK_SPLIT_RECOVERY_SCHEMA.into(),
+        candidate_plan_digest: plan.canonical_digest.clone(),
+        criterion: SplitCriterionView {
+            anchor: criterion,
+            statement,
+        },
+        reason,
+        candidates: plan
+            .slices
+            .iter()
+            .map(|slice| {
+                let blockers = split_candidate_blockers(plan, slice, request, config, index);
+                SplitRecoveryCandidate {
+                    id: slice.id.clone(),
+                    selectable: split_candidate_selectable(
+                        plan, slice, request, config, index, &blockers,
+                    ),
+                    goal: slice.goal.clone(),
+                    anchors: slice.anchors.clone(),
+                    editable_targets: slice
+                        .editable_targets
+                        .iter()
+                        .map(planned_target_view)
+                        .collect(),
+                    verification_targets: slice
+                        .verification_targets
+                        .iter()
+                        .map(planned_target_view)
+                        .collect(),
+                    readonly_context: slice
+                        .readonly_context
+                        .iter()
+                        .map(planned_target_view)
+                        .collect(),
+                    acceptance: slice.acceptance.clone(),
+                    contracts: slice
+                        .contracts
+                        .iter()
+                        .filter_map(|anchor| {
+                            index
+                                .contracts
+                                .get(anchor)
+                                .map(|contract| contract_view(anchor, contract))
+                        })
+                        .collect(),
+                    origin_closure: plan.origin_closure.clone(),
+                    origin_closure_digest: plan.origin_closure_digest.clone(),
+                    budget: slice.budget.clone(),
+                    confidence: slice.confidence,
+                    blockers: blockers.iter().map(diagnostic_view).collect(),
+                }
+            })
+            .collect(),
+    }
+}
+
+fn split_candidate_selectable(
+    plan: &WorkPlan,
+    slice: &syu_work_model::ExecutionSlice,
+    request: &WorkRequest,
+    config: &syu_project_model::ProjectConfig,
+    index: &SpecIndex,
+    blockers: &[syu_diagnostics::Diagnostic],
+) -> bool {
+    plan.status == PlanStatus::Ready
+        && blockers.is_empty()
+        && slice.confidence != syu_work_model::PlanConfidence::Low
+        && (request.operation == WorkOperation::Investigate || !slice.editable_targets.is_empty())
+        && slice_budget_within_limits(slice, config)
+        && slice_targets_are_active(index, slice)
+        && origin_closure_is_complete(plan, request, slice, index)
+        && (request.operation == WorkOperation::Investigate
+            || verification_covers_editable_targets(index, slice, request.origin.criterion()))
+}
+
+fn split_candidate_blockers(
+    plan: &WorkPlan,
+    slice: &syu_work_model::ExecutionSlice,
+    request: &WorkRequest,
+    config: &syu_project_model::ProjectConfig,
+    index: &SpecIndex,
+) -> Vec<syu_diagnostics::Diagnostic> {
+    let mut blockers = slice.blockers.clone();
+    if plan.status != PlanStatus::Ready
+        && !blockers
+            .iter()
+            .any(|blocker| blocker.rule_id == "plan-needs-review")
+    {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "plan-needs-review",
+            "the canonical candidate plan is blocked and cannot be selected",
+            "work-plan",
+        ));
+    }
+    if slice.confidence == syu_work_model::PlanConfidence::Low {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "low-confidence-slice",
+            "the candidate requires exact server review before it can be selected",
+            "work-plan",
+        ));
+    }
+    if request.operation != WorkOperation::Investigate && slice.editable_targets.is_empty() {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "missing-editable-target",
+            "the candidate has no exact editable target",
+            "work-plan",
+        ));
+    }
+    if request.operation != WorkOperation::Investigate && slice.verification_targets.is_empty() {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "missing-verification-coverage",
+            "the candidate has no exact verification target for its editable boundary",
+            "work-plan",
+        ));
+    }
+    for target in slice
+        .editable_targets
+        .iter()
+        .chain(slice.verification_targets.iter())
+        .chain(slice.readonly_context.iter())
+    {
+        if !active_exact_target(index, &target.reference) {
+            blockers.push(syu_diagnostics::Diagnostic::error(
+                "target-lifecycle",
+                format!(
+                    "candidate target {} is not an active exact artifact",
+                    target.reference
+                ),
+                target.resolved_path.clone(),
+            ));
+        }
+    }
+    if !origin_closure_is_complete(plan, request, slice, index) {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "missing-origin-closure",
+            "the candidate does not retain a complete active implementation, verification, readonly, and contract closure",
+            "work-plan",
+        ));
+    }
+    if request.operation != WorkOperation::Investigate
+        && !verification_covers_editable_targets(index, slice, request.origin.criterion())
+    {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "missing-verification-coverage",
+            "the candidate verification targets do not cover the exact origin criterion",
+            "work-plan",
+        ));
+    }
+    let closure = &plan.origin_closure;
+    if request
+        .origin
+        .targets()
+        .iter()
+        .any(|target| !closure.implementation_targets.contains(target))
+    {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "missing-origin-closure",
+            "the candidate does not retain the complete implementation origin closure",
+            "work-plan",
+        ));
+    }
+    if !slice_budget_within_limits(slice, config) {
+        blockers.push(syu_diagnostics::Diagnostic::error(
+            "budget-exceeded",
+            "the candidate exceeds a configured execution limit",
+            "work-plan",
+        ));
+    }
+    blockers
+}
+
+fn active_exact_target(index: &SpecIndex, reference: &BoundTargetRef) -> bool {
+    index.target(reference).is_some_and(|target| {
+        !matches!(
+            target.lifecycle,
+            syu_spec_model::ArtifactTargetLifecycle::Absent
+        )
+    })
+}
+
+fn slice_targets_are_active(index: &SpecIndex, slice: &syu_work_model::ExecutionSlice) -> bool {
+    slice
+        .editable_targets
+        .iter()
+        .chain(slice.verification_targets.iter())
+        .chain(slice.readonly_context.iter())
+        .all(|target| active_exact_target(index, &target.reference))
+}
+
+fn verification_covers_editable_targets(
+    index: &SpecIndex,
+    slice: &syu_work_model::ExecutionSlice,
+    criterion: &SpecAnchor,
+) -> bool {
+    let valid_verifications = slice
+        .verification_targets
+        .iter()
+        .filter(|target| implemented_verification_claim(index, target, criterion))
+        .collect::<Vec<_>>();
+    !slice.editable_targets.is_empty()
+        && slice.editable_targets.iter().all(|editable| {
+            valid_verifications.iter().any(|verification| {
+                index
+                    .verification_by_target
+                    .get(&editable.reference)
+                    .is_some_and(|covered| covered.contains(&verification.reference))
+            })
+        })
+}
+
+fn implemented_verification_claim(
+    index: &SpecIndex,
+    target: &syu_work_model::PlannedTarget,
+    criterion: &SpecAnchor,
+) -> bool {
+    let Some(claim) = target.verification_claim.as_ref() else {
+        return false;
+    };
+    if claim.criterion != *criterion || claim.target != target.reference {
+        return false;
+    }
+    let Some(binding) = index.bindings.get(&target.reference.binding) else {
+        return false;
+    };
+    if binding.role != BindingRole::Verification
+        || index.item_status.get(&target.reference.binding.item) != Some(&ItemStatus::Implemented)
+    {
+        return false;
+    }
+    let Some(artifact) = index.target(&target.reference) else {
+        return false;
+    };
+    if matches!(
+        artifact.lifecycle,
+        syu_spec_model::ArtifactTargetLifecycle::Absent
+    ) {
+        return false;
+    }
+    let matching = artifact
+        .claims
+        .iter()
+        .filter_map(|entry| match entry {
+            TargetClaim::Verifies {
+                criterion: actual,
+                covers,
+                ..
+            } if actual == criterion && !covers.is_empty() => Some(covers),
+            _ => None,
+        })
+        .count();
+    matching == 1
+}
+
+fn origin_closure_is_complete(
+    plan: &WorkPlan,
+    request: &WorkRequest,
+    slice: &syu_work_model::ExecutionSlice,
+    index: &SpecIndex,
+) -> bool {
+    let closure = &plan.origin_closure;
+    if request
+        .origin
+        .targets()
+        .iter()
+        .any(|target| !closure.implementation_targets.contains(target))
+    {
+        return false;
+    }
+    if closure
+        .implementation_targets
+        .iter()
+        .chain(closure.verification_targets.iter())
+        .chain(closure.readonly_targets.iter())
+        .any(|target| !active_exact_target(index, target))
+    {
+        return false;
+    }
+    if slice
+        .editable_targets
+        .iter()
+        .any(|target| !closure.implementation_targets.contains(&target.reference))
+        || slice
+            .verification_targets
+            .iter()
+            .any(|target| !closure.verification_targets.contains(&target.reference))
+        || slice
+            .readonly_context
+            .iter()
+            .any(|target| !closure.readonly_targets.contains(&target.reference))
+    {
+        return false;
+    }
+    closure.contracts.iter().all(|anchor| {
+        let Some(contract) = index.contracts.get(anchor) else {
+            return false;
+        };
+        if contract.guarantees.is_empty()
+            || contract
+                .guarantees
+                .iter()
+                .any(|guarantee| guarantee != request.origin.criterion())
+        {
+            return false;
+        }
+        let mut related = std::iter::once(&contract.source).chain(
+            contract
+                .participants
+                .iter()
+                .map(|participant| &participant.target),
+        );
+        related.all(|target| {
+            closure.readonly_targets.contains(target) && active_exact_target(index, target)
+        })
+    })
+}
+
+fn split_reason(plan: &WorkPlan, config: &syu_project_model::ProjectConfig) -> SplitReasonView {
+    let budget = plan.slices.iter().fold(
+        syu_work_model::SliceBudgetUsage::default(),
+        |mut total, slice| {
+            total.editable_files += slice.budget.editable_files;
+            total.editable_symbols += slice.budget.editable_symbols;
+            total.verification_targets += slice.budget.verification_targets;
+            total.readonly_targets += slice.budget.readonly_targets;
+            total.total_bytes += slice.budget.total_bytes;
+            total
+        },
+    );
+    let limits = &config.work.slicing;
+    let (code, message) = if plan.slices.len() > 1 {
+        (
+            "independent-target-components",
+            "The Requirement criterion expands into independent executable target components.",
+        )
+    } else if budget.editable_files > limits.max_editable_files
+        || budget.editable_symbols > limits.max_editable_symbols
+    {
+        (
+            "editable-budget",
+            "The candidate exceeds the configured editable target budget.",
+        )
+    } else if budget.verification_targets > limits.max_verification_targets {
+        (
+            "verification-budget",
+            "The candidate exceeds the configured verification target budget.",
+        )
+    } else if budget.readonly_targets > limits.max_readonly_targets {
+        (
+            "readonly-budget",
+            "The candidate exceeds the configured readonly context budget.",
+        )
+    } else if budget.total_bytes > limits.max_total_bytes {
+        (
+            "total-byte-budget",
+            "The candidate exceeds the configured total byte budget.",
+        )
+    } else {
+        let message = plan
+            .diagnostics
+            .first()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .unwrap_or("The candidate exceeds a configured execution limit.");
+        let lower = message.to_ascii_lowercase();
+        let code = if lower.contains("verification") {
+            "verification-budget"
+        } else if lower.contains("readonly") {
+            "readonly-budget"
+        } else if lower.contains("byte") {
+            "total-byte-budget"
+        } else {
+            "editable-budget"
+        };
+        (code, message)
+    };
+    SplitReasonView {
+        code: code.into(),
+        message: message.into(),
+        planner_basis_digest: plan.canonical_digest.clone(),
+    }
+}
+
+fn slice_budget_within_limits(
+    slice: &syu_work_model::ExecutionSlice,
+    config: &syu_project_model::ProjectConfig,
+) -> bool {
+    let limits = &config.work.slicing;
+    slice.budget.editable_files <= limits.max_editable_files
+        && slice.budget.editable_symbols <= limits.max_editable_symbols
+        && slice.budget.verification_targets <= limits.max_verification_targets
+        && slice.budget.readonly_targets <= limits.max_readonly_targets
+        && slice.budget.total_bytes <= limits.max_total_bytes
+}
+
+fn planned_target_view(target: &syu_work_model::PlannedTarget) -> PlannedTargetView {
+    PlannedTargetView {
+        reference: target.reference.clone(),
+        access: target.access,
+        transition: target.transition,
+        lifecycle: target.lifecycle,
+        path: target.resolved_path.clone(),
+        selector: target.resolved_selector.clone(),
+        artifact_identity: target.artifact_identity.clone(),
+        adapter: target.adapter.clone(),
+        facet: target.facet.clone(),
+        role: format!("{:?}", target.role).to_ascii_lowercase(),
+        verification_claim: target.verification_claim.clone(),
+        content_hash: target.content_hash.clone(),
+        excerpt_hash: target.excerpt_hash.clone(),
+        line_start: target.line_start,
+        line_end: target.line_end,
+        budget_bytes: target.budget_bytes,
+        budget_lines: target.budget_lines,
+    }
+}
+
+fn contract_view(anchor: &SpecAnchor, contract: &Contract) -> ContractRefView {
+    ContractRefView {
+        anchor: anchor.clone(),
+        kind: format!("{:?}", contract.kind).to_ascii_lowercase(),
+        source: contract.source.clone(),
+        participants: contract
+            .participants
+            .iter()
+            .map(|participant| participant.target.clone())
+            .collect(),
+        guarantees: contract.guarantees.clone(),
+    }
+}
+
+fn diagnostic_view(diagnostic: &syu_diagnostics::Diagnostic) -> DiagnosticView {
+    DiagnosticView {
+        rule_id: diagnostic.rule_id.clone(),
+        phase: format!("{:?}", diagnostic.phase).to_ascii_lowercase(),
+        severity: format!("{:?}", diagnostic.severity).to_ascii_lowercase(),
+        message: diagnostic.message.clone(),
+        primary: diagnostic.primary.clone(),
+        related: diagnostic.related.clone(),
+        anchor: diagnostic.anchor.clone(),
+        target: diagnostic.target.clone(),
+    }
+}
+
 fn verification_receipt_view(receipt: &VerificationReceipt) -> VerificationReceiptView {
     VerificationReceiptView {
         slice_id: receipt.slice_id.clone(),
@@ -4974,7 +6506,20 @@ fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView
             .blockers
             .first()
             .map(|blocker| blocker.next_action.clone());
-        let finalized = store.finalization(&attempt.attempt_id)?.is_some();
+        // Invalid or unreadable finalization evidence is deliberately treated
+        // as not finalized in the projection. The durable store still returns
+        // the error to mutation/verification callers; the UI must fail closed
+        // instead of turning forged evidence into a server error.
+        let finalized = store
+            .finalization(
+                &ExecutionIdentity {
+                    plan_digest: attempt.plan_digest.clone(),
+                    slice_id: attempt.slice_id.clone(),
+                },
+                &attempt.attempt_id,
+            )
+            .map(|receipt| receipt.is_some())
+            .unwrap_or(false);
         views.push(CompletionAttemptView {
             attempt_id: attempt.attempt_id,
             plan_digest: attempt.plan_digest,
@@ -5000,7 +6545,8 @@ fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView
 
 fn context_pack_view(context: &syu_work_model::ContextPack) -> ContextPackView {
     ContextPackView {
-        slice_id: context.slice.clone(),
+        plan_digest: context.plan_digest.clone(),
+        slice_id: context.slice_id.clone(),
         entry_count: context.artifact_context.len(),
     }
 }
@@ -5103,6 +6649,14 @@ fn project_session(
         .as_ref()
         .map(plan_view)
         .or(projection.work.plan);
+    projection.work.split_recovery = session
+        .plan
+        .as_ref()
+        .zip(session.draft_request.as_ref())
+        .filter(|(plan, _)| plan.slices.len() > 1 || plan.status != PlanStatus::Ready)
+        .map(|(plan, request)| {
+            split_recovery_view(plan, request, &workspace.config, &snapshot.index)
+        });
     projection.work.verification_receipt = session
         .verification_receipt
         .as_ref()
@@ -5127,7 +6681,7 @@ fn project_session(
         .work
         .agent
         .as_ref()
-        .map(|run| syu_agent::events(workspace, &run.run_id))
+        .map(|run| syu_agent::events(workspace, run))
         .transpose()?
         .unwrap_or_default();
     projection.work.context_pack = session.context_pack.as_ref().map(context_pack_view);
@@ -5183,15 +6737,7 @@ fn journey_specification_context(
     request: Option<&WorkRequest>,
 ) -> Option<(JourneySpecificationView, String)> {
     let request = request?;
-    let mut criteria = request
-        .seeds
-        .iter()
-        .filter_map(|seed| match seed {
-            WorkSeed::Anchor(anchor) if anchor.kind == LocalAnchorKind::Criterion => {
-                Some(anchor.clone())
-            }
-            _ => None,
-        })
+    let mut criteria = std::iter::once(request.origin.criterion().clone())
         .chain(
             request
                 .requested_targets
@@ -5238,7 +6784,7 @@ fn journey_view(
     let title = session
         .work_title
         .clone()
-        .or_else(|| work.request.as_ref().map(|request| request.summary.clone()))
+        .or_else(|| work.request.as_ref().map(|request| request.title.clone()))
         .expect("work title is set when a WorkRequest exists");
     let specification = journey_specification_context(items, session.draft_request.as_ref());
     let related_specification = specification.as_ref().map(|(view, _)| view.clone());
@@ -5273,31 +6819,100 @@ fn journey_view(
             approved_scope: None,
             evidence: JourneyEvidenceView {
                 status: "draft".into(),
-                summary: "A behavior has been selected; its scope has not been approved.".into(),
+                summary: "An exact origin has been selected; its scope has not been approved."
+                    .into(),
                 blockers: vec![],
             },
             related_specification,
             advanced,
         });
     };
+    if plan.status == PlanStatus::Ready && plan.slices.len() > 1 {
+        return Ok(WorkJourneyView {
+            title,
+            title_key: None,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "select_slice".into(),
+                label: "Select a focused step".into(),
+                label_key: "journey.action.select_slice".into(),
+                explanation: "This Requirement criterion expands into independent execution slices. Select one exact slice to continue.".into(),
+                explanation_key: "journey.explanation.select_slice".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(JourneyScopeView {
+                summary: format!("{} focused slices are available.", plan.slices.len()),
+                status: "split-required".into(),
+                editable_target_count: plan.slices.iter().map(|slice| slice.editable_targets.len()).sum(),
+                slice_count: plan.slices.len(),
+            }),
+            evidence: JourneyEvidenceView {
+                status: "split_required".into(),
+                summary: "Select one exact execution slice for the linked Requirement criterion.".into(),
+                blockers: vec![],
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if plan.status != PlanStatus::Ready && work.split_recovery.is_some() {
+        let reason = work
+            .split_recovery
+            .as_ref()
+            .map(|recovery| recovery.reason.message.clone())
+            .unwrap_or_else(|| "The candidate plan needs review before execution.".into());
+        return Ok(WorkJourneyView {
+            title,
+            title_key: None,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "choose_specification".into(),
+                label: "Choose another exact criterion".into(),
+                label_key: "journey.action.choose_specification".into(),
+                explanation:
+                    "This candidate is blocked; choose another Requirement criterion or return to its specification."
+                        .into(),
+                explanation_key: "journey.explanation.choose_specification".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: None,
+            evidence: JourneyEvidenceView {
+                status: "blocked".into(),
+                summary: reason.clone(),
+                blockers: vec![JourneyBlockerView {
+                    message: reason,
+                    next_action: "Choose another exact Requirement criterion or return to its specification."
+                        .into(),
+                }],
+            },
+            related_specification,
+            advanced,
+        });
+    }
     if plan.status != PlanStatus::Ready || plan.slices.len() != 1 {
         let (summary, message, next_action) = if plan.slices.len() > 1 {
             (
                 "The proposed change needs separate focused steps.",
                 "This change needs separate focused steps.",
-                "Choose one behavior to change first.",
+                "Choose one focused execution slice to change first.",
             )
         } else if plan.slices.is_empty() {
             (
-                "We could not find a safe executable change for this behavior.",
-                "This behavior does not yet have a bounded implementation path.",
-                "Choose a related behavior or add its implementation guidance.",
+                "We could not find a safe executable change for this exact origin.",
+                "This Requirement criterion does not yet have a bounded implementation path.",
+                "Choose a related Requirement criterion or add its implementation guidance.",
             )
         } else {
             (
                 "The proposed change cannot be prepared safely yet.",
                 "The change boundary needs attention before implementation can begin.",
-                "Choose a smaller related behavior and review it again.",
+                "Choose a smaller related Requirement criterion and review it again.",
             )
         };
         return Ok(WorkJourneyView {
@@ -5306,13 +6921,13 @@ fn journey_view(
             current_step: "review".into(),
             steps: journey_steps("review"),
             primary_action: JourneyActionView {
-                action: "restart".into(),
-                label: "Choose a smaller change".into(),
-                label_key: "journey.action.restart".into(),
+                action: "choose_specification".into(),
+                label: "Choose another exact origin".into(),
+                label_key: "journey.action.choose_specification".into(),
                 explanation:
-                    "This change needs separate focused work. Choose one behavior to change first."
+                    "This candidate cannot continue safely. Choose another exact origin or return to its specification."
                         .into(),
-                explanation_key: "journey.explanation.restart".into(),
+                explanation_key: "journey.explanation.choose_specification".into(),
                 confirmation_required: false,
                 enabled: true,
             },
@@ -5332,7 +6947,16 @@ fn journey_view(
     }
     let approved = DeliveryStore::for_workspace(&workspace.root)
         .ok()
-        .and_then(|store| store.approval(&plan.digest).ok())
+        .and_then(|store| {
+            plan.slices.first().and_then(|slice| {
+                store
+                    .approval(&ExecutionIdentity {
+                        plan_digest: plan.digest.clone(),
+                        slice_id: slice.id.clone(),
+                    })
+                    .ok()
+            })
+        })
         .is_some();
     let scope = JourneyScopeView {
         summary: format!(
@@ -5728,6 +7352,7 @@ fn item_summary_from_philosophy(
         bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: vec![],
         anchors: anchors_for(index, &item.id),
+        origin_capabilities: vec![],
     }
 }
 
@@ -5760,6 +7385,7 @@ fn item_summary_from_policy(
         bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: vec![],
         anchors: anchors_for(index, &item.id),
+        origin_capabilities: vec![],
     }
 }
 
@@ -5792,6 +7418,7 @@ fn item_summary_from_requirement(
         bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: vec![],
         anchors: anchors_for(index, &item.id),
+        origin_capabilities: vec![],
     }
 }
 
@@ -5824,6 +7451,238 @@ fn item_summary_from_feature(
             .map(|contract| contract_summary(&item_id, contract))
             .collect(),
         anchors: anchors_for(index, &item.id),
+        origin_capabilities: vec![],
+    }
+}
+
+fn origin_capabilities(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    items: &[ItemSummary],
+) -> Vec<OriginCapabilityView> {
+    let mut capabilities = Vec::new();
+    for item in items {
+        if item.kind == "requirement" {
+            for criterion in &item.criteria {
+                if let Ok(anchor) = criterion.anchor.parse::<SpecAnchor>() {
+                    capabilities.push(origin_capability(
+                        workspace,
+                        index,
+                        WorkOrigin::RequirementCriterion { criterion: anchor },
+                        "Requirement criterion",
+                    ));
+                }
+            }
+        } else if item.kind == "feature" {
+            for binding in &item.bindings {
+                if binding.role != "implementation" {
+                    continue;
+                }
+                let Ok(binding_anchor) = binding.anchor.parse::<SpecAnchor>() else {
+                    continue;
+                };
+                let targets = binding
+                    .targets
+                    .iter()
+                    .filter_map(|target| {
+                        let reference = target.reference.parse::<BoundTargetRef>().ok()?;
+                        index
+                            .target(&reference)
+                            .filter(|artifact| {
+                                !matches!(
+                                    artifact.lifecycle,
+                                    syu_spec_model::ArtifactTargetLifecycle::Absent
+                                )
+                            })
+                            .map(|_| reference)
+                    })
+                    .collect::<Vec<_>>();
+                let mut targets = targets;
+                targets.sort();
+                targets.dedup();
+                let criteria = binding
+                    .targets
+                    .iter()
+                    .flat_map(|target| target.claims.iter())
+                    .filter_map(|claim| match claim {
+                        TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
+                        _ => None,
+                    })
+                    .collect::<BTreeSet<_>>();
+                if criteria.len() == 1 {
+                    let criterion = criteria.into_iter().next().expect("one criterion");
+                    capabilities.push(origin_capability(
+                        workspace,
+                        index,
+                        WorkOrigin::FeatureImplementationBinding {
+                            binding: binding_anchor.clone(),
+                            criterion: criterion.clone(),
+                            targets: targets.clone(),
+                        },
+                        "Feature implementation",
+                    ));
+                    for target in targets {
+                        capabilities.push(origin_capability(
+                            workspace,
+                            index,
+                            WorkOrigin::FeatureImplementationTarget {
+                                target,
+                                binding: binding_anchor.clone(),
+                                criterion: criterion.clone(),
+                            },
+                            "Implementation target",
+                        ));
+                    }
+                } else {
+                    let nearest = criteria
+                        .iter()
+                        .cloned()
+                        .map(|criterion| WorkOrigin::FeatureImplementationBinding {
+                            binding: binding_anchor.clone(),
+                            criterion,
+                            targets: targets.clone(),
+                        })
+                        .collect();
+                    capabilities.push(OriginCapabilityView {
+                        schema: syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA.into(),
+                        origin: None,
+                        label: "Feature implementation".into(),
+                        enabled: false,
+                        disabled_code: Some("ambiguous-origin".into()),
+                        disabled_message: Some(
+                            "choose a Feature implementation binding with one exact Requirement criterion"
+                                .into(),
+                        ),
+                        nearest,
+                    });
+                }
+            }
+        }
+    }
+    for capability in &mut capabilities {
+        capability.nearest.sort_by(|left, right| {
+            origin_kind_rank(left)
+                .cmp(&origin_kind_rank(right))
+                .then_with(|| origin_bytes(left).cmp(&origin_bytes(right)))
+        });
+        capability
+            .nearest
+            .dedup_by(|left, right| origin_bytes(left) == origin_bytes(right));
+    }
+    capabilities.sort_by(|left, right| {
+        let left_key = left
+            .origin
+            .as_ref()
+            .or_else(|| left.nearest.first())
+            .map(origin_bytes)
+            .unwrap_or_default();
+        let right_key = right
+            .origin
+            .as_ref()
+            .or_else(|| right.nearest.first())
+            .map(origin_bytes)
+            .unwrap_or_default();
+        left_key
+            .cmp(&right_key)
+            .then_with(|| left.label.cmp(&right.label))
+    });
+    capabilities
+}
+
+fn origin_bytes(origin: &WorkOrigin) -> Vec<u8> {
+    serde_json::to_vec(origin).expect("serialize exact origin")
+}
+
+fn origin_kind_rank(origin: &WorkOrigin) -> u8 {
+    match origin {
+        WorkOrigin::RequirementCriterion { .. } => 0,
+        WorkOrigin::FeatureImplementationBinding { .. } => 1,
+        WorkOrigin::FeatureImplementationTarget { .. } => 2,
+    }
+}
+
+fn origin_owner_item(origin: &WorkOrigin) -> &SpecId {
+    match origin {
+        WorkOrigin::RequirementCriterion { criterion }
+        | WorkOrigin::FeatureImplementationBinding {
+            binding: criterion, ..
+        }
+        | WorkOrigin::FeatureImplementationTarget {
+            binding: criterion, ..
+        } => &criterion.item,
+    }
+}
+
+fn origin_capability(
+    snapshot_workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    origin: WorkOrigin,
+    label: &str,
+) -> OriginCapabilityView {
+    match validate_work_origin(snapshot_workspace, index, &origin) {
+        Ok(()) => OriginCapabilityView {
+            schema: syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA.into(),
+            origin: Some(origin),
+            label: label.into(),
+            enabled: true,
+            disabled_code: None,
+            disabled_message: None,
+            nearest: vec![],
+        },
+        Err(error) => OriginCapabilityView {
+            schema: syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA.into(),
+            origin: None,
+            label: label.into(),
+            enabled: false,
+            disabled_code: Some(origin_error_code(&error)),
+            disabled_message: Some(error.to_string()),
+            nearest: vec![origin],
+        },
+    }
+}
+
+fn origin_error_code(error: &anyhow::Error) -> String {
+    let message = error.to_string().to_ascii_lowercase();
+    if message.contains("must start from an exact requirement criterion")
+        || message.contains("does not resolve to an exact requirement criterion")
+        || message.contains(" unknown")
+        || message.contains("unknown ")
+        || message.contains("does not resolve")
+    {
+        "unknown-origin"
+    } else if message.contains("not implemented") || message.contains("planned") {
+        "planned-origin"
+    } else if message.contains("not an implementation binding") {
+        "non-implementation-binding"
+    } else if message.contains("canonically sorted") || message.contains("must be exact") {
+        "unsupported-origin-shape"
+    } else if message.contains("ambiguous") {
+        "ambiguous-criterion"
+    } else if message.contains("absent") {
+        "target-lifecycle"
+    } else if message.contains("no active") || message.contains("no exact") {
+        if message.contains("verification") {
+            "missing-verification-coverage"
+        } else {
+            "missing-satisfies"
+        }
+    } else if message.contains("satisfies") || message.contains("criterion") {
+        "missing-satisfies"
+    } else if message.contains("verification") {
+        "missing-verification-coverage"
+    } else if message.contains("contract") {
+        "missing-contract-closure"
+    } else {
+        "unknown-origin"
+    }
+    .into()
+}
+
+fn origin_error_status(error: &anyhow::Error) -> StatusCode {
+    match origin_error_code(error).as_str() {
+        "unknown-origin" => StatusCode::NOT_FOUND,
+        "unsupported-origin-shape" => StatusCode::BAD_REQUEST,
+        _ => StatusCode::UNPROCESSABLE_ENTITY,
     }
 }
 
@@ -5924,6 +7783,7 @@ fn bindings_for(
                         path: target.path.to_string_lossy().into_owned(),
                         selector: target.selector.clone(),
                         adapter: target.adapter.clone(),
+                        lifecycle: target.lifecycle,
                         claims: target.claims.clone(),
                     })
                     .collect(),
@@ -6275,6 +8135,29 @@ mod tests {
         .expect("projection mutation basis")
     }
 
+    fn execution_from_projection(projection: &serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "plan_digest": projection["work"]["plan"]["digest"],
+            "slice_id": projection["work"]["selected_slice"],
+        })
+    }
+
+    fn json_files_recursive(root: &Path) -> Vec<PathBuf> {
+        let mut files = Vec::new();
+        let Ok(entries) = fs::read_dir(root) else {
+            return files;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                files.extend(json_files_recursive(&path));
+            } else if path.extension().and_then(|value| value.to_str()) == Some("json") {
+                files.push(path);
+            }
+        }
+        files
+    }
+
     async fn json_mutation<T: Serialize>(
         app: &Router,
         method: Method,
@@ -6406,11 +8289,11 @@ mod tests {
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-FIXTURE-POST-STATE".into(),
-            summary: "modify the fixture behavior".into(),
+            title: "modify the fixture behavior".into(),
             operation: syu_work_model::WorkOperation::Modify,
-            seeds: vec![syu_work_model::WorkSeed::Anchor(
-                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-            )],
+            origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            },
             constraints: Default::default(),
             requested_targets: vec![],
         };
@@ -6441,12 +8324,28 @@ mod tests {
             &csrf,
             &SliceCommand {
                 basis: basis.clone(),
-                slice_id: slice.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let response = json_mutation(&app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/validate",
+            &csrf,
+            &ValidateCommand {
+                basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
+            },
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
         let validation: ValidationRunView =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
@@ -6455,7 +8354,20 @@ mod tests {
             matches!(validation.state, ValidationRunState::Passed),
             "{validation:?}"
         );
-        let response = json_mutation(&app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/approve",
+            &csrf,
+            &ApproveCommand {
+                basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
+            },
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         let source = temp.path().join("src/lib.rs");
@@ -6480,7 +8392,10 @@ mod tests {
             &csrf,
             &SliceCommand {
                 basis: basis.clone(),
-                slice_id: slice,
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
@@ -6501,7 +8416,14 @@ mod tests {
             Method::POST,
             "/api/work/result",
             &csrf,
-            &ResultCommand { basis, receipt },
+            &ResultCommand {
+                basis,
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: receipt.slice_id.clone(),
+                },
+                receipt,
+            },
         )
         .await;
         let status = response.status();
@@ -6541,11 +8463,11 @@ mod tests {
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-FIXTURE-AGENT".into(),
-            summary: "scoped agent fixture change".into(),
+            title: "scoped agent fixture change".into(),
             operation: syu_work_model::WorkOperation::Modify,
-            seeds: vec![syu_work_model::WorkSeed::Anchor(
-                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-            )],
+            origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            },
             constraints: Default::default(),
             requested_targets: vec![],
         };
@@ -6572,14 +8494,43 @@ mod tests {
             &csrf,
             &SliceCommand {
                 basis: basis.clone(),
-                slice_id: slice.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let response = json_mutation(&app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/validate",
+            &csrf,
+            &ValidateCommand {
+                basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
+            },
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let response = json_mutation(&app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/approve",
+            &csrf,
+            &ApproveCommand {
+                basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
+            },
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
         let response = json_mutation(
             &app,
@@ -6588,7 +8539,10 @@ mod tests {
             &csrf,
             &AgentStartCommand {
                 basis: basis.clone(),
-                slice_id: slice,
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
@@ -6614,6 +8568,10 @@ mod tests {
                 &csrf,
                 &AgentPatchCommand {
                     basis: basis.clone(),
+                    execution: ExecutionIdentity {
+                        plan_digest: run.plan_digest.clone(),
+                        slice_id: run.slice_id.clone(),
+                    },
                     run_id: run.run_id.clone(),
                     patch: AgentPatch {
                         schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -6644,6 +8602,10 @@ mod tests {
             &csrf,
             &AgentPatchCommand {
                 basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: run.slice_id.clone(),
+                },
                 run_id: run.run_id.clone(),
                 patch: AgentPatch {
                     schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -6666,6 +8628,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert!(fs::read_to_string(&source).unwrap().contains("false"));
         let before_rejected = fs::read_to_string(&source).unwrap();
+        let (fresh_basis, _, _) = projection_and_basis(&app).await;
         let unrelated = BoundTargetRef {
             binding: target.reference.binding.clone(),
             target_id: syu_spec_model::LocalId("unrelated".into()),
@@ -6676,7 +8639,11 @@ mod tests {
             "/api/work/agent/patch",
             &csrf,
             &AgentPatchCommand {
-                basis,
+                basis: fresh_basis,
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: run.slice_id.clone(),
+                },
                 run_id: run.run_id.clone(),
                 patch: AgentPatch {
                     schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -6696,7 +8663,14 @@ mod tests {
             },
         )
         .await;
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::CONFLICT,
+            "{}",
+            String::from_utf8_lossy(&response_body)
+        );
         assert_eq!(fs::read_to_string(source).unwrap(), before_rejected);
 
         let (basis, _, _) = projection_and_basis(&app).await;
@@ -6707,6 +8681,10 @@ mod tests {
             &csrf,
             &AgentBlockerCommand {
                 basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: run.slice_id.clone(),
+                },
                 run_id: run.run_id.clone(),
                 blocker: AgentBlocker {
                     code: "SYU-AGENT-TEST".into(),
@@ -6724,6 +8702,10 @@ mod tests {
             &csrf,
             &AgentScopeExpansionCommand {
                 basis,
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: run.slice_id.clone(),
+                },
                 run_id: run.run_id,
                 reason: "the test needs a second target".into(),
                 requested_targets: vec![target.reference.clone()],
@@ -6775,11 +8757,11 @@ mod tests {
             session.draft_request = Some(WorkRequest {
                 schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
                 id: "WORK-FIXTURE-NEXT".into(),
-                summary: "a subsequent work request".into(),
+                title: "a subsequent work request".into(),
                 operation: syu_work_model::WorkOperation::Modify,
-                seeds: vec![syu_work_model::WorkSeed::Anchor(
-                    "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-                )],
+                origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                    criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                },
                 constraints: Default::default(),
                 requested_targets: vec![],
             });
@@ -6850,9 +8832,13 @@ mod tests {
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: format!("WORK-FIXTURE-LIFECYCLE-{target_id}"),
-            summary: format!("apply {transition:?} to {target_id}"),
+            title: format!("apply {transition:?} to {target_id}"),
             operation,
-            seeds: vec![],
+            origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                criterion: format!("REQ-FIXTURE-001#criterion.{criterion}")
+                    .parse()
+                    .unwrap(),
+            },
             constraints,
             requested_targets: vec![syu_work_model::RequestedTarget {
                 reference: target.clone(),
@@ -6908,14 +8894,43 @@ mod tests {
             &csrf,
             &SliceCommand {
                 basis: basis.clone(),
-                slice_id: slice.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let response = json_mutation(app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/validate",
+            &csrf,
+            &ValidateCommand {
+                basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
+            },
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let response = json_mutation(app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/approve",
+            &csrf,
+            &ApproveCommand {
+                basis: basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
+            },
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
         let response = json_mutation(
             app,
@@ -6924,7 +8939,10 @@ mod tests {
             &csrf,
             &AgentStartCommand {
                 basis: basis.clone(),
-                slice_id: slice.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
@@ -6957,8 +8975,12 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": anchor,
-                "summary": summary,
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": {
+                    "kind": "requirement-criterion",
+                    "criterion": anchor,
+                },
+                "title": summary,
             }),
         )
         .await;
@@ -6974,6 +8996,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "pre-v1 cutover: planned origins are rejected before Work creation"]
     async fn planned_remove_target_flows_from_suggestion_to_finalization() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7071,6 +9094,10 @@ mod tests {
             &csrf,
             &AgentPatchCommand {
                 basis,
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: run.slice_id.clone(),
+                },
                 run_id: run.run_id.clone(),
                 patch: AgentPatch {
                     schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -7098,7 +9125,10 @@ mod tests {
             &post_csrf,
             &SliceCommand {
                 basis: post_basis.clone(),
-                slice_id: slice.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
@@ -7117,6 +9147,10 @@ mod tests {
             &post_csrf,
             &FinalizeCommand {
                 basis: post_basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: attempt.plan_digest.clone(),
+                    slice_id: attempt.slice_id.clone(),
+                },
                 attempt_id: attempt.attempt_id.clone(),
                 preview_token: None,
             },
@@ -7134,6 +9168,10 @@ mod tests {
             &post_csrf,
             &FinalizeCommand {
                 basis: post_basis,
+                execution: ExecutionIdentity {
+                    plan_digest: attempt.plan_digest.clone(),
+                    slice_id: attempt.slice_id.clone(),
+                },
                 attempt_id: attempt.attempt_id,
                 preview_token: Some(preview.preview_token),
             },
@@ -7143,6 +9181,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "pre-v1 cutover: planned origins are rejected before Work creation"]
     async fn planned_verification_add_runs_its_exact_runner_before_finalization() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7274,6 +9313,10 @@ mod tests {
             &csrf,
             &AgentPatchCommand {
                 basis,
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: run.slice_id.clone(),
+                },
                 run_id: run.run_id.clone(),
                 patch: AgentPatch {
                     schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -7305,7 +9348,10 @@ mod tests {
             &post_csrf,
             &SliceCommand {
                 basis: post_basis.clone(),
-                slice_id: slice.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: run.plan_digest.clone(),
+                    slice_id: slice.clone(),
+                },
             },
         )
         .await;
@@ -7329,6 +9375,10 @@ mod tests {
             &post_csrf,
             &FinalizeCommand {
                 basis: post_basis.clone(),
+                execution: ExecutionIdentity {
+                    plan_digest: attempt.plan_digest.clone(),
+                    slice_id: attempt.slice_id.clone(),
+                },
                 attempt_id: attempt.attempt_id.clone(),
                 preview_token: None,
             },
@@ -7346,6 +9396,10 @@ mod tests {
             &post_csrf,
             &FinalizeCommand {
                 basis: post_basis,
+                execution: ExecutionIdentity {
+                    plan_digest: attempt.plan_digest.clone(),
+                    slice_id: attempt.slice_id.clone(),
+                },
                 attempt_id: attempt.attempt_id,
                 preview_token: Some(preview.preview_token),
             },
@@ -7442,6 +9496,10 @@ mod tests {
                 &csrf,
                 &AgentPatchCommand {
                     basis,
+                    execution: ExecutionIdentity {
+                        plan_digest: run.plan_digest.clone(),
+                        slice_id: run.slice_id.clone(),
+                    },
                     run_id: run.run_id.clone(),
                     patch: AgentPatch {
                         schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -7481,7 +9539,10 @@ mod tests {
                 &post_csrf,
                 &SliceCommand {
                     basis: post_basis.clone(),
-                    slice_id: slice.clone(),
+                    execution: ExecutionIdentity {
+                        plan_digest: run.plan_digest.clone(),
+                        slice_id: slice.clone(),
+                    },
                 },
             )
             .await;
@@ -7506,6 +9567,10 @@ mod tests {
                 &post_csrf,
                 &FinalizeCommand {
                     basis: post_basis.clone(),
+                    execution: ExecutionIdentity {
+                        plan_digest: attempt.plan_digest.clone(),
+                        slice_id: attempt.slice_id.clone(),
+                    },
                     attempt_id: attempt.attempt_id.clone(),
                     preview_token: None,
                 },
@@ -7523,6 +9588,10 @@ mod tests {
                 &post_csrf,
                 &FinalizeCommand {
                     basis: post_basis,
+                    execution: ExecutionIdentity {
+                        plan_digest: attempt.plan_digest.clone(),
+                        slice_id: attempt.slice_id.clone(),
+                    },
                     attempt_id: attempt.attempt_id,
                     preview_token: Some(preview.preview_token),
                 },
@@ -7654,13 +9723,9 @@ mod tests {
                 // are the durable closure, not this top-level JSON alone.
                 let store = DeliveryStore::for_workspace(temp.path()).expect("evidence store");
                 let finalization_path =
-                    fs::read_dir(store.root().join("completion/v1/finalizations"))
-                        .expect("finalization directory")
-                        .flatten()
-                        .map(|entry| entry.path())
-                        .find(|path| {
-                            path.extension().and_then(|value| value.to_str()) == Some("json")
-                        })
+                    json_files_recursive(&store.root().join("completion/v1/finalizations"))
+                        .into_iter()
+                        .next()
                         .expect("finalization evidence");
                 let mut forged: serde_json::Value = serde_json::from_slice(
                     &fs::read(&finalization_path).expect("read finalization evidence"),
@@ -7717,11 +9782,16 @@ mod tests {
                     )
                     .await
                     .unwrap();
-                assert_eq!(readiness.status(), StatusCode::OK, "{description}");
-                let readiness: ReadinessView = serde_json::from_slice(
-                    &readiness.into_body().collect().await.unwrap().to_bytes(),
-                )
-                .expect("restored-target readiness");
+                let readiness_status = readiness.status();
+                let readiness_body = readiness.into_body().collect().await.unwrap().to_bytes();
+                assert_eq!(
+                    readiness_status,
+                    StatusCode::OK,
+                    "{description}: {}",
+                    String::from_utf8_lossy(&readiness_body)
+                );
+                let readiness: ReadinessView =
+                    serde_json::from_slice(&readiness_body).expect("restored-target readiness");
                 let restored_subject = readiness
                     .axes
                     .get("seedability")
@@ -7829,6 +9899,10 @@ mod tests {
                 &csrf,
                 &AgentPatchCommand {
                     basis,
+                    execution: ExecutionIdentity {
+                        plan_digest: run.plan_digest.clone(),
+                        slice_id: run.slice_id.clone(),
+                    },
                     run_id: run.run_id.clone(),
                     patch: AgentPatch {
                         schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
@@ -7881,6 +9955,19 @@ mod tests {
         let service = server.service.clone();
         let app = server.router();
 
+        let (_, _, projection) = projection_and_basis(&app).await;
+        let feature = projection["specifications"]["specifications"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["id"] == "FEAT-FIXTURE-001"))
+            .expect("fixture feature projection");
+        let feature_capabilities = feature["origin_capabilities"]
+            .as_array()
+            .expect("feature origin capabilities");
+        assert!(feature_capabilities.iter().any(|capability| {
+            capability["label"] == "Feature implementation"
+                && capability["enabled"] == true
+                && capability["origin"]["kind"] == "feature-implementation-binding"
+        }));
         let response = app
             .clone()
             .oneshot(
@@ -8049,16 +10136,69 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-FIXTURE-001#binding.verification",
-                "summary": "Do not accept a non-criterion anchor"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-FIXTURE-001#binding.verification" },
+                "title": "Do not accept a non-criterion anchor"
             }),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert!(
             service.session.read().unwrap().draft_request.is_none(),
             "an unapproved or non-criterion discovery result cannot create scope"
         );
+    }
+
+    #[tokio::test]
+    async fn feature_origin_capability_creates_work_with_exact_binding() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, projection) = projection_and_basis(&app).await;
+        let feature = projection["specifications"]["specifications"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["id"] == "FEAT-FIXTURE-001"))
+            .expect("fixture feature projection");
+        let origin = feature["origin_capabilities"]
+            .as_array()
+            .and_then(|capabilities| {
+                capabilities.iter().find_map(|capability| {
+                    (capability["label"] == "Feature implementation"
+                        && capability["enabled"] == true)
+                        .then(|| capability["origin"].clone())
+                })
+            })
+            .expect("enabled Feature binding origin");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": origin,
+                "title": "Focus the fixture implementation"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let created: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("Feature-origin Work projection");
+        assert_eq!(
+            created["work"]["request"]["origin"]["kind"],
+            "feature-implementation-binding"
+        );
+        assert_eq!(created["work"]["request"]["requested_target_count"], 1);
     }
 
     #[tokio::test]
@@ -8166,7 +10306,14 @@ mod tests {
             &update,
         )
         .await;
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::CONFLICT,
+            "{}",
+            String::from_utf8_lossy(&response_body)
+        );
         let response = json_mutation(
             &app,
             Method::PUT,
@@ -8729,12 +10876,13 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.behavior",
-                "summary": "Do not create mixed transition work"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-FIXTURE-001#criterion.behavior" },
+                "title": "Do not create mixed transition work"
             }),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert!(
             service
                 .session
@@ -8753,12 +10901,13 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.behavior",
-                "summary": "Do not create mixed transition work"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-FIXTURE-001#criterion.behavior" },
+                "title": "Do not create mixed transition work"
             }),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert!(
             service
                 .session
@@ -8856,15 +11005,24 @@ mod tests {
                 &serde_json::json!({
                     "basis": basis,
                     "action": "create",
-                    "anchor": anchor,
-                    "summary": "Must not start from an inactive specification"
+                    "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                    "origin": { "kind": "requirement-criterion", "criterion": anchor },
+                    "title": "Must not start from an inactive specification"
                 }),
             )
             .await;
+            let expected_status = match (anchor, status) {
+                ("REQ-FIXTURE-001", None) => StatusCode::UNPROCESSABLE_ENTITY,
+                (_, Some(_)) => StatusCode::UNPROCESSABLE_ENTITY,
+                _ => StatusCode::NOT_FOUND,
+            };
+            let response_status = response.status();
+            let response_body = response.into_body().collect().await.unwrap().to_bytes();
             assert_eq!(
-                response.status(),
-                StatusCode::BAD_REQUEST,
-                "anchor={anchor} status={status:?}"
+                response_status,
+                expected_status,
+                "anchor={anchor} status={status:?}: {}",
+                String::from_utf8_lossy(&response_body)
             );
             let (_, _, projection) = projection_and_basis(&app).await;
             assert!(
@@ -8879,6 +11037,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "pre-v1 cutover: planned origins are rejected before Work creation"]
     async fn planned_add_target_is_advisory_until_human_approval() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -9022,8 +11181,9 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.add-symbol",
-                "summary": "reject accumulated over-budget groups"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-FIXTURE-001#criterion.add-symbol" },
+                "title": "reject accumulated over-budget groups"
             }),
         )
         .await;
@@ -9082,7 +11242,10 @@ mod tests {
             request.requested_targets[0].transition,
             syu_work_model::TargetTransition::Add
         );
-        assert!(request.seeds.is_empty());
+        assert!(matches!(
+            request.origin,
+            syu_work_model::WorkOrigin::RequirementCriterion { .. }
+        ));
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9094,6 +11257,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "pre-v1 cutover: planned origins are rejected before Work creation"]
     async fn planned_requirement_with_approved_add_target_can_create_ready_plan() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -9222,8 +11386,9 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-PLANNED-001#criterion.behavior",
-                "summary": "reject accumulated over-budget groups"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-PLANNED-001#criterion.behavior" },
+                "title": "reject accumulated over-budget groups"
             }),
         )
         .await;
@@ -9272,8 +11437,9 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-PLANNED-001#criterion.behavior",
-                "summary": "add the approved planned target"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-PLANNED-001#criterion.behavior" },
+                "title": "add the approved planned target"
             }),
         )
         .await;
@@ -9285,7 +11451,10 @@ mod tests {
                 .expect("workbench session lock")
                 .draft_request
                 .as_ref()
-                .is_some_and(|request| request.seeds.is_empty())
+                .is_some_and(|request| matches!(
+                    request.origin,
+                    syu_work_model::WorkOrigin::RequirementCriterion { .. }
+                ))
         );
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
@@ -9335,15 +11504,22 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.behavior",
-                "summary": "Make the finished change understandable"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-FIXTURE-001#criterion.behavior" },
+                "title": "Make the finished change understandable"
             }),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        let status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "create body: {}",
+            String::from_utf8_lossy(&body)
+        );
         let projection: serde_json::Value =
-            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
-                .expect("journey projection");
+            serde_json::from_slice(&body).expect("journey projection");
         assert_eq!(
             projection["journey"]["title"],
             "Make the finished change understandable"
@@ -9370,7 +11546,7 @@ mod tests {
                 .draft_request
                 .as_ref()
                 .and_then(|request| request.constraints.max_slices),
-            Some(1)
+            None
         );
         assert!(
             projection["journey"]["advanced"]["request_id"]
@@ -9405,7 +11581,7 @@ mod tests {
             "Explain the finished change"
         );
         assert_eq!(
-            projection["work"]["request"]["summary"], "Make the finished change understandable",
+            projection["work"]["request"]["title"], "Make the finished change understandable",
             "renaming the display title must not invalidate the canonical request or plan"
         );
         assert_eq!(projection["journey"]["primary_action"]["action"], "prepare");
@@ -9444,7 +11620,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": basis, "action": "approve" }),
+            &serde_json::json!({
+                "basis": basis,
+                "action": "approve",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9467,7 +11647,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": basis, "action": "start" }),
+            &serde_json::json!({
+                "basis": basis,
+                "action": "start",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9490,7 +11674,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": basis, "action": "verify" }),
+            &serde_json::json!({
+                "basis": basis,
+                "action": "verify",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9519,7 +11707,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": basis, "action": "retry" }),
+            &serde_json::json!({
+                "basis": basis,
+                "action": "retry",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9558,12 +11750,11 @@ mod tests {
             session.draft_request = Some(WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: "WORK-MULTIPLE-CRITERIA".into(),
-                summary: "Change several fixture criteria".into(),
+                title: "Change several fixture criteria".into(),
                 operation: WorkOperation::Modify,
-                seeds: vec![
-                    WorkSeed::Anchor("REQ-FIXTURE-001#criterion.behavior".parse().unwrap()),
-                    WorkSeed::Anchor("REQ-FIXTURE-001#criterion.other".parse().unwrap()),
-                ],
+                origin: WorkOrigin::RequirementCriterion {
+                    criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                },
                 constraints: WorkConstraints::default(),
                 requested_targets: vec![],
             });
@@ -9581,7 +11772,7 @@ mod tests {
         let projection: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("multiple criteria projection");
-        assert!(projection["journey"]["related_specification"].is_null());
+        assert!(!projection["journey"]["related_specification"].is_null());
     }
 
     #[tokio::test]
@@ -9598,11 +11789,11 @@ mod tests {
         let request = WorkRequest {
             schema: WORK_REQUEST_SCHEMA.into(),
             id: "WORK-BLOCKED-JOURNEY".into(),
-            summary: "keep the fixture behavior valid".into(),
+            title: "keep the fixture behavior valid".into(),
             operation: WorkOperation::Modify,
-            seeds: vec![WorkSeed::Anchor(
-                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-            )],
+            origin: WorkOrigin::RequirementCriterion {
+                criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            },
             constraints: WorkConstraints {
                 max_slices: Some(0),
                 ..WorkConstraints::default()
@@ -9627,7 +11818,10 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("blocked journey projection");
         assert_eq!(projection["journey"]["evidence"]["status"], "blocked");
-        assert_eq!(projection["journey"]["primary_action"]["action"], "restart");
+        assert_eq!(
+            projection["journey"]["primary_action"]["action"],
+            "choose_specification"
+        );
         let response = json_mutation(
             &app,
             Method::POST,
@@ -9635,11 +11829,12 @@ mod tests {
             &csrf,
             &serde_json::json!({
                 "basis": basis_from_projection(&projection),
-                "action": "approve"
+                "action": "approve",
+                "execution": execution_from_projection(&projection),
             }),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
@@ -9664,8 +11859,9 @@ mod tests {
             &serde_json::json!({
                 "basis": basis,
                 "action": "create",
-                "anchor": "REQ-FIXTURE-001#criterion.behavior",
-                "summary": "Make the fixture behavior pass"
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": { "kind": "requirement-criterion", "criterion": "REQ-FIXTURE-001#criterion.behavior" },
+                "title": "Make the fixture behavior pass"
             }),
         )
         .await;
@@ -9692,7 +11888,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "approve" }),
+            &serde_json::json!({
+                "basis": basis_from_projection(&projection),
+                "action": "approve",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9705,7 +11905,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "start" }),
+            &serde_json::json!({
+                "basis": basis_from_projection(&projection),
+                "action": "start",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9724,7 +11928,11 @@ mod tests {
             Method::POST,
             "/api/work/action",
             &csrf,
-            &serde_json::json!({ "basis": stale_basis, "action": "verify" }),
+            &serde_json::json!({
+                "basis": stale_basis,
+                "action": "verify",
+                "execution": execution_from_projection(&projection),
+            }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -9743,7 +11951,10 @@ mod tests {
             &csrf,
             &serde_json::json!({
                 "basis": basis_from_projection(&projection),
-                "action": "finalize"
+                "action": "finalize",
+                "execution": execution_from_projection(&projection),
+                "attempt_id": projection["journey"]["advanced"]["attempt_id"],
+                "preview_token": null,
             }),
         )
         .await;
@@ -9846,11 +12057,11 @@ mod tests {
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-WORKBENCH-SESSION".into(),
-            summary: "plan a Workbench session".into(),
+            title: "plan a Workbench session".into(),
             operation: syu_work_model::WorkOperation::Modify,
-            seeds: vec![syu_work_model::WorkSeed::Anchor(
-                "REQ-WORKBENCH-002#criterion.work-session".parse().unwrap(),
-            )],
+            origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                criterion: "REQ-WORKBENCH-002#criterion.work-session".parse().unwrap(),
+            },
             constraints: Default::default(),
             requested_targets: vec![],
         };

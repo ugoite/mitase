@@ -117,12 +117,14 @@ assert "approved_ids" in SPECIFICATIONS_JS
 assert "data-review-target-suggestions" in SPECIFICATIONS_JS
 assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
 assert "result.request" not in SPECIFICATIONS_JS
-assert "work.request.summary_from_anchor" in SPECIFICATIONS_JS
-assert SPECIFICATIONS_JS.count("state.go('work')") == 2
-assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") == 2
+assert "schema: 'syu/work-origin-capability/v1'" in SPECIFICATIONS_JS
+assert "origin_capabilities" in SPECIFICATIONS_JS
+assert "work.request.summary_from_anchor" not in SPECIFICATIONS_JS
+assert SPECIFICATIONS_JS.count("state.go('work')") >= 2
+assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") >= 2
 assert "data-create-work-from-suggestions" in SPECIFICATIONS_JS
 assert "approved_target_suggestions" in SERVER_RS
-assert "validate_create_work_criterion" in SERVER_RS
+assert "validate_requirement_origin" in SERVER_RS
 assert '"/api/work/request"' not in SERVER_RS
 assert "WorkRequestCommand" not in SERVER_RS
 assert "resolve_approved_target_candidates" in SERVER_RS

@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::format_sha256;
@@ -18,13 +18,17 @@ pub const FINALIZATION_RECEIPT_SCHEMA: &str = "syu/finalization-receipt/v1";
 pub const AGENT_RUN_SCHEMA: &str = "syu/agent-run/v1";
 pub const AGENT_PATCH_SCHEMA: &str = "syu/agent-patch/v1";
 pub const AGENT_EVENT_SCHEMA: &str = "syu/agent-event/v1";
+pub const WORK_ORIGIN_CAPABILITY_SCHEMA: &str = "syu/work-origin-capability/v1";
+pub const WORK_SELECT_SLICE_SCHEMA: &str = "syu/work-select-slice/v1";
+pub const WORK_SELECT_SLICE_RESPONSE_SCHEMA: &str = "syu/work-select-slice-response/v1";
+pub const WORK_ERROR_SCHEMA: &str = "syu/work-error/v1";
+pub const WORK_SPLIT_RECOVERY_SCHEMA: &str = "syu/work-split-recovery/v1";
+pub const WORK_EXECUTION_IDENTITY_DIGEST_DOMAIN: &str = "syu/work-execution-identity-digest/v1\0";
+pub const VERIFICATION_RECEIPT_DIGEST_DOMAIN: &str = "syu/verification-receipt-digest/v1\0";
+pub const FINALIZATION_RECEIPT_DIGEST_DOMAIN: &str = "syu/finalization-receipt-digest/v1\0";
 
 fn is_stable_target_lifecycle(value: &TargetLifecycle) -> bool {
     matches!(value, TargetLifecycle::Stable)
-}
-
-fn is_empty_vec<T>(value: &[T]) -> bool {
-    value.is_empty()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,13 +41,57 @@ pub enum WorkOperation {
     Document,
     Investigate,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum WorkSeed {
-    Anchor(SpecAnchor),
-    Item(SpecItemRef),
-    ArtifactIdentity { artifact_identity: String },
-    ChangedUnit { changed_unit: String },
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum WorkOrigin {
+    RequirementCriterion {
+        criterion: SpecAnchor,
+    },
+    FeatureImplementationBinding {
+        binding: SpecAnchor,
+        criterion: SpecAnchor,
+        targets: Vec<BoundTargetRef>,
+    },
+    FeatureImplementationTarget {
+        target: BoundTargetRef,
+        binding: SpecAnchor,
+        criterion: SpecAnchor,
+    },
+}
+
+impl WorkOrigin {
+    pub fn criterion(&self) -> &SpecAnchor {
+        match self {
+            Self::RequirementCriterion { criterion }
+            | Self::FeatureImplementationBinding { criterion, .. }
+            | Self::FeatureImplementationTarget { criterion, .. } => criterion,
+        }
+    }
+
+    pub fn targets(&self) -> &[BoundTargetRef] {
+        match self {
+            Self::RequirementCriterion { .. } => &[],
+            Self::FeatureImplementationBinding { targets, .. } => targets,
+            Self::FeatureImplementationTarget { target, .. } => std::slice::from_ref(target),
+        }
+    }
+}
+
+/// The only authority that identifies an executable Work boundary. Locator
+/// ids such as run and attempt ids are deliberately not part of this value.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionIdentity {
+    pub plan_digest: String,
+    pub slice_id: String,
+}
+
+pub fn execution_identity_digest(identity: &ExecutionIdentity) -> String {
+    let bytes = canonical_json_bytes(serde_json::to_value(identity).expect("serialize identity"));
+    let mut hash = Sha256::new();
+    hash.update(WORK_EXECUTION_IDENTITY_DIGEST_DOMAIN.as_bytes());
+    hash.update(bytes);
+    format_sha256(hash.finalize())
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -64,23 +112,83 @@ pub struct WorkConstraints {
 pub struct WorkRequest {
     pub schema: String,
     pub id: String,
-    pub summary: String,
+    pub title: String,
     pub operation: WorkOperation,
-    pub seeds: Vec<WorkSeed>,
-    #[serde(default)]
+    pub origin: WorkOrigin,
     pub constraints: WorkConstraints,
-    #[serde(default)]
     pub requested_targets: Vec<RequestedTarget>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone)]
 pub struct RequestedTarget {
-    #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub criterion: Option<SpecAnchor>,
     pub transition: TargetTransition,
+}
+
+impl PartialEq for RequestedTarget {
+    fn eq(&self, other: &Self) -> bool {
+        self.reference == other.reference && self.transition == other.transition
+    }
+}
+
+impl Eq for RequestedTarget {}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RequestedTargetWire {
+    reference: BoundTargetRef,
+    transition: TargetTransition,
+    access: TargetAccessMode,
+    lifecycle: TargetLifecycle,
+}
+
+impl Serialize for RequestedTarget {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let (access, lifecycle) = requested_target_modes(self.transition);
+        RequestedTargetWireRef {
+            reference: &self.reference,
+            transition: self.transition,
+            access,
+            lifecycle,
+        }
+        .serialize(serializer)
+    }
+}
+
+#[derive(Serialize)]
+struct RequestedTargetWireRef<'a> {
+    reference: &'a BoundTargetRef,
+    transition: TargetTransition,
+    access: TargetAccessMode,
+    lifecycle: TargetLifecycle,
+}
+
+impl<'de> Deserialize<'de> for RequestedTarget {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let wire = RequestedTargetWire::deserialize(deserializer)?;
+        let (expected_access, expected_lifecycle) = requested_target_modes(wire.transition);
+        if wire.access != expected_access || wire.lifecycle != expected_lifecycle {
+            return Err(de::Error::custom(
+                "requested target access/lifecycle do not match its transition",
+            ));
+        }
+        Ok(Self {
+            reference: wire.reference,
+            criterion: None,
+            transition: wire.transition,
+        })
+    }
+}
+
+fn requested_target_modes(transition: TargetTransition) -> (TargetAccessMode, TargetLifecycle) {
+    match transition {
+        TargetTransition::Add => (TargetAccessMode::Editable, TargetLifecycle::EnsurePresent),
+        TargetTransition::Modify => (TargetAccessMode::Editable, TargetLifecycle::Stable),
+        TargetTransition::Remove => (TargetAccessMode::Editable, TargetLifecycle::EnsureAbsent),
+        TargetTransition::RunOnly => (TargetAccessMode::RunOnly, TargetLifecycle::Stable),
+        TargetTransition::Readonly => (TargetAccessMode::Readonly, TargetLifecycle::Stable),
+    }
 }
 
 impl RequestedTarget {
@@ -283,6 +391,15 @@ pub struct ExecutionSlice {
     pub confidence: PlanConfidence,
     pub blockers: Vec<Diagnostic>,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OriginClosure {
+    pub implementation_targets: Vec<BoundTargetRef>,
+    pub verification_targets: Vec<BoundTargetRef>,
+    pub readonly_targets: Vec<BoundTargetRef>,
+    pub contracts: Vec<SpecAnchor>,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkPlan {
@@ -292,6 +409,8 @@ pub struct WorkPlan {
     #[serde(default)]
     pub execution: PlanExecution,
     pub request: WorkRequest,
+    pub origin_closure: OriginClosure,
+    pub origin_closure_digest: String,
     pub canonical_digest: String,
     pub status: PlanStatus,
     pub slices: Vec<ExecutionSlice>,
@@ -417,8 +536,8 @@ pub struct ContextInstructions {
 #[serde(deny_unknown_fields)]
 pub struct ContextPack {
     pub schema: String,
-    pub plan: String,
-    pub slice: String,
+    pub plan_digest: String,
+    pub slice_id: String,
     pub basis: PlanBasis,
     pub instructions: ContextInstructions,
     pub spec_context: Vec<SpecContextEntry>,
@@ -636,7 +755,6 @@ pub struct VerificationReceipt {
     pub completed_at: String,
     pub executions: Vec<VerificationExecution>,
     /// Exact lifecycle proof for every editable target in the completed slice.
-    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub lifecycle_proofs: Vec<TargetLifecycleProof>,
 }
 
@@ -644,9 +762,8 @@ pub struct VerificationReceipt {
 #[serde(deny_unknown_fields)]
 pub struct VerificationExecution {
     pub target: BoundTargetRef,
-    /// Legacy v2 receipts omit this field. New v3 receipts require it during
-    /// validation so their evidence is always criterion-specific.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// v3 receipts carry the criterion-specific claim explicitly. `null` is
+    /// retained for a verification execution that is not claim-bound.
     pub claim: Option<VerificationClaimRef>,
     pub runner: String,
     pub command: Vec<String>,
@@ -764,6 +881,7 @@ pub struct PlanApproval {
     pub schema: String,
     pub approval_id: String,
     pub plan_digest: String,
+    pub slice_id: String,
     pub workspace_fingerprint: String,
     pub revision: String,
     pub reviewed_at: String,
@@ -808,6 +926,7 @@ pub struct FinalizationPreview {
 pub struct FinalizationReceipt {
     pub schema: String,
     pub finalization_id: String,
+    pub finalization_digest: String,
     pub attempt_id: String,
     pub attempt_digest: String,
     pub plan_digest: String,
@@ -818,7 +937,6 @@ pub struct FinalizationReceipt {
     pub changed_files: Vec<String>,
     /// The validated target lifecycle evidence preserved from the completion
     /// receipt that authorized this finalization.
-    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub lifecycle_proofs: Vec<TargetLifecycleProof>,
     pub completed_at: String,
 }
@@ -891,10 +1009,210 @@ fn readonly_targets_fingerprint_excluding_paths(
 }
 
 pub fn work_plan_digest(plan: &WorkPlan) -> String {
-    let mut copy = plan.clone();
-    copy.canonical_digest.clear();
-    let bytes = serde_json::to_vec(&copy).expect("serialize work plan digest");
+    let value = serde_json::json!({
+        "request": {
+            "schema": plan.request.schema,
+            "operation": plan.request.operation,
+            "origin": plan.request.origin,
+            "constraints": plan.request.constraints,
+            "requested_targets": plan.request.requested_targets.iter().map(requested_target_digest_value).collect::<Vec<_>>(),
+        },
+        "basis": plan.basis,
+        "execution": plan.execution,
+        "origin_closure": plan.origin_closure,
+        "origin_closure_digest": plan.origin_closure_digest,
+        "slices": plan.slices.iter().map(execution_slice_digest_value).collect::<Vec<_>>(),
+        "diagnostics": plan.diagnostics,
+    });
+    let bytes = canonical_json_bytes(value);
     let mut hash = Sha256::new();
+    hash.update(b"syu/work-plan-digest/v1\0");
     hash.update(bytes);
     format_sha256(hash.finalize())
+}
+
+fn requested_target_digest_value(target: &RequestedTarget) -> serde_json::Value {
+    let access = match target.transition {
+        TargetTransition::RunOnly => TargetAccessMode::RunOnly,
+        TargetTransition::Readonly => TargetAccessMode::Readonly,
+        TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove => {
+            TargetAccessMode::Editable
+        }
+    };
+    let lifecycle = match target.transition {
+        TargetTransition::Add => TargetLifecycle::EnsurePresent,
+        TargetTransition::Remove => TargetLifecycle::EnsureAbsent,
+        TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
+            TargetLifecycle::Stable
+        }
+    };
+    serde_json::json!({
+        "reference": target.reference,
+        "transition": target.transition,
+        "access": access,
+        "lifecycle": lifecycle,
+    })
+}
+
+fn planned_target_digest_value(target: &PlannedTarget) -> serde_json::Value {
+    serde_json::json!({
+        "reference": target.reference,
+        "verification_claim": target.verification_claim,
+        "artifact_identity": target.artifact_identity,
+        "transition": target.transition,
+        "lifecycle": target.lifecycle,
+        "access": target.access,
+        "resolved_path": target.resolved_path,
+        "resolved_selector": target.resolved_selector,
+        "content_hash": target.content_hash,
+        "excerpt_hash": target.excerpt_hash,
+        "container_content_hash": target.container_content_hash,
+        "adapter": target.adapter,
+        "facet": target.facet,
+        "role": target.role,
+        "byte_start": target.byte_start,
+        "byte_end": target.byte_end,
+        "line_start": target.line_start,
+        "line_end": target.line_end,
+        "budget_bytes": target.budget_bytes,
+        "budget_lines": target.budget_lines,
+        "reason": target.reason,
+    })
+}
+
+fn execution_slice_digest_value(slice: &ExecutionSlice) -> serde_json::Value {
+    serde_json::json!({
+        "id": slice.id,
+        "goal": slice.goal,
+        "anchors": slice.anchors,
+        "editable_targets": slice.editable_targets.iter().map(planned_target_digest_value).collect::<Vec<_>>(),
+        "verification_targets": slice.verification_targets.iter().map(planned_target_digest_value).collect::<Vec<_>>(),
+        "readonly_context": slice.readonly_context.iter().map(planned_target_digest_value).collect::<Vec<_>>(),
+        "acceptance": slice.acceptance,
+        "contracts": slice.contracts,
+        "non_goals": slice.non_goals,
+        "completion": slice.completion,
+        "budget": slice.budget,
+        "confidence": slice.confidence,
+        "blockers": slice.blockers,
+    })
+}
+
+pub fn canonical_json_bytes(value: serde_json::Value) -> Vec<u8> {
+    fn normalize(value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Object(object) => {
+                let mut entries = object.into_iter().collect::<Vec<_>>();
+                entries.sort_by(|left, right| left.0.cmp(&right.0));
+                serde_json::Value::Object(
+                    entries
+                        .into_iter()
+                        .map(|(key, value)| (key, normalize(value)))
+                        .collect(),
+                )
+            }
+            serde_json::Value::Array(values) => {
+                let mut values = values.into_iter().map(normalize).collect::<Vec<_>>();
+                values.sort_by(|left, right| {
+                    serde_json::to_vec(left)
+                        .expect("serialize canonical array value")
+                        .cmp(&serde_json::to_vec(right).expect("serialize canonical array value"))
+                });
+                serde_json::Value::Array(values)
+            }
+            other => other,
+        }
+    }
+    serde_json::to_vec(&normalize(value)).expect("serialize canonical JSON")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requested_target_wire_shape_is_closed_and_derived() {
+        let target = RequestedTarget {
+            reference: "FEAT-TEST-001#binding.implementation/target.handler"
+                .parse()
+                .expect("target reference"),
+            criterion: Some(
+                "REQ-TEST-001#criterion.behavior"
+                    .parse()
+                    .expect("criterion anchor"),
+            ),
+            transition: TargetTransition::Modify,
+        };
+        let value = serde_json::to_value(&target).expect("serialize requested target");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "access": "editable",
+                "lifecycle": "stable",
+                "reference": "FEAT-TEST-001#binding.implementation/target.handler",
+                "transition": "modify"
+            })
+        );
+        assert!(
+            serde_json::from_value::<RequestedTarget>(serde_json::json!({
+                "reference": "FEAT-TEST-001#binding.implementation/target.handler",
+                "transition": "modify",
+                "access": "editable",
+                "lifecycle": "stable",
+                "criterion": "REQ-TEST-001#criterion.behavior"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<RequestedTarget>(serde_json::json!({
+                "ref": "FEAT-TEST-001#binding.implementation/target.handler",
+                "transition": "modify",
+                "access": "editable",
+                "lifecycle": "stable"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<RequestedTarget>(serde_json::json!({
+                "reference": "FEAT-TEST-001#binding.implementation/target.handler",
+                "transition": "modify",
+                "access": "readonly",
+                "lifecycle": "stable"
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn work_request_rejects_the_removed_seed_boundary() {
+        let legacy = serde_json::json!({
+            "schema": WORK_REQUEST_SCHEMA,
+            "id": "WORK-LEGACY",
+            "title": "legacy",
+            "operation": "modify",
+            "origin": { "kind": "requirement-criterion", "criterion": "REQ-TEST-001#criterion.behavior" },
+            "seeds": [{ "kind": "anchor", "anchor": "REQ-TEST-001#criterion.behavior" }],
+            "constraints": {},
+            "requested_targets": []
+        });
+        assert!(serde_json::from_value::<WorkRequest>(legacy).is_err());
+    }
+
+    #[test]
+    fn canonical_digest_domains_have_literal_vectors() {
+        assert_eq!(
+            canonical_json_bytes(serde_json::json!({
+                "z": { "b": 2, "a": 1 },
+                "a": [3, 1, 2]
+            })),
+            br#"{"a":[1,2,3],"z":{"a":1,"b":2}}"#
+        );
+        assert_eq!(
+            execution_identity_digest(&ExecutionIdentity {
+                plan_digest: "sha256:plan".into(),
+                slice_id: "slice-1".into(),
+            }),
+            "sha256:1b160a8b0208ad66de7d8500e7e6f6428804f45aabf5234e663eea29d49a3419"
+        );
+    }
 }

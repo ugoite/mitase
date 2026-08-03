@@ -9,7 +9,7 @@ validation:
   preset: standard
   readiness:
     target: off
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
   changed:
     require_owned_changes: false
     require_plan: true

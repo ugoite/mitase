@@ -239,6 +239,20 @@ function renderNoMatchRecovery(root, state) {
 }
 
 function run(state, action) {
+  const work = state.projection.work || {};
+  const plan = work.plan;
+  const sliceId = work.selected_slice || state.selectedSlice;
+  if (['approve', 'start', 'retry', 'verify'].includes(action.action) && plan?.digest && sliceId) {
+    action = { ...action, execution: { plan_digest: plan.digest, slice_id: sliceId } };
+  }
+  if (action.action === 'finalize' && plan?.digest && sliceId) {
+    action = {
+      ...action,
+      execution: { plan_digest: plan.digest, slice_id: sliceId },
+      attempt_id: state.projection.journey?.advanced?.attempt_id || work.completion?.current?.attempt_id,
+      preview_token: action.preview_token ?? null,
+    };
+  }
   return state.runAction(
     () => state.api.runJourneyAction(state.projection, action),
     () => {
@@ -434,6 +448,62 @@ function renderEvidence(journey, state) {
   const blockers = evidence.blockers || [];
   const card = element('section', `journey-state journey-evidence ${toneFor(status)}${blockers.length ? ' has-blockers' : ''}`);
   card.append(stateHeader(t(`journey.evidence_label.${status}`), status));
+  if (state.projection.work?.split_recovery) {
+    const recovery = state.projection.work?.split_recovery;
+    const split = element('div', 'journey-split-recovery');
+    split.append(
+      element('h3', null, t('journey.split.title')),
+      element('p', null, `${t('journey.split.criterion')}: ${recovery?.criterion?.anchor || t('journey.advanced.none')}`),
+      element('p', null, recovery?.criterion?.statement || t('journey.split.explanation')),
+      element('p', null, recovery?.reason?.message || t('journey.split.explanation')),
+    );
+    const choices = element('div', 'journey-split-choices');
+    (recovery?.candidates || []).forEach((candidate, index) => {
+      const choice = element('button', `journey-split-choice${candidate.selectable ? '' : ' blocked'}`);
+      choice.type = 'button';
+      choice.disabled = !candidate.selectable;
+      choice.setAttribute('data-select-slice', candidate.id);
+      const editable = candidate.editable_targets || [];
+      const verification = candidate.verification_targets || [];
+      const readonly = candidate.readonly_context || [];
+      const budget = candidate.budget || {};
+      const evidenceSummary = [
+        `${editable.length} ${t('journey.targets')}`,
+        `${verification.length} ${t('journey.split.verification')}`,
+        `${readonly.length} ${t('journey.split.readonly')}`,
+      ].join(' · ');
+      const budgetSummary = [
+        `${budget.editable_files || 0} files`,
+        `${budget.editable_symbols || 0} symbols`,
+        `${budget.total_bytes || 0} bytes`,
+      ].join(' · ');
+      const anchorSummary = (candidate.anchors || []).join(', ');
+      const targetSummary = editable.map(target => target.reference).join(', ');
+      choice.setAttribute(
+        'aria-label',
+        `${candidate.goal || candidate.id}; ${evidenceSummary}; ${budgetSummary}`,
+      );
+      choice.append(
+        element('strong', null, `${index + 1}. ${candidate.goal || candidate.id}`),
+        element('span', null, evidenceSummary),
+        element('small', null, `${t('journey.split.budget')}: ${budgetSummary}`),
+      );
+      if (anchorSummary) choice.append(element('small', null, `${t('journey.split.anchors')}: ${anchorSummary}`));
+      if (targetSummary) choice.append(element('small', null, targetSummary));
+      if (candidate.blockers?.length) {
+        choice.append(element('small', null, candidate.blockers.map(blocker => blocker.message).join(' · ')));
+      }
+      choice.addEventListener('click', () => run(state, {
+        schema: 'syu/work-select-slice/v1',
+        action: 'select_slice',
+        candidate_plan_digest: recovery?.candidate_plan_digest,
+        slice_id: candidate.id,
+      }));
+      choices.append(choice);
+    });
+    split.append(choices);
+    card.append(split);
+  }
   if (blockers.length) {
     card.append(countChip(blockers.length, '!', t('journey.blockers'), () => {
       state.journeyContextTab = 'diagnostics';
@@ -564,7 +634,7 @@ function renderJourney(root, journey, state, work) {
     const requestMeta = element('div', 'meta-line work-request-meta');
     requestMeta.append(
       element('span', 'chip', `${t('work.request.operation')}: ${localizeEnum('operation', work.request.operation)}`),
-      element('span', 'chip', `${t('work.request.seed')}: ${work.request.seed_count}`),
+      element('span', 'chip', `${t('work.request.origin')}: ${work.request.origin?.kind || t('journey.advanced.none')}`),
     );
     root.append(requestMeta);
   }

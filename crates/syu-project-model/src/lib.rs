@@ -116,7 +116,7 @@ pub struct ReadinessSelectionProbe {
 pub struct ReadinessLimits {
     pub max_ownership_scope_units: usize,
     pub max_targets_per_binding: usize,
-    pub max_slices_per_seed: usize,
+    pub max_slices_per_origin: usize,
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -190,7 +190,7 @@ validation:
           level: work-ready
       public_entrypoints: { selection: all, level: seedable }
       changed_units: false
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
   changed: { require_owned_changes: true, require_plan: true }
 verification: { runners: {} }
 work:
@@ -228,7 +228,7 @@ work:
             ReadinessLimits {
                 max_ownership_scope_units: 64,
                 max_targets_per_binding: 12,
-                max_slices_per_seed: 4,
+                max_slices_per_origin: 4,
             }
         );
         assert_eq!(
@@ -238,7 +238,7 @@ work:
                 max_editable_symbols: 8,
                 max_verification_targets: 8,
                 max_readonly_targets: 12,
-                max_total_bytes: 80_000,
+                max_total_bytes: 120_000,
             }
         );
         assert!(

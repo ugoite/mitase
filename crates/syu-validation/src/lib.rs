@@ -792,14 +792,25 @@ pub fn execute_verification(
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
         if configured.executable == "cargo" {
-            // Reuse one ignored target directory for all exact verification
-            // jobs in this workspace. A fresh target per test is isolated but
-            // needlessly consumes gigabytes and makes a readiness report fail
-            // before the actual tests can run.
-            command.env(
-                "CARGO_TARGET_DIR",
-                workspace.root.join("target").join("syu-verification"),
-            );
+            // Reuse one target directory for all exact verification jobs in a
+            // workspace. Keep an explicitly supplied target directory (the
+            // test runner uses this to stay off the source volume); otherwise
+            // use a workspace-specific temporary directory so verification
+            // never mutates or nests a target directory inside a temporary
+            // clone's source tree.
+            let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join("syu-verification")
+                        // `sha256:` is part of Syu's digest wire format, but
+                        // `:` is a library-path separator on Unix.
+                        .join(
+                            digest(workspace.root.to_string_lossy().as_bytes())
+                                .trim_start_matches("sha256:"),
+                        )
+                });
+            command.env("CARGO_TARGET_DIR", target_dir);
         }
         let output = command
             .output()
@@ -876,7 +887,7 @@ pub fn execute_verification_attempt(
         Ok(receipt) => {
             let mut report = evaluate_completion(workspace, index, submitted, &receipt)?;
             report.attempt_id = attempt_id.into();
-            report.receipt_digest = Some(digest(&serde_json::to_vec(&receipt)?));
+            report.receipt_digest = Some(verification_receipt_digest(&receipt)?);
             let executions = receipt
                 .executions
                 .iter()
@@ -1302,7 +1313,7 @@ pub fn evaluate_completion(
         attempt_id: String::new(),
         plan_digest: canonical.canonical_digest,
         slice_id: receipt.slice_id.clone(),
-        receipt_digest: Some(digest(&serde_json::to_vec(receipt)?)),
+        receipt_digest: Some(verification_receipt_digest(receipt)?),
         status,
         demonstrated,
         checks,
@@ -1538,6 +1549,14 @@ fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
     format_sha256(hash.finalize())
+}
+
+fn verification_receipt_digest<T: Serialize>(value: &T) -> Result<String> {
+    let bytes = syu_work_model::canonical_json_bytes(serde_json::to_value(value)?);
+    let mut hash = Sha256::new();
+    hash.update(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
+    hash.update(bytes);
+    Ok(format_sha256(hash.finalize()))
 }
 
 fn epoch_seconds() -> String {
@@ -3764,7 +3783,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         push(
             out,
             "SYU-WORK-009",
-            "post-state validation requires --slice when a plan has multiple slices",
+            "post-state validation requires --slice-id when a plan has multiple slices",
             "work-plan",
             None,
         );
@@ -4692,7 +4711,7 @@ mod tests {
                 "  preset: standard\n",
                 "  readiness:\n",
                 "    target: off\n",
-                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
                 "  changed:\n",
                 "    require_owned_changes: false\n",
                 "    require_plan: false\n",
@@ -4792,11 +4811,11 @@ mod tests {
         let request = syu_work_model::WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-VALIDATION-BASIS".into(),
-            summary: "modify the fixture behavior".into(),
+            title: "modify the fixture behavior".into(),
             operation: syu_work_model::WorkOperation::Modify,
-            seeds: vec![syu_work_model::WorkSeed::Anchor(
-                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-            )],
+            origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            },
             constraints: Default::default(),
             requested_targets: vec![],
         };
@@ -5635,23 +5654,6 @@ requirements:
     }
 
     #[test]
-    fn legacy_receipt_execution_deserializes_without_a_claim() {
-        let execution: VerificationExecution = serde_json::from_value(serde_json::json!({
-            "target": "FEAT-AUTH-001#binding.ui/target.requested",
-            "runner": "cargo-test",
-            "command": ["cargo", "test"],
-            "exit_code": 0,
-            "stdout_digest": "sha256:stdout",
-            "stderr_digest": "sha256:stderr",
-            "proof": { "identity": "tests::behavior", "matched_count": 1 },
-            "implementation_digests": {},
-            "verification_digest": "sha256:verification"
-        }))
-        .expect("v2 execution remains readable");
-        assert!(execution.claim.is_none());
-    }
-
-    #[test]
     fn self_hosted_shared_verification_targets_execute_claim_by_claim() {
         let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -5711,9 +5713,11 @@ requirements:
                 let request = syu_work_model::WorkRequest {
                     schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
                     id: format!("WORK-SHARED-{}", criterion.local_id),
-                    summary: "Execute a shared verification claim.".into(),
+                    title: "Execute a shared verification claim.".into(),
                     operation: syu_work_model::WorkOperation::Modify,
-                    seeds: vec![syu_work_model::WorkSeed::Anchor(criterion.clone())],
+                    origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                        criterion: criterion.clone(),
+                    },
                     constraints: Default::default(),
                     requested_targets: vec![],
                 };

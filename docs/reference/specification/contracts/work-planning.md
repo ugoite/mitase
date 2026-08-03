@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
 
 - **id**: FEAT-PUBLIC-WORK-PLANNING-001
   - **title**: Work planning
-  - **summary**: Govern requested-target, plan-identity, and split-guidance entrypoints.
+  - **summary**: Govern exact Work origins, requested-target identity, canonical plan digests, and split-recovery selection entrypoints.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-043
@@ -125,7 +125,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-WORK-PLANNING-001
   title: Work planning
-  summary: Govern requested-target, plan-identity, and split-guidance entrypoints.
+  summary: Govern exact Work origins, requested-target identity, canonical plan digests, and split-recovery selection entrypoints.
   status: implemented
   bindings:
   - id: public-api-043

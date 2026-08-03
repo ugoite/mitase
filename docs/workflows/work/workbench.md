@@ -17,16 +17,21 @@ projection debugging.
 The server keeps one canonical workspace, inventory index, and static projection snapshot while repository content is unchanged. Warm reads and planning actions reuse that snapshot; tracked, staged, deleted, renamed, and untracked content changes invalidate it before the next operation. The server returns the browser shell immediately, the browser fetches the canonical projection once while showing startup progress, renders only the visible page, and shows an accessible busy state while actions are running.
 
 Work is a guided journey for people who do not need to know repository
-internals: choose a target specification, review the relevant criterion,
-approve a bounded change, follow implementation, inspect evidence, and confirm
-completion. The server supplies one next action at a time and explains why it
-is available. Scope, diagnostics, identifiers, paths, selectors, and commands
-are available only from Advanced details. Settings remains a utility page.
+internals: choose an exact Work origin, review its linked Requirement
+criterion, select one server-projected execution slice when the criterion
+expands into several independent slices, approve a bounded change, follow
+implementation, inspect evidence, and confirm completion. In this model
+“behavior” means the exact Requirement criterion; the UI never asks for a
+behavior choice without rendering the choices. The server supplies one next
+action at a time and explains why it is available. Scope, diagnostics,
+identifiers, paths, selectors, and commands are available only from Advanced
+details. Settings remains a utility page.
 
-- Work starts from Specifications. Choose a requirement criterion and use its
-  Create Work action; Work then separates advisory suggestions from the
-  approved executable boundary and offers a concrete recovery action when work
-  is blocked.
+- Work starts from Specifications. Use the server-projected Create Work
+  capability on a Requirement criterion, Feature implementation binding, or
+  exact implementation target. Work then separates advisory suggestions from
+  the approved executable boundary and exposes exact split candidates when a
+  criterion produces more than one execution slice.
 - After a criterion is selected, Work keeps its parent specification and exact
   criterion visible once in a read-only desktop split. Narrow layouts reduce
   the same context to one collapsed heading until the user opens it.
@@ -77,6 +82,9 @@ Supporting operations are backed by local server endpoints:
   its exact target, confidence, and evidence. Suggestions stay advisory until
   selected targets are approved; rejection is remembered for the reviewed
   evidence, and configured budget overflow asks the user to split the work.
+  Split recovery shows the criterion, deterministic planner reason, exact
+  target evidence, budgets, closure, and blockers; selecting a candidate
+  canonically replans one `{ plan_digest, slice_id }` execution boundary.
 - Item and Work editors show human-facing fields first. Exact anchors,
   bindings, contracts, selectors, and planning budgets remain editable under
   collapsed advanced settings and are preserved even when left collapsed.

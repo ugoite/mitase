@@ -471,8 +471,9 @@ export function renderTargetSuggestions(root, state) {
       const createWork = button(t('items.create_work'), '→', () => state.runAction(
         () => state.api.runJourneyAction(state.projection, {
           action: 'create',
-          anchor: set.criterion,
-          summary: `${t('work.request.summary_from_anchor').replace('{anchor}', set.criterion)}`,
+          schema: 'syu/work-origin-capability/v1',
+          origin: { kind: 'requirement-criterion', criterion: set.criterion },
+          title: `${t('work.request.title_from_origin').replace('{anchor}', set.criterion)}`,
         }),
         () => {
           state.targetSuggestions = null;
@@ -932,6 +933,37 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
     summary.textContent = selected.summary || selected.description;
     root.append(summary);
   }
+  if (!readOnly && selected.kind === 'feature') {
+    const capabilities = (selected.origin_capabilities || [])
+      .filter(capability => capability.label === 'Feature implementation' || capability.label === 'Implementation target');
+    const origins = document.createElement('section');
+    origins.className = 'card specification-group feature-work-origins';
+    origins.append(Object.assign(document.createElement('h3'), { textContent: t('items.create_work') }));
+    capabilities.forEach(capability => {
+      const origin = capability.origin;
+      const reference = origin?.kind === 'feature-implementation-binding'
+        ? origin.binding
+        : origin?.target;
+      const action = button(
+        `${capability.label}: ${reference || t('journey.advanced.none')}`,
+        origin?.kind === 'feature-implementation-binding' ? '→' : '↗',
+        () => state.runAction(
+          () => state.api.runJourneyAction(state.projection, {
+            schema: capability.schema,
+            action: 'create',
+            origin,
+            title: `${localizeSpecificationTitle(selected)} · ${reference || capability.label}`,
+          }),
+          () => { state.selectedSlice = null; state.go('work'); },
+        ),
+        `btn small ${capability.enabled ? '' : 'disabled'}`,
+      );
+      action.disabled = !capability.enabled;
+      if (!capability.enabled) action.title = capability.disabled_message || '';
+      origins.append(action);
+    });
+    if (origins.childElementCount > 1) root.append(origins);
+  }
   const groups = [
     ['principles', selected.principles || [], 'principle'],
     ['rules', selected.rules || [], 'rule'],
@@ -957,17 +989,25 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       text.append(anchor, statement);
       row.append(text);
       if (kind === 'criterion' && value.kind) row.append(enumChip('criterion.kind', value.kind));
-      if (!readOnly && kind === 'criterion' && selected.status === 'implemented') {
+      if (!readOnly && kind === 'criterion') {
+        const capability = (state.projection.specifications?.origin_capabilities || []).find(value =>
+          value.origin?.kind === 'requirement-criterion'
+          && value.origin.criterion === value.anchor
+        );
+        if (!capability) return;
         const createWork = button(t('items.create_work'), '→', () => state.runAction(
           () => state.api.runJourneyAction(state.projection, {
             action: 'create',
-            anchor: value.anchor,
-            summary: `${t('work.request.summary_from_anchor').replace('{anchor}', localizeSpecificationTitle(selected))}`,
+            schema: capability.schema,
+            origin: capability.origin,
+          title: `${t('work.request.title_from_origin').replace('{anchor}', localizeSpecificationTitle(selected))}`,
           }),
           () => { state.selectedSlice = null; state.go('work'); },
         ), 'btn small');
         createWork.setAttribute('data-create-work', '');
         createWork.setAttribute('data-create-work-anchor', value.anchor);
+        createWork.disabled = !capability.enabled;
+        if (!capability.enabled) createWork.title = capability.disabled_message || '';
         row.append(createWork);
       }
       if (!readOnly && kind === 'criterion') {
@@ -1131,22 +1171,24 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
     rail.replaceChildren();
     candidates.forEach(candidate => {
       const item = itemFromCandidate(candidate);
-      const buttonNode = document.createElement('button');
-      buttonNode.type = 'button';
+      const buttonNode = document.createElement('div');
       buttonNode.className = `rail-item${item.id === state?.selectedSpecification ? ' active' : ''}`;
+      const selectButton = document.createElement('button');
+      selectButton.type = 'button';
+      selectButton.className = 'rail-item-select';
       const title = document.createElement('div');
       const id = document.createElement('b');
       id.textContent = item.id;
       const name = document.createElement('p');
       name.textContent = localizeSpecificationTitle(item);
       title.append(id, name);
-      buttonNode.append(title);
+      selectButton.append(title);
       if (candidate.relevance?.length) {
         const reason = document.createElement('small');
         reason.textContent = candidate.relevance[0];
-        buttonNode.append(reason);
+        selectButton.append(reason);
       }
-      buttonNode.addEventListener('click', () => {
+      selectButton.addEventListener('click', () => {
         state.selectedSpecification = item.id;
         state.specificationEditor = null;
         state.specificationPreview = null;
@@ -1154,6 +1196,30 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
         state.targetSuggestionSelection = [];
         state.render();
       });
+      buttonNode.append(selectButton);
+      const originActions = document.createElement('div');
+      originActions.className = 'rail-item-actions';
+      (item.origin_capabilities || []).forEach(capability => {
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'btn compact';
+        action.textContent = capability.label;
+        action.disabled = !capability.enabled;
+        action.title = capability.enabled
+          ? capability.label
+          : (capability.disabled_message || capability.disabled_code || capability.label);
+        action.addEventListener('click', () => state.runAction(
+          () => state.api.runJourneyAction(state.projection, {
+            schema: capability.schema,
+            action: 'create',
+            origin: capability.origin,
+            title: `${localizeSpecificationTitle(item)} · ${capability.label}`,
+          }),
+          () => { state.selectedSlice = null; state.go('work'); },
+        ));
+        originActions.append(action);
+      });
+      if (originActions.childElementCount) buttonNode.append(originActions);
       rail.append(buttonNode);
     });
   }

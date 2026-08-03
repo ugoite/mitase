@@ -11,10 +11,9 @@ use syu_project_model::{ProjectConfig, ReadinessLevel};
 use syu_spec_model::{BoundTargetRef, ItemStatus, OwnershipSelector, SpecAnchor, format_sha256};
 use syu_work_model::{
     CompletionAttempt, CompletionStatus, FINALIZATION_RECEIPT_SCHEMA, FinalizationReceipt,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, TargetLifecycle,
-    TargetTransition, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptStatus, VerificationClaimRef,
-    VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest, WorkSeed,
-    work_plan_digest,
+    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetLifecycle, TargetTransition,
+    VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptStatus, VerificationClaimRef,
+    VerificationReceipt, work_plan_digest,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -612,7 +611,7 @@ pub fn evaluate(
                                 .collect::<Vec<_>>();
                             if contract_slices.is_empty() {
                                 blockers.push(
-                                    "canonical contract seed produced no contract closure".into(),
+                                    "canonical contract origin produced no contract closure".into(),
                                 );
                             } else {
                                 for slice in contract_slices {
@@ -646,7 +645,7 @@ pub fn evaluate(
                             blockers.push(format!("canonical contract plan is {:?}", plan.status))
                         }
                         Err(error) => {
-                            blockers.push(format!("canonical contract seed failed: {error}"))
+                            blockers.push(format!("canonical contract origin failed: {error}"))
                         }
                     }
                 }
@@ -818,25 +817,36 @@ fn canonical_contract_plan(
     contract: &SpecAnchor,
     revision: &str,
 ) -> Result<syu_work_model::WorkPlan> {
-    syu_planner::plan(
-        &WorkRequest {
-            schema: WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-contract-{}", contract.local_id),
-            summary: "canonical contract closure plan probe".into(),
-            operation: WorkOperation::Modify,
-            seeds: vec![WorkSeed::Anchor(contract.clone())],
-            constraints: syu_work_model::WorkConstraints {
-                max_slices: Some(
-                    workspace
-                        .config
-                        .validation
-                        .readiness
-                        .limits
-                        .max_slices_per_seed,
-                ),
-                ..Default::default()
-            },
-            requested_targets: vec![],
+    let criterion = index
+        .contracts
+        .get(contract)
+        .and_then(|value| value.guarantees.first())
+        .cloned()
+        .with_context(|| format!("contract {contract} has no criterion guarantee"))?;
+    let requested_targets = index
+        .contracts
+        .get(contract)
+        .map(|value| {
+            std::iter::once(value.source.clone())
+                .chain(
+                    value
+                        .participants
+                        .iter()
+                        .map(|participant| participant.target.clone()),
+                )
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    syu_planner::plan_probe(
+        &syu_planner::PlanProbe {
+            criterion,
+            requested_targets,
+            max_slices: workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_slices_per_origin,
         },
         workspace,
         index,
@@ -986,8 +996,9 @@ fn durable_attempt_digest(attempt: &CompletionAttempt) -> Option<String> {
     let mut copy = attempt.clone();
     let expected = copy.attempt_digest.clone();
     copy.attempt_digest.clear();
-    let bytes = serde_json::to_vec(&copy).ok()?;
+    let bytes = syu_work_model::canonical_json_bytes(serde_json::to_value(&copy).ok()?);
     let mut hash = Sha256::new();
+    hash.update(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
     hash.update(bytes);
     (expected == format_sha256(hash.finalize())).then_some(expected)
 }
@@ -1035,6 +1046,19 @@ fn finalized_absent_targets(
         {
             continue;
         }
+        let mut finalization_without_digest = receipt.clone();
+        let finalization_digest = finalization_without_digest.finalization_digest.clone();
+        finalization_without_digest.finalization_digest.clear();
+        let Ok(finalization_value) = serde_json::to_value(&finalization_without_digest) else {
+            continue;
+        };
+        let finalization_bytes = syu_work_model::canonical_json_bytes(finalization_value);
+        let mut finalization_hash = Sha256::new();
+        finalization_hash.update(syu_work_model::FINALIZATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
+        finalization_hash.update(finalization_bytes);
+        if finalization_digest != format_sha256(finalization_hash.finalize()) {
+            continue;
+        }
         let Some(attempt) = attempts.iter().find_map(|path| {
             let bytes = fs::read(path).ok()?;
             let attempt = serde_json::from_slice::<CompletionAttempt>(&bytes).ok()?;
@@ -1056,6 +1080,19 @@ fn finalized_absent_targets(
         let Some(verification) = attempt.receipt.as_ref() else {
             continue;
         };
+        let Ok(verification_value) = serde_json::to_value(verification) else {
+            continue;
+        };
+        let expected_receipt_digest = {
+            let bytes = syu_work_model::canonical_json_bytes(verification_value);
+            let mut hash = Sha256::new();
+            hash.update(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
+            hash.update(bytes);
+            format_sha256(hash.finalize())
+        };
+        if attempt.report.receipt_digest.as_deref() != Some(expected_receipt_digest.as_str()) {
+            continue;
+        }
         if verification.schema != VERIFICATION_RECEIPT_SCHEMA
             || verification.plan_digest != receipt.plan_digest
             || verification.slice_id != receipt.slice_id
@@ -1287,25 +1324,16 @@ fn canonical_criterion_plan(
     criterion: &SpecAnchor,
     revision: &str,
 ) -> Result<syu_work_model::WorkPlan> {
-    syu_planner::plan(
-        &WorkRequest {
-            schema: WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-{}", criterion.local_id),
-            summary: "canonical readiness plan probe".into(),
-            operation: WorkOperation::Modify,
-            seeds: vec![WorkSeed::Anchor(criterion.clone())],
-            constraints: syu_work_model::WorkConstraints {
-                max_slices: Some(
-                    workspace
-                        .config
-                        .validation
-                        .readiness
-                        .limits
-                        .max_slices_per_seed,
-                ),
-                ..Default::default()
-            },
+    syu_planner::plan_probe(
+        &syu_planner::PlanProbe {
+            criterion: criterion.clone(),
             requested_targets: vec![],
+            max_slices: workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_slices_per_origin,
         },
         workspace,
         index,
@@ -1533,29 +1561,16 @@ fn canonical_public_target_plan(
     criterion: &SpecAnchor,
     revision: &str,
 ) -> Result<syu_work_model::WorkPlan> {
-    syu_planner::plan(
-        &WorkRequest {
-            schema: WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-public-{}", target.target_id),
-            summary: "canonical public entrypoint plan probe".into(),
-            operation: WorkOperation::Modify,
-            seeds: vec![],
-            constraints: syu_work_model::WorkConstraints {
-                max_slices: Some(
-                    workspace
-                        .config
-                        .validation
-                        .readiness
-                        .limits
-                        .max_slices_per_seed,
-                ),
-                ..Default::default()
-            },
-            requested_targets: vec![RequestedTarget {
-                reference: target.clone(),
-                criterion: Some(criterion.clone()),
-                transition: TargetTransition::Modify,
-            }],
+    syu_planner::plan_probe(
+        &syu_planner::PlanProbe {
+            criterion: criterion.clone(),
+            requested_targets: vec![target.clone()],
+            max_slices: workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_slices_per_origin,
         },
         workspace,
         index,

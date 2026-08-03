@@ -27,13 +27,20 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
 
 - **id**: FEAT-WORKBENCH-GUIDED-JOURNEY-001
   - **title**: Guided non-programmer journey
-  - **summary**: Project a safe change lifecycle as one explained next action at a time.
+  - **summary**: Project a safe change lifecycle as one explained next action at a time, including exact-origin split recovery.
   - **status**: implemented
   - **bindings**:
     - **id**: journey
       - **role**: implementation
       - **facet**: workbench-journey
       - **responsibility**: Build the server-owned guided work projection and typed action boundary.
+      - **owns**:
+        - **id**: server-planned-requirement-add-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::planned_requirement_with_approved_add_target_can_create_ready_plan
       - **targets**:
         - **id**: journey-projection
           - **adapter**: rust
@@ -144,13 +151,18 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-GUIDED-JOURNEY-001
   title: Guided non-programmer journey
-  summary: Project a safe change lifecycle as one explained next action at a time.
+  summary: Project a safe change lifecycle as one explained next action at a time, including exact-origin split recovery.
   status: implemented
   bindings:
   - id: journey
     role: implementation
     facet: workbench-journey
     responsibility: Build the server-owned guided work projection and typed action boundary.
+    owns:
+    - id: server-planned-requirement-add-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::planned_requirement_with_approved_add_target_can_create_ready_plan' }
     targets:
     - id: journey-projection
       adapter: rust
