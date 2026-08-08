@@ -13,11 +13,11 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
-    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentEvent, AgentEventKind, AgentRun,
-    AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionAttempt,
-    CompletionBlocker, CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA,
-    FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval,
-    VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
+    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentContextPack, AgentEvent,
+    AgentEventKind, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
+    CompletionAttempt, CompletionBlocker, CompletionStatus, ExecutionIdentity,
+    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
+    PlanApproval, VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -27,6 +27,7 @@ pub const STORE_SCHEMA: &str = "syu/completion/v1";
 #[derive(Debug, Clone)]
 pub struct DeliveryStore {
     root: PathBuf,
+    workspace_root: PathBuf,
 }
 
 impl DeliveryStore {
@@ -46,7 +47,10 @@ impl DeliveryStore {
         } else {
             workspace_root.join(path)
         };
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            workspace_root: workspace_root.to_path_buf(),
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -123,8 +127,67 @@ impl DeliveryStore {
         Ok(false)
     }
 
-    pub fn append_attempt(&self, attempt: &CompletionAttempt) -> Result<CompletionAttempt> {
+    pub fn execute_and_append_attempt(
+        &self,
+        workspace: &SpecWorkspace,
+        plan: &syu_work_model::WorkPlan,
+        slice_id: &str,
+    ) -> Result<CompletionAttempt> {
+        self.require_workspace(workspace)?;
+        let identity = ExecutionIdentity {
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: slice_id.into(),
+        };
+        let approval = self.approval(&identity)?;
+        if approval.plan != *plan {
+            bail!("verification requires the exact approved plan");
+        }
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| slice.id == slice_id)
+            .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
+        if slice.verification_targets.is_empty() {
+            bail!("selected slice has no verification targets");
+        }
+        let index = workspace.index()?;
+        let attempt_id = self.new_id("attempt");
+        let started_at = now_nanos().to_string();
+        let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
+            workspace,
+            &index,
+            plan,
+            slice_id,
+            &repository_revision(&workspace.root)?,
+            &attempt_id,
+        )?;
+        report.attempt_id = attempt_id.clone();
+        let mut attempt = CompletionAttempt {
+            schema: COMPLETION_ATTEMPT_SCHEMA.into(),
+            attempt_id,
+            attempt_digest: String::new(),
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: slice_id.into(),
+            approved_plan_digest: approval.plan_digest,
+            started_at,
+            completed_at: now_nanos().to_string(),
+            verification,
+            receipt,
+            report,
+        };
+        let mut without_digest = attempt.clone();
+        without_digest.attempt_digest.clear();
+        attempt.attempt_digest = Self::verification_digest(&without_digest)?;
+        self.append_attempt(workspace, &attempt)
+    }
+
+    fn append_attempt(
+        &self,
+        workspace: &SpecWorkspace,
+        attempt: &CompletionAttempt,
+    ) -> Result<CompletionAttempt> {
         self.ensure()?;
+        self.require_workspace(workspace)?;
         validate_completion_attempt_schema(attempt)?;
         validate_attempt_digest(attempt)?;
         let identity = ExecutionIdentity {
@@ -142,6 +205,18 @@ impl DeliveryStore {
             || approval.plan_digest != attempt.plan_digest
         {
             bail!("completion attempt is not tied to its approved plan");
+        }
+        if let Some(receipt) = &attempt.receipt {
+            let index = workspace.index()?;
+            let revision = repository_revision(&workspace.root)?;
+            syu_validation::validate_verification_receipt(
+                workspace,
+                &index,
+                &approval.plan,
+                &attempt.slice_id,
+                receipt,
+                &revision,
+            )?;
         }
         let path = self.attempt_path(attempt);
         write_immutable_json(&path, attempt)
@@ -190,10 +265,7 @@ impl DeliveryStore {
         Ok(values)
     }
 
-    pub fn append_finalization(
-        &self,
-        receipt: &FinalizationReceipt,
-    ) -> Result<FinalizationReceipt> {
+    fn append_finalization(&self, receipt: &FinalizationReceipt) -> Result<FinalizationReceipt> {
         self.ensure()?;
         validate_finalization_schema(receipt)?;
         let mut without_digest = receipt.clone();
@@ -588,6 +660,13 @@ impl DeliveryStore {
             .join(component(&event.plan_digest))
             .join(component(&event.slice_id))
             .join(format!("{}.json", component(&event.event_id)))
+    }
+
+    fn require_workspace(&self, workspace: &SpecWorkspace) -> Result<()> {
+        if workspace.root.canonicalize()? != self.workspace_root.canonicalize()? {
+            bail!("delivery evidence must use the store's workspace");
+        }
+        Ok(())
     }
 }
 
@@ -1024,6 +1103,10 @@ fn validate_run_started_reference(
     {
         bail!("agent run does not reference its exact approval identity");
     }
+    let expected = canonical_agent_context(store, &approval, run)?;
+    if run.context != expected {
+        bail!("agent run context is not the canonical context for its approval");
+    }
     for path in json_files(&store.agent_events_dir())? {
         let candidate: AgentEvent = read_json(&path)?;
         validate_agent_event_schema(&candidate)?;
@@ -1036,6 +1119,34 @@ fn validate_run_started_reference(
         }
     }
     Ok(())
+}
+
+fn canonical_agent_context(
+    store: &DeliveryStore,
+    approval: &PlanApproval,
+    run: &AgentRun,
+) -> Result<AgentContextPack> {
+    let workspace = SpecWorkspace::load(&store.workspace_root)?;
+    let index = workspace.index()?;
+    let revision = repository_revision(&workspace.root)?;
+    if approval.revision != revision
+        || approval.workspace_fingerprint != workspace.try_fingerprint()?
+    {
+        bail!("agent run approval is stale for the current workspace");
+    }
+    let slice = approval
+        .plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == run.slice_id)
+        .ok_or_else(|| anyhow::anyhow!("agent run slice is absent from its approved plan"))?;
+    let context =
+        syu_planner::export_context(&approval.plan, &run.slice_id, &workspace, &index, &revision)?;
+    Ok(AgentContextPack::from_slice(
+        &run.plan_digest,
+        context,
+        slice,
+    ))
 }
 
 impl DeliveryStore {
@@ -1088,6 +1199,16 @@ fn validate_attempt_digest(attempt: &CompletionAttempt) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn repository_revision(root: &Path) -> Result<String> {
+    let output = Command::new("git")
+        .args(["-C", &root.to_string_lossy(), "rev-parse", "HEAD"])
+        .output()?;
+    if !output.status.success() {
+        bail!("resolve workspace revision");
+    }
+    Ok(String::from_utf8(output.stdout)?.trim().into())
 }
 
 fn write_immutable_json<T: Serialize + DeserializeOwned>(path: &Path, value: &T) -> Result<T> {
@@ -1290,9 +1411,7 @@ mod tests {
     use std::{fs, process::Command};
     use syu_work_model::{
         AgentEvent, AgentEventKind, AgentPatchRecord, AgentPatchStatus, AgentRun,
-        COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CONTEXT_PACK_SCHEMA, CompletionReport,
-        FinalizationReceipt, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
-        VerificationAttemptResult, VerificationAttemptStatus, VerificationReceipt,
+        COMPLETION_ATTEMPT_SCHEMA, CONTEXT_PACK_SCHEMA, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
         WORK_REQUEST_SCHEMA, WorkOperation, WorkOrigin, WorkRequest,
     };
 
@@ -1380,99 +1499,35 @@ mod tests {
     }
 
     fn fixture_attempt(
+        workspace: &SpecWorkspace,
         plan: &syu_work_model::WorkPlan,
-        approval: &PlanApproval,
+        _approval: &PlanApproval,
         revision: &str,
     ) -> CompletionAttempt {
-        let slice_id = plan.slices[0].id.clone();
-        let slice = &plan.slices[0];
-        let executions = slice
-            .verification_targets
-            .iter()
-            .map(|target| syu_work_model::VerificationExecution {
-                target: target.reference.clone(),
-                claim: target.verification_claim.clone(),
-                runner: "fixture".into(),
-                command: vec!["fixture".into()],
-                exit_code: 0,
-                stdout_digest: "sha256:fixture-stdout".into(),
-                stderr_digest: "sha256:fixture-stderr".into(),
-                proof: syu_work_model::ExactTestEvidence {
-                    identity: "fixture".into(),
-                    matched_count: 1,
-                },
-                implementation_digests: std::collections::BTreeMap::new(),
-                verification_digest: "sha256:fixture-verification".into(),
-            })
-            .collect::<Vec<_>>();
-        let execution_attempts = executions
-            .iter()
-            .map(|execution| syu_work_model::VerificationExecutionAttempt {
-                target: Some(execution.target.clone()),
-                claim: execution.claim.clone(),
-                runner: execution.runner.clone(),
-                command: execution.command.clone(),
-                exit_code: Some(execution.exit_code),
-                stdout_digest: Some(execution.stdout_digest.clone()),
-                stderr_digest: Some(execution.stderr_digest.clone()),
-                proof: Some(execution.proof.clone()),
-                error: None,
-            })
-            .collect::<Vec<_>>();
-        let receipt = VerificationReceipt {
-            schema: VERIFICATION_RECEIPT_SCHEMA.into(),
-            plan_digest: plan.canonical_digest.clone(),
-            slice_id: slice_id.clone(),
-            revision: revision.into(),
-            workspace_fingerprint: "sha256:stale".into(),
-            started_at: "0".into(),
-            completed_at: "1".into(),
-            executions,
-            lifecycle_proofs: slice
-                .editable_targets
-                .iter()
-                .map(|target| syu_work_model::TargetLifecycleProof {
-                    reference: target.reference.clone(),
-                    transition: target.transition,
-                    lifecycle: target.lifecycle,
-                    before_content_hash: target.content_hash.clone(),
-                    after_content_hash: "sha256:fixture-after".into(),
-                    before_excerpt_hash: target.excerpt_hash.clone(),
-                    after_excerpt_hash: "sha256:fixture-after-excerpt".into(),
-                })
-                .collect(),
-        };
-        let receipt_digest = DeliveryStore::verification_digest(&receipt).expect("receipt digest");
+        let attempt_id = "attempt-test";
+        let index = workspace.index().unwrap();
+        let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
+            workspace,
+            &index,
+            plan,
+            &plan.slices[0].id,
+            revision,
+            attempt_id,
+        )
+        .unwrap();
+        report.attempt_id = attempt_id.into();
         let mut attempt = CompletionAttempt {
             schema: COMPLETION_ATTEMPT_SCHEMA.into(),
-            attempt_id: "attempt-test".into(),
+            attempt_id: attempt_id.into(),
             attempt_digest: String::new(),
             plan_digest: plan.canonical_digest.clone(),
-            slice_id: slice_id.clone(),
-            approved_plan_digest: approval.plan_digest.clone(),
+            slice_id: plan.slices[0].id.clone(),
+            approved_plan_digest: plan.canonical_digest.clone(),
             started_at: "0".into(),
             completed_at: "1".into(),
-            verification: VerificationAttemptResult {
-                status: VerificationAttemptStatus::Complete,
-                executions: execution_attempts,
-                failure: None,
-            },
-            receipt: Some(receipt),
-            report: CompletionReport {
-                schema: COMPLETION_REPORT_SCHEMA.into(),
-                attempt_id: "attempt-test".into(),
-                plan_digest: plan.canonical_digest.clone(),
-                slice_id,
-                receipt_digest: Some(receipt_digest),
-                status: CompletionStatus::Blocked,
-                demonstrated: vec![],
-                checks: vec![],
-                blockers: vec![CompletionBlocker {
-                    code: "SYU-FIXTURE-STALE".into(),
-                    message: "fixture intentionally carries a stale workspace fingerprint".into(),
-                    next_action: "rerun verification".into(),
-                }],
-            },
+            verification,
+            receipt,
+            report,
         };
         attempt.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&attempt)).unwrap();
@@ -1558,29 +1613,41 @@ mod tests {
         tampered_approval.plan.request.constraints.max_slices = Some(2);
         assert!(store.approve(&tampered_approval).is_err());
 
-        let attempt = fixture_attempt(&plan, &approval, &revision);
+        let attempt = fixture_attempt(&workspace, &plan, &approval, &revision);
         let mut invalid_attempt = attempt.clone();
         invalid_attempt.schema = "syu/legacy-attempt/v0".into();
-        assert!(store.append_attempt(&invalid_attempt).is_err());
+        assert!(store.append_attempt(&workspace, &invalid_attempt).is_err());
         let mut invalid_report_identity = attempt.clone();
         invalid_report_identity.report.plan_digest = "sha256:other-plan".into();
         invalid_report_identity.attempt_digest = String::new();
         invalid_report_identity.attempt_digest =
             DeliveryStore::verification_digest(&invalid_report_identity).unwrap();
-        assert!(store.append_attempt(&invalid_report_identity).is_err());
+        assert!(
+            store
+                .append_attempt(&workspace, &invalid_report_identity)
+                .is_err()
+        );
         let mut invalid_attempt_identity = attempt.clone();
         invalid_attempt_identity.approved_plan_digest = "sha256:other-plan".into();
         invalid_attempt_identity.attempt_digest = DeliveryStore::verification_digest(
             &attempt_with_empty_digest(&invalid_attempt_identity),
         )
         .unwrap();
-        assert!(store.append_attempt(&invalid_attempt_identity).is_err());
+        assert!(
+            store
+                .append_attempt(&workspace, &invalid_attempt_identity)
+                .is_err()
+        );
         let mut invalid_report_attempt = attempt.clone();
         invalid_report_attempt.report.attempt_id = "attempt-other".into();
         invalid_report_attempt.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid_report_attempt))
                 .unwrap();
-        assert!(store.append_attempt(&invalid_report_attempt).is_err());
+        assert!(
+            store
+                .append_attempt(&workspace, &invalid_report_attempt)
+                .is_err()
+        );
 
         let mut invalid_execution_set = attempt.clone();
         invalid_execution_set
@@ -1597,7 +1664,11 @@ mod tests {
         invalid_execution_set.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid_execution_set))
                 .unwrap();
-        assert!(store.append_attempt(&invalid_execution_set).is_err());
+        assert!(
+            store
+                .append_attempt(&workspace, &invalid_execution_set)
+                .is_err()
+        );
 
         let identity = ExecutionIdentity {
             plan_digest: plan.canonical_digest.clone(),
@@ -1730,7 +1801,9 @@ mod tests {
         };
         assert!(store.append_agent_event(&invalid_start).is_err());
 
-        let valid_run: AgentRun = serde_json::from_value(run_json(&approval.approval_id)).unwrap();
+        let mut valid_run: AgentRun =
+            serde_json::from_value(run_json(&approval.approval_id)).unwrap();
+        valid_run.context = canonical_agent_context(&store, &approval, &valid_run).unwrap();
         let valid_start = AgentEvent {
             schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
             event_id: "event-valid-run-start".into(),
@@ -1760,9 +1833,9 @@ mod tests {
         let approval = store
             .approve(&fixture_approval(&workspace, &plan, &revision))
             .unwrap();
-        let attempt = fixture_attempt(&plan, &approval, &revision);
+        let attempt = fixture_attempt(&workspace, &plan, &approval, &revision);
 
-        assert_eq!(store.append_attempt(&attempt).unwrap(), attempt);
+        assert_eq!(store.append_attempt(&workspace, &attempt).unwrap(), attempt);
         assert_eq!(
             store
                 .attempt(
@@ -1776,15 +1849,15 @@ mod tests {
             attempt
         );
         assert_eq!(store.attempts().unwrap(), vec![attempt.clone()]);
-        assert!(store.append_attempt(&attempt).is_err());
+        assert!(store.append_attempt(&workspace, &attempt).is_err());
 
         let mut tampered = attempt;
         tampered.completed_at = "later".into();
-        assert!(store.append_attempt(&tampered).is_err());
+        assert!(store.append_attempt(&workspace, &tampered).is_err());
     }
 
     #[test]
-    fn finalization_preview_requires_complete_attempt() {
+    fn finalization_preview_requires_current_complete_attempt() {
         let temp = tempfile::tempdir().unwrap();
         copy_dir(&workbench_fixture_root(), temp.path());
         let revision = init_git_repo(temp.path());
@@ -1794,8 +1867,8 @@ mod tests {
         let approval = store
             .approve(&fixture_approval(&workspace, &plan, &revision))
             .unwrap();
-        let attempt = fixture_attempt(&plan, &approval, &revision);
-        let attempt = store.append_attempt(&attempt).unwrap();
+        let attempt = fixture_attempt(&workspace, &plan, &approval, &revision);
+        let attempt = store.append_attempt(&workspace, &attempt).unwrap();
 
         let preview = store.finalization_preview(&workspace, &attempt).unwrap();
         assert_eq!(preview.status, CompletionStatus::Blocked);
@@ -1803,7 +1876,7 @@ mod tests {
             preview
                 .blockers
                 .iter()
-                .any(|blocker| blocker.code == "SYU-FINALIZE-STALE-EVIDENCE")
+                .all(|blocker| blocker.code != "SYU-FINALIZE-STALE-EVIDENCE")
         );
 
         let mut incomplete = attempt.clone();
@@ -1822,7 +1895,7 @@ mod tests {
         incomplete.report.status = CompletionStatus::Blocked;
         incomplete.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&incomplete)).unwrap();
-        let incomplete = store.append_attempt(&incomplete).unwrap();
+        let incomplete = store.append_attempt(&workspace, &incomplete).unwrap();
         let preview = store.finalization_preview(&workspace, &incomplete).unwrap();
         assert_eq!(preview.status, CompletionStatus::Blocked);
         assert!(
@@ -1844,7 +1917,7 @@ mod tests {
         let approval = store
             .approve(&fixture_approval(&workspace, &plan, &revision))
             .unwrap();
-        let mut complete = fixture_attempt(&plan, &approval, &revision);
+        let mut complete = fixture_attempt(&workspace, &plan, &approval, &revision);
         let slice = &plan.slices[0];
         let executed_claims = complete
             .receipt
@@ -1886,7 +1959,7 @@ mod tests {
             .collect();
         complete.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&complete)).unwrap();
-        assert!(store.append_attempt(&complete).is_ok());
+        assert!(store.append_attempt(&workspace, &complete).is_ok());
 
         let mut invalid = complete.clone();
         invalid.attempt_id = "attempt-invalid-report".into();
@@ -1894,7 +1967,7 @@ mod tests {
         invalid.report.demonstrated.clear();
         invalid.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid)).unwrap();
-        assert!(store.append_attempt(&invalid).is_err());
+        assert!(store.append_attempt(&workspace, &invalid).is_err());
     }
 
     fn attempt_with_empty_digest(attempt: &CompletionAttempt) -> CompletionAttempt {

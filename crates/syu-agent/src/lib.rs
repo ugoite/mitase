@@ -15,13 +15,12 @@ use syu_validation::canonical_plan_for_execution;
 use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
     AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun,
-    AgentRunStatus, AgentTargetChange, AgentTargetDigest, AgentTargetWrite, ContextPack,
-    ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetAccessMode,
-    TargetLifecycle, TargetTransition,
+    AgentRunStatus, AgentTargetChange, AgentTargetWrite, ExecutionIdentity, PLAN_APPROVAL_SCHEMA,
+    PlanApproval, PlanStatus, TargetAccessMode, TargetLifecycle, TargetTransition,
 };
 use syu_workspace::SpecWorkspace;
 
-pub const AGENT_CONTEXT_SCHEMA: &str = "syu/agent-context/v1";
+pub const AGENT_CONTEXT_SCHEMA: &str = syu_work_model::AGENT_CONTEXT_SCHEMA;
 
 pub fn start_run(
     workspace: &SpecWorkspace,
@@ -64,7 +63,7 @@ pub fn start_run(
         bail!("agent only supports editable Add, Modify, and Remove targets");
     }
     let context = syu_planner::export_context(&plan, slice_id, workspace, &index, &revision)?;
-    let agent_context = agent_context(&plan.canonical_digest, slice_id, &context, slice)?;
+    let agent_context = AgentContextPack::from_slice(&plan.canonical_digest, context, slice);
     let store = DeliveryStore::for_workspace(&workspace.root)?;
     let run = AgentRun {
         schema: AGENT_RUN_SCHEMA.into(),
@@ -852,43 +851,6 @@ fn lifecycle_proof(
         }),
         (_, None) => bail!("target {} is absent after the patch", planned.reference),
     }
-}
-
-fn agent_context(
-    plan_digest: &str,
-    slice_id: &str,
-    context: &ContextPack,
-    slice: &syu_work_model::ExecutionSlice,
-) -> Result<AgentContextPack> {
-    let targets = |targets: &[syu_work_model::PlannedTarget]| {
-        targets
-            .iter()
-            .map(|target| AgentTargetDigest {
-                reference: target.reference.clone(),
-                path: target.resolved_path.clone(),
-                access: target.access,
-                transition: target.transition,
-                lifecycle: target.lifecycle,
-                content_hash: target.content_hash.clone(),
-                excerpt_hash: target.excerpt_hash.clone(),
-                container_content_hash: target.container_content_hash.clone(),
-                line_start: target.line_start,
-                line_end: target.line_end,
-                budget_bytes: target.budget_bytes,
-                budget_lines: target.budget_lines,
-            })
-            .collect()
-    };
-    Ok(AgentContextPack {
-        schema: AGENT_CONTEXT_SCHEMA.into(),
-        plan_digest: plan_digest.into(),
-        slice_id: slice_id.into(),
-        context: context.clone(),
-        budget: slice.budget.clone(),
-        editable_targets: targets(&slice.editable_targets),
-        verification_targets: targets(&slice.verification_targets),
-        readonly_targets: targets(&slice.readonly_context),
-    })
 }
 
 #[derive(Debug)]

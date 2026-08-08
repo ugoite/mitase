@@ -34,11 +34,11 @@ use syu_spec_model::{
 };
 use syu_validation::{ChangeStatus, PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
-    AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA,
-    CompletionAttempt, CompletionStatus, ExecutionIdentity, FinalizationPreview,
-    FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget,
-    TargetAccessMode, TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints,
-    WorkOperation, WorkOrigin, WorkPlan, WorkRequest,
+    AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, CompletionAttempt,
+    CompletionStatus, ExecutionIdentity, FinalizationPreview, FinalizationReceipt,
+    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, TargetAccessMode,
+    TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints, WorkOperation,
+    WorkOrigin, WorkPlan, WorkRequest,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -4545,36 +4545,11 @@ async fn api_agent_verify(
                 anyhow::anyhow!("agent verification requires an approved plan: {error}"),
             )
         })?;
-    let attempt_id = store.new_id("attempt");
-    let started_at = timestamp();
-    let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
+    let attempt = store.execute_and_append_attempt(
         &snapshot.workspace,
-        &snapshot.index,
         &approval.plan,
         &command.execution.slice_id,
-        &snapshot.revision,
-        &attempt_id,
     )?;
-    report.attempt_id = attempt_id.clone();
-    let mut attempt = CompletionAttempt {
-        schema: COMPLETION_ATTEMPT_SCHEMA.into(),
-        attempt_id,
-        attempt_digest: String::new(),
-        plan_digest: approval.plan_digest.clone(),
-        slice_id: command.execution.slice_id,
-        approved_plan_digest: approval.plan_digest,
-        started_at,
-        completed_at: timestamp(),
-        verification,
-        receipt,
-        report,
-    };
-    attempt.attempt_digest = DeliveryStore::verification_digest(&{
-        let mut copy = attempt.clone();
-        copy.attempt_digest.clear();
-        copy
-    })?;
-    let attempt = store.append_attempt(&attempt)?;
     syu_agent::record_verification(&snapshot.workspace, &run, &attempt.attempt_id)?;
     let mut session = service
         .session
@@ -4682,36 +4657,8 @@ async fn api_verify(
             anyhow::anyhow!("verification requires a validated selected slice"),
         ));
     }
-    let attempt_id = store.new_id("attempt");
-    let started_at = timestamp();
-    let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
-        &snapshot.workspace,
-        &snapshot.index,
-        plan,
-        &command.execution.slice_id,
-        &snapshot.revision,
-        &attempt_id,
-    )?;
-    report.attempt_id = attempt_id.clone();
-    let mut attempt = CompletionAttempt {
-        schema: COMPLETION_ATTEMPT_SCHEMA.into(),
-        attempt_id,
-        attempt_digest: String::new(),
-        plan_digest: plan.canonical_digest.clone(),
-        slice_id: command.execution.slice_id,
-        approved_plan_digest: approval.plan_digest,
-        started_at,
-        completed_at: timestamp(),
-        verification,
-        receipt,
-        report,
-    };
-    attempt.attempt_digest = DeliveryStore::verification_digest(&{
-        let mut copy = attempt.clone();
-        copy.attempt_digest.clear();
-        copy
-    })?;
-    let attempt = store.append_attempt(&attempt)?;
+    let attempt =
+        store.execute_and_append_attempt(&snapshot.workspace, plan, &command.execution.slice_id)?;
     session.verification_receipt = attempt.receipt.clone();
     Ok(Json(attempt))
 }

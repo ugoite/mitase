@@ -18,8 +18,8 @@ use syu_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
 use syu_work_model::{
-    CompletionAttempt, CompletionStatus, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval,
-    PlanStatus, VerificationAttemptStatus, WorkPlan, WorkRequest,
+    CompletionStatus, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
+    VerificationAttemptStatus, WorkPlan, WorkRequest,
 };
 use syu_workbench_server::project as project_workbench;
 use syu_workspace::SpecWorkspace;
@@ -244,18 +244,6 @@ enum WorkCommand {
         workspace: PathBuf,
         #[arg(long)]
         out: Option<PathBuf>,
-    },
-    Verify {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        out: PathBuf,
     },
 }
 #[derive(Debug, Subcommand)]
@@ -584,7 +572,6 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             format,
         } => {
             let workspace = SpecWorkspace::load(&root)?;
-            let index = workspace.index()?;
             let plan: WorkPlan = read_yaml(&plan_path)?;
             let store = DeliveryStore::for_workspace(&workspace.root)?;
             if plan.canonical_digest != plan_digest {
@@ -609,32 +596,7 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             if slice_value.verification_targets.is_empty() {
                 bail!("selected slice has no verification targets");
             }
-            let attempt_id = store.new_id("attempt");
-            let started_at = now_timestamp();
-            let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
-                &workspace,
-                &index,
-                &plan,
-                &slice_id,
-                &revision(&workspace.root)?,
-                &attempt_id,
-            )?;
-            report.attempt_id = attempt_id.clone();
-            let mut attempt = CompletionAttempt {
-                schema: syu_work_model::COMPLETION_ATTEMPT_SCHEMA.into(),
-                attempt_id,
-                attempt_digest: String::new(),
-                plan_digest: plan.canonical_digest.clone(),
-                slice_id,
-                approved_plan_digest: approval.plan_digest,
-                started_at,
-                completed_at: now_timestamp(),
-                verification,
-                receipt,
-                report,
-            };
-            attempt.attempt_digest = attempt_digest(&attempt)?;
-            let attempt = store.append_attempt(&attempt)?;
+            let attempt = store.execute_and_append_attempt(&workspace, &plan, &slice_id)?;
             emit_task_value(&attempt, format, "completion attempt")?;
             Ok(
                 if matches!(
@@ -752,12 +714,6 @@ fn emit_task_value<T: serde::Serialize>(value: &T, format: Format, label: &str) 
     Ok(())
 }
 
-fn attempt_digest(attempt: &CompletionAttempt) -> Result<String> {
-    let mut copy = attempt.clone();
-    copy.attempt_digest.clear();
-    DeliveryStore::verification_digest(&copy)
-}
-
 fn now_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -825,40 +781,6 @@ fn run_work(args: WorkArgs) -> Result<i32> {
                 print!("{yaml}");
             }
             Ok(0)
-        }
-        WorkCommand::Verify {
-            plan: plan_path,
-            plan_digest,
-            slice_id,
-            workspace,
-            out,
-        } => {
-            let workspace = SpecWorkspace::load(workspace)?;
-            let index = workspace.index()?;
-            let plan: WorkPlan = read_yaml(&plan_path)?;
-            if plan.canonical_digest != plan_digest {
-                bail!("submitted plan does not match --plan-digest");
-            }
-            let receipt = syu_validation::execute_verification(
-                &workspace,
-                &index,
-                &plan,
-                &slice_id,
-                &revision(&workspace.root)?,
-            )?;
-            write_yaml(&out, &receipt)?;
-            println!("wrote {}", out.display());
-            Ok(
-                if receipt
-                    .executions
-                    .iter()
-                    .all(|execution| execution.exit_code == 0)
-                {
-                    0
-                } else {
-                    1
-                },
-            )
         }
     }
 }

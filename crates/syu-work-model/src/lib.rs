@@ -18,6 +18,7 @@ pub const FINALIZATION_RECEIPT_SCHEMA: &str = "syu/finalization-receipt/v1";
 pub const AGENT_RUN_SCHEMA: &str = "syu/agent-run/v1";
 pub const AGENT_PATCH_SCHEMA: &str = "syu/agent-patch/v1";
 pub const AGENT_EVENT_SCHEMA: &str = "syu/agent-event/v1";
+pub const AGENT_CONTEXT_SCHEMA: &str = "syu/agent-context/v1";
 pub const WORK_ORIGIN_CAPABILITY_SCHEMA: &str = "syu/work-origin-capability/v1";
 pub const WORK_SELECT_SLICE_SCHEMA: &str = "syu/work-select-slice/v1";
 pub const WORK_SELECT_SLICE_RESPONSE_SCHEMA: &str = "syu/work-select-slice-response/v1";
@@ -572,6 +573,40 @@ pub struct AgentContextPack {
     pub editable_targets: Vec<AgentTargetDigest>,
     pub verification_targets: Vec<AgentTargetDigest>,
     pub readonly_targets: Vec<AgentTargetDigest>,
+}
+
+impl AgentContextPack {
+    pub fn from_slice(plan_digest: &str, context: ContextPack, slice: &ExecutionSlice) -> Self {
+        let targets = |targets: &[PlannedTarget]| {
+            targets
+                .iter()
+                .map(|target| AgentTargetDigest {
+                    reference: target.reference.clone(),
+                    path: target.resolved_path.clone(),
+                    access: target.access,
+                    transition: target.transition,
+                    lifecycle: target.lifecycle,
+                    content_hash: target.content_hash.clone(),
+                    excerpt_hash: target.excerpt_hash.clone(),
+                    container_content_hash: target.container_content_hash.clone(),
+                    line_start: target.line_start,
+                    line_end: target.line_end,
+                    budget_bytes: target.budget_bytes,
+                    budget_lines: target.budget_lines,
+                })
+                .collect()
+        };
+        Self {
+            schema: AGENT_CONTEXT_SCHEMA.into(),
+            plan_digest: plan_digest.into(),
+            slice_id: slice.id.clone(),
+            context,
+            budget: slice.budget.clone(),
+            editable_targets: targets(&slice.editable_targets),
+            verification_targets: targets(&slice.verification_targets),
+            readonly_targets: targets(&slice.readonly_context),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
