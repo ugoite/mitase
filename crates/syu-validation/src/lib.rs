@@ -1559,8 +1559,10 @@ fn ensure_exact_test_executed(
             continue;
         }
         let event_name = event.get("name").and_then(serde_json::Value::as_str);
-        let exact_identity = event_name == Some(test_identity.as_str())
-            || event_name.is_some_and(|value| value.ends_with(&format!("::{test_identity}")));
+        // `--exact` makes the runner's filter authoritative; the structured
+        // event must then carry that exact identity. A suffix match could
+        // accept the same test name from a different harness or module.
+        let exact_identity = event_name == Some(test_identity.as_str());
         if !exact_identity {
             continue;
         }
@@ -1587,23 +1589,33 @@ fn ensure_exact_test_executed(
 /// line that looks like a harness result. Force libtest's structured stream
 /// and keep the injected arguments in the receipt's canonical command.
 pub fn canonical_runner_arguments(executable: &str, mut arguments: Vec<String>) -> Vec<String> {
-    if executable == "cargo"
-        && arguments.iter().any(|argument| argument == "test")
-        && !arguments.iter().any(|argument| argument == "--format")
-    {
+    if executable == "cargo" && arguments.iter().any(|argument| argument == "test") {
         if let Some(index) = arguments.iter().position(|argument| argument == "--") {
-            arguments.splice(
-                index + 1..index + 1,
-                [
-                    "-Z".into(),
-                    "unstable-options".into(),
-                    "--format".into(),
-                    "json".into(),
-                ],
-            );
+            let harness_start = index + 1;
+            if !arguments[harness_start..]
+                .iter()
+                .any(|argument| argument == "--exact")
+            {
+                arguments.insert(harness_start, "--exact".into());
+            }
+            if !arguments[harness_start..]
+                .iter()
+                .any(|argument| argument == "--format")
+            {
+                arguments.splice(
+                    harness_start..harness_start,
+                    [
+                        "-Z".into(),
+                        "unstable-options".into(),
+                        "--format".into(),
+                        "json".into(),
+                    ],
+                );
+            }
         } else {
             arguments.extend([
                 "--".into(),
+                "--exact".into(),
                 "-Z".into(),
                 "unstable-options".into(),
                 "--format".into(),
@@ -1746,6 +1758,20 @@ fn validate_config(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 "active inventory profile {} is not defined",
                 ctx.config.inventory.active_profile
             ),
+            "syu.yaml",
+            None,
+        );
+    }
+    if let Some(probe) = &ctx.config.validation.readiness.probes.public_entrypoints
+        && matches!(
+            probe.level,
+            ReadinessLevel::Traceable | ReadinessLevel::Verifiable | ReadinessLevel::ClosedLoop
+        )
+    {
+        push(
+            out,
+            "SYU-SCHEMA-003",
+            "public entrypoint readiness probes support only off, seedable, or work-ready in v1",
             "syu.yaml",
             None,
         );
@@ -5776,6 +5802,14 @@ requirements:
             "cargo",
             &target,
             &arguments,
+            br#"{"type":"test","name":"other::tests::exact_test_execution_requires_match","event":"ok"}
+"#,
+        )
+        .is_err());
+        assert!(ensure_exact_test_executed(
+            "cargo",
+            &target,
+            &arguments,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ignored"}
 "#,
         )
@@ -5790,6 +5824,16 @@ requirements:
         )
         .is_err());
         assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());
+        let command = canonical_runner_arguments(
+            "cargo",
+            vec!["test".into(), "--package".into(), "sample".into()],
+        );
+        assert!(command.windows(2).any(|window| window == ["--", "--exact"]));
+        assert!(
+            command
+                .windows(2)
+                .any(|window| window == ["--format", "json"])
+        );
     }
 
     #[test]

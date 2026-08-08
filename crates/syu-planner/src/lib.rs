@@ -445,6 +445,14 @@ fn requirement_add_target_is_in_origin_binding(
     let Some(declared) = index.target(target) else {
         return false;
     };
+    // `absent` is a removal declaration. It is never an authority for an
+    // Add request, even when the target is otherwise linked to the criterion.
+    if matches!(
+        declared.lifecycle,
+        syu_spec_model::ArtifactTargetLifecycle::Absent
+    ) {
+        return false;
+    }
     let has_exact_binding = match binding.role {
         BindingRole::Implementation => {
             let target_claims_criterion = declared.claims.iter().any(|claim| {
@@ -3121,6 +3129,18 @@ fn one_target(
         blockers.push(diagnostic);
         return vec![];
     }
+    if options.policy.transition == TargetTransition::Add
+        && matches!(target.lifecycle, ArtifactTargetLifecycle::Absent)
+    {
+        let mut diagnostic = Diagnostic::error(
+            "SYU-TARGET-002",
+            format!("target {reference} is declared absent and cannot be planned as an Add"),
+            target.path.to_string_lossy(),
+        );
+        diagnostic.target = Some(reference.clone());
+        blockers.push(diagnostic);
+        return vec![];
+    }
     let has_active_artifact = index.target_to_artifact.contains_key(reference)
         || (target.lifecycle == ArtifactTargetLifecycle::Absent
             && (index.all_target_to_artifact.contains_key(reference)
@@ -5177,6 +5197,63 @@ mod tests {
                     && target.lifecycle == TargetLifecycle::EnsurePresent
                     && target.reference.target_id.to_string() == "handler-missing"
             })
+        }));
+    }
+
+    #[test]
+    fn explicit_add_rejects_a_target_declared_absent() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .expect("feature spec")
+            .replace(
+                "            selector: { kind: symbol, name: handler_missing }\n            claims: []",
+                concat!(
+                    "            selector: { kind: symbol, name: handler_missing }\n",
+                    "            lifecycle: absent\n",
+                    "            claims:\n",
+                    "              - kind: satisfies\n",
+                    "                criterion: REQ-TEST-001#criterion.test",
+                ),
+            );
+        fs::write(feature_path, feature).expect("absent add target");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-ABSENT-ADD".into(),
+            title: "reject absent declaration as add".into(),
+            operation: WorkOperation::Add,
+            origin: WorkOrigin::RequirementCriterion {
+                criterion: "REQ-TEST-001#criterion.test".parse().unwrap(),
+            },
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(256),
+                max_added_lines_per_target: Some(8),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Add,
+            }],
+        };
+
+        let plan = plan(&request, &workspace, &index, "rev-absent-add").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(plan.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-WORK-001"
+                && diagnostic
+                    .message
+                    .contains("outside the exact editable origin closure")
         }));
     }
 

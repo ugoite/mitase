@@ -1092,10 +1092,35 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Patch
         }
         applied.push(file_rollback);
     }
-    Ok(PatchRollback {
+    let rollback = PatchRollback {
         files: applied,
         created_dirs,
-    })
+    };
+    if let Err(error) = sync_mutation_directories(&rollback) {
+        return Err(rollback_error(error, rollback));
+    }
+    Ok(rollback)
+}
+
+fn sync_mutation_directories(rollback: &PatchRollback) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let mut directories = std::collections::BTreeSet::new();
+        directories.extend(
+            rollback
+                .files
+                .iter()
+                .filter_map(|file| file.path.parent().map(Path::to_path_buf)),
+        );
+        directories.extend(rollback.created_dirs.iter().cloned());
+        for directory in directories {
+            fs::File::open(&directory)
+                .with_context(|| format!("open mutation directory {}", directory.display()))?
+                .sync_all()
+                .with_context(|| format!("sync mutation directory {}", directory.display()))?;
+        }
+    }
+    Ok(())
 }
 
 fn cleanup_preparation_error(error: anyhow::Error, created_dirs: &[PathBuf]) -> anyhow::Error {
