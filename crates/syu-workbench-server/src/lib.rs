@@ -7670,46 +7670,38 @@ fn origin_capabilities(
                 let Ok(binding_anchor) = binding.anchor.parse::<SpecAnchor>() else {
                     continue;
                 };
-                let targets = binding
+                let mut target_criteria = binding
                     .targets
                     .iter()
                     .filter_map(|target| {
                         let reference = target.reference.parse::<BoundTargetRef>().ok()?;
-                        index
-                            .target(&reference)
-                            .filter(|artifact| {
-                                !matches!(
-                                    artifact.lifecycle,
-                                    syu_spec_model::ArtifactTargetLifecycle::Absent
-                                )
+                        let artifact = index.target(&reference)?;
+                        if matches!(
+                            artifact.lifecycle,
+                            syu_spec_model::ArtifactTargetLifecycle::Absent
+                        ) {
+                            return None;
+                        }
+                        let criteria = artifact
+                            .claims
+                            .iter()
+                            .filter_map(|claim| match claim {
+                                TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
+                                _ => None,
                             })
-                            .map(|_| reference)
+                            .collect::<BTreeSet<_>>();
+                        Some((reference, criteria))
                     })
                     .collect::<Vec<_>>();
-                let mut targets = targets;
-                targets.sort();
-                targets.dedup();
-                let criteria = binding
-                    .targets
+                target_criteria.sort_by(|(left, _), (right, _)| left.cmp(right));
+                target_criteria.dedup_by(|(left, _), (right, _)| left == right);
+                let targets = target_criteria
                     .iter()
-                    .filter(|target| {
-                        target
-                            .reference
-                            .parse::<BoundTargetRef>()
-                            .ok()
-                            .and_then(|reference| index.target(&reference))
-                            .is_some_and(|artifact| {
-                                !matches!(
-                                    artifact.lifecycle,
-                                    syu_spec_model::ArtifactTargetLifecycle::Absent
-                                )
-                            })
-                    })
-                    .flat_map(|target| target.claims.iter())
-                    .filter_map(|claim| match claim {
-                        TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
-                        _ => None,
-                    })
+                    .map(|(reference, _)| reference.clone())
+                    .collect::<Vec<_>>();
+                let criteria = target_criteria
+                    .iter()
+                    .flat_map(|(_, criteria)| criteria.iter().cloned())
                     .collect::<BTreeSet<_>>();
                 if criteria.len() == 1 {
                     let criterion = criteria.into_iter().next().expect("one criterion");
@@ -7723,12 +7715,15 @@ fn origin_capabilities(
                         },
                         "Feature implementation",
                     ));
-                    for target in targets {
+                    for (target, target_criteria) in &target_criteria {
+                        if !target_criteria.contains(&criterion) {
+                            continue;
+                        }
                         capabilities.push(origin_capability(
                             workspace,
                             index,
                             WorkOrigin::FeatureImplementationTarget {
-                                target,
+                                target: target.clone(),
                                 binding: binding_anchor.clone(),
                                 criterion: criterion.clone(),
                             },
@@ -7736,6 +7731,20 @@ fn origin_capabilities(
                         ));
                     }
                 } else {
+                    for (target, target_criteria) in &target_criteria {
+                        for criterion in target_criteria {
+                            capabilities.push(origin_capability(
+                                workspace,
+                                index,
+                                WorkOrigin::FeatureImplementationTarget {
+                                    target: target.clone(),
+                                    binding: binding_anchor.clone(),
+                                    criterion: criterion.clone(),
+                                },
+                                "Implementation target",
+                            ));
+                        }
+                    }
                     let nearest = criteria
                         .iter()
                         .cloned()
@@ -10523,6 +10532,114 @@ mod tests {
                 .iter()
                 .any(|diagnostic| { diagnostic.message.contains("exact Work origin is invalid") })
         );
+    }
+
+    #[tokio::test]
+    async fn feature_origin_target_capabilities_keep_each_criterion_selectable() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("multi-criterion fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+
+        let feature_path = temp.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path).expect("feature spec");
+        fs::write(
+            &feature_path,
+            feature.replacen(
+                concat!(
+                    "              - kind: satisfies\n",
+                    "                criterion: REQ-FIXTURE-001#criterion.behavior\n",
+                ),
+                concat!(
+                    "              - kind: satisfies\n",
+                    "                criterion: REQ-FIXTURE-001#criterion.behavior\n",
+                    "          - id: journey-source\n",
+                    "            adapter: rust\n",
+                    "            path: src/lib.rs\n",
+                    "            selector: { kind: symbol, name: behavior }\n",
+                    "            claims:\n",
+                    "              - kind: satisfies\n",
+                    "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                ),
+                1,
+            ),
+        )
+        .expect("multi-criterion feature spec");
+
+        let requirement_path = temp.path().join("spec/requirement.yaml");
+        let requirement = fs::read_to_string(&requirement_path).expect("requirement spec");
+        fs::write(
+            &requirement_path,
+            requirement.replacen(
+                "FEAT-LIFECYCLE-ADD-SYMBOL-001#binding.lifecycle/target.added-symbol",
+                "FEAT-FIXTURE-001#binding.implementation/target.journey-source",
+                1,
+            ),
+        )
+        .expect("multi-criterion verification coverage");
+
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let (basis, csrf, projection) = projection_and_basis(&app).await;
+        let feature = projection["specifications"]["specifications"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["id"] == "FEAT-FIXTURE-001"))
+            .expect("multi-criterion Feature projection");
+        let capabilities = feature["origin_capabilities"]
+            .as_array()
+            .expect("Feature origin capabilities");
+        assert!(capabilities.iter().any(|capability| {
+            capability["label"] == "Feature implementation"
+                && capability["enabled"] == false
+                && capability["disabled_code"] == "ambiguous-origin"
+        }));
+        let target_origin = capabilities
+            .iter()
+            .find_map(|capability| {
+                (capability["label"] == "Implementation target"
+                    && capability["enabled"] == true
+                    && capability["origin"]["target"]
+                        == "FEAT-FIXTURE-001#binding.implementation/target.journey-source"
+                    && capability["origin"]["criterion"] == "REQ-FIXTURE-001#criterion.add-symbol")
+                    .then(|| capability["origin"].clone())
+            })
+            .expect("the exact multi-criterion target remains selectable");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "schema": syu_work_model::WORK_ORIGIN_CAPABILITY_SCHEMA,
+                "origin": target_origin,
+                "title": "Focus the journey source"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let request = service
+            .session
+            .read()
+            .expect("multi-criterion session")
+            .draft_request
+            .clone()
+            .expect("created target-origin request");
+        assert!(matches!(
+            request.origin,
+            WorkOrigin::FeatureImplementationTarget { ref target, ref criterion, .. }
+                if target.target_id.to_string() == "journey-source"
+                    && criterion.to_string() == "REQ-FIXTURE-001#criterion.add-symbol"
+        ));
+        assert_eq!(request.requested_targets.len(), 1);
     }
 
     #[tokio::test]
