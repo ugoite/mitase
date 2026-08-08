@@ -167,6 +167,9 @@ pub fn validate_work_origin(index: &SpecIndex, origin: &WorkOrigin) -> Result<()
 /// contextual closure. A target's own claims are never allowed to silently
 /// replace the selected origin.
 pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result<()> {
+    if request.schema != WORK_REQUEST_SCHEMA {
+        bail!("Work request schema must be {WORK_REQUEST_SCHEMA}");
+    }
     let criterion = request.origin.criterion();
     if criterion.kind != syu_spec_model::LocalAnchorKind::Criterion
         || !matches!(index.anchor(criterion), Some(AnchorValue::Criterion(_)))
