@@ -3177,7 +3177,7 @@ fn slice_budget_can_shrink_with_editable_split(
         return true;
     }
     if slice.budget.readonly_targets > limits.max_readonly_targets {
-        return false;
+        return true;
     }
     if slice.budget.total_bytes <= limits.max_total_bytes {
         return false;
@@ -3214,7 +3214,7 @@ fn rebuild_split_slice(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
     index: &SpecIndex,
-    _criterion: &SpecAnchor,
+    criterion: &SpecAnchor,
     original: &ExecutionSlice,
     group: SliceGroup,
     part: usize,
@@ -3225,7 +3225,8 @@ fn rebuild_split_slice(
         .filter(|diagnostic| diagnostic.rule_id != "SYU-WORK-003")
         .cloned()
         .collect::<Vec<_>>();
-    let (editable_targets, verification_targets, readonly_context) = match group {
+    let (editable_targets, verification_targets, readonly_context, contracts, anchors) = match group
+    {
         SliceGroup::Editable(editable) => {
             let verification_targets: Vec<PlannedTarget> = original
                 .verification_targets
@@ -3240,14 +3241,17 @@ fn rebuild_split_slice(
                 })
                 .cloned()
                 .collect();
+            let (readonly_context, contracts, anchors) =
+                focused_split_closure(index, criterion, original, &editable);
             (
                 editable,
                 verification_targets,
-                original.readonly_context.clone(),
+                readonly_context,
+                contracts,
+                anchors,
             )
         }
     };
-    let contracts = original.contracts.clone();
     let completion = completion_checks(
         request,
         &editable_targets,
@@ -3279,7 +3283,7 @@ fn rebuild_split_slice(
     Ok(ExecutionSlice {
         id: format!("{}-part{:02}", original.id, part),
         goal: original.goal.clone(),
-        anchors: original.anchors.clone(),
+        anchors,
         editable_targets,
         verification_targets,
         readonly_context,
@@ -3291,6 +3295,98 @@ fn rebuild_split_slice(
         confidence: original.confidence,
         blockers,
     })
+}
+
+/// Keep split candidates semantically focused. The unsplit criterion slice
+/// carries the complete origin closure, but a selectable child only needs the
+/// exact contract, generated-artifact, and same-binding readonly context that
+/// constrains its editable targets.
+fn focused_split_closure(
+    index: &SpecIndex,
+    criterion: &SpecAnchor,
+    original: &ExecutionSlice,
+    editable: &[PlannedTarget],
+) -> (Vec<PlannedTarget>, Vec<SpecAnchor>, Vec<SpecAnchor>) {
+    let editable_bindings = editable
+        .iter()
+        .map(|target| target.reference.binding.clone())
+        .collect::<BTreeSet<_>>();
+    let mut related_targets = editable
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let mut related_contracts = BTreeSet::new();
+    for target in editable {
+        if let Some(contracts) = index.contracts_by_target.get(&target.reference) {
+            related_contracts.extend(contracts.iter().cloned());
+        }
+        related_targets.extend(
+            index
+                .generated_by_source
+                .get(&target.reference)
+                .into_iter()
+                .flatten()
+                .cloned(),
+        );
+        related_targets.extend(
+            index
+                .generated_from
+                .get(&target.reference)
+                .into_iter()
+                .flatten()
+                .cloned(),
+        );
+    }
+    for anchor in &original.contracts {
+        let Some(contract) = index.contracts.get(anchor) else {
+            continue;
+        };
+        let contract_targets = std::iter::once(&contract.source).chain(
+            contract
+                .participants
+                .iter()
+                .map(|participant| &participant.target),
+        );
+        if contract_targets
+            .clone()
+            .any(|target| related_targets.contains(target))
+        {
+            related_contracts.insert(anchor.clone());
+            for target in std::iter::once(&contract.source).chain(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| &participant.target),
+            ) {
+                related_targets.insert(target.clone());
+            }
+        }
+    }
+    let readonly = original
+        .readonly_context
+        .iter()
+        .filter(|target| {
+            related_targets.contains(&target.reference)
+                || editable_bindings.contains(&target.reference.binding)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let contracts = original
+        .contracts
+        .iter()
+        .filter(|anchor| related_contracts.contains(*anchor))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut anchors = vec![criterion.clone()];
+    anchors.extend(
+        editable
+            .iter()
+            .map(|target| target.reference.binding.clone()),
+    );
+    anchors.extend(contracts.iter().cloned());
+    anchors.sort();
+    anchors.dedup();
+    (readonly, contracts, anchors)
 }
 
 fn slice_budget(

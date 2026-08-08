@@ -927,7 +927,7 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                     no_open,
                 });
             if let Some(request) = request {
-                server.with_request(request).run()?;
+                server.with_request(request)?.run()?;
             } else {
                 server.run()?;
             }

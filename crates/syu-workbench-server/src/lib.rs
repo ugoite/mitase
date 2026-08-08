@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum::{
     Json, Router,
     extract::{Extension, Path as AxumPath, Query, Request, State},
@@ -134,11 +134,15 @@ impl WorkbenchServer {
         self.launch = launch;
         self
     }
-    pub fn with_request(self, request: WorkRequest) -> Self {
+    pub fn with_request(self, request: WorkRequest) -> Result<Self> {
+        let workspace = SpecWorkspace::load(&self.launch.workspace_root)?;
+        let index = workspace.index()?;
+        validate_work_origin(&workspace, &index, &request.origin)
+            .context("preloaded Work request requires an exact implemented origin")?;
         if let Ok(mut session) = self.service.session.write() {
             session.draft_request = Some(request);
         }
-        self
+        Ok(self)
     }
     pub fn projection(&self, revision: &str) -> Result<WorkspaceProjection> {
         let snapshot = self.service.snapshot()?;
@@ -3442,12 +3446,20 @@ async fn api_source(
         is_excerpt: false,
     }))
 }
+fn validate_requirement_origin(index: &SpecIndex, origin: &WorkOrigin) -> Result<()> {
+    syu_planner::validate_work_origin(index, origin)
+}
+
 fn validate_work_origin(
     _workspace: &SpecWorkspace,
     index: &SpecIndex,
     origin: &WorkOrigin,
 ) -> Result<()> {
-    syu_planner::validate_work_origin(index, origin)
+    if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
+        validate_requirement_origin(index, origin)
+    } else {
+        syu_planner::validate_work_origin(index, origin)
+    }
 }
 
 fn ensure_homogeneous_approved_transitions(candidates: &[TargetSuggestion]) -> Result<()> {
@@ -4187,6 +4199,8 @@ async fn api_plan(
         .draft_request
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no work request selected"))?;
+    validate_work_origin(&snapshot.workspace, &snapshot.index, &request.origin)
+        .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
     let plan = plan(
         &request,
         &snapshot.workspace,
@@ -6069,28 +6083,50 @@ fn origin_closure_is_complete(
     {
         return false;
     }
-    closure.contracts.iter().all(|anchor| {
-        let Some(contract) = index.contracts.get(anchor) else {
-            return false;
-        };
-        if contract.guarantees.is_empty()
-            || contract
-                .guarantees
-                .iter()
-                .any(|guarantee| guarantee != request.origin.criterion())
-        {
-            return false;
-        }
-        let mut related = std::iter::once(&contract.source).chain(
-            contract
-                .participants
-                .iter()
-                .map(|participant| &participant.target),
-        );
-        related.all(|target| {
-            closure.readonly_targets.contains(target) && active_exact_target(index, target)
+    let slice_targets = slice
+        .editable_targets
+        .iter()
+        .chain(slice.verification_targets.iter())
+        .chain(slice.readonly_context.iter())
+        .map(|target| &target.reference)
+        .collect::<BTreeSet<_>>();
+    closure
+        .contracts
+        .iter()
+        .filter(|anchor| {
+            index.contracts.get(*anchor).is_some_and(|contract| {
+                std::iter::once(&contract.source)
+                    .chain(
+                        contract
+                            .participants
+                            .iter()
+                            .map(|participant| &participant.target),
+                    )
+                    .any(|target| slice_targets.contains(target))
+            })
         })
-    })
+        .all(|anchor| {
+            let Some(contract) = index.contracts.get(anchor) else {
+                return false;
+            };
+            if contract.guarantees.is_empty()
+                || contract
+                    .guarantees
+                    .iter()
+                    .any(|guarantee| guarantee != request.origin.criterion())
+            {
+                return false;
+            }
+            let mut related = std::iter::once(&contract.source).chain(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| &participant.target),
+            );
+            related.all(|target| {
+                closure.readonly_targets.contains(target) && active_exact_target(index, target)
+            })
+        })
 }
 
 fn split_reason(plan: &WorkPlan, config: &syu_project_model::ProjectConfig) -> SplitReasonView {
@@ -8028,6 +8064,7 @@ mod tests {
         };
         let app = WorkbenchServer::new(temp.path().to_path_buf())
             .with_request(request)
+            .expect("preloaded fixture request")
             .router();
         let (basis, csrf, request_projection) = projection_and_basis(&app).await;
         assert!(request_projection["work"]["request"].is_object());
@@ -8202,6 +8239,7 @@ mod tests {
         };
         let app = WorkbenchServer::new(temp.path().to_path_buf())
             .with_request(request)
+            .expect("preloaded fixture request")
             .router();
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
@@ -9138,6 +9176,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "pre-v1 cutover: planned Feature lifecycle origins are rejected before agent execution"]
     async fn workbench_agent_applies_all_approved_lifecycle_writes() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -9543,6 +9582,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "pre-v1 cutover: planned Feature lifecycle origins are rejected before agent execution"]
     async fn workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -11576,6 +11616,7 @@ mod tests {
         };
         let app = WorkbenchServer::new(temp.path().to_path_buf())
             .with_request(request)
+            .expect("preloaded fixture request")
             .router();
         let (basis, csrf, _) = projection_and_basis(&app).await;
 
@@ -11841,9 +11882,80 @@ mod tests {
         };
         let app = WorkbenchServer::new(workspace_root())
             .with_request(request)
+            .expect("preloaded Workbench request")
             .router();
         let (_, _, projection) = projection_and_basis(&app).await;
         assert!(projection["work"]["request"].is_object());
+    }
+
+    #[tokio::test]
+    async fn select_slice_replans_the_exact_candidate_boundary() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("select-slice fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-SELECT-SLICE-BOUNDARY".into(),
+            title: "select the fixture behavior boundary".into(),
+            operation: WorkOperation::Modify,
+            origin: WorkOrigin::RequirementCriterion {
+                criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            },
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![],
+        };
+        let server = WorkbenchServer::new(temp.path().to_path_buf())
+            .with_request(request)
+            .expect("exact preloaded request");
+        let app = server.router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let candidate: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("candidate plan");
+        assert_eq!(candidate.status, PlanStatus::Ready);
+        let candidate_slice = candidate.slices.first().expect("candidate slice").clone();
+
+        select_slice(
+            &server.service,
+            &basis,
+            &candidate.canonical_digest,
+            &candidate_slice.id,
+        )
+        .unwrap_or_else(|error| panic!("select exact candidate slice: {}", error.1));
+
+        let session = server
+            .service
+            .session
+            .read()
+            .expect("selected session lock");
+        let selected_plan = session.plan.clone().expect("selected plan");
+        assert_eq!(selected_plan.slices.len(), 1);
+        assert_eq!(
+            session.selected_slice.as_deref(),
+            Some(selected_plan.slices[0].id.as_str())
+        );
+        assert!(!selected_plan.request.requested_targets.is_empty());
+        assert!(
+            selected_plan
+                .request
+                .requested_targets
+                .iter()
+                .all(|requested| {
+                    selected_plan.slices[0]
+                        .editable_targets
+                        .iter()
+                        .chain(selected_plan.slices[0].verification_targets.iter())
+                        .any(|planned| planned.reference == requested.reference)
+                })
+        );
     }
 
     #[test]

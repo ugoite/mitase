@@ -181,6 +181,14 @@ impl DeliveryStore {
             plan_digest: receipt.plan_digest.clone(),
             slice_id: receipt.slice_id.clone(),
         };
+        let attempt = self.attempt(&identity, &receipt.attempt_id)?;
+        if attempt.attempt_digest != receipt.attempt_digest
+            || attempt.approved_plan_digest != receipt.plan_digest
+            || attempt.report.status != CompletionStatus::Complete
+            || attempt.receipt.is_none()
+        {
+            bail!("finalization is not tied to one complete attempt for its execution identity");
+        }
         let path = self.finalization_path(&identity, &receipt.attempt_id);
         if path.exists() {
             return self
@@ -213,6 +221,14 @@ impl DeliveryStore {
         let expected = Self::finalization_digest(&without_digest)?;
         if supplied != expected {
             bail!("stored finalization has an invalid digest: {supplied} != {expected}");
+        }
+        let attempt = self.attempt(identity, attempt_id)?;
+        if attempt.attempt_digest != receipt.attempt_digest
+            || attempt.approved_plan_digest != receipt.plan_digest
+            || attempt.report.status != CompletionStatus::Complete
+            || attempt.receipt.is_none()
+        {
+            bail!("stored finalization is not tied to one complete attempt");
         }
         Ok(Some(receipt))
     }
@@ -571,7 +587,20 @@ fn validate_plan_approval_schema(approval: &PlanApproval) -> Result<()> {
         approval.plan.schema.as_str(),
         WORK_PLAN_SCHEMA,
         "approved work plan",
-    )
+    )?;
+    if approval.plan_digest != approval.plan.canonical_digest
+        || approval.slice_id
+            != approval
+                .plan
+                .slices
+                .first()
+                .map(|slice| slice.id.clone())
+                .unwrap_or_default()
+        || approval.plan.slices.len() != 1
+    {
+        bail!("plan approval nested work plan does not match its execution identity");
+    }
+    Ok(())
 }
 
 fn validate_completion_attempt_schema(attempt: &CompletionAttempt) -> Result<()> {
@@ -585,12 +614,20 @@ fn validate_completion_attempt_schema(attempt: &CompletionAttempt) -> Result<()>
         COMPLETION_REPORT_SCHEMA,
         "completion report",
     )?;
+    if attempt.report.plan_digest != attempt.plan_digest
+        || attempt.report.slice_id != attempt.slice_id
+    {
+        bail!("completion report does not match its attempt execution identity");
+    }
     if let Some(receipt) = &attempt.receipt {
         require_schema(
             receipt.schema.as_str(),
             VERIFICATION_RECEIPT_SCHEMA,
             "verification receipt",
         )?;
+        if receipt.plan_digest != attempt.plan_digest || receipt.slice_id != attempt.slice_id {
+            bail!("verification receipt does not match its attempt execution identity");
+        }
     }
     Ok(())
 }
@@ -607,14 +644,52 @@ fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
     require_schema(event.schema.as_str(), AGENT_EVENT_SCHEMA, "agent event")?;
     match &event.event {
         AgentEventKind::RunStarted { run } => {
-            require_schema(run.schema.as_str(), AGENT_RUN_SCHEMA, "agent run")
+            require_schema(run.schema.as_str(), AGENT_RUN_SCHEMA, "agent run")?;
+            if event.run_id != run.run_id
+                || event.plan_digest != run.plan_digest
+                || event.slice_id != run.slice_id
+                || run.context.plan_digest != run.plan_digest
+                || run.context.slice_id != run.slice_id
+            {
+                bail!("agent run does not match its enclosing event identity");
+            }
+            Ok(())
         }
         AgentEventKind::PatchRecorded { patch } => {
-            require_schema(patch.schema.as_str(), AGENT_PATCH_SCHEMA, "agent patch")
+            require_schema(patch.schema.as_str(), AGENT_PATCH_SCHEMA, "agent patch")?;
+            if event.run_id != patch.run_id
+                || event.plan_digest != patch.plan_digest
+                || event.slice_id != patch.slice_id
+            {
+                bail!("agent patch does not match its enclosing event identity");
+            }
+            Ok(())
         }
-        AgentEventKind::BlockerRecorded { .. }
-        | AgentEventKind::ScopeExpansionRequested { .. }
-        | AgentEventKind::VerificationRecorded { .. } => Ok(()),
+        AgentEventKind::BlockerRecorded { blocker } => {
+            if blocker.code.trim().is_empty()
+                || blocker.message.trim().is_empty()
+                || blocker.next_action.trim().is_empty()
+            {
+                bail!("agent blocker event requires a complete blocker");
+            }
+            Ok(())
+        }
+        AgentEventKind::ScopeExpansionRequested { request } => {
+            if event.run_id != request.run_id
+                || event.plan_digest != request.plan_digest
+                || event.slice_id != request.slice_id
+                || request.requested_targets.is_empty()
+            {
+                bail!("scope expansion does not match its enclosing event identity");
+            }
+            Ok(())
+        }
+        AgentEventKind::VerificationRecorded { attempt_id } => {
+            if attempt_id.trim().is_empty() {
+                bail!("verification event requires an attempt id");
+            }
+            Ok(())
+        }
     }
 }
 
@@ -843,10 +918,10 @@ mod tests {
     use super::*;
     use std::{fs, process::Command};
     use syu_work_model::{
-        AgentEvent, AgentEventKind, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
-        CompletionReport, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
-        VerificationAttemptResult, VerificationAttemptStatus, VerificationReceipt,
-        WORK_REQUEST_SCHEMA, WorkOperation, WorkOrigin, WorkRequest,
+        AgentEvent, AgentEventKind, AgentPatchRecord, AgentPatchStatus, COMPLETION_ATTEMPT_SCHEMA,
+        COMPLETION_REPORT_SCHEMA, CompletionReport, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
+        VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult, VerificationAttemptStatus,
+        VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation, WorkOrigin, WorkRequest,
     };
 
     fn workbench_fixture_root() -> PathBuf {
@@ -1060,6 +1135,12 @@ mod tests {
         let mut invalid_attempt = attempt.clone();
         invalid_attempt.schema = "syu/legacy-attempt/v0".into();
         assert!(store.append_attempt(&invalid_attempt).is_err());
+        let mut invalid_report_identity = attempt.clone();
+        invalid_report_identity.report.plan_digest = "sha256:other-plan".into();
+        invalid_report_identity.attempt_digest = String::new();
+        invalid_report_identity.attempt_digest =
+            DeliveryStore::verification_digest(&invalid_report_identity).unwrap();
+        assert!(store.append_attempt(&invalid_report_identity).is_err());
 
         let identity = ExecutionIdentity {
             plan_digest: plan.canonical_digest.clone(),
@@ -1087,14 +1168,40 @@ mod tests {
             event_id: "event-test".into(),
             event_digest: String::new(),
             run_id: "run-test".into(),
-            plan_digest: identity.plan_digest,
-            slice_id: identity.slice_id,
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
             created_at: String::new(),
             event: AgentEventKind::VerificationRecorded {
                 attempt_id: attempt.attempt_id,
             },
         };
         assert!(store.append_agent_event(&invalid_event).is_err());
+        let invalid_nested_patch = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-patch-test".into(),
+            event_digest: String::new(),
+            run_id: "run-test".into(),
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
+            created_at: String::new(),
+            event: AgentEventKind::PatchRecorded {
+                patch: AgentPatchRecord {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    patch_id: "patch-test".into(),
+                    run_id: "different-run".into(),
+                    plan_digest: "sha256:different-plan".into(),
+                    slice_id: "different-slice".into(),
+                    status: AgentPatchStatus::Rejected,
+                    writes: vec![],
+                    changes: vec![],
+                    before_workspace_fingerprint: String::new(),
+                    after_workspace_fingerprint: String::new(),
+                    blockers: vec![],
+                    created_at: String::new(),
+                },
+            },
+        };
+        assert!(store.append_agent_event(&invalid_nested_patch).is_err());
     }
 
     #[test]
