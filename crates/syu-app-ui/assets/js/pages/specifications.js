@@ -1000,7 +1000,7 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
             action: 'create',
             schema: capability.schema,
             origin: capability.origin,
-          title: `${t('work.request.title_from_origin').replace('{anchor}', localizeSpecificationTitle(selected))}`,
+          title: `${t('work.request.title_from_origin').replace('{anchor}', value.anchor)}`,
           }),
           () => { state.selectedSlice = null; state.go('work'); },
         ), 'btn small');

@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeSet,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -136,6 +137,7 @@ impl DeliveryStore {
                 attempt.attempt_id
             )
         })?;
+        validate_completion_attempt_against_plan(attempt, &approval.plan)?;
         if approval.plan_digest != attempt.approved_plan_digest
             || approval.plan_digest != attempt.plan_digest
         {
@@ -158,6 +160,8 @@ impl DeliveryStore {
                 && value.plan_digest == identity.plan_digest
                 && value.slice_id == identity.slice_id
             {
+                let approval = self.approval(identity)?;
+                validate_completion_attempt_against_plan(&value, &approval.plan)?;
                 return Ok(value);
             }
         }
@@ -170,6 +174,12 @@ impl DeliveryStore {
             let value = read_json::<CompletionAttempt>(&path)?;
             validate_completion_attempt_schema(&value)?;
             validate_attempt_digest(&value)?;
+            let identity = ExecutionIdentity {
+                plan_digest: value.plan_digest.clone(),
+                slice_id: value.slice_id.clone(),
+            };
+            let approval = self.approval(&identity)?;
+            validate_completion_attempt_against_plan(&value, &approval.plan)?;
             values.push(value);
         }
         values.sort_by(|a, b| {
@@ -676,6 +686,143 @@ fn validate_completion_attempt_schema(attempt: &CompletionAttempt) -> Result<()>
     Ok(())
 }
 
+fn validate_completion_attempt_against_plan(
+    attempt: &CompletionAttempt,
+    plan: &syu_work_model::WorkPlan,
+) -> Result<()> {
+    let slice = plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == attempt.slice_id)
+        .ok_or_else(|| {
+            anyhow::anyhow!("completion attempt slice is absent from its approved plan")
+        })?;
+
+    let expected_executions = slice
+        .verification_targets
+        .iter()
+        .map(|target| (target.reference.clone(), target.verification_claim.clone()))
+        .collect::<BTreeSet<_>>();
+    let actual_executions = attempt
+        .receipt
+        .as_ref()
+        .map(|receipt| {
+            receipt
+                .executions
+                .iter()
+                .map(|execution| (execution.target.clone(), execution.claim.clone()))
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+
+    match (&attempt.verification.status, &attempt.receipt) {
+        (syu_work_model::VerificationAttemptStatus::Complete, Some(receipt)) => {
+            if receipt.executions.len() != expected_executions.len()
+                || actual_executions != expected_executions
+                || attempt.verification.executions.len() != receipt.executions.len()
+                || attempt.verification.failure.is_some()
+            {
+                bail!("completion attempt verification execution set is not exact");
+            }
+            for execution in &receipt.executions {
+                if execution.exit_code != 0
+                    || execution.command.is_empty()
+                    || execution.proof.matched_count == 0
+                    || execution
+                        .claim
+                        .as_ref()
+                        .is_some_and(|claim| claim.target != execution.target)
+                {
+                    bail!("completion attempt contains an invalid verification execution");
+                }
+                let Some(attempt_execution) =
+                    attempt.verification.executions.iter().find(|candidate| {
+                        candidate.target.as_ref() == Some(&execution.target)
+                            && candidate.claim == execution.claim
+                    })
+                else {
+                    bail!("completion attempt execution is not mirrored by its receipt");
+                };
+                if attempt_execution.runner != execution.runner
+                    || attempt_execution.command != execution.command
+                    || attempt_execution.exit_code != Some(execution.exit_code)
+                    || attempt_execution.stdout_digest.as_deref()
+                        != Some(execution.stdout_digest.as_str())
+                    || attempt_execution.stderr_digest.as_deref()
+                        != Some(execution.stderr_digest.as_str())
+                    || attempt_execution.proof.as_ref() != Some(&execution.proof)
+                    || attempt_execution.error.is_some()
+                {
+                    bail!("completion attempt execution evidence is inconsistent");
+                }
+            }
+            let expected_lifecycle_refs = slice
+                .editable_targets
+                .iter()
+                .map(|target| target.reference.clone())
+                .collect::<BTreeSet<_>>();
+            let actual_lifecycle_refs = receipt
+                .lifecycle_proofs
+                .iter()
+                .map(|proof| proof.reference.clone())
+                .collect::<BTreeSet<_>>();
+            if receipt.lifecycle_proofs.len() != slice.editable_targets.len()
+                || actual_lifecycle_refs != expected_lifecycle_refs
+                || receipt.lifecycle_proofs.iter().any(|proof| {
+                    slice
+                        .editable_targets
+                        .iter()
+                        .find(|target| target.reference == proof.reference)
+                        .is_none_or(|target| {
+                            target.transition != proof.transition
+                                || target.lifecycle != proof.lifecycle
+                        })
+                })
+            {
+                bail!("completion attempt lifecycle proof set is not exact");
+            }
+            if attempt.report.receipt_digest.as_deref()
+                != Some(DeliveryStore::verification_digest(receipt)?.as_str())
+            {
+                bail!("completion report does not bind its verification receipt");
+            }
+        }
+        (syu_work_model::VerificationAttemptStatus::Failed, None) => {
+            if attempt.verification.executions.is_empty() == false
+                || attempt.verification.failure.is_none()
+            {
+                bail!("failed completion attempt must contain only its structured failure");
+            }
+            if attempt.report.status != CompletionStatus::Blocked
+                || attempt.report.blockers.is_empty()
+                || attempt.report.receipt_digest.is_some()
+            {
+                bail!("failed completion attempt must have a blocked report");
+            }
+        }
+        _ => bail!("completion attempt verification state and receipt are inconsistent"),
+    }
+
+    match attempt.report.status {
+        CompletionStatus::Complete => {
+            if attempt.report.blockers.iter().next().is_some()
+                || attempt.report.checks.iter().any(|check| !check.passed)
+                || !matches!(
+                    attempt.verification.status,
+                    syu_work_model::VerificationAttemptStatus::Complete
+                )
+            {
+                bail!("complete completion report still contains blockers or failed checks");
+            }
+        }
+        CompletionStatus::Blocked if attempt.report.blockers.is_empty() => {
+            bail!("blocked completion report must explain its blocker");
+        }
+        CompletionStatus::Blocked => {}
+    }
+    Ok(())
+}
+
 fn validate_finalization_schema(receipt: &FinalizationReceipt) -> Result<()> {
     require_schema(
         receipt.schema.as_str(),
@@ -1114,6 +1261,40 @@ mod tests {
         revision: &str,
     ) -> CompletionAttempt {
         let slice_id = plan.slices[0].id.clone();
+        let slice = &plan.slices[0];
+        let executions = slice
+            .verification_targets
+            .iter()
+            .map(|target| syu_work_model::VerificationExecution {
+                target: target.reference.clone(),
+                claim: target.verification_claim.clone(),
+                runner: "fixture".into(),
+                command: vec!["fixture".into()],
+                exit_code: 0,
+                stdout_digest: "sha256:fixture-stdout".into(),
+                stderr_digest: "sha256:fixture-stderr".into(),
+                proof: syu_work_model::ExactTestEvidence {
+                    identity: "fixture".into(),
+                    matched_count: 1,
+                },
+                implementation_digests: std::collections::BTreeMap::new(),
+                verification_digest: "sha256:fixture-verification".into(),
+            })
+            .collect::<Vec<_>>();
+        let execution_attempts = executions
+            .iter()
+            .map(|execution| syu_work_model::VerificationExecutionAttempt {
+                target: Some(execution.target.clone()),
+                claim: execution.claim.clone(),
+                runner: execution.runner.clone(),
+                command: execution.command.clone(),
+                exit_code: Some(execution.exit_code),
+                stdout_digest: Some(execution.stdout_digest.clone()),
+                stderr_digest: Some(execution.stderr_digest.clone()),
+                proof: Some(execution.proof.clone()),
+                error: None,
+            })
+            .collect::<Vec<_>>();
         let receipt = VerificationReceipt {
             schema: VERIFICATION_RECEIPT_SCHEMA.into(),
             plan_digest: plan.canonical_digest.clone(),
@@ -1122,8 +1303,20 @@ mod tests {
             workspace_fingerprint: "sha256:stale".into(),
             started_at: "0".into(),
             completed_at: "1".into(),
-            executions: vec![],
-            lifecycle_proofs: vec![],
+            executions,
+            lifecycle_proofs: slice
+                .editable_targets
+                .iter()
+                .map(|target| syu_work_model::TargetLifecycleProof {
+                    reference: target.reference.clone(),
+                    transition: target.transition,
+                    lifecycle: target.lifecycle,
+                    before_content_hash: target.content_hash.clone(),
+                    after_content_hash: "sha256:fixture-after".into(),
+                    before_excerpt_hash: target.excerpt_hash.clone(),
+                    after_excerpt_hash: "sha256:fixture-after-excerpt".into(),
+                })
+                .collect(),
         };
         let receipt_digest = DeliveryStore::verification_digest(&receipt).expect("receipt digest");
         let mut attempt = CompletionAttempt {
@@ -1137,7 +1330,7 @@ mod tests {
             completed_at: "1".into(),
             verification: VerificationAttemptResult {
                 status: VerificationAttemptStatus::Complete,
-                executions: vec![],
+                executions: execution_attempts,
                 failure: None,
             },
             receipt: Some(receipt),
@@ -1147,10 +1340,14 @@ mod tests {
                 plan_digest: plan.canonical_digest.clone(),
                 slice_id,
                 receipt_digest: Some(receipt_digest),
-                status: CompletionStatus::Complete,
+                status: CompletionStatus::Blocked,
                 demonstrated: vec![],
                 checks: vec![],
-                blockers: vec![],
+                blockers: vec![CompletionBlocker {
+                    code: "SYU-FIXTURE-STALE".into(),
+                    message: "fixture intentionally carries a stale workspace fingerprint".into(),
+                    next_action: "rerun verification".into(),
+                }],
             },
         };
         attempt.attempt_digest =
@@ -1259,6 +1456,23 @@ mod tests {
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid_report_attempt))
                 .unwrap();
         assert!(store.append_attempt(&invalid_report_attempt).is_err());
+
+        let mut invalid_execution_set = attempt.clone();
+        invalid_execution_set
+            .receipt
+            .as_mut()
+            .unwrap()
+            .executions
+            .clear();
+        invalid_execution_set.verification.executions.clear();
+        invalid_execution_set.report.receipt_digest = Some(
+            DeliveryStore::verification_digest(invalid_execution_set.receipt.as_ref().unwrap())
+                .unwrap(),
+        );
+        invalid_execution_set.attempt_digest =
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid_execution_set))
+                .unwrap();
+        assert!(store.append_attempt(&invalid_execution_set).is_err());
 
         let identity = ExecutionIdentity {
             plan_digest: plan.canonical_digest.clone(),
@@ -1396,6 +1610,12 @@ mod tests {
         incomplete.attempt_id = "attempt-incomplete".into();
         incomplete.attempt_digest.clear();
         incomplete.verification.status = syu_work_model::VerificationAttemptStatus::Failed;
+        incomplete.verification.executions.clear();
+        incomplete.verification.failure = Some(syu_work_model::VerificationAttemptFailure {
+            code: "SYU-FIXTURE-INCOMPLETE".into(),
+            message: "fixture incomplete attempt".into(),
+            next_action: "rerun verification".into(),
+        });
         incomplete.receipt = None;
         incomplete.report.attempt_id = incomplete.attempt_id.clone();
         incomplete.report.receipt_digest = None;

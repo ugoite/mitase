@@ -216,7 +216,15 @@ pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result
             &request.origin,
             target.reference(),
         );
-        if !allowed.contains(target.reference()) && !allowed_add {
+        let allowed_declared_editable = matches!(
+            target.transition(request_default_transition(request.operation)),
+            TargetTransition::Modify | TargetTransition::Remove
+        ) && requirement_declared_target_is_in_origin_binding(
+            index,
+            &request.origin,
+            target.reference(),
+        );
+        if !allowed.contains(target.reference()) && !allowed_add && !allowed_declared_editable {
             bail!(
                 "requested target {} is outside the exact {} origin closure",
                 target.reference(),
@@ -233,13 +241,41 @@ pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result
         .constraints
         .exact_generated_targets
         .iter()
+        .cloned()
         .collect::<BTreeSet<_>>();
     if generated.iter().any(|target| {
         !boundary.readonly.contains(target) || !index.generated_from.contains_key(target)
     }) {
         bail!("exact generated target closure is outside the selected origin");
     }
-    if request
+    if request.constraints.exact_scope {
+        let roots = request
+            .requested_targets
+            .iter()
+            .map(|target| target.reference.clone())
+            .collect::<Vec<_>>();
+        let (related_targets, _, expected_contracts) = dependency_closure(index, &roots);
+        let expected_generated = related_targets
+            .iter()
+            .filter(|target| index.generated_from.contains_key(*target))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if generated != expected_generated {
+            bail!(
+                "exact generated target closure is incomplete or broader than the selected slice"
+            );
+        }
+        if request
+            .constraints
+            .exact_contracts
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            != expected_contracts
+        {
+            bail!("exact contract closure is incomplete or broader than the selected slice");
+        }
+    } else if request
         .constraints
         .exact_contracts
         .iter()
@@ -280,8 +316,21 @@ fn request_target_boundary(
         WorkOrigin::RequirementCriterion { .. } => index
             .criteria_to_implementation_targets
             .get(criterion)
+            .into_iter()
+            .flatten()
+            .filter(|target| {
+                index.bindings.get(&target.binding).is_some_and(|binding| {
+                    binding.role == BindingRole::Implementation
+                        && index.item_status.get(&target.binding.item)
+                            == Some(&ItemStatus::Implemented)
+                        && index.target(target).is_some_and(|artifact| {
+                            !matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent)
+                        })
+                        && index.target_to_artifact.contains_key(*target)
+                })
+            })
             .cloned()
-            .unwrap_or_default(),
+            .collect(),
         WorkOrigin::FeatureImplementationBinding { targets, .. } => targets.clone(),
         WorkOrigin::FeatureImplementationTarget { target, .. } => vec![target.clone()],
     };
@@ -415,6 +464,39 @@ fn requirement_add_target_is_in_origin_binding(
     has_exact_binding
         && !has_other_criterion_claim
         && !index.target_to_artifact.contains_key(target)
+}
+
+fn requirement_declared_target_is_in_origin_binding(
+    index: &SpecIndex,
+    origin: &WorkOrigin,
+    target: &BoundTargetRef,
+) -> bool {
+    let WorkOrigin::RequirementCriterion { criterion } = origin else {
+        return false;
+    };
+    let Some(binding) = index.bindings.get(&target.binding) else {
+        return false;
+    };
+    if binding.role != BindingRole::Implementation
+        || !matches!(
+            index.item_status.get(&target.binding.item),
+            Some(ItemStatus::Implemented | ItemStatus::Planned)
+        )
+    {
+        return false;
+    }
+    let Some(declared) = index.target(target) else {
+        return false;
+    };
+    declared.claims.iter().any(|claim| {
+        matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
+    }) && !declared.claims.iter().any(|claim| match claim {
+        TargetClaim::Satisfies { criterion: actual }
+        | TargetClaim::Verifies {
+            criterion: actual, ..
+        } => actual != criterion,
+        _ => false,
+    })
 }
 
 fn extend_request_context(

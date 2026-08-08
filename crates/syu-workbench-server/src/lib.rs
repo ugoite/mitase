@@ -7323,6 +7323,19 @@ fn origin_capabilities(
                 let criteria = binding
                     .targets
                     .iter()
+                    .filter(|target| {
+                        target
+                            .reference
+                            .parse::<BoundTargetRef>()
+                            .ok()
+                            .and_then(|reference| index.target(&reference))
+                            .is_some_and(|artifact| {
+                                !matches!(
+                                    artifact.lifecycle,
+                                    syu_spec_model::ArtifactTargetLifecycle::Absent
+                                )
+                            })
+                    })
                     .flat_map(|target| target.claims.iter())
                     .filter_map(|claim| match claim {
                         TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
