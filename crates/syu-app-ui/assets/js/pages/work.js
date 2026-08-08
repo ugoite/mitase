@@ -643,10 +643,12 @@ function renderJourney(root, journey, state, work) {
   next.append(element('p', 'journey-copy', actionText(journey.primary_action, 'explanation')));
   const actions = element('div', 'journey-actions');
   const action = journey.primary_action;
-  actions.append(button(actionText(action, 'label'), () => {
-    if (action.confirmation_required && !window.confirm(`${actionText(action, 'explanation')}\n\n${t('journey.confirm')}`)) return;
-    run(state, { action: action.action });
-  }, true));
+  if (action.action !== 'select_slice') {
+    actions.append(button(actionText(action, 'label'), () => {
+      if (action.confirmation_required && !window.confirm(`${actionText(action, 'explanation')}\n\n${t('journey.confirm')}`)) return;
+      dispatchJourneyAction(state, action);
+    }, true));
+  }
   if (journey.recovery_action) {
     const recovery = journey.recovery_action;
     actions.append(button(actionText(recovery, 'label'), () => {

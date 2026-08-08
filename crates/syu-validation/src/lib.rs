@@ -4137,7 +4137,7 @@ fn validate_slice_scope(
                 .any(|target| target_matches_changed_file_path(ctx, target, file));
             let editable_hit = editable_targets.iter().any(|target| {
                 editable_target_matches_hunkless_change(ctx, target, file)
-                    || editable_add_target_matches_file(target, file)
+                    || editable_add_target_matches_file(ctx, target, file)
             });
             let generated_hit = generated_targets.iter().any(|target| {
                 target_matches_changed_file_path(ctx, target, file)
@@ -4171,10 +4171,7 @@ fn validate_slice_scope(
             let readonly_hit = guarded_targets
                 .iter()
                 .any(|target| target_overlaps_change(ctx, target, file, &hunk));
-            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk)
-                || editable_targets
-                    .iter()
-                    .any(|target| editable_add_target_matches_file(target, file));
+            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
             let generated_hit = generated_targets.iter().any(|target| {
                 target_overlaps_change(ctx, target, file, &hunk)
                     && generated_target_has_changed_source(ctx, slice, target, files)
@@ -4228,16 +4225,15 @@ fn generated_target_has_changed_source(
 }
 
 fn editable_add_target_matches_file(
+    ctx: &ValidationContext<'_>,
     target: &syu_work_model::PlannedTarget,
     file: &ChangedFile,
 ) -> bool {
     target.transition == syu_work_model::TargetTransition::Add
         && target.content_hash.is_empty()
         && target.excerpt_hash.is_empty()
-        && file
-            .new_path
-            .as_ref()
-            .is_some_and(|path| path.to_string_lossy() == target.resolved_path)
+        && target_selector_is_file(target)
+        && target_matches_changed_file_path(ctx, target, file)
 }
 
 fn target_matches_changed_file_path(
@@ -5295,6 +5291,106 @@ requirements:
         let slice = ExecutionSlice {
             id: "json-openapi-scope".into(),
             goal: "Change only GET /users".into(),
+            anchors: vec![],
+            editable_targets: vec![target],
+            verification_targets: vec![],
+            readonly_context: vec![],
+            acceptance: vec![],
+            contracts: vec![],
+            non_goals: vec![],
+            completion: vec![CompletionCheck::DiffWithinScope],
+            budget: Default::default(),
+            confidence: PlanConfidence::Exact,
+            blockers: vec![],
+        };
+        let mut diagnostics = Vec::new();
+        validate_slice_scope(&ctx, &[sibling_change], &slice, &mut diagnostics);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-006")
+        );
+    }
+
+    #[test]
+    fn add_to_existing_file_scope_rejects_a_sibling_change() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        fs::write(
+            tempdir.path().join("web/login.ts"),
+            "export function submitLogin() { return fetch('/sessions', { method: 'POST' }); }\nexport function sibling() {}\n",
+        )
+        .expect("post-state source");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("workspace index");
+        let reference: BoundTargetRef = "FEAT-AUTH-001#binding.ui/target.submit".parse().unwrap();
+        let declared = index.target(&reference).expect("declared target");
+        let resolved = resolve_target_in_workspace(&workspace, declared).expect("target");
+        let mut target = sample_target(
+            "web/login.ts",
+            &resolved.description,
+            (resolved.line_start, resolved.line_end),
+        );
+        target.reference = reference;
+        target.resolved_selector.symbols = resolved.symbols.clone();
+        target.content_hash.clear();
+        target.excerpt_hash.clear();
+        target.byte_start = resolved.byte_start;
+        target.byte_end = resolved.byte_end;
+
+        let ctx = ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PostState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        };
+        let sibling_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 2,
+                old_end: 2,
+                new_start: 2,
+                new_end: 2,
+            }],
+        };
+        assert!(!editable_add_target_matches_file(
+            &ctx,
+            &target,
+            &sibling_change
+        ));
+        assert!(!change_is_within_editable_scope(
+            &ctx,
+            &[&target],
+            &sibling_change,
+            &sibling_change.hunks[0],
+        ));
+        let target_and_sibling_change = ChangedFile {
+            hunks: vec![ChangedRange {
+                old_start: 1,
+                old_end: 1,
+                new_start: 1,
+                new_end: 2,
+            }],
+            ..sibling_change.clone()
+        };
+        assert!(!change_is_within_editable_scope(
+            &ctx,
+            &[&target],
+            &target_and_sibling_change,
+            &target_and_sibling_change.hunks[0],
+        ));
+
+        let slice = ExecutionSlice {
+            id: "add-existing-file-scope".into(),
+            goal: "Add only the approved target".into(),
             anchors: vec![],
             editable_targets: vec![target],
             verification_targets: vec![],

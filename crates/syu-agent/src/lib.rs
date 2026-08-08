@@ -569,8 +569,21 @@ fn validate_post_patch(
                 if before_identity.is_some() {
                     bail!("target {target} already existed before the patch");
                 }
-                if after_resolved.is_none() {
-                    bail!("target {target} was not created by the patch");
+                let resolved = after_resolved.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("target {target} was not created by the patch")
+                })?;
+                if let Some(content) = patch.writes.iter().find_map(|write| match write {
+                    AgentTargetWrite::AddToFile {
+                        target: candidate,
+                        content,
+                        ..
+                    } if candidate == target => Some(content),
+                    _ => None,
+                }) && content.trim() != resolved.excerpt.trim()
+                {
+                    bail!(
+                        "target {target} insertion content does not exactly match the approved target"
+                    );
                 }
             }
             TargetTransition::Remove => {

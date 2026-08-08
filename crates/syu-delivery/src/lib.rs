@@ -15,7 +15,7 @@ use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lower
 use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentContextPack, AgentEvent,
     AgentEventKind, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
-    CompletionAttempt, CompletionBlocker, CompletionStatus, ExecutionIdentity,
+    CONTEXT_PACK_SCHEMA, CompletionAttempt, CompletionBlocker, CompletionStatus, ExecutionIdentity,
     FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
     PlanApproval, VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
 };
@@ -502,7 +502,33 @@ impl DeliveryStore {
     pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
         self.ensure()?;
         validate_agent_event_schema(event)?;
-        validate_agent_event_references(self, event)?;
+        validate_agent_event_references(self, event, true)?;
+        if !matches!(&event.event, AgentEventKind::RunStarted { .. }) {
+            let identity = ExecutionIdentity {
+                plan_digest: event.plan_digest.clone(),
+                slice_id: event.slice_id.clone(),
+            };
+            let current = self.agent_run(&identity, &event.run_id)?;
+            let allowed = match &event.event {
+                AgentEventKind::PatchRecorded { .. }
+                | AgentEventKind::BlockerRecorded { .. }
+                | AgentEventKind::VerificationRecorded { .. } => {
+                    matches!(current.status, AgentRunStatus::Active)
+                }
+                AgentEventKind::ScopeExpansionRequested { .. } => matches!(
+                    current.status,
+                    AgentRunStatus::Active | AgentRunStatus::Blocked
+                ),
+                AgentEventKind::RunStarted { .. } => true,
+            };
+            if !allowed {
+                bail!(
+                    "agent event cannot be appended after run {} reaches {:?}",
+                    event.run_id,
+                    current.status
+                );
+            }
+        }
         let mut canonical = event.clone();
         let supplied = canonical.event_digest.clone();
         canonical.event_digest.clear();
@@ -524,7 +550,7 @@ impl DeliveryStore {
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
             validate_agent_event_schema(&event)?;
-            validate_agent_event_references(self, &event)?;
+            validate_agent_event_references(self, &event, false)?;
             validate_agent_event_digest(&path, &event)?;
             if event.run_id == run_id
                 && event.plan_digest == identity.plan_digest
@@ -554,11 +580,27 @@ impl DeliveryStore {
             started.ok_or_else(|| anyhow::anyhow!("agent run {run_id} was not started"))?;
         for event in events {
             match event.event {
-                AgentEventKind::RunStarted { .. }
-                | AgentEventKind::PatchRecorded { .. }
-                | AgentEventKind::ScopeExpansionRequested { .. } => {}
-                AgentEventKind::BlockerRecorded { .. } => run.status = AgentRunStatus::Blocked,
+                AgentEventKind::RunStarted { .. } => {}
+                AgentEventKind::PatchRecorded { .. } => {
+                    if !matches!(run.status, AgentRunStatus::Active) {
+                        bail!("agent patch follows a non-active run {}", run.run_id);
+                    }
+                }
+                AgentEventKind::ScopeExpansionRequested { .. } => {
+                    if !matches!(run.status, AgentRunStatus::Active | AgentRunStatus::Blocked) {
+                        bail!("scope expansion follows a completed run {}", run.run_id);
+                    }
+                }
+                AgentEventKind::BlockerRecorded { .. } => {
+                    if !matches!(run.status, AgentRunStatus::Active) {
+                        bail!("blocker follows a non-active run {}", run.run_id);
+                    }
+                    run.status = AgentRunStatus::Blocked;
+                }
                 AgentEventKind::VerificationRecorded { attempt_id } => {
+                    if !matches!(run.status, AgentRunStatus::Active) {
+                        bail!("verification follows a non-active run {}", run.run_id);
+                    }
                     run.status = match self.attempt(identity, &attempt_id)?.report.status {
                         CompletionStatus::Complete => AgentRunStatus::Completed,
                         CompletionStatus::Blocked => AgentRunStatus::Blocked,
@@ -598,7 +640,7 @@ impl DeliveryStore {
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
             validate_agent_event_schema(&event)?;
-            validate_agent_event_references(self, &event)?;
+            validate_agent_event_references(self, &event, false)?;
             validate_agent_event_digest(&path, &event)?;
             events.push(event);
         }
@@ -1050,10 +1092,14 @@ fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
     }
 }
 
-fn validate_agent_event_references(store: &DeliveryStore, event: &AgentEvent) -> Result<()> {
+fn validate_agent_event_references(
+    store: &DeliveryStore,
+    event: &AgentEvent,
+    validate_current_context: bool,
+) -> Result<()> {
     match &event.event {
         AgentEventKind::RunStarted { run } => {
-            validate_run_started_reference(store, event, run)?;
+            validate_run_started_reference(store, event, run, validate_current_context)?;
         }
         AgentEventKind::VerificationRecorded { attempt_id } => {
             let identity = ExecutionIdentity {
@@ -1085,6 +1131,7 @@ fn validate_run_started_reference(
     store: &DeliveryStore,
     event: &AgentEvent,
     run: &AgentRun,
+    validate_current_context: bool,
 ) -> Result<()> {
     let identity = ExecutionIdentity {
         plan_digest: event.plan_digest.clone(),
@@ -1102,7 +1149,7 @@ fn validate_run_started_reference(
     {
         bail!("agent run does not reference its exact approval identity");
     }
-    let expected = canonical_agent_context(store, &approval, run)?;
+    let expected = canonical_agent_context(store, &approval, run, validate_current_context)?;
     if run.context != expected {
         bail!("agent run context is not the canonical context for its approval");
     }
@@ -1124,7 +1171,28 @@ fn canonical_agent_context(
     store: &DeliveryStore,
     approval: &PlanApproval,
     run: &AgentRun,
+    validate_current_context: bool,
 ) -> Result<AgentContextPack> {
+    let slice = approval
+        .plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == run.slice_id)
+        .ok_or_else(|| anyhow::anyhow!("agent run slice is absent from its approved plan"))?;
+    if !validate_current_context {
+        if run.context.context.schema != CONTEXT_PACK_SCHEMA
+            || run.context.context.plan_digest != run.plan_digest
+            || run.context.context.slice_id != run.slice_id
+            || run.context.context.basis != approval.plan.basis
+        {
+            bail!("persisted agent run context is not tied to its approved plan");
+        }
+        return Ok(AgentContextPack::from_slice(
+            &run.plan_digest,
+            run.context.context.clone(),
+            slice,
+        ));
+    }
     let workspace = SpecWorkspace::load(&store.workspace_root)?;
     let index = workspace.index()?;
     let revision = repository_revision(&workspace.root)?;
@@ -1133,12 +1201,6 @@ fn canonical_agent_context(
     {
         bail!("agent run approval is stale for the current workspace");
     }
-    let slice = approval
-        .plan
-        .slices
-        .iter()
-        .find(|slice| slice.id == run.slice_id)
-        .ok_or_else(|| anyhow::anyhow!("agent run slice is absent from its approved plan"))?;
     let context =
         syu_planner::export_context(&approval.plan, &run.slice_id, &workspace, &index, &revision)?;
     Ok(AgentContextPack::from_slice(
@@ -1164,7 +1226,7 @@ impl DeliveryStore {
             {
                 continue;
             }
-            validate_run_started_reference(self, &candidate, run)?;
+            validate_run_started_reference(self, &candidate, run, false)?;
             return Ok((**run).clone());
         }
         bail!(
@@ -1699,7 +1761,7 @@ mod tests {
             slice_id: identity.slice_id.clone(),
             created_at: String::new(),
             event: AgentEventKind::VerificationRecorded {
-                attempt_id: attempt.attempt_id,
+                attempt_id: attempt.attempt_id.clone(),
             },
         };
         assert!(store.append_agent_event(&invalid_event).is_err());
@@ -1802,7 +1864,7 @@ mod tests {
 
         let mut valid_run: AgentRun =
             serde_json::from_value(run_json(&approval.approval_id)).unwrap();
-        valid_run.context = canonical_agent_context(&store, &approval, &valid_run).unwrap();
+        valid_run.context = canonical_agent_context(&store, &approval, &valid_run, true).unwrap();
         let valid_start = AgentEvent {
             schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
             event_id: "event-valid-run-start".into(),
@@ -1819,6 +1881,44 @@ mod tests {
         let mut duplicate_start = valid_start;
         duplicate_start.event_id = "event-duplicate-run-start".into();
         assert!(store.append_agent_event(&duplicate_start).is_err());
+
+        assert_eq!(attempt.report.status, CompletionStatus::Blocked);
+        store.append_attempt(&workspace, &attempt).unwrap();
+        store
+            .append_agent_event(&AgentEvent {
+                schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+                event_id: "event-verification-test".into(),
+                event_digest: String::new(),
+                run_id: "run-start-test".into(),
+                plan_digest: identity.plan_digest.clone(),
+                slice_id: identity.slice_id.clone(),
+                created_at: "2".into(),
+                event: AgentEventKind::VerificationRecorded {
+                    attempt_id: attempt.attempt_id.clone(),
+                },
+            })
+            .unwrap();
+        assert_eq!(
+            store.agent_run(&identity, "run-start-test").unwrap().status,
+            AgentRunStatus::Blocked
+        );
+        let late_blocker = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-late-blocker".into(),
+            event_digest: String::new(),
+            run_id: "run-start-test".into(),
+            plan_digest: identity.plan_digest,
+            slice_id: identity.slice_id,
+            created_at: "3".into(),
+            event: AgentEventKind::BlockerRecorded {
+                blocker: syu_work_model::AgentBlocker {
+                    code: "late".into(),
+                    message: "must be rejected".into(),
+                    next_action: "start a new run".into(),
+                },
+            },
+        };
+        assert!(store.append_agent_event(&late_blocker).is_err());
     }
 
     #[test]
