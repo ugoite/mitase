@@ -446,12 +446,18 @@ fn requirement_add_target_is_in_origin_binding(
         return false;
     };
     let has_exact_binding = match binding.role {
-        BindingRole::Implementation => index
-            .criteria_to_implementation_targets
-            .get(criterion)
-            .into_iter()
-            .flatten()
-            .any(|root| root.binding == target.binding),
+        BindingRole::Implementation => {
+            let target_claims_criterion = declared.claims.iter().any(|claim| {
+                matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
+            });
+            target_claims_criterion
+                && index
+                    .criteria_to_implementation_targets
+                    .get(criterion)
+                    .into_iter()
+                    .flatten()
+                    .any(|root| root.binding == target.binding)
+        }
         BindingRole::Verification => declared.claims.iter().any(|claim| {
             matches!(claim, TargetClaim::Verifies { criterion: actual, .. } if actual == criterion)
         }),
@@ -4966,12 +4972,11 @@ mod tests {
                 .iter()
                 .all(|target| target.reference.target_id.to_string() != "missing-test")
         }));
-        assert!(plan.slices.iter().any(|slice| {
-            slice
-                .blockers
+        assert!(
+            plan.diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-014")
-        }));
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-001")
+        );
     }
 
     #[test]

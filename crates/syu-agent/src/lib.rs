@@ -15,9 +15,9 @@ use syu_spec_model::{BoundTargetRef, format_sha256};
 use syu_validation::canonical_plan_for_execution;
 use syu_work_model::{
     AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack, AgentEvent,
-    AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun, AgentRunStatus,
-    AgentTargetChange, AgentTargetWrite, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval,
-    PlanStatus, TargetAccessMode, TargetLifecycle, TargetTransition,
+    AgentEventKind, AgentPatch, AgentPatchRecord, AgentRun, AgentRunStatus, AgentTargetChange,
+    AgentTargetWrite, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
+    TargetAccessMode, TargetLifecycle, TargetTransition,
 };
 use syu_workspace::SpecWorkspace;
 
@@ -97,30 +97,19 @@ pub fn apply_scoped_patch(
     let workspace = &fresh_workspace;
     let run = validate_run(workspace, run)?;
     let before_fingerprint = workspace.try_fingerprint()?;
-    let now = timestamp();
     let patch_id = store.new_id("agent-patch");
     let result = apply_patch_inner(workspace, &run, patch, &store, &patch_id);
     match result {
         Ok(applied) => {
-            let record = AgentPatchRecord {
-                schema: AGENT_PATCH_SCHEMA.into(),
-                patch_id,
-                run_id: run.run_id.clone(),
-                plan_digest: run.plan_digest.clone(),
-                slice_id: run.slice_id.clone(),
-                status: AgentPatchStatus::Accepted,
-                writes: patch.writes.clone(),
-                changes: applied.changes,
-                before_workspace_fingerprint: before_fingerprint,
-                after_workspace_fingerprint: applied.after_fingerprint,
-                blockers: vec![],
-                created_at: now,
-            };
-            match append_patch_event_while_locked(&store, &run, record.clone()) {
-                Ok(()) => {
-                    store.clear_mutation_journal()?;
-                    Ok(record)
-                }
+            let applied_workspace = SpecWorkspace::load(&workspace.root)?;
+            let record = match store.record_agent_patch_after_apply_while_locked(
+                &applied_workspace,
+                &run,
+                patch,
+                &patch_id,
+                &before_fingerprint,
+            ) {
+                Ok(record) => record,
                 Err(error) => {
                     let restored = restore_rollback(&applied.rollback);
                     if let Err(restore) = restored {
@@ -129,8 +118,12 @@ pub fn apply_scoped_patch(
                         ));
                     }
                     store.clear_mutation_journal()?;
-                    Err(error)
+                    return Err(error);
                 }
+            };
+            {
+                store.clear_mutation_journal()?;
+                Ok(record)
             }
         }
         Err(error) => {
@@ -139,21 +132,14 @@ pub fn apply_scoped_patch(
                 message: error.to_string(),
                 next_action: "Keep the approved slice unchanged, resolve the blocker, or request explicit scope expansion.".into(),
             };
-            let record = AgentPatchRecord {
-                schema: AGENT_PATCH_SCHEMA.into(),
-                patch_id,
-                run_id: run.run_id.clone(),
-                plan_digest: run.plan_digest.clone(),
-                slice_id: run.slice_id.clone(),
-                status: AgentPatchStatus::Rejected,
-                writes: patch.writes.clone(),
-                changes: vec![],
-                before_workspace_fingerprint: before_fingerprint,
-                after_workspace_fingerprint: String::new(),
-                blockers: vec![blocker.clone()],
-                created_at: now,
-            };
-            append_patch_event_while_locked(&store, &run, record)?;
+            store.record_rejected_agent_patch_while_locked(
+                workspace,
+                &run,
+                patch,
+                &patch_id,
+                &before_fingerprint,
+                blocker,
+            )?;
             Err(error)
         }
     }
@@ -522,10 +508,10 @@ fn apply_patch_inner(
         if let Some(error) = &candidate_index.inventory_error {
             bail!("patch produced an invalid inventory: {error}");
         }
-        let changes = validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
-        Ok((candidate.try_fingerprint()?, changes))
+        validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
+        Ok(())
     })();
-    let (after_fingerprint, changes) = match post_write {
+    match post_write {
         Ok(applied) => applied,
         Err(error) => {
             let restored = restore_rollback(&rollback);
@@ -538,11 +524,7 @@ fn apply_patch_inner(
             return Err(error);
         }
     };
-    Ok(PatchApplied {
-        after_fingerprint,
-        changes,
-        rollback,
-    })
+    Ok(PatchApplied { rollback })
 }
 
 fn missing_parent_dirs(path: &Path) -> Vec<PathBuf> {
@@ -959,8 +941,6 @@ struct Replacement {
 }
 
 struct PatchApplied {
-    after_fingerprint: String,
-    changes: Vec<AgentTargetChange>,
     rollback: PatchRollback,
 }
 
@@ -1200,29 +1180,6 @@ fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
     } else {
         Err(anyhow::anyhow!("rollback errors: {}", errors.join("; ")))
     }
-}
-
-fn append_patch_event_while_locked(
-    store: &DeliveryStore,
-    run: &AgentRun,
-    patch: AgentPatchRecord,
-) -> Result<()> {
-    append_patch_event_with_lock_mode(store, run, patch, true)
-}
-
-fn append_patch_event_with_lock_mode(
-    store: &DeliveryStore,
-    run: &AgentRun,
-    patch: AgentPatchRecord,
-    workspace_locked: bool,
-) -> Result<()> {
-    if !workspace_locked {
-        let _workspace_lock = store.lock_workspace()?;
-        store.record_agent_patch_while_locked(run, patch)?;
-    } else {
-        store.record_agent_patch_while_locked(run, patch)?;
-    }
-    Ok(()).map(|_| ())
 }
 
 fn append_event(

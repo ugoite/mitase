@@ -99,7 +99,16 @@ impl ReadinessReport {
                 .probes
                 .public_entrypoints
                 .as_ref()
-                .is_none_or(|probe| self.meets_scope(public_entrypoints_scope(), probe.level))
+                .is_none_or(|probe| {
+                    matches!(
+                        probe.level,
+                        ReadinessLevel::Off
+                            | ReadinessLevel::Seedable
+                            | ReadinessLevel::WorkReady
+                            | ReadinessLevel::Verifiable
+                            | ReadinessLevel::ClosedLoop
+                    ) && self.meets_scope(public_entrypoints_scope(), probe.level)
+                })
             && readiness
                 .probes
                 .contracts
@@ -570,7 +579,22 @@ pub fn evaluate(
     if let Some(required_level) = public_probe {
         let public_subjects =
             public_entrypoint_subjects(workspace, index, revision, required_level);
-        seed_subjects.extend(public_subjects);
+        // A public entrypoint probe is a scoped denominator for every axis it
+        // asks Workbench to enforce.  Keeping these subjects only in
+        // seedability made work-ready and above probes either impossible to
+        // satisfy or silently unrelated to the entrypoint they advertised.
+        if required_level >= ReadinessLevel::Seedable {
+            seed_subjects.extend(public_subjects.clone());
+        }
+        if required_level >= ReadinessLevel::WorkReady {
+            work_subjects.extend(public_subjects.clone());
+        }
+        if required_level >= ReadinessLevel::Verifiable {
+            verification_subjects.extend(public_subjects.clone());
+        }
+        if required_level >= ReadinessLevel::ClosedLoop {
+            closed_subjects.extend(public_subjects);
+        }
     }
 
     if let Some(required_level) = contracts_probe {
@@ -1121,7 +1145,7 @@ fn finalized_absent_targets(
             || verification
                 .executions
                 .iter()
-                .any(|execution| execution.exit_code != 0 || execution.proof.matched_count == 0)
+                .any(|execution| execution.exit_code != 0 || execution.proof.matched_count != 1)
         {
             continue;
         }
@@ -1279,7 +1303,7 @@ fn validate_durable_receipt_closure(
         if execution.target != claim.target
             || execution.exit_code != 0
             || execution.command.is_empty()
-            || execution.proof.matched_count == 0
+            || execution.proof.matched_count != 1
         {
             bail!("durable verification receipt execution is invalid");
         }
@@ -1291,13 +1315,14 @@ fn validate_durable_receipt_closure(
             .runners
             .get(&runner_ref.runner)
             .ok_or_else(|| anyhow::anyhow!("durable verification runner is not configured"))?;
+        let arguments = configured
+            .arguments
+            .iter()
+            .map(|argument| crate::expand_runner_argument(argument, &runner_ref.arguments))
+            .collect::<Vec<_>>();
+        let arguments = crate::canonical_runner_arguments(&configured.executable, arguments);
         let expected_command = std::iter::once(configured.executable.clone())
-            .chain(
-                configured
-                    .arguments
-                    .iter()
-                    .map(|argument| crate::expand_runner_argument(argument, &runner_ref.arguments)),
-            )
+            .chain(arguments)
             .collect::<Vec<_>>();
         if execution.runner != runner_ref.runner || execution.command != expected_command {
             bail!("durable verification receipt command is stale");
@@ -1727,11 +1752,18 @@ fn public_entrypoint_subjects(
     // product contract. The readiness denominator must remain the explicit
     // `exposes` declarations: each one names an exact public entrypoint and
     // binds it to a capability target that can supply acceptance evidence.
+    let unsupported_level = required_level > ReadinessLevel::WorkReady;
     index
         .exposes_by_target
         .iter()
         .map(|(target_ref, exposed_target)| {
             let mut blockers = Vec::new();
+            if unsupported_level {
+                blockers.push(
+                    "public entrypoint probes above work-ready require explicit execution evidence"
+                        .into(),
+                );
+            }
             let Some(identity) = index.target_to_artifact.get(target_ref) else {
                 return subject(
                     format!("public:{target_ref}"),

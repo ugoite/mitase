@@ -17,11 +17,12 @@ use std::{
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
-    AgentEvent, AgentEventKind, AgentPatchRecord, AgentRun, AgentRunStatus,
-    COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CONTEXT_PACK_SCHEMA, CompletionAttempt,
-    CompletionBlocker, CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA,
-    FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval,
-    ScopeExpansionRequest, VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
+    AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentRun, AgentRunStatus,
+    AgentTargetChange, AgentTargetWrite, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
+    CONTEXT_PACK_SCHEMA, CompletionAttempt, CompletionBlocker, CompletionStatus, ExecutionIdentity,
+    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
+    PlanApproval, ScopeExpansionRequest, VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA,
+    work_plan_digest,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -980,7 +981,128 @@ impl DeliveryStore {
         )
     }
 
-    pub fn record_agent_patch_while_locked(
+    /// Record an accepted patch only after DeliveryStore has rebuilt its
+    /// evidence from the approved slice and the workspace's actual post-state.
+    /// Callers cannot submit an authoritative `AgentPatchRecord`; that record
+    /// is constructed here so patch history cannot be forged independently of
+    /// the approved writes.
+    pub fn record_agent_patch_after_apply_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        run: &AgentRun,
+        patch: &AgentPatch,
+        patch_id: &str,
+        before_workspace_fingerprint: &str,
+    ) -> Result<AgentPatchRecord> {
+        let identity = ExecutionIdentity {
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+        };
+        let persisted = self.agent_run(&identity, &run.run_id)?;
+        let mut expected_run = run.clone();
+        expected_run.status = persisted.status.clone();
+        if persisted != expected_run || !matches!(persisted.status, AgentRunStatus::Active) {
+            bail!("agent patch authority requires the exact active persisted run");
+        }
+        if patch.schema != syu_work_model::AGENT_PATCH_SCHEMA
+            || patch.run_id != run.run_id
+            || patch.expected_workspace_fingerprint
+                != run.context.context.basis.workspace_fingerprint
+            || patch_id.trim().is_empty()
+            || before_workspace_fingerprint.trim().is_empty()
+        {
+            bail!("agent patch authority input is not bound to the active run");
+        }
+        let approval = self.approval(&identity)?;
+        if approval.approval_id != run.approval_id
+            || approval.plan_digest != run.plan_digest
+            || approval.plan_digest != approval.plan.canonical_digest
+            || approval.plan.slices.len() != 1
+            || approval.slice_id != run.slice_id
+        {
+            bail!("agent patch authority is not bound to the exact approval");
+        }
+        let index = workspace.index()?;
+        let slice = approval
+            .plan
+            .slices
+            .iter()
+            .find(|slice| slice.id == run.slice_id)
+            .ok_or_else(|| anyhow::anyhow!("agent slice is absent from its approved plan"))?;
+        let changes = validate_agent_patch_writes(workspace, &index, slice, patch)?;
+        let after_workspace_fingerprint = workspace.try_fingerprint()?;
+        if before_workspace_fingerprint == after_workspace_fingerprint {
+            bail!("accepted agent patch must change the workspace");
+        }
+        let record = AgentPatchRecord {
+            schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+            patch_id: patch_id.into(),
+            run_id: run.run_id.clone(),
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+            status: syu_work_model::AgentPatchStatus::Accepted,
+            writes: patch.writes.clone(),
+            changes,
+            before_workspace_fingerprint: before_workspace_fingerprint.into(),
+            after_workspace_fingerprint,
+            blockers: vec![],
+            created_at: now_nanos().to_string(),
+        };
+        self.append_agent_patch_event_while_locked(run, record.clone())?;
+        Ok(record)
+    }
+
+    /// Rejected attempts are also event-sourced, but they never carry
+    /// authoritative post-state evidence. Their writes remain an audit of the
+    /// attempted request and are bound to the active run and unchanged basis.
+    pub fn record_rejected_agent_patch_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        run: &AgentRun,
+        patch: &AgentPatch,
+        patch_id: &str,
+        before_workspace_fingerprint: &str,
+        blocker: AgentBlocker,
+    ) -> Result<AgentPatchRecord> {
+        let identity = ExecutionIdentity {
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+        };
+        let persisted = self.agent_run(&identity, &run.run_id)?;
+        let mut expected_run = run.clone();
+        expected_run.status = persisted.status.clone();
+        if persisted != expected_run || !matches!(persisted.status, AgentRunStatus::Active) {
+            bail!("rejected agent patch requires the exact active persisted run");
+        }
+        if patch.schema != syu_work_model::AGENT_PATCH_SCHEMA
+            || patch.run_id != run.run_id
+            || patch.expected_workspace_fingerprint
+                != run.context.context.basis.workspace_fingerprint
+            || patch_id.trim().is_empty()
+            || before_workspace_fingerprint.trim().is_empty()
+            || workspace.try_fingerprint()? != before_workspace_fingerprint
+        {
+            bail!("rejected agent patch is not bound to the unchanged run basis");
+        }
+        let record = AgentPatchRecord {
+            schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+            patch_id: patch_id.into(),
+            run_id: run.run_id.clone(),
+            plan_digest: run.plan_digest.clone(),
+            slice_id: run.slice_id.clone(),
+            status: syu_work_model::AgentPatchStatus::Rejected,
+            writes: patch.writes.clone(),
+            changes: vec![],
+            before_workspace_fingerprint: before_workspace_fingerprint.into(),
+            after_workspace_fingerprint: String::new(),
+            blockers: vec![blocker],
+            created_at: now_nanos().to_string(),
+        };
+        self.append_agent_patch_event_while_locked(run, record.clone())?;
+        Ok(record)
+    }
+
+    fn append_agent_patch_event_while_locked(
         &self,
         run: &AgentRun,
         patch: AgentPatchRecord,
@@ -1796,6 +1918,194 @@ fn validate_finalization_schema(receipt: &FinalizationReceipt) -> Result<()> {
         FINALIZATION_RECEIPT_SCHEMA,
         "finalization receipt",
     )
+}
+
+fn validate_agent_patch_writes(
+    workspace: &SpecWorkspace,
+    index: &syu_workspace::SpecIndex,
+    slice: &syu_work_model::ExecutionSlice,
+    patch: &AgentPatch,
+) -> Result<Vec<AgentTargetChange>> {
+    if patch.writes.is_empty() {
+        bail!("accepted agent patch must contain at least one write");
+    }
+    let mut seen = BTreeSet::new();
+    let mut changes = Vec::with_capacity(patch.writes.len());
+    for write in &patch.writes {
+        let target = agent_write_target(write);
+        if !seen.insert(target.clone()) {
+            bail!("accepted agent patch writes target {target} more than once");
+        }
+        let planned = slice
+            .editable_targets
+            .iter()
+            .find(|candidate| candidate.reference == *target)
+            .ok_or_else(|| {
+                anyhow::anyhow!("accepted patch target {target} is outside the approved slice")
+            })?;
+        if planned.access != syu_work_model::TargetAccessMode::Editable
+            || !matches!(
+                planned.transition,
+                syu_work_model::TargetTransition::Add
+                    | syu_work_model::TargetTransition::Modify
+                    | syu_work_model::TargetTransition::Remove
+            )
+        {
+            bail!("accepted patch target {target} is not an editable lifecycle target");
+        }
+        let is_file = planned.resolved_selector.description == "file"
+            && planned.resolved_selector.symbols.is_empty();
+        let current = index.target(target).and_then(|declared| {
+            syu_workspace::resolve_target_in_workspace(workspace, declared).ok()
+        });
+        match write {
+            AgentTargetWrite::Replace {
+                expected_excerpt_hash,
+                content,
+                ..
+            } => {
+                require_agent_transition(
+                    target,
+                    planned,
+                    syu_work_model::TargetTransition::Modify,
+                    false,
+                )?;
+                if expected_excerpt_hash != &planned.excerpt_hash {
+                    bail!("replace target {target} is not bound to the approved excerpt");
+                }
+                let current = current.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("replace target {target} is absent after the patch")
+                })?;
+                if current.content_hash == planned.content_hash
+                    || current.excerpt.trim() != content.trim()
+                {
+                    bail!("replace target {target} does not match the actual post-state");
+                }
+            }
+            AgentTargetWrite::AddToFile {
+                expected_path_hash,
+                content,
+                ..
+            } => {
+                require_agent_transition(
+                    target,
+                    planned,
+                    syu_work_model::TargetTransition::Add,
+                    false,
+                )?;
+                if is_file || planned.container_content_hash.as_deref() != Some(expected_path_hash)
+                {
+                    bail!("insertion target {target} is not bound to its approved container");
+                }
+                let current = current.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("insertion target {target} is absent after the patch")
+                })?;
+                if current.excerpt.trim() != content.trim() {
+                    bail!("insertion target {target} does not match the actual post-state");
+                }
+            }
+            AgentTargetWrite::CreateFile { content, .. } => {
+                require_agent_transition(
+                    target,
+                    planned,
+                    syu_work_model::TargetTransition::Add,
+                    true,
+                )?;
+                if planned.container_content_hash.is_some() {
+                    bail!("file target {target} is approved for insertion, not file creation");
+                }
+                let current = current.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("created file target {target} is absent after the patch")
+                })?;
+                if current.excerpt != *content {
+                    bail!("created file target {target} does not match the actual post-state");
+                }
+            }
+            AgentTargetWrite::Remove {
+                expected_excerpt_hash,
+                ..
+            } => {
+                require_agent_transition(
+                    target,
+                    planned,
+                    syu_work_model::TargetTransition::Remove,
+                    false,
+                )?;
+                if is_file || expected_excerpt_hash != &planned.excerpt_hash || current.is_some() {
+                    bail!("remove target {target} is not bound to the approved absent post-state");
+                }
+            }
+            AgentTargetWrite::RemoveFile {
+                expected_content_hash,
+                ..
+            } => {
+                require_agent_transition(
+                    target,
+                    planned,
+                    syu_work_model::TargetTransition::Remove,
+                    true,
+                )?;
+                if !is_file || expected_content_hash != &planned.content_hash || current.is_some() {
+                    bail!(
+                        "file removal target {target} is not bound to the approved absent post-state"
+                    );
+                }
+            }
+        }
+        changes.push(agent_change(planned, current.as_ref()));
+    }
+    Ok(changes)
+}
+
+fn agent_write_target(write: &AgentTargetWrite) -> &syu_spec_model::BoundTargetRef {
+    match write {
+        AgentTargetWrite::Replace { target, .. }
+        | AgentTargetWrite::AddToFile { target, .. }
+        | AgentTargetWrite::CreateFile { target, .. }
+        | AgentTargetWrite::Remove { target, .. }
+        | AgentTargetWrite::RemoveFile { target, .. } => target,
+    }
+}
+
+fn require_agent_transition(
+    target: &syu_spec_model::BoundTargetRef,
+    planned: &syu_work_model::PlannedTarget,
+    transition: syu_work_model::TargetTransition,
+    requires_file: bool,
+) -> Result<()> {
+    if planned.transition != transition
+        || (transition == syu_work_model::TargetTransition::Add
+            && planned.lifecycle != syu_work_model::TargetLifecycle::EnsurePresent)
+        || (transition == syu_work_model::TargetTransition::Remove
+            && planned.lifecycle != syu_work_model::TargetLifecycle::EnsureAbsent)
+        || (transition == syu_work_model::TargetTransition::Modify
+            && planned.lifecycle != syu_work_model::TargetLifecycle::Stable)
+        || (planned.resolved_selector.description == "file"
+            && planned.resolved_selector.symbols.is_empty())
+            != requires_file
+    {
+        bail!("target {target} does not permit this exact scoped write");
+    }
+    Ok(())
+}
+
+fn agent_change(
+    planned: &syu_work_model::PlannedTarget,
+    current: Option<&syu_workspace::ResolvedTarget>,
+) -> AgentTargetChange {
+    AgentTargetChange {
+        reference: planned.reference.clone(),
+        transition: planned.transition,
+        lifecycle: planned.lifecycle,
+        before_content_hash: planned.content_hash.clone(),
+        after_content_hash: current
+            .map(|resolved| resolved.content_hash.clone())
+            .unwrap_or_default(),
+        before_excerpt_hash: planned.excerpt_hash.clone(),
+        after_excerpt_hash: current
+            .map(|resolved| resolved.excerpt_hash.clone())
+            .unwrap_or_default(),
+    }
 }
 
 fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
