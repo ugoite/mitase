@@ -201,6 +201,11 @@ impl DeliveryStore {
             || attempt.approved_plan_digest != receipt.plan_digest
             || attempt.report.status != CompletionStatus::Complete
             || attempt.receipt.is_none()
+            || attempt
+                .receipt
+                .as_ref()
+                .map(|value| &value.lifecycle_proofs)
+                != Some(&receipt.lifecycle_proofs)
         {
             bail!("finalization is not tied to one complete attempt for its execution identity");
         }
@@ -242,6 +247,11 @@ impl DeliveryStore {
             || attempt.approved_plan_digest != receipt.plan_digest
             || attempt.report.status != CompletionStatus::Complete
             || attempt.receipt.is_none()
+            || attempt
+                .receipt
+                .as_ref()
+                .map(|value| &value.lifecycle_proofs)
+                != Some(&receipt.lifecycle_proofs)
         {
             bail!("stored finalization is not tied to one complete attempt");
         }
@@ -355,7 +365,8 @@ impl DeliveryStore {
             plan_digest: attempt.plan_digest.clone(),
             slice_id: attempt.slice_id.clone(),
         };
-        if current.preview_token != token
+        if current != preview.clone()
+            || current.preview_token != token
             || current.pre_workspace_fingerprint != preview.pre_workspace_fingerprint
         {
             bail!("workspace changed after finalization preview; preview again");

@@ -880,10 +880,15 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
             format,
         } => {
             let workspace = SpecWorkspace::load(workspace)?;
+            let index = workspace.index()?;
             let request = request
                 .as_ref()
                 .map(|path| read_yaml::<WorkRequest>(path))
                 .transpose()?;
+            if let Some(request) = &request {
+                validate_work_request(&index, request)
+                    .context("workbench projection request is outside its exact origin")?;
+            }
             let projection =
                 project_workbench(&workspace, request.as_ref(), &revision(&workspace.root)?)?;
             match format {

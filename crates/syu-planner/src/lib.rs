@@ -485,6 +485,9 @@ fn validate_origin_target(
     if matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent) {
         bail!("origin target {target} is absent");
     }
+    if !index.target_to_artifact.contains_key(target) {
+        bail!("origin target {target} does not resolve to an active inventory artifact");
+    }
     let claims = artifact
         .claims
         .iter()
@@ -557,6 +560,11 @@ fn validate_origin_contract_closure(
                 })?;
                 if matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent) {
                     bail!("origin target {related_target} has an absent contract participant");
+                }
+                if !index.target_to_artifact.contains_key(&related_target) {
+                    bail!(
+                        "origin target {related_target} does not resolve to an active contract artifact"
+                    );
                 }
                 pending.push(related_target);
             }
@@ -3557,15 +3565,38 @@ fn focused_split_closure(
         .collect::<Vec<_>>();
     let (related_targets, _generated_targets, related_contracts) =
         dependency_closure(index, &roots);
-    let readonly = original
-        .readonly_context
+    let child_editable = editable
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let mut readonly = original
+        .editable_targets
         .iter()
         .filter(|target| {
             related_targets.contains(&target.reference)
-                || editable_bindings.contains(&target.reference.binding)
+                && !child_editable.contains(&target.reference)
         })
-        .cloned()
+        .map(|target| {
+            let mut context = target.clone();
+            context.access = TargetAccessMode::Readonly;
+            context.transition = TargetTransition::Readonly;
+            context.lifecycle = TargetLifecycle::Stable;
+            context
+        })
         .collect::<Vec<_>>();
+    readonly.extend(
+        original
+            .readonly_context
+            .iter()
+            .filter(|target| {
+                related_targets.contains(&target.reference)
+                    || editable_bindings.contains(&target.reference.binding)
+            })
+            .cloned()
+            .collect::<Vec<_>>(),
+    );
+    readonly.sort_by(|left, right| left.reference.cmp(&right.reference));
+    readonly.dedup_by(|left, right| left.reference == right.reference);
     let contracts = original
         .contracts
         .iter()

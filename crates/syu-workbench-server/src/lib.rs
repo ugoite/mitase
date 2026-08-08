@@ -21,7 +21,7 @@ use syu_delivery::DeliveryStore;
 use syu_diagnostics::{Severity, ValidationPhase, ValidationResult};
 use syu_planner::{
     SplitWorkRecommendation, TargetSuggestion, TargetSuggestionSet, plan,
-    split_work_recommendation, suggest_targets,
+    split_work_recommendation, suggest_targets, validate_work_request,
 };
 use syu_project_model::{ChangeBaseline, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
@@ -5564,6 +5564,10 @@ pub fn project(
     revision: &str,
 ) -> Result<WorkspaceProjection> {
     let index = workspace.index()?;
+    if let Some(request) = request {
+        validate_work_request(&index, request)
+            .context("workbench projection request is outside its exact origin")?;
+    }
     project_with_index(workspace, &index, request, revision)
 }
 
