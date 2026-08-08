@@ -99,12 +99,13 @@ pub fn apply_scoped_patch(
     run: &AgentRun,
     patch: &AgentPatch,
 ) -> Result<AgentPatchRecord> {
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let _workspace_guard = PATCH_WORKSPACE_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| anyhow::anyhow!("agent workspace mutation lock"))?;
     let run = validate_run(workspace, run)?;
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
     let before_fingerprint = workspace.try_fingerprint()?;
     let now = timestamp();
     let patch_id = store.new_id("agent-patch");
@@ -125,7 +126,7 @@ pub fn apply_scoped_patch(
                 blockers: vec![],
                 created_at: now,
             };
-            match append_patch_event(&store, &run, record.clone()) {
+            match append_patch_event_while_locked(&store, &run, record.clone()) {
                 Ok(()) => Ok(record),
                 Err(error) => {
                     restore_rollback(&applied.rollback)?;
@@ -153,7 +154,7 @@ pub fn apply_scoped_patch(
                 blockers: vec![blocker.clone()],
                 created_at: now,
             };
-            append_patch_event(&store, &run, record)?;
+            append_patch_event_while_locked(&store, &run, record)?;
             Err(error)
         }
     }
@@ -212,6 +213,23 @@ pub fn record_verification(
     run: &AgentRun,
     attempt_id: &str,
 ) -> Result<AgentEvent> {
+    record_verification_inner(workspace, run, attempt_id, false)
+}
+
+pub fn record_verification_while_locked(
+    workspace: &SpecWorkspace,
+    run: &AgentRun,
+    attempt_id: &str,
+) -> Result<AgentEvent> {
+    record_verification_inner(workspace, run, attempt_id, true)
+}
+
+fn record_verification_inner(
+    workspace: &SpecWorkspace,
+    run: &AgentRun,
+    attempt_id: &str,
+    workspace_locked: bool,
+) -> Result<AgentEvent> {
     let run = validate_run(workspace, run)?;
     if !matches!(run.status, AgentRunStatus::Active) {
         bail!("agent run is not active; resolve its blocker or start a new run");
@@ -219,12 +237,13 @@ pub fn record_verification(
     if attempt_id.trim().is_empty() {
         bail!("verification evidence requires an attempt id");
     }
-    append_event(
+    append_event_with_lock_mode(
         workspace,
         &run,
         AgentEventKind::VerificationRecorded {
             attempt_id: attempt_id.into(),
         },
+        workspace_locked,
     )
 }
 
@@ -1143,10 +1162,19 @@ fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
     }
 }
 
-fn append_patch_event(
+fn append_patch_event_while_locked(
     store: &DeliveryStore,
     run: &AgentRun,
     patch: AgentPatchRecord,
+) -> Result<()> {
+    append_patch_event_with_lock_mode(store, run, patch, true)
+}
+
+fn append_patch_event_with_lock_mode(
+    store: &DeliveryStore,
+    run: &AgentRun,
+    patch: AgentPatchRecord,
+    workspace_locked: bool,
 ) -> Result<()> {
     let event = AgentEvent {
         schema: AGENT_EVENT_SCHEMA.into(),
@@ -1158,13 +1186,27 @@ fn append_patch_event(
         created_at: timestamp(),
         event: AgentEventKind::PatchRecorded { patch },
     };
-    store.append_agent_event(&event).map(|_| ())
+    if workspace_locked {
+        store.append_agent_event_while_locked(&event, false)
+    } else {
+        store.append_agent_event(&event)
+    }
+    .map(|_| ())
 }
 
 fn append_event(
     workspace: &SpecWorkspace,
     run: &AgentRun,
     event: AgentEventKind,
+) -> Result<AgentEvent> {
+    append_event_with_lock_mode(workspace, run, event, false)
+}
+
+fn append_event_with_lock_mode(
+    workspace: &SpecWorkspace,
+    run: &AgentRun,
+    event: AgentEventKind,
+    workspace_locked: bool,
 ) -> Result<AgentEvent> {
     let store = DeliveryStore::for_workspace(&workspace.root)?;
     let value = AgentEvent {
@@ -1177,7 +1219,11 @@ fn append_event(
         created_at: timestamp(),
         event,
     };
-    store.append_agent_event(&value)
+    if workspace_locked {
+        store.append_agent_event_while_locked(&value, false)
+    } else {
+        store.append_agent_event(&value)
+    }
 }
 
 fn repository_revision(root: &Path) -> Result<String> {

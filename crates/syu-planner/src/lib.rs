@@ -464,9 +464,11 @@ fn requirement_add_target_is_in_origin_binding(
         } => actual != criterion,
         _ => false,
     });
+    let is_new_verification_post_state = binding.role == BindingRole::Verification
+        && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Planned);
     has_exact_binding
         && !has_other_criterion_claim
-        && !index.target_to_artifact.contains_key(target)
+        && (!index.target_to_artifact.contains_key(target) || is_new_verification_post_state)
 }
 
 fn requirement_declared_target_is_in_origin_binding(
@@ -2735,7 +2737,9 @@ fn slice_has_verification_coverage(
         .requested_targets
         .iter()
         .filter(|requested| {
-            requested.criterion() == Some(criterion)
+            requested
+                .criterion()
+                .is_none_or(|requested| requested == criterion)
                 && requested.transition(default_transition(request.operation))
                     == TargetTransition::Add
                 && index

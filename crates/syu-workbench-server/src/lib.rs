@@ -83,6 +83,7 @@ pub struct ApprovedTargetSuggestion {
 pub struct WorkbenchEngine;
 struct CachedWorkspaceSnapshot {
     signature: String,
+    governance_signature: String,
     workspace: Arc<SpecWorkspace>,
     index: Arc<SpecIndex>,
     revision: String,
@@ -295,8 +296,16 @@ impl WorkbenchService {
             if workspace_signature(&self.workspace_root)? != signature {
                 continue;
             }
+            let governance_signature = governance_signature(&workspace)?;
+            let governance_changed = self
+                .snapshot
+                .read()
+                .map_err(|_| anyhow::anyhow!("workbench snapshot lock"))?
+                .as_ref()
+                .is_some_and(|cached| cached.governance_signature != governance_signature);
             let cached = Arc::new(CachedWorkspaceSnapshot {
                 signature,
+                governance_signature,
                 workspace,
                 index,
                 revision,
@@ -306,10 +315,36 @@ impl WorkbenchService {
                 .snapshot
                 .write()
                 .map_err(|_| anyhow::anyhow!("workbench snapshot lock"))? = Some(cached.clone());
+            if governance_changed {
+                let mut session = self
+                    .session
+                    .write()
+                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+                clear_work_execution_state(&mut session);
+            }
             return Ok(cached);
         }
         anyhow::bail!("workspace changed while loading the Workbench snapshot")
     }
+}
+
+fn governance_signature(workspace: &SpecWorkspace) -> Result<String> {
+    let mut hash = Sha256::new();
+    hash.update(b"syu/workbench-governance/v1\0");
+    hash.update(fs::read(workspace.root.join("syu.yaml"))?);
+    let mut paths = workspace
+        .documents
+        .iter()
+        .map(|document| document.path.clone())
+        .collect::<Vec<_>>();
+    paths.sort();
+    for path in paths {
+        hash.update(b"\0path\0");
+        hash.update(path.to_string_lossy().as_bytes());
+        hash.update(b"\0content\0");
+        hash.update(fs::read(path)?);
+    }
+    Ok(format_sha256(hash.finalize()))
 }
 
 fn workspace_signature(root: &Path) -> Result<String> {
@@ -1031,9 +1066,9 @@ fn ensure_no_active_agent_run(service: &WorkbenchService) -> Result<()> {
         .agent_run
         .as_ref()
         .is_some_and(|run| matches!(run.status, AgentRunStatus::Active));
-    let persisted_active = DeliveryStore::for_workspace(&service.workspace_root)?
-        .latest_agent_run()?
-        .is_some_and(|run| matches!(run.status, AgentRunStatus::Active));
+    let persisted_active = !DeliveryStore::for_workspace(&service.workspace_root)?
+        .active_agent_runs()?
+        .is_empty();
     if session_active || persisted_active {
         anyhow::bail!(
             "specification and config edits are unavailable while an agent run is active"
@@ -1043,6 +1078,8 @@ fn ensure_no_active_agent_run(service: &WorkbenchService) -> Result<()> {
 }
 
 fn clear_work_execution_state(session: &mut WorkbenchSession) {
+    session.work_title = None;
+    session.draft_request = None;
     session.plan = None;
     session.selected_slice = None;
     session.context_pack = None;
@@ -2830,6 +2867,8 @@ async fn api_specification_apply(
     AxumPath(anchor): AxumPath<String>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = basis(&service, &command.basis)?;
     ensure_no_active_agent_run(&service)?;
     let workspace = &snapshot.workspace;
@@ -2898,6 +2937,8 @@ async fn api_specification_candidate_apply(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = basis(&service, &command.basis)?;
     ensure_no_active_agent_run(&service)?;
     let workspace = &snapshot.workspace;
@@ -2976,6 +3017,8 @@ async fn api_config_apply(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = basis(&service, &command.basis)?;
     ensure_no_active_agent_run(&service)?;
     let workspace = &snapshot.workspace;
@@ -4595,6 +4638,7 @@ async fn api_agent_verify(
         ));
     }
     let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let approval = store
         .approval(&ExecutionIdentity {
             plan_digest: run.plan_digest.clone(),
@@ -4606,12 +4650,17 @@ async fn api_agent_verify(
                 anyhow::anyhow!("agent verification requires an approved plan: {error}"),
             )
         })?;
-    let attempt = store.execute_and_append_attempt(
+    let attempt = store.execute_and_append_attempt_while_locked(
         &snapshot.workspace,
         &approval.plan,
         &command.execution.slice_id,
     )?;
-    syu_agent::record_verification(&snapshot.workspace, &run, &attempt.attempt_id)?;
+    if let Err(error) =
+        syu_agent::record_verification_while_locked(&snapshot.workspace, &run, &attempt.attempt_id)
+    {
+        store.remove_unfinalized_attempt_while_locked(&attempt)?;
+        return Err(error.into());
+    }
     let mut session = service
         .session
         .write()
@@ -5920,15 +5969,25 @@ fn split_candidate_selectable(
     index: &SpecIndex,
     blockers: &[syu_diagnostics::Diagnostic],
 ) -> bool {
-    plan.status == PlanStatus::Ready
-        && blockers.is_empty()
+    let recoverable_plan_block = plan_can_replan_candidate(plan, slice);
+    let intrinsic_blockers = blockers
+        .iter()
+        .filter(|blocker| blocker.rule_id != "plan-needs-review")
+        .count();
+    (plan.status == PlanStatus::Ready || recoverable_plan_block)
+        && intrinsic_blockers == 0
         && slice.confidence != syu_work_model::PlanConfidence::Low
         && (request.operation == WorkOperation::Investigate || !slice.editable_targets.is_empty())
         && slice_budget_within_limits(slice, config)
         && slice_targets_are_active(index, slice)
         && origin_closure_is_complete(plan, request, slice, index)
         && (request.operation == WorkOperation::Investigate
-            || verification_covers_editable_targets(index, slice, request.origin.criterion()))
+            || verification_covers_editable_targets(
+                index,
+                slice,
+                request,
+                request.origin.criterion(),
+            ))
 }
 
 fn split_candidate_blockers(
@@ -5940,6 +5999,7 @@ fn split_candidate_blockers(
 ) -> Vec<syu_diagnostics::Diagnostic> {
     let mut blockers = slice.blockers.clone();
     if plan.status != PlanStatus::Ready
+        && !plan_can_replan_candidate(plan, slice)
         && !blockers
             .iter()
             .any(|blocker| blocker.rule_id == "plan-needs-review")
@@ -5996,7 +6056,7 @@ fn split_candidate_blockers(
         ));
     }
     if request.operation != WorkOperation::Investigate
-        && !verification_covers_editable_targets(index, slice, request.origin.criterion())
+        && !verification_covers_editable_targets(index, slice, request, request.origin.criterion())
     {
         blockers.push(syu_diagnostics::Diagnostic::error(
             "missing-verification-coverage",
@@ -6025,6 +6085,15 @@ fn split_candidate_blockers(
         ));
     }
     blockers
+}
+
+fn plan_can_replan_candidate(plan: &WorkPlan, slice: &syu_work_model::ExecutionSlice) -> bool {
+    plan.status != PlanStatus::Ready
+        && slice.blockers.is_empty()
+        && plan.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-WORK-003"
+                && diagnostic.message.to_ascii_lowercase().contains("slices")
+        })
 }
 
 fn active_exact_target(index: &SpecIndex, reference: &BoundTargetRef) -> bool {
@@ -6063,27 +6132,65 @@ fn candidate_target_is_valid(index: &SpecIndex, target: &syu_work_model::Planned
 fn verification_covers_editable_targets(
     index: &SpecIndex,
     slice: &syu_work_model::ExecutionSlice,
+    request: &WorkRequest,
     criterion: &SpecAnchor,
 ) -> bool {
     let valid_verifications = slice
         .verification_targets
         .iter()
-        .filter(|target| implemented_verification_claim(index, target, criterion))
+        .filter(|target| verification_target_is_valid(index, target, request, criterion))
         .collect::<Vec<_>>();
     !slice.editable_targets.is_empty()
         && slice.editable_targets.iter().all(|editable| {
+            if explicitly_requested_verification_add(index, request, &editable.reference) {
+                return true;
+            }
             valid_verifications.iter().any(|verification| {
-                index
-                    .verification_by_target
-                    .get(&editable.reference)
-                    .is_some_and(|covered| covered.contains(&verification.reference))
+                let covered = if explicitly_requested_verification_add(
+                    index,
+                    request,
+                    &verification.reference,
+                ) {
+                    index.all_verification_by_target.get(&editable.reference)
+                } else {
+                    index.verification_by_target.get(&editable.reference)
+                };
+                covered.is_some_and(|covered| covered.contains(&verification.reference))
             })
         })
 }
 
-fn implemented_verification_claim(
+fn explicitly_requested_verification_add(
+    index: &SpecIndex,
+    request: &WorkRequest,
+    reference: &BoundTargetRef,
+) -> bool {
+    request.requested_targets.iter().any(|requested| {
+        requested.reference() == reference
+            && requested.transition(work_default_transition(request.operation))
+                == TargetTransition::Add
+            && index
+                .bindings
+                .get(&reference.binding)
+                .is_some_and(|binding| binding.role == BindingRole::Verification)
+    })
+}
+
+fn work_default_transition(operation: WorkOperation) -> TargetTransition {
+    match operation {
+        WorkOperation::Add => TargetTransition::Add,
+        WorkOperation::Remove => TargetTransition::Remove,
+        WorkOperation::Modify
+        | WorkOperation::Refactor
+        | WorkOperation::Document
+        | WorkOperation::Investigate => TargetTransition::Modify,
+    }
+}
+
+fn verification_target_is_valid(
     index: &SpecIndex,
     target: &syu_work_model::PlannedTarget,
+    request: &WorkRequest,
     criterion: &SpecAnchor,
 ) -> bool {
     let Some(claim) = target.verification_claim.as_ref() else {
@@ -6095,18 +6202,24 @@ fn implemented_verification_claim(
     let Some(binding) = index.bindings.get(&target.reference.binding) else {
         return false;
     };
-    if binding.role != BindingRole::Verification
-        || index.item_status.get(&target.reference.binding.item) != Some(&ItemStatus::Implemented)
+    if binding.role != BindingRole::Verification {
+        return false;
+    }
+    let planned_add = explicitly_requested_verification_add(index, request, &target.reference);
+    if !planned_add
+        && index.item_status.get(&target.reference.binding.item) != Some(&ItemStatus::Implemented)
     {
         return false;
     }
     let Some(artifact) = index.target(&target.reference) else {
         return false;
     };
-    if matches!(
-        artifact.lifecycle,
-        syu_spec_model::ArtifactTargetLifecycle::Absent
-    ) {
+    if !planned_add
+        && matches!(
+            artifact.lifecycle,
+            syu_spec_model::ArtifactTargetLifecycle::Absent
+        )
+    {
         return false;
     }
     let matching = artifact
@@ -6760,6 +6873,54 @@ fn journey_view(
             evidence: JourneyEvidenceView {
                 status: "split_required".into(),
                 summary: "Select one exact execution slice for the linked Requirement criterion.".into(),
+                blockers: vec![],
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if plan.status != PlanStatus::Ready
+        && work.split_recovery.as_ref().is_some_and(|recovery| {
+            recovery
+                .candidates
+                .iter()
+                .any(|candidate| candidate.selectable)
+        })
+    {
+        let recovery = work
+            .split_recovery
+            .as_ref()
+            .expect("selectable recovery has a split view");
+        return Ok(WorkJourneyView {
+            title,
+            title_key: None,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "select_slice".into(),
+                label: "Select a focused step".into(),
+                label_key: "journey.action.select_slice".into(),
+                explanation:
+                    "The broad candidate is blocked only by its slice limit. Select one exact step to replan it safely."
+                        .into(),
+                explanation_key: "journey.explanation.select_slice".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(JourneyScopeView {
+                summary: format!("{} focused slices can be replanned.", recovery.candidates.len()),
+                status: "split-required".into(),
+                editable_target_count: recovery
+                    .candidates
+                    .iter()
+                    .map(|candidate| candidate.editable_targets.len())
+                    .sum(),
+                slice_count: recovery.candidates.len(),
+            }),
+            evidence: JourneyEvidenceView {
+                status: "split_required".into(),
+                summary: recovery.reason.message.clone(),
                 blockers: vec![],
             },
             related_specification,
@@ -8230,6 +8391,38 @@ mod tests {
         fs::write(temp.path().join("src/new.rs"), "pub fn added() {}\n").expect("untracked edit");
         let fifth = server.service.snapshot().expect("untracked snapshot");
         assert!(!Arc::ptr_eq(&fourth, &fifth));
+
+        {
+            let mut session = server.service.session.write().expect("session lock");
+            session.work_title = Some("stale work".into());
+            session.draft_request = Some(WorkRequest {
+                schema: WORK_REQUEST_SCHEMA.into(),
+                id: "WORK-SNAPSHOT-GOVERNANCE".into(),
+                title: "stale work".into(),
+                operation: WorkOperation::Modify,
+                origin: WorkOrigin::RequirementCriterion {
+                    criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                },
+                constraints: WorkConstraints::default(),
+                requested_targets: vec![],
+            });
+        }
+        let requirement = temp.path().join("spec/requirement.yaml");
+        let requirement_source = fs::read_to_string(&requirement).expect("requirement source");
+        fs::write(
+            &requirement,
+            requirement_source.replace(
+                "Keep the fixture behavior valid",
+                "Keep the edited fixture behavior valid",
+            ),
+        )
+        .expect("governance edit");
+        let sixth = server.service.snapshot().expect("governance snapshot");
+        assert!(!Arc::ptr_eq(&fifth, &sixth));
+        let session = server.service.session.read().expect("session lock");
+        assert!(session.draft_request.is_none());
+        assert!(session.plan.is_none());
+        assert!(session.work_title.is_none());
     }
 
     async fn run_fixture_post_state_flow(out_of_scope: bool) -> StatusCode {
@@ -9139,7 +9332,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-v1 cutover: planned origins are rejected before Work creation"]
     async fn planned_verification_add_runs_its_exact_runner_before_finalization() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -9162,7 +9354,7 @@ mod tests {
                 "      - id: implementation\n",
                 "        role: implementation\n",
                 "        facet: work\n",
-                "        responsibility: Keep the existing implementation target connected to the verification proof.\n",
+                "        responsibility: Keep the planned implementation connected to its verification proof.\n",
                 "        targets:\n",
                 "          - id: implementation\n",
                 "            adapter: rust\n",
@@ -9170,7 +9362,7 @@ mod tests {
                 "            selector: { kind: symbol, name: behavior }\n",
                 "            claims:\n",
                 "              - kind: satisfies\n",
-                "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                "                criterion: REQ-FIXTURE-001#criterion.behavior\n",
                 "      - id: verification\n",
                 "        role: verification\n",
                 "        facet: verification\n",
@@ -9182,8 +9374,8 @@ mod tests {
                 "            selector: { kind: symbol, name: added_verification_lifecycle_stays_valid }\n",
                 "            claims:\n",
                 "              - kind: verifies\n",
-                "                criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
-                "                covers: [FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]\n",
+                "                criterion: REQ-FIXTURE-001#criterion.behavior\n",
+                "                covers: [FEAT-FIXTURE-001#binding.implementation/target.behavior, FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]\n",
                 "                runner: { runner: cargo-test, arguments: { package: workbench-flow-fixture, test: added_verification_lifecycle_stays_valid } }\n",
                 "  - id: FEAT-LIFECYCLE-REMOVE-SYMBOL-001"
             ),
@@ -9193,8 +9385,14 @@ mod tests {
         let requirement_path = temp.path().join("spec/requirement.yaml");
         let mut requirement = fs::read_to_string(&requirement_path).expect("requirement spec");
         requirement = requirement.replacen(
-            "covers: [FEAT-LIFECYCLE-ADD-SYMBOL-001#binding.lifecycle/target.added-symbol]",
-            "covers: [FEAT-LIFECYCLE-ADD-VERIFICATION-001#binding.implementation/target.implementation]",
+            concat!(
+                "criterion: REQ-FIXTURE-001#criterion.add-symbol\n",
+                "                covers: [FEAT-LIFECYCLE-ADD-SYMBOL-001#binding.lifecycle/target.added-symbol]",
+            ),
+            concat!(
+                "criterion: REQ-FIXTURE-001#criterion.behavior\n",
+                "                covers: [FEAT-FIXTURE-001#binding.implementation/target.behavior]",
+            ),
             1,
         );
         fs::write(requirement_path, requirement).expect("verification requirement");
@@ -9202,7 +9400,7 @@ mod tests {
         let server = WorkbenchServer::new(temp.path().to_path_buf());
         let app = server.router();
         let suggestion_path =
-            "/api/specifications/REQ-FIXTURE-001%23criterion.add-symbol/target-suggestions";
+            "/api/specifications/REQ-FIXTURE-001%23criterion.behavior/target-suggestions";
         let response = app
             .clone()
             .oneshot(
@@ -9248,7 +9446,7 @@ mod tests {
         assert_eq!(approval.approved_ids, vec![candidate.id.clone()]);
         let request = create_approved_work_request(
             &server,
-            "REQ-FIXTURE-001#criterion.add-symbol",
+            "REQ-FIXTURE-001#criterion.behavior",
             "add the approved verification target",
         )
         .await;
@@ -11823,11 +12021,22 @@ mod tests {
         let projection: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("blocked journey projection");
-        assert_eq!(projection["journey"]["evidence"]["status"], "blocked");
+        assert_eq!(
+            projection["journey"]["evidence"]["status"],
+            "split_required"
+        );
         assert_eq!(
             projection["journey"]["primary_action"]["action"],
-            "choose_specification"
+            "select_slice"
         );
+        let recovery = &projection["work"]["split_recovery"];
+        let candidate_plan_digest = recovery["candidate_plan_digest"].as_str().unwrap();
+        let candidate = recovery["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|candidate| candidate["selectable"] == true)
+            .expect("blocked global slice limit exposes a replan candidate");
         let response = json_mutation(
             &app,
             Method::POST,
@@ -11835,12 +12044,19 @@ mod tests {
             &csrf,
             &serde_json::json!({
                 "basis": basis_from_projection(&projection),
-                "action": "approve",
-                "execution": execution_from_projection(&projection),
+                "action": "select_slice",
+                "schema": syu_work_model::WORK_SELECT_SLICE_SCHEMA,
+                "candidate_plan_digest": candidate_plan_digest,
+                "slice_id": candidate["id"],
             }),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(response.status(), StatusCode::OK);
+        let selected: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("replanned slice response");
+        assert_eq!(selected["projection"]["work"]["plan"]["status"], "ready");
+        assert!(selected["projection"]["work"]["selected_slice"].is_string());
     }
 
     #[tokio::test]

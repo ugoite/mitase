@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 
 use anyhow::{Context, Result, bail};
+use fs2::FileExt;
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
+    fs::File,
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -30,6 +32,20 @@ static AGENT_EVENT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub struct DeliveryStore {
     root: PathBuf,
     workspace_root: PathBuf,
+}
+
+/// A repository-local exclusive lock shared by every process that mutates
+/// Workbench evidence or the governed workspace.  The lock is deliberately a
+/// file lock rather than a process-global mutex: Workbench and the CLI may be
+/// active in different processes against the same pre-v1 workspace.
+pub struct WorkspaceLock {
+    file: File,
+}
+
+impl Drop for WorkspaceLock {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
 }
 
 impl DeliveryStore {
@@ -69,6 +85,18 @@ impl DeliveryStore {
             fs::create_dir_all(path)?;
         }
         Ok(())
+    }
+
+    pub fn lock_workspace(&self) -> Result<WorkspaceLock> {
+        self.ensure()?;
+        let path = self.root.join("workspace.lock");
+        let file = File::options()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)?;
+        file.lock_exclusive()?;
+        Ok(WorkspaceLock { file })
     }
 
     pub fn approve(&self, approval: &PlanApproval) -> Result<PlanApproval> {
@@ -135,6 +163,16 @@ impl DeliveryStore {
         plan: &syu_work_model::WorkPlan,
         slice_id: &str,
     ) -> Result<CompletionAttempt> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.execute_and_append_attempt_while_locked(workspace, plan, slice_id)
+    }
+
+    pub fn execute_and_append_attempt_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        plan: &syu_work_model::WorkPlan,
+        slice_id: &str,
+    ) -> Result<CompletionAttempt> {
         self.require_workspace(workspace)?;
         let identity = ExecutionIdentity {
             plan_digest: plan.canonical_digest.clone(),
@@ -181,6 +219,27 @@ impl DeliveryStore {
         without_digest.attempt_digest.clear();
         attempt.attempt_digest = Self::verification_digest(&without_digest)?;
         self.append_attempt(workspace, &attempt)
+    }
+
+    pub fn remove_unfinalized_attempt_while_locked(
+        &self,
+        attempt: &CompletionAttempt,
+    ) -> Result<()> {
+        let identity = ExecutionIdentity {
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+        };
+        if self
+            .finalization_path(&identity, &attempt.attempt_id)
+            .exists()
+        {
+            bail!("cannot remove an attempt that already has a finalization");
+        }
+        let path = self.attempt_path(attempt);
+        if path.exists() {
+            fs::remove_file(path)?;
+        }
+        Ok(())
     }
 
     fn append_attempt(
@@ -441,22 +500,33 @@ impl DeliveryStore {
         preview: &FinalizationPreview,
         token: &str,
     ) -> Result<FinalizationReceipt> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.apply_finalization_while_locked(workspace, attempt, preview, token)
+    }
+
+    pub fn apply_finalization_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        attempt: &CompletionAttempt,
+        preview: &FinalizationPreview,
+        token: &str,
+    ) -> Result<FinalizationReceipt> {
         if preview.preview_token != token || preview.status != CompletionStatus::Complete {
             bail!("finalization preview token is stale or blocked");
         }
-        let current = self.finalization_preview(workspace, attempt)?;
         let identity = ExecutionIdentity {
             plan_digest: attempt.plan_digest.clone(),
             slice_id: attempt.slice_id.clone(),
         };
+        if let Some(existing) = self.finalization(&identity, &attempt.attempt_id)? {
+            return Ok(existing);
+        }
+        let current = self.finalization_preview(workspace, attempt)?;
         if current != preview.clone()
             || current.preview_token != token
             || current.pre_workspace_fingerprint != preview.pre_workspace_fingerprint
         {
             bail!("workspace changed after finalization preview; preview again");
-        }
-        if let Some(existing) = self.finalization(&identity, &attempt.attempt_id)? {
-            return Ok(existing);
         }
         let old = apply_status_overlay(workspace, &preview.promoted_items)?;
         let post_workspace_fingerprint = match validate_finalized_workspace(&workspace.root) {
@@ -502,10 +572,23 @@ impl DeliveryStore {
     }
 
     pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
+        let _workspace_lock = self.lock_workspace()?;
         self.append_agent_event_with_retry(event, false)
     }
 
     pub fn append_agent_event_for_retry(
+        &self,
+        event: &AgentEvent,
+        retry: bool,
+    ) -> Result<AgentEvent> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.append_agent_event_with_retry(event, retry)
+    }
+
+    /// Append the event while the caller already owns `lock_workspace`.
+    /// Keeping this explicit prevents verification and its terminal event from
+    /// being interleaved by another Workbench or CLI process.
+    pub fn append_agent_event_while_locked(
         &self,
         event: &AgentEvent,
         retry: bool,
@@ -705,6 +788,35 @@ impl DeliveryStore {
             .last()
             .map(|(_, _, identity, run_id)| self.agent_run(identity, run_id))
             .transpose()
+    }
+
+    pub fn active_agent_runs(&self) -> Result<Vec<AgentRun>> {
+        let mut started = self
+            .agent_events_all()?
+            .into_iter()
+            .filter_map(|event| match event.event {
+                AgentEventKind::RunStarted { run } => Some((
+                    run.plan_digest.clone(),
+                    run.slice_id.clone(),
+                    run.run_id.clone(),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        started.sort();
+        started.dedup();
+        let mut active = Vec::new();
+        for (plan_digest, slice_id, run_id) in started {
+            let identity = ExecutionIdentity {
+                plan_digest,
+                slice_id,
+            };
+            let run = self.agent_run(&identity, &run_id)?;
+            if matches!(run.status, AgentRunStatus::Active) {
+                active.push(run);
+            }
+        }
+        Ok(active)
     }
 
     fn agent_events_all(&self) -> Result<Vec<AgentEvent>> {

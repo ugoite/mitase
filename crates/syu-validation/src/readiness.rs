@@ -1790,7 +1790,7 @@ fn public_entrypoint_subjects(
                 match canonical_public_target_plan(
                     workspace,
                     index,
-                    target_ref,
+                    exposed_target,
                     &criterion,
                     revision,
                 ) {

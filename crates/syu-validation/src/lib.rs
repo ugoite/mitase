@@ -4293,13 +4293,22 @@ fn change_is_within_editable_scope(
         None => true,
     };
     let new_ok = match file.new_path.as_ref() {
-        Some(path) => changed_side_is_fully_covered(
-            hunk.new_start,
-            hunk.new_end,
-            editable_targets
-                .iter()
-                .filter_map(|target| target_line_range(ctx, target, TargetRangeSide::New, path)),
-        ),
+        Some(path) => {
+            changed_side_is_fully_covered(
+                hunk.new_start,
+                hunk.new_end,
+                editable_targets.iter().filter_map(|target| {
+                    target_line_range(ctx, target, TargetRangeSide::New, path)
+                }),
+            ) || editable_targets.iter().any(|target| {
+                target.transition == TargetTransition::Add
+                    && target.container_content_hash.is_some()
+                    && hunk.old_start == hunk.old_end
+                    && target_line_range(ctx, target, TargetRangeSide::New, path).is_some_and(
+                        |range| changed_side_overlaps(hunk.new_start, hunk.new_end, range),
+                    )
+            })
+        }
         None => true,
     };
     old_ok && new_ok
