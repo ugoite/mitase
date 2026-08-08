@@ -867,8 +867,7 @@ fn validate_completion_attempt_against_plan(
             }
         }
         (syu_work_model::VerificationAttemptStatus::Failed, None) => {
-            if attempt.verification.executions.is_empty() == false
-                || attempt.verification.failure.is_none()
+            if !attempt.verification.executions.is_empty() || attempt.verification.failure.is_none()
             {
                 bail!("failed completion attempt must contain only its structured failure");
             }
@@ -884,7 +883,7 @@ fn validate_completion_attempt_against_plan(
 
     match attempt.report.status {
         CompletionStatus::Complete => {
-            if attempt.report.blockers.iter().next().is_some()
+            if attempt.report.blockers.first().is_some()
                 || attempt.report.checks.iter().any(|check| !check.passed)
                 || !matches!(
                     attempt.verification.status,
@@ -910,7 +909,7 @@ fn validate_completion_report_against_slice(
     let expected_checks = slice
         .completion
         .iter()
-        .map(|check| serde_json::to_string(check))
+        .map(serde_json::to_string)
         .collect::<Result<BTreeSet<_>, _>>()?;
     let actual_checks = attempt
         .report
@@ -1165,7 +1164,7 @@ impl DeliveryStore {
             {
                 continue;
             }
-            validate_run_started_reference(self, &candidate, &run)?;
+            validate_run_started_reference(self, &candidate, run)?;
             return Ok((**run).clone());
         }
         bail!(
