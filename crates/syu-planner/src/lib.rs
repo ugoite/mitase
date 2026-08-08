@@ -305,6 +305,17 @@ fn request_target_boundary(
     } else {
         BTreeSet::new()
     };
+    let exposed_implementation_targets =
+        if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
+            index
+                .exposes_by_target
+                .iter()
+                .filter(|(_, exposed)| implementation_roots.contains(exposed))
+                .map(|(public, _)| public.clone())
+                .collect::<BTreeSet<_>>()
+        } else {
+            BTreeSet::new()
+        };
     let editable = if matches!(origin, WorkOrigin::RequirementCriterion { .. })
         && operation == WorkOperation::Document
     {
@@ -312,7 +323,11 @@ fn request_target_boundary(
     } else if operation == WorkOperation::Investigate {
         BTreeSet::new()
     } else if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
-        implementation_roots.iter().cloned().collect()
+        implementation_roots
+            .iter()
+            .cloned()
+            .chain(exposed_implementation_targets.iter().cloned())
+            .collect()
     } else {
         implementation_roots.iter().cloned().collect()
     };

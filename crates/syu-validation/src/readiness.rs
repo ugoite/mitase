@@ -1072,6 +1072,9 @@ fn finalized_absent_targets(
             || attempt.plan_digest != receipt.plan_digest
             || attempt.slice_id != receipt.slice_id
             || attempt.approved_plan_digest != attempt.plan_digest
+            || attempt.report.attempt_id != attempt.attempt_id
+            || attempt.report.plan_digest != attempt.plan_digest
+            || attempt.report.slice_id != attempt.slice_id
             || attempt.report.status != CompletionStatus::Complete
             || attempt.verification.status != VerificationAttemptStatus::Complete
         {
@@ -1116,6 +1119,10 @@ fn finalized_absent_targets(
             || approval.plan_digest != approval.plan.canonical_digest
             || approval.plan_digest != work_plan_digest(&approval.plan)
             || approval.revision != approval.plan.basis.revision
+            || approval.workspace_fingerprint != approval.plan.basis.workspace_fingerprint
+            || approval.slice_id != receipt.slice_id
+            || approval.plan.slices.len() != 1
+            || approval.plan.slices[0].id != receipt.slice_id
             || verification.revision != approval.revision
             || !revision_is_ancestor(&workspace.root, &approval.revision, revision)
         {
@@ -1144,6 +1151,15 @@ fn finalized_absent_targets(
         }
         let mut valid = true;
         let mut finalized_targets = BTreeSet::new();
+        let expected_remove_targets = slice
+            .editable_targets
+            .iter()
+            .filter(|target| {
+                target.transition == TargetTransition::Remove
+                    && target.lifecycle == TargetLifecycle::EnsureAbsent
+            })
+            .map(|target| target.reference.clone())
+            .collect::<BTreeSet<_>>();
         for proof in &receipt.lifecycle_proofs {
             let Some(target) = slice
                 .editable_targets
@@ -1165,6 +1181,11 @@ fn finalized_absent_targets(
                 break;
             }
             finalized_targets.insert(proof.reference.clone());
+        }
+        if finalized_targets.len() != receipt.lifecycle_proofs.len()
+            || finalized_targets != expected_remove_targets
+        {
+            valid = false;
         }
         if valid && !receipt.lifecycle_proofs.is_empty() {
             targets.extend(finalized_targets);

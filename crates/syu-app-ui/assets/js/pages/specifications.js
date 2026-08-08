@@ -990,9 +990,9 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
       row.append(text);
       if (kind === 'criterion' && value.kind) row.append(enumChip('criterion.kind', value.kind));
       if (!readOnly && kind === 'criterion') {
-        const capability = (state.projection.specifications?.origin_capabilities || []).find(value =>
-          value.origin?.kind === 'requirement-criterion'
-          && value.origin.criterion === value.anchor
+        const capability = (state.projection.specifications?.origin_capabilities || []).find(candidate =>
+          candidate.origin?.kind === 'requirement-criterion'
+          && candidate.origin.criterion === value.anchor
         );
         if (!capability) return;
         const createWork = button(t('items.create_work'), '→', () => state.runAction(
