@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -814,11 +814,99 @@ fn validate_completion_attempt_against_plan(
             {
                 bail!("complete completion report still contains blockers or failed checks");
             }
+            validate_completion_report_against_slice(attempt, slice)?;
         }
         CompletionStatus::Blocked if attempt.report.blockers.is_empty() => {
             bail!("blocked completion report must explain its blocker");
         }
         CompletionStatus::Blocked => {}
+    }
+    Ok(())
+}
+
+fn validate_completion_report_against_slice(
+    attempt: &CompletionAttempt,
+    slice: &syu_work_model::ExecutionSlice,
+) -> Result<()> {
+    let expected_checks = slice
+        .completion
+        .iter()
+        .map(|check| serde_json::to_string(check))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let actual_checks = attempt
+        .report
+        .checks
+        .iter()
+        .map(|check| serde_json::to_string(&check.check))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    if attempt.report.checks.len() != expected_checks.len()
+        || actual_checks != expected_checks
+        || attempt
+            .report
+            .checks
+            .iter()
+            .any(|check| !check.passed || check.evidence.is_empty())
+    {
+        bail!("complete completion report checks do not exactly cover the selected slice");
+    }
+
+    let receipt = attempt
+        .receipt
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("complete completion report has no receipt"))?;
+    let executed_claims = receipt
+        .executions
+        .iter()
+        .filter_map(|execution| execution.claim.clone())
+        .collect::<BTreeSet<_>>();
+    let mut expected_demonstrated = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for acceptance in &slice.acceptance {
+        let verification_targets = slice
+            .verification_targets
+            .iter()
+            .filter(|target| {
+                target.verification_claim.as_ref().is_some_and(|claim| {
+                    claim.criterion == acceptance.anchor && executed_claims.contains(claim)
+                })
+            })
+            .map(|target| target.reference.to_string())
+            .collect::<BTreeSet<_>>();
+        if verification_targets.is_empty()
+            || expected_demonstrated
+                .insert(
+                    acceptance.anchor.to_string(),
+                    (acceptance.statement.clone(), verification_targets),
+                )
+                .is_some()
+        {
+            bail!(
+                "complete completion report cannot demonstrate every acceptance criterion exactly"
+            );
+        }
+    }
+    let mut actual_demonstrated = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for evidence in &attempt.report.demonstrated {
+        if actual_demonstrated
+            .insert(
+                evidence.anchor.to_string(),
+                (
+                    evidence.statement.clone(),
+                    evidence
+                        .verification_targets
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                ),
+            )
+            .is_some()
+        {
+            bail!("complete completion report demonstrates one criterion more than once");
+        }
+    }
+    if actual_demonstrated != expected_demonstrated {
+        bail!(
+            "complete completion report demonstrated criteria do not exactly match the selected slice"
+        );
     }
     Ok(())
 }
@@ -1631,6 +1719,70 @@ mod tests {
                 .iter()
                 .any(|blocker| blocker.code == "SYU-FINALIZE-INCOMPLETE")
         );
+    }
+
+    #[test]
+    fn complete_attempt_requires_exact_completion_report_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = store
+            .approve(&fixture_approval(&workspace, &plan, &revision))
+            .unwrap();
+        let mut complete = fixture_attempt(&plan, &approval, &revision);
+        let slice = &plan.slices[0];
+        let executed_claims = complete
+            .receipt
+            .as_ref()
+            .unwrap()
+            .executions
+            .iter()
+            .filter_map(|execution| execution.claim.clone())
+            .collect::<BTreeSet<_>>();
+        complete.report.status = CompletionStatus::Complete;
+        complete.report.blockers.clear();
+        complete.report.checks = slice
+            .completion
+            .iter()
+            .cloned()
+            .map(|check| syu_work_model::CompletionCheckEvidence {
+                check,
+                passed: true,
+                evidence: vec!["fixture evidence".into()],
+            })
+            .collect();
+        complete.report.demonstrated = slice
+            .acceptance
+            .iter()
+            .map(|acceptance| syu_work_model::CompletionCriterionEvidence {
+                anchor: acceptance.anchor.clone(),
+                statement: acceptance.statement.clone(),
+                verification_targets: slice
+                    .verification_targets
+                    .iter()
+                    .filter(|target| {
+                        target.verification_claim.as_ref().is_some_and(|claim| {
+                            claim.criterion == acceptance.anchor && executed_claims.contains(claim)
+                        })
+                    })
+                    .map(|target| target.reference.clone())
+                    .collect(),
+            })
+            .collect();
+        complete.attempt_digest =
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&complete)).unwrap();
+        assert!(store.append_attempt(&complete).is_ok());
+
+        let mut invalid = complete.clone();
+        invalid.attempt_id = "attempt-invalid-report".into();
+        invalid.report.attempt_id = invalid.attempt_id.clone();
+        invalid.report.demonstrated.clear();
+        invalid.attempt_digest =
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid)).unwrap();
+        assert!(store.append_attempt(&invalid).is_err());
     }
 
     fn attempt_with_empty_digest(attempt: &CompletionAttempt) -> CompletionAttempt {

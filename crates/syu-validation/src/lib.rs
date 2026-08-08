@@ -631,7 +631,7 @@ fn current_readonly_fingerprint(
     readonly_targets_fingerprint_for_execution(&slices)
 }
 
-fn resolve_planned_target_for_workspace(
+pub(crate) fn resolve_planned_target_for_workspace(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
     target: &syu_work_model::PlannedTarget,
@@ -1541,7 +1541,7 @@ fn ensure_exact_test_executed(
     })
 }
 
-fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
+pub(crate) fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
     values
         .iter()
         .fold(template.to_owned(), |value, (key, replacement)| {

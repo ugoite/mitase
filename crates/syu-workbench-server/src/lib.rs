@@ -20,8 +20,9 @@ use std::{fs, path::Path};
 use syu_delivery::DeliveryStore;
 use syu_diagnostics::{Severity, ValidationPhase, ValidationResult};
 use syu_planner::{
-    SplitWorkRecommendation, TargetSuggestion, TargetSuggestionSet, plan,
-    split_work_recommendation, suggest_targets, validate_work_request,
+    SplitWorkRecommendation, TargetSuggestion, TargetSuggestionSet, origin_closure_digest,
+    origin_closure_for_slice, plan, split_work_recommendation, suggest_targets,
+    validate_work_request,
 };
 use syu_project_model::{ChangeBaseline, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
@@ -5858,6 +5859,7 @@ fn split_recovery_view(
             .iter()
             .map(|slice| {
                 let blockers = split_candidate_blockers(plan, slice, request, config, index);
+                let origin_closure = origin_closure_for_slice(index, slice);
                 SplitRecoveryCandidate {
                     id: slice.id.clone(),
                     selectable: split_candidate_selectable(
@@ -5891,8 +5893,8 @@ fn split_recovery_view(
                                 .map(|contract| contract_view(anchor, contract))
                         })
                         .collect(),
-                    origin_closure: plan.origin_closure.clone(),
-                    origin_closure_digest: plan.origin_closure_digest.clone(),
+                    origin_closure_digest: origin_closure_digest(&origin_closure),
+                    origin_closure,
                     budget: slice.budget.clone(),
                     confidence: slice.confidence,
                     blockers: blockers.iter().map(diagnostic_view).collect(),
@@ -6105,6 +6107,50 @@ fn origin_closure_is_complete(
     slice: &syu_work_model::ExecutionSlice,
     index: &SpecIndex,
 ) -> bool {
+    let candidate_closure = syu_planner::origin_closure_for_slice(index, slice);
+    let slice_implementation = slice
+        .editable_targets
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let slice_verification = slice
+        .verification_targets
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let slice_readonly = slice
+        .readonly_context
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let slice_contracts = slice.contracts.iter().cloned().collect::<BTreeSet<_>>();
+    if candidate_closure
+        .implementation_targets
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        != slice_implementation
+        || candidate_closure
+            .verification_targets
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            != slice_verification
+        || candidate_closure
+            .readonly_targets
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            != slice_readonly
+        || candidate_closure
+            .contracts
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            != slice_contracts
+    {
+        return false;
+    }
     let closure = &plan.origin_closure;
     if request
         .origin

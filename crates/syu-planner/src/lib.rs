@@ -3655,10 +3655,6 @@ fn focused_split_closure(
     original: &ExecutionSlice,
     editable: &[PlannedTarget],
 ) -> (Vec<PlannedTarget>, Vec<SpecAnchor>, Vec<SpecAnchor>) {
-    let editable_bindings = editable
-        .iter()
-        .map(|target| target.reference.binding.clone())
-        .collect::<BTreeSet<_>>();
     let roots = editable
         .iter()
         .map(|target| target.reference.clone())
@@ -3688,10 +3684,7 @@ fn focused_split_closure(
         original
             .readonly_context
             .iter()
-            .filter(|target| {
-                related_targets.contains(&target.reference)
-                    || editable_bindings.contains(&target.reference.binding)
-            })
+            .filter(|target| related_targets.contains(&target.reference))
             .cloned()
             .collect::<Vec<_>>(),
     );
@@ -3713,6 +3706,75 @@ fn focused_split_closure(
     anchors.sort();
     anchors.dedup();
     (readonly, contracts, anchors)
+}
+
+/// Return the exact closure carried by one selectable execution slice. The
+/// plan-level closure may contain sibling slices; a split candidate must show
+/// only the boundary that will be replayed when that candidate is selected.
+pub fn origin_closure_for_slice(index: &SpecIndex, slice: &ExecutionSlice) -> OriginClosure {
+    let mut closure = OriginClosure {
+        implementation_targets: slice
+            .editable_targets
+            .iter()
+            .map(|target| target.reference.clone())
+            .collect(),
+        verification_targets: slice
+            .verification_targets
+            .iter()
+            .map(|target| target.reference.clone())
+            .collect(),
+        readonly_targets: slice
+            .readonly_context
+            .iter()
+            .map(|target| target.reference.clone())
+            .collect(),
+        contracts: slice.contracts.clone(),
+    };
+    loop {
+        let before = closure.contracts.len();
+        for target in closure
+            .implementation_targets
+            .iter()
+            .chain(closure.verification_targets.iter())
+            .chain(closure.readonly_targets.iter())
+        {
+            if let Some(contracts) = index.contracts_by_target.get(target) {
+                closure.contracts.extend(contracts.iter().cloned());
+            }
+        }
+        closure.contracts.sort();
+        closure.contracts.dedup();
+        for anchor in &closure.contracts {
+            let Some(contract) = index.contracts.get(anchor) else {
+                continue;
+            };
+            closure.readonly_targets.push(contract.source.clone());
+            closure.readonly_targets.extend(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| participant.target.clone()),
+            );
+        }
+        closure.readonly_targets.sort();
+        closure.readonly_targets.dedup();
+        if closure.contracts.len() == before {
+            break;
+        }
+    }
+    closure.implementation_targets.sort();
+    closure.implementation_targets.dedup();
+    closure.verification_targets.sort();
+    closure.verification_targets.dedup();
+    closure.readonly_targets.sort();
+    closure.readonly_targets.dedup();
+    closure.contracts.sort();
+    closure.contracts.dedup();
+    closure
+}
+
+pub fn origin_closure_digest(closure: &OriginClosure) -> String {
+    digest_json(closure)
 }
 
 fn slice_budget(

@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::process::Command;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -1149,6 +1149,22 @@ fn finalized_absent_targets(
         if expected_claims.is_empty() || expected_claims != actual_claims {
             continue;
         }
+        let Some(baseline) = crate::load_workspace_at_revision(&workspace.root, &approval.revision)
+        else {
+            continue;
+        };
+        if validate_durable_receipt_closure(
+            &baseline.workspace,
+            &baseline.index,
+            &approval.plan,
+            slice,
+            &attempt,
+            verification,
+        )
+        .is_err()
+        {
+            continue;
+        }
         let mut valid = true;
         let mut finalized_targets = BTreeSet::new();
         let expected_remove_targets = slice
@@ -1192,6 +1208,245 @@ fn finalized_absent_targets(
         }
     }
     targets
+}
+
+fn validate_durable_receipt_closure(
+    baseline_workspace: &SpecWorkspace,
+    baseline_index: &SpecIndex,
+    plan: &syu_work_model::WorkPlan,
+    slice: &syu_work_model::ExecutionSlice,
+    attempt: &CompletionAttempt,
+    receipt: &VerificationReceipt,
+) -> Result<()> {
+    if receipt.schema != VERIFICATION_RECEIPT_SCHEMA
+        || receipt.plan_digest != plan.canonical_digest
+        || receipt.slice_id != slice.id
+        || attempt.verification.status != VerificationAttemptStatus::Complete
+        || attempt.verification.failure.is_some()
+    {
+        bail!("durable verification receipt identity is invalid");
+    }
+
+    let expected_claims = slice
+        .verification_targets
+        .iter()
+        .map(|target| {
+            target
+                .verification_claim
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("verification target has no exact claim"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    let actual_claims = receipt
+        .executions
+        .iter()
+        .map(|execution| {
+            execution
+                .claim
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("receipt execution has no exact claim"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if actual_claims.len() != expected_claims.len()
+        || actual_claims.into_iter().collect::<BTreeSet<_>>() != expected_claims
+        || attempt.verification.executions.len() != receipt.executions.len()
+    {
+        bail!("durable verification receipt execution set is not exact");
+    }
+
+    for execution in &receipt.executions {
+        let claim = execution
+            .claim
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("receipt execution has no exact claim"))?;
+        if execution.target != claim.target
+            || execution.exit_code != 0
+            || execution.command.is_empty()
+            || execution.proof.matched_count == 0
+        {
+            bail!("durable verification receipt execution is invalid");
+        }
+        let (_verification_target, runner_ref, covers) =
+            crate::resolve_verification_claim(baseline_index, claim)?;
+        let configured = baseline_workspace
+            .config
+            .verification
+            .runners
+            .get(&runner_ref.runner)
+            .ok_or_else(|| anyhow::anyhow!("durable verification runner is not configured"))?;
+        let expected_command = std::iter::once(configured.executable.clone())
+            .chain(
+                configured
+                    .arguments
+                    .iter()
+                    .map(|argument| crate::expand_runner_argument(argument, &runner_ref.arguments)),
+            )
+            .collect::<Vec<_>>();
+        if execution.runner != runner_ref.runner || execution.command != expected_command {
+            bail!("durable verification receipt command is stale");
+        }
+        let planned_verification = slice
+            .verification_targets
+            .iter()
+            .find(|target| target.reference == execution.target)
+            .ok_or_else(|| anyhow::anyhow!("receipt target is outside the selected slice"))?;
+        let resolved_verification = crate::resolve_planned_target_for_workspace(
+            baseline_workspace,
+            baseline_index,
+            planned_verification,
+        )
+        .ok_or_else(|| anyhow::anyhow!("durable verification target cannot be resolved"))?;
+        if execution.verification_digest != resolved_verification.content_hash {
+            bail!("durable verification target digest is stale");
+        }
+
+        let expected_implementation_digests = covers
+            .iter()
+            .map(|covered| {
+                let digest = receipt
+                    .lifecycle_proofs
+                    .iter()
+                    .find(|proof| proof.reference == *covered)
+                    .map(|proof| proof.after_content_hash.clone())
+                    .or_else(|| {
+                        slice
+                            .editable_targets
+                            .iter()
+                            .chain(slice.verification_targets.iter())
+                            .chain(slice.readonly_context.iter())
+                            .find(|target| target.reference == *covered)
+                            .and_then(|target| {
+                                crate::resolve_planned_target_for_workspace(
+                                    baseline_workspace,
+                                    baseline_index,
+                                    target,
+                                )
+                                .map(|resolved| resolved.content_hash)
+                            })
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("durable implementation target cannot be resolved")
+                    })?;
+                Ok((covered.clone(), digest))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        if execution.implementation_digests != expected_implementation_digests {
+            bail!("durable implementation digest closure is stale");
+        }
+        if execution.proof.identity
+            != runner_ref
+                .arguments
+                .get("test")
+                .cloned()
+                .unwrap_or_default()
+            || execution.proof.identity.is_empty()
+        {
+            bail!("durable exact-test proof is stale");
+        }
+    }
+
+    for execution in &receipt.executions {
+        let mirrored = attempt.verification.executions.iter().find(|candidate| {
+            candidate.target.as_ref() == Some(&execution.target)
+                && candidate.claim == execution.claim
+        });
+        let Some(mirrored) = mirrored else {
+            bail!("durable attempt does not mirror receipt executions");
+        };
+        if mirrored.runner != execution.runner
+            || mirrored.command != execution.command
+            || mirrored.exit_code != Some(execution.exit_code)
+            || mirrored.stdout_digest.as_deref() != Some(execution.stdout_digest.as_str())
+            || mirrored.stderr_digest.as_deref() != Some(execution.stderr_digest.as_str())
+            || mirrored.proof.as_ref() != Some(&execution.proof)
+            || mirrored.error.is_some()
+        {
+            bail!("durable attempt execution evidence is inconsistent");
+        }
+    }
+    validate_durable_completion_report(attempt, slice, receipt)
+}
+
+fn validate_durable_completion_report(
+    attempt: &CompletionAttempt,
+    slice: &syu_work_model::ExecutionSlice,
+    receipt: &VerificationReceipt,
+) -> Result<()> {
+    if attempt.report.status != CompletionStatus::Complete || !attempt.report.blockers.is_empty() {
+        bail!("durable completion report is not complete");
+    }
+    let expected_checks = slice
+        .completion
+        .iter()
+        .map(|check| serde_json::to_string(check))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let actual_checks = attempt
+        .report
+        .checks
+        .iter()
+        .map(|check| serde_json::to_string(&check.check))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    if attempt.report.checks.len() != expected_checks.len()
+        || actual_checks != expected_checks
+        || attempt
+            .report
+            .checks
+            .iter()
+            .any(|check| !check.passed || check.evidence.is_empty())
+    {
+        bail!("durable completion checks are not exact");
+    }
+    let executed_claims = receipt
+        .executions
+        .iter()
+        .filter_map(|execution| execution.claim.clone())
+        .collect::<BTreeSet<_>>();
+    let mut expected = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for acceptance in &slice.acceptance {
+        let targets = slice
+            .verification_targets
+            .iter()
+            .filter(|target| {
+                target.verification_claim.as_ref().is_some_and(|claim| {
+                    claim.criterion == acceptance.anchor && executed_claims.contains(claim)
+                })
+            })
+            .map(|target| target.reference.to_string())
+            .collect::<BTreeSet<_>>();
+        if targets.is_empty()
+            || expected
+                .insert(
+                    acceptance.anchor.to_string(),
+                    (acceptance.statement.clone(), targets),
+                )
+                .is_some()
+        {
+            bail!("durable completion acceptance evidence is incomplete");
+        }
+    }
+    let mut actual = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for evidence in &attempt.report.demonstrated {
+        if actual
+            .insert(
+                evidence.anchor.to_string(),
+                (
+                    evidence.statement.clone(),
+                    evidence
+                        .verification_targets
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                ),
+            )
+            .is_some()
+        {
+            bail!("durable completion acceptance evidence is duplicated");
+        }
+    }
+    if actual != expected {
+        bail!("durable completion acceptance evidence is not exact");
+    }
+    Ok(())
 }
 
 /// A durable absence proof remains useful across commits and unrelated
