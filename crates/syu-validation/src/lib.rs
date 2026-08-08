@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use syu_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
-use syu_planner::plan as canonical_plan;
+use syu_planner::{plan as canonical_plan, validate_work_origin};
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
@@ -503,6 +503,8 @@ pub fn canonical_plan_for_execution(
     if submitted.schema != WORK_PLAN_SCHEMA {
         bail!("plan schema must be {WORK_PLAN_SCHEMA}");
     }
+    validate_work_origin(index, &submitted.request.origin)
+        .context("submitted plan requires an exact implemented Work origin")?;
     if submitted.basis.revision != revision {
         bail!("plan basis revision is stale");
     }

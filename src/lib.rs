@@ -11,7 +11,7 @@ use std::{
 };
 use syu_delivery::DeliveryStore;
 use syu_inventory::{InventoryContext, InventoryRegistry};
-use syu_planner::{export_context, plan};
+use syu_planner::{export_context, plan, validate_work_origin};
 use syu_project_model::{ChangeBaseline, GitRef};
 use syu_spec_model::RepoPath;
 use syu_validation::{
@@ -778,6 +778,8 @@ fn run_work(args: WorkArgs) -> Result<i32> {
             let index = workspace.index()?;
             let request: WorkRequest = read_yaml(&request)?;
             ensure_clean_plan_workspace(&workspace)?;
+            validate_work_origin(&index, &request.origin)
+                .context("work plan requires an exact implemented Work origin")?;
             let plan = plan(&request, &workspace, &index, &revision(&workspace.root)?)?;
             write_yaml(&out, &plan)?;
             println!("wrote {} ({:?})", out.display(), plan.status);

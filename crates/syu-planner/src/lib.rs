@@ -73,6 +73,279 @@ pub struct PlanProbe {
     pub max_slices: usize,
 }
 
+/// Validate the exact origin before a request is expanded into a plan.
+///
+/// This is deliberately owned by the canonical planner rather than by a UI
+/// server. CLI planning, execution re-planning, and Workbench all need the
+/// same closed-world origin boundary; otherwise an apparently exact Feature
+/// or target selection could silently broaden when it crosses a process
+/// boundary.
+pub fn validate_work_origin(index: &SpecIndex, origin: &WorkOrigin) -> Result<()> {
+    let criterion = origin.criterion();
+    if criterion.kind != syu_spec_model::LocalAnchorKind::Criterion {
+        bail!("Work must start from an exact requirement criterion");
+    }
+    if !matches!(index.anchor(criterion), Some(AnchorValue::Criterion(_))) {
+        bail!("Work criterion anchor does not resolve to an exact requirement criterion");
+    }
+    if index.criterion_status.get(criterion) != Some(&ItemStatus::Implemented) {
+        bail!("origin criterion {criterion} is not implemented");
+    }
+    match origin {
+        WorkOrigin::RequirementCriterion { criterion } => {
+            validate_requirement_origin(index, criterion)
+        }
+        WorkOrigin::FeatureImplementationBinding {
+            binding,
+            criterion,
+            targets,
+        } => {
+            let artifact_binding = index
+                .bindings
+                .get(binding)
+                .ok_or_else(|| anyhow::anyhow!("implementation binding {binding} is unknown"))?;
+            if artifact_binding.role != BindingRole::Implementation {
+                bail!("origin binding {binding} is not an implementation binding");
+            }
+            if index.item_status.get(&binding.item) != Some(&ItemStatus::Implemented) {
+                bail!("origin binding {binding} is not implemented");
+            }
+            let mut expected = artifact_binding
+                .targets
+                .iter()
+                .filter(|target| !matches!(target.lifecycle, ArtifactTargetLifecycle::Absent))
+                .map(|target| BoundTargetRef {
+                    binding: binding.clone(),
+                    target_id: target.id.clone(),
+                })
+                .collect::<Vec<_>>();
+            expected.sort();
+            if targets.windows(2).any(|window| window[0] >= window[1]) {
+                bail!("implementation binding origin target list is not canonically sorted");
+            }
+            let mut actual = targets.clone();
+            actual.sort();
+            if expected != actual {
+                bail!("implementation binding origin must contain its complete active target set");
+            }
+            if targets.is_empty() {
+                bail!("implementation binding origin has no active implementation target");
+            }
+            let binding_criteria = targets
+                .iter()
+                .filter_map(|target| index.target(target))
+                .flat_map(|artifact| artifact.claims.iter())
+                .filter_map(|claim| match claim {
+                    TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
+                    _ => None,
+                })
+                .collect::<BTreeSet<_>>();
+            if binding_criteria.len() != 1 {
+                bail!("implementation binding origin has an ambiguous criterion");
+            }
+            if binding_criteria.iter().next() != Some(criterion) {
+                bail!("implementation binding origin has no exact satisfies criterion");
+            }
+            for target in targets {
+                validate_origin_target(index, target, binding, criterion)?;
+            }
+            validate_origin_contract_closure(index, criterion, targets)
+        }
+        WorkOrigin::FeatureImplementationTarget {
+            target,
+            binding,
+            criterion,
+        } => validate_origin_target(index, target, binding, criterion),
+    }
+}
+
+fn validate_planning_origin(request: &WorkRequest, index: &SpecIndex) -> Result<()> {
+    let criterion = request.origin.criterion();
+    if criterion.kind != syu_spec_model::LocalAnchorKind::Criterion
+        || !matches!(index.anchor(criterion), Some(AnchorValue::Criterion(_)))
+    {
+        bail!("Work origin must name one exact requirement criterion");
+    }
+    for requested in &request.requested_targets {
+        if let Some(requested_criterion) = requested.criterion()
+            && requested_criterion != criterion
+        {
+            bail!(
+                "requested target {} is outside the exact origin criterion {}",
+                requested.reference(),
+                criterion
+            );
+        }
+    }
+    match &request.origin {
+        WorkOrigin::RequirementCriterion { .. } => Ok(()),
+        WorkOrigin::FeatureImplementationBinding { .. }
+        | WorkOrigin::FeatureImplementationTarget { .. } => {
+            validate_work_origin(index, &request.origin)
+        }
+    }
+}
+
+fn validate_requirement_origin(index: &SpecIndex, criterion: &SpecAnchor) -> Result<()> {
+    let implementations = index
+        .criteria_to_implementation_targets
+        .get(criterion)
+        .into_iter()
+        .flatten()
+        .filter(|target| {
+            index.bindings.get(&target.binding).is_some_and(|binding| {
+                binding.role == BindingRole::Implementation
+                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
+                    && binding.targets.iter().any(|candidate| {
+                        candidate.id == target.target_id
+                            && !matches!(candidate.lifecycle, ArtifactTargetLifecycle::Absent)
+                    })
+            })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if implementations.is_empty() {
+        bail!("origin criterion {criterion} has no active implemented implementation target");
+    }
+    let verifications = index
+        .criteria_to_verification_targets
+        .get(criterion)
+        .into_iter()
+        .flatten()
+        .filter(|target| {
+            index.bindings.get(&target.binding).is_some_and(|binding| {
+                binding.role == BindingRole::Verification
+                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
+                    && index.target(target).is_some_and(|artifact| {
+                        !matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent)
+                    })
+            })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if verifications.is_empty() {
+        bail!("origin criterion {criterion} has no active implemented verification target");
+    }
+    for implementation in &implementations {
+        if !verifications.iter().any(|verification| {
+            index
+                .verification_by_target
+                .get(implementation)
+                .is_some_and(|covered| covered.contains(verification))
+        }) {
+            bail!(
+                "origin criterion {criterion} has no exact verification coverage for {implementation}"
+            );
+        }
+    }
+    validate_origin_contract_closure(index, criterion, &implementations)
+}
+
+fn validate_origin_target(
+    index: &SpecIndex,
+    target: &BoundTargetRef,
+    binding: &SpecAnchor,
+    criterion: &SpecAnchor,
+) -> Result<()> {
+    if &target.binding != binding {
+        bail!("origin target {target} does not belong to binding {binding}");
+    }
+    let artifact_binding = index
+        .bindings
+        .get(binding)
+        .ok_or_else(|| anyhow::anyhow!("origin binding {binding} is unknown"))?;
+    if artifact_binding.role != BindingRole::Implementation {
+        bail!("origin binding {binding} is not an implementation binding");
+    }
+    if index.item_status.get(&binding.item) != Some(&ItemStatus::Implemented) {
+        bail!("origin binding {binding} is not implemented");
+    }
+    let artifact = index
+        .target(target)
+        .ok_or_else(|| anyhow::anyhow!("origin target {target} is unknown"))?;
+    if matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent) {
+        bail!("origin target {target} is absent");
+    }
+    let claims = artifact
+        .claims
+        .iter()
+        .filter_map(|claim| match claim {
+            TargetClaim::Satisfies { criterion: actual } => Some(actual),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if claims.len() != 1 || claims[0] != criterion {
+        bail!("origin target {target} must have exactly one matching satisfies criterion");
+    }
+    let verification_targets = index
+        .criteria_to_verification_targets
+        .get(criterion)
+        .into_iter()
+        .flatten();
+    if !verification_targets.clone().any(|verification| {
+        index
+            .verification_by_target
+            .get(target)
+            .is_some_and(|covered| covered.contains(verification))
+    }) {
+        bail!("origin target {target} has no exact verification coverage");
+    }
+    validate_origin_contract_closure(index, criterion, std::slice::from_ref(target))
+}
+
+fn validate_origin_contract_closure(
+    index: &SpecIndex,
+    criterion: &SpecAnchor,
+    roots: &[BoundTargetRef],
+) -> Result<()> {
+    let mut pending = roots.to_vec();
+    let mut visited_targets = BTreeSet::new();
+    let mut visited_contracts = BTreeSet::new();
+    while let Some(target) = pending.pop() {
+        if !visited_targets.insert(target.clone()) {
+            continue;
+        }
+        let Some(contracts) = index.contracts_by_target.get(&target) else {
+            continue;
+        };
+        for contract_anchor in contracts {
+            if !visited_contracts.insert(contract_anchor.clone()) {
+                continue;
+            }
+            let contract = index.contracts.get(contract_anchor).ok_or_else(|| {
+                anyhow::anyhow!("origin target {target} has an unresolved contract closure")
+            })?;
+            if contract.guarantees.is_empty()
+                || contract
+                    .guarantees
+                    .iter()
+                    .any(|guarantee| guarantee != criterion)
+            {
+                bail!(
+                    "origin target {target} has a contract without the exact criterion guarantee"
+                );
+            }
+            let mut related = vec![contract.source.clone()];
+            related.extend(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| participant.target.clone()),
+            );
+            for related_target in related {
+                let artifact = index.target(&related_target).ok_or_else(|| {
+                    anyhow::anyhow!("origin target {target} has an unresolved contract participant")
+                })?;
+                if matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent) {
+                    bail!("origin target {related_target} has an absent contract participant");
+                }
+                pending.push(related_target);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn suggest_targets(
     criterion: &SpecAnchor,
     workspace: &SpecWorkspace,
@@ -564,6 +837,16 @@ pub fn plan(
     if let Some(error) = &index.inventory_error {
         bail!("inventory failed; plan generation is refused: {error}");
     }
+    if let Err(error) = validate_planning_origin(request, index) {
+        return Ok(blocked_plan(
+            request,
+            workspace,
+            index,
+            revision,
+            "SYU-WORK-001",
+            format!("exact Work origin is invalid: {error}"),
+        ));
+    }
     // Force the inventory-backed fingerprint before any blocked/ready plan is
     // serialized. A fallback UI fingerprint must never become an execution
     // basis.
@@ -723,7 +1006,7 @@ pub fn plan(
     }
     let mut expanded_slices = Vec::new();
     for slice in slices {
-        expanded_slices.extend(split_slice_if_needed(request, workspace, &slice)?);
+        expanded_slices.extend(split_slice_if_needed(request, workspace, index, &slice)?);
     }
     let mut slices = expanded_slices;
     slices.sort_by(|a, b| a.id.cmp(&b.id));
@@ -944,7 +1227,10 @@ fn primary_targets(
     index: &SpecIndex,
     criterion: &SpecAnchor,
 ) -> Vec<BoundTargetRef> {
-    let mut targets = match request.operation {
+    let mut targets = match &request.origin {
+        WorkOrigin::FeatureImplementationBinding { targets, .. } => targets.clone(),
+        WorkOrigin::FeatureImplementationTarget { target, .. } => vec![target.clone()],
+        WorkOrigin::RequirementCriterion { .. } => match request.operation {
         WorkOperation::Document => index
             .bindings
             .iter()
@@ -969,6 +1255,7 @@ fn primary_targets(
             .get(criterion)
             .cloned()
             .unwrap_or_default(),
+        },
     };
     targets.sort();
     targets.dedup();
@@ -2809,6 +3096,7 @@ fn blocked_plan(
 fn split_slice_if_needed(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
+    index: &SpecIndex,
     slice: &ExecutionSlice,
 ) -> Result<Vec<ExecutionSlice>> {
     if !slice_exceeds_limits(slice, &workspace.config.work.slicing) {
@@ -2823,10 +3111,17 @@ fn split_slice_if_needed(
         return Ok(vec![slice.clone()]);
     };
     let mut out = Vec::new();
-    for (index, group) in groups.into_iter().enumerate() {
-        let candidate =
-            rebuild_split_slice(request, workspace, &criterion, slice, group, index + 1)?;
-        let mut nested = split_slice_if_needed(request, workspace, &candidate)?;
+    for (part, group) in groups.into_iter().enumerate() {
+        let candidate = rebuild_split_slice(
+            request,
+            workspace,
+            index,
+            &criterion,
+            slice,
+            group,
+            part + 1,
+        )?;
+        let mut nested = split_slice_if_needed(request, workspace, index, &candidate)?;
         out.append(&mut nested);
     }
     Ok(out)
@@ -2843,7 +3138,17 @@ fn split_groups(
     if !slice_budget_can_shrink_with_editable_split(slice, limits) {
         return None;
     }
-    if slice.acceptance.len() == 1 && slice.editable_targets.len() > 1 {
+    let has_mixed_editable_transitions = slice
+        .editable_targets
+        .iter()
+        .map(|target| format!("{:?}", target.transition))
+        .collect::<BTreeSet<_>>()
+        .len()
+        > 1;
+    if slice.acceptance.len() == 1
+        && slice.editable_targets.len() > 1
+        && has_mixed_editable_transitions
+    {
         return None;
     }
     if let Some(groups) = target_groups(&slice.editable_targets) {
@@ -2864,9 +3169,14 @@ fn slice_budget_can_shrink_with_editable_split(
     {
         return true;
     }
-    if slice.budget.verification_targets > limits.max_verification_targets
-        || slice.budget.readonly_targets > limits.max_readonly_targets
-    {
+    // Verification is assigned per implementation component when the slice
+    // is rebuilt. A shared criterion-level test may appear in multiple focused
+    // slices, but unrelated verification targets must not keep every slice
+    // over the limit.
+    if slice.budget.verification_targets > limits.max_verification_targets {
+        return true;
+    }
+    if slice.budget.readonly_targets > limits.max_readonly_targets {
         return false;
     }
     if slice.budget.total_bytes <= limits.max_total_bytes {
@@ -2903,6 +3213,7 @@ fn group_targets(
 fn rebuild_split_slice(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
+    index: &SpecIndex,
     _criterion: &SpecAnchor,
     original: &ExecutionSlice,
     group: SliceGroup,
@@ -2915,11 +3226,26 @@ fn rebuild_split_slice(
         .cloned()
         .collect::<Vec<_>>();
     let (editable_targets, verification_targets, readonly_context) = match group {
-        SliceGroup::Editable(editable) => (
-            editable,
-            original.verification_targets.clone(),
-            original.readonly_context.clone(),
-        ),
+        SliceGroup::Editable(editable) => {
+            let verification_targets: Vec<PlannedTarget> = original
+                .verification_targets
+                .iter()
+                .filter(|verification| {
+                    editable.iter().any(|target| {
+                        index
+                            .verification_by_target
+                            .get(&target.reference)
+                            .is_some_and(|covered| covered.contains(&verification.reference))
+                    })
+                })
+                .cloned()
+                .collect();
+            (
+                editable,
+                verification_targets,
+                original.readonly_context.clone(),
+            )
+        }
     };
     let contracts = original.contracts.clone();
     let completion = completion_checks(

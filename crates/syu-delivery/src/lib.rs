@@ -12,9 +12,11 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
-    AgentEvent, AgentEventKind, AgentRun, AgentRunStatus, CompletionAttempt, CompletionBlocker,
-    CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview,
-    FinalizationReceipt, PlanApproval,
+    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentEvent, AgentEventKind, AgentRun,
+    AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionAttempt,
+    CompletionBlocker, CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA,
+    FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval,
+    VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -64,6 +66,7 @@ impl DeliveryStore {
 
     pub fn approve(&self, approval: &PlanApproval) -> Result<PlanApproval> {
         self.ensure()?;
+        validate_plan_approval_schema(approval)?;
         if approval.plan_digest != approval.plan.canonical_digest {
             bail!("approval plan digest does not match its canonical plan");
         }
@@ -90,6 +93,7 @@ impl DeliveryStore {
 
     pub fn approval(&self, identity: &ExecutionIdentity) -> Result<PlanApproval> {
         let approval: PlanApproval = read_json(&self.approval_path(identity))?;
+        validate_plan_approval_schema(&approval)?;
         if approval.plan_digest != identity.plan_digest
             || approval.slice_id != identity.slice_id
             || approval.plan_digest != approval.plan.canonical_digest
@@ -104,6 +108,7 @@ impl DeliveryStore {
     pub fn has_approval_for_plan(&self, plan_digest: &str) -> Result<bool> {
         for path in json_files(&self.approvals_dir())? {
             let approval: PlanApproval = read_json(&path)?;
+            validate_plan_approval_schema(&approval)?;
             if approval.plan_digest == plan_digest {
                 if approval.plan_digest != approval.plan.canonical_digest
                     || approval.plan.slices.len() != 1
@@ -119,6 +124,7 @@ impl DeliveryStore {
 
     pub fn append_attempt(&self, attempt: &CompletionAttempt) -> Result<CompletionAttempt> {
         self.ensure()?;
+        validate_completion_attempt_schema(attempt)?;
         validate_attempt_digest(attempt)?;
         let path = self.attempt_path(attempt);
         write_immutable_json(&path, attempt)
@@ -131,6 +137,7 @@ impl DeliveryStore {
     ) -> Result<CompletionAttempt> {
         for path in json_files(&self.attempts_dir())? {
             let value: CompletionAttempt = read_json(&path)?;
+            validate_completion_attempt_schema(&value)?;
             validate_attempt_digest(&value)?;
             if value.attempt_id == attempt_id
                 && value.plan_digest == identity.plan_digest
@@ -146,6 +153,7 @@ impl DeliveryStore {
         let mut values = Vec::new();
         for path in json_files(&self.attempts_dir())? {
             let value = read_json::<CompletionAttempt>(&path)?;
+            validate_completion_attempt_schema(&value)?;
             validate_attempt_digest(&value)?;
             values.push(value);
         }
@@ -162,6 +170,7 @@ impl DeliveryStore {
         receipt: &FinalizationReceipt,
     ) -> Result<FinalizationReceipt> {
         self.ensure()?;
+        validate_finalization_schema(receipt)?;
         let mut without_digest = receipt.clone();
         let supplied = without_digest.finalization_digest.clone();
         without_digest.finalization_digest.clear();
@@ -191,6 +200,7 @@ impl DeliveryStore {
             return Ok(None);
         }
         let receipt: FinalizationReceipt = read_json(&path)?;
+        validate_finalization_schema(&receipt)?;
         if receipt.plan_digest != identity.plan_digest
             || receipt.slice_id != identity.slice_id
             || receipt.attempt_id != attempt_id
@@ -367,6 +377,7 @@ impl DeliveryStore {
 
     pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
         self.ensure()?;
+        validate_agent_event_schema(event)?;
         let mut canonical = event.clone();
         let supplied = canonical.event_digest.clone();
         canonical.event_digest.clear();
@@ -387,6 +398,7 @@ impl DeliveryStore {
         let mut events = Vec::new();
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
+            validate_agent_event_schema(&event)?;
             validate_agent_event_digest(&path, &event)?;
             if event.run_id == run_id
                 && event.plan_digest == identity.plan_digest
@@ -459,6 +471,7 @@ impl DeliveryStore {
         let mut events = Vec::new();
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
+            validate_agent_event_schema(&event)?;
             validate_agent_event_digest(&path, &event)?;
             events.push(event);
         }
@@ -539,6 +552,70 @@ fn now_nanos() -> u128 {
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     serde_json::from_slice(&fs::read(path).with_context(|| format!("read {}", path.display()))?)
         .with_context(|| format!("parse {}", path.display()))
+}
+
+fn require_schema(actual: &str, expected: &str, artifact: &str) -> Result<()> {
+    if actual != expected {
+        bail!("{artifact} schema must be {expected}");
+    }
+    Ok(())
+}
+
+fn validate_plan_approval_schema(approval: &PlanApproval) -> Result<()> {
+    require_schema(
+        approval.schema.as_str(),
+        PLAN_APPROVAL_SCHEMA,
+        "plan approval",
+    )?;
+    require_schema(
+        approval.plan.schema.as_str(),
+        WORK_PLAN_SCHEMA,
+        "approved work plan",
+    )
+}
+
+fn validate_completion_attempt_schema(attempt: &CompletionAttempt) -> Result<()> {
+    require_schema(
+        attempt.schema.as_str(),
+        COMPLETION_ATTEMPT_SCHEMA,
+        "completion attempt",
+    )?;
+    require_schema(
+        attempt.report.schema.as_str(),
+        COMPLETION_REPORT_SCHEMA,
+        "completion report",
+    )?;
+    if let Some(receipt) = &attempt.receipt {
+        require_schema(
+            receipt.schema.as_str(),
+            VERIFICATION_RECEIPT_SCHEMA,
+            "verification receipt",
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_finalization_schema(receipt: &FinalizationReceipt) -> Result<()> {
+    require_schema(
+        receipt.schema.as_str(),
+        FINALIZATION_RECEIPT_SCHEMA,
+        "finalization receipt",
+    )
+}
+
+fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
+    require_schema(event.schema.as_str(), AGENT_EVENT_SCHEMA, "agent event")?;
+    match &event.event {
+        AgentEventKind::RunStarted { run } => {
+            require_schema(run.schema.as_str(), AGENT_RUN_SCHEMA, "agent run")
+        }
+        AgentEventKind::PatchRecorded { patch } => {
+            require_schema(patch.schema.as_str(), AGENT_PATCH_SCHEMA, "agent patch")
+        }
+        AgentEventKind::BlockerRecorded { .. }
+        | AgentEventKind::ScopeExpansionRequested { .. }
+        | AgentEventKind::VerificationRecorded { .. } => Ok(()),
+    }
 }
 
 fn validate_agent_event_digest(path: &Path, event: &AgentEvent) -> Result<()> {
@@ -766,10 +843,10 @@ mod tests {
     use super::*;
     use std::{fs, process::Command};
     use syu_work_model::{
-        COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionReport,
-        PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult,
-        VerificationAttemptStatus, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation,
-        WorkOrigin, WorkRequest,
+        AgentEvent, AgentEventKind, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
+        CompletionReport, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
+        VerificationAttemptResult, VerificationAttemptStatus, VerificationReceipt,
+        WORK_REQUEST_SCHEMA, WorkOperation, WorkOrigin, WorkRequest,
     };
 
     fn workbench_fixture_root() -> PathBuf {
@@ -963,6 +1040,61 @@ mod tests {
                 .unwrap(),
             approval
         );
+    }
+
+    #[test]
+    fn durable_artifacts_require_their_declared_v1_schemas() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = fixture_approval(&workspace, &plan, &revision);
+
+        let mut invalid_approval = approval.clone();
+        invalid_approval.schema = "syu/legacy-approval/v0".into();
+        assert!(store.approve(&invalid_approval).is_err());
+
+        let attempt = fixture_attempt(&plan, &approval, &revision);
+        let mut invalid_attempt = attempt.clone();
+        invalid_attempt.schema = "syu/legacy-attempt/v0".into();
+        assert!(store.append_attempt(&invalid_attempt).is_err());
+
+        let identity = ExecutionIdentity {
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: plan.slices[0].id.clone(),
+        };
+        let invalid_finalization = FinalizationReceipt {
+            schema: "syu/legacy-finalization/v0".into(),
+            finalization_id: "finalization-test".into(),
+            finalization_digest: String::new(),
+            attempt_id: attempt.attempt_id.clone(),
+            attempt_digest: attempt.attempt_digest.clone(),
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
+            pre_workspace_fingerprint: String::new(),
+            post_workspace_fingerprint: String::new(),
+            promoted_items: vec![],
+            changed_files: vec![],
+            lifecycle_proofs: vec![],
+            completed_at: String::new(),
+        };
+        assert!(store.append_finalization(&invalid_finalization).is_err());
+
+        let invalid_event = AgentEvent {
+            schema: "syu/legacy-agent-event/v0".into(),
+            event_id: "event-test".into(),
+            event_digest: String::new(),
+            run_id: "run-test".into(),
+            plan_digest: identity.plan_digest,
+            slice_id: identity.slice_id,
+            created_at: String::new(),
+            event: AgentEventKind::VerificationRecorded {
+                attempt_id: attempt.attempt_id,
+            },
+        };
+        assert!(store.append_agent_event(&invalid_event).is_err());
     }
 
     #[test]

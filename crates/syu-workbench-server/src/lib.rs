@@ -3442,283 +3442,12 @@ async fn api_source(
         is_excerpt: false,
     }))
 }
-fn validate_work_criterion_anchor(index: &SpecIndex, anchor: &SpecAnchor) -> Result<()> {
-    if anchor.kind != LocalAnchorKind::Criterion {
-        anyhow::bail!("Work must start from an exact requirement criterion");
-    }
-    if !matches!(
-        index.anchor(anchor),
-        Some(syu_workspace::AnchorValue::Criterion(_))
-    ) {
-        anyhow::bail!("Work criterion anchor does not resolve to an exact requirement criterion");
-    }
-    Ok(())
-}
-
 fn validate_work_origin(
     _workspace: &SpecWorkspace,
     index: &SpecIndex,
     origin: &WorkOrigin,
 ) -> Result<()> {
-    let criterion = origin.criterion();
-    validate_work_criterion_anchor(index, criterion)?;
-    if index.criterion_status.get(criterion) != Some(&ItemStatus::Implemented) {
-        anyhow::bail!("origin criterion {criterion} is not implemented");
-    }
-    match origin {
-        WorkOrigin::RequirementCriterion { criterion } => {
-            validate_requirement_origin(index, criterion)
-        }
-        WorkOrigin::FeatureImplementationBinding {
-            binding,
-            criterion,
-            targets,
-        } => {
-            let artifact_binding = index
-                .bindings
-                .get(binding)
-                .ok_or_else(|| anyhow::anyhow!("implementation binding {binding} is unknown"))?;
-            if artifact_binding.role != BindingRole::Implementation {
-                anyhow::bail!("origin binding {binding} is not an implementation binding");
-            }
-            if index.item_status.get(&binding.item) != Some(&ItemStatus::Implemented) {
-                anyhow::bail!("origin binding {binding} is not implemented");
-            }
-            let mut expected = artifact_binding
-                .targets
-                .iter()
-                .filter(|target| {
-                    !matches!(
-                        target.lifecycle,
-                        syu_spec_model::ArtifactTargetLifecycle::Absent
-                    )
-                })
-                .map(|target| BoundTargetRef {
-                    binding: binding.clone(),
-                    target_id: target.id.clone(),
-                })
-                .collect::<Vec<_>>();
-            expected.sort();
-            let mut actual = targets.clone();
-            if actual.windows(2).any(|window| window[0] >= window[1]) {
-                anyhow::bail!(
-                    "implementation binding origin target list is not canonically sorted"
-                );
-            }
-            actual.sort();
-            if expected != actual {
-                anyhow::bail!(
-                    "implementation binding origin must contain its complete active target set"
-                );
-            }
-            if targets.is_empty() {
-                anyhow::bail!("implementation binding origin has no active implementation target");
-            }
-            let binding_criteria = targets
-                .iter()
-                .filter_map(|target| index.target(target))
-                .flat_map(|artifact| artifact.claims.iter())
-                .filter_map(|claim| match claim {
-                    TargetClaim::Satisfies { criterion } => Some(criterion.clone()),
-                    _ => None,
-                })
-                .collect::<BTreeSet<_>>();
-            if binding_criteria.len() != 1 {
-                anyhow::bail!("implementation binding origin has an ambiguous criterion");
-            }
-            if binding_criteria.iter().next() != Some(criterion) {
-                anyhow::bail!("implementation binding origin has no exact satisfies criterion");
-            }
-            for target in targets {
-                validate_origin_target(index, target, binding, criterion)?;
-            }
-            validate_origin_contract_closure(index, criterion, targets)?;
-            Ok(())
-        }
-        WorkOrigin::FeatureImplementationTarget {
-            target,
-            binding,
-            criterion,
-        } => validate_origin_target(index, target, binding, criterion),
-    }
-}
-
-fn validate_requirement_origin(index: &SpecIndex, criterion: &SpecAnchor) -> Result<()> {
-    let implementations = index
-        .criteria_to_implementation_targets
-        .get(criterion)
-        .into_iter()
-        .flatten()
-        .filter(|target| {
-            index.bindings.get(&target.binding).is_some_and(|binding| {
-                binding.role == BindingRole::Implementation
-                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
-                    && binding.targets.iter().any(|candidate| {
-                        candidate.id == target.target_id
-                            && !matches!(
-                                candidate.lifecycle,
-                                syu_spec_model::ArtifactTargetLifecycle::Absent
-                            )
-                    })
-            })
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    if implementations.is_empty() {
-        anyhow::bail!(
-            "origin criterion {criterion} has no active implemented implementation target"
-        );
-    }
-    let verifications = index
-        .criteria_to_verification_targets
-        .get(criterion)
-        .into_iter()
-        .flatten()
-        .filter(|target| {
-            index.bindings.get(&target.binding).is_some_and(|binding| {
-                binding.role == BindingRole::Verification
-                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
-                    && index.target(target).is_some_and(|artifact| {
-                        !matches!(
-                            artifact.lifecycle,
-                            syu_spec_model::ArtifactTargetLifecycle::Absent
-                        )
-                    })
-            })
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    if verifications.is_empty() {
-        anyhow::bail!("origin criterion {criterion} has no active implemented verification target");
-    }
-    for implementation in &implementations {
-        if !verifications.iter().any(|verification| {
-            index
-                .verification_by_target
-                .get(implementation)
-                .is_some_and(|covered| covered.contains(verification))
-        }) {
-            anyhow::bail!(
-                "origin criterion {criterion} has no exact verification coverage for {implementation}"
-            );
-        }
-    }
-    validate_origin_contract_closure(index, criterion, &implementations)?;
-    Ok(())
-}
-
-fn validate_origin_target(
-    index: &SpecIndex,
-    target: &BoundTargetRef,
-    binding: &SpecAnchor,
-    criterion: &SpecAnchor,
-) -> Result<()> {
-    if &target.binding != binding {
-        anyhow::bail!("origin target {target} does not belong to binding {binding}");
-    }
-    let artifact_binding = index
-        .bindings
-        .get(binding)
-        .ok_or_else(|| anyhow::anyhow!("implementation binding {binding} is unknown"))?;
-    if artifact_binding.role != BindingRole::Implementation {
-        anyhow::bail!("origin binding {binding} is not an implementation binding");
-    }
-    if index.item_status.get(&binding.item) != Some(&ItemStatus::Implemented) {
-        anyhow::bail!("origin binding {binding} is not implemented");
-    }
-    let artifact = index
-        .target(target)
-        .ok_or_else(|| anyhow::anyhow!("origin target {target} is unknown"))?;
-    if matches!(
-        artifact.lifecycle,
-        syu_spec_model::ArtifactTargetLifecycle::Absent
-    ) {
-        anyhow::bail!("origin target {target} is absent");
-    }
-    let claims = artifact
-        .claims
-        .iter()
-        .filter_map(|claim| match claim {
-            syu_spec_model::TargetClaim::Satisfies { criterion: actual } => Some(actual),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    if claims.len() != 1 || claims[0] != criterion {
-        anyhow::bail!("origin target {target} must have exactly one matching satisfies criterion");
-    }
-    let mut verification_targets = index
-        .criteria_to_verification_targets
-        .get(criterion)
-        .into_iter()
-        .flatten();
-    if !verification_targets.any(|verification| {
-        index
-            .verification_by_target
-            .get(target)
-            .is_some_and(|covered| covered.contains(verification))
-    }) {
-        anyhow::bail!("origin target {target} has no exact verification coverage");
-    }
-    validate_origin_contract_closure(index, criterion, std::slice::from_ref(target))?;
-    Ok(())
-}
-
-fn validate_origin_contract_closure(
-    index: &SpecIndex,
-    criterion: &SpecAnchor,
-    roots: &[BoundTargetRef],
-) -> Result<()> {
-    let mut pending = roots.to_vec();
-    let mut visited_targets = BTreeSet::new();
-    let mut visited_contracts = BTreeSet::new();
-    while let Some(target) = pending.pop() {
-        if !visited_targets.insert(target.clone()) {
-            continue;
-        }
-        let Some(contracts) = index.contracts_by_target.get(&target) else {
-            continue;
-        };
-        for contract_anchor in contracts {
-            if !visited_contracts.insert(contract_anchor.clone()) {
-                continue;
-            }
-            let contract = index.contracts.get(contract_anchor).ok_or_else(|| {
-                anyhow::anyhow!("origin target {target} has an unresolved contract closure")
-            })?;
-            if contract.guarantees.is_empty()
-                || contract
-                    .guarantees
-                    .iter()
-                    .any(|guarantee| guarantee != criterion)
-            {
-                anyhow::bail!(
-                    "origin target {target} has a contract without the exact criterion guarantee"
-                );
-            }
-            let mut related = vec![contract.source.clone()];
-            related.extend(
-                contract
-                    .participants
-                    .iter()
-                    .map(|participant| participant.target.clone()),
-            );
-            for related_target in related {
-                let artifact = index.target(&related_target).ok_or_else(|| {
-                    anyhow::anyhow!("origin target {target} has an unresolved contract participant")
-                })?;
-                if matches!(
-                    artifact.lifecycle,
-                    syu_spec_model::ArtifactTargetLifecycle::Absent
-                ) {
-                    anyhow::bail!(
-                        "origin target {related_target} has an absent contract participant"
-                    );
-                }
-                pending.push(related_target);
-            }
-        }
-    }
-    Ok(())
+    syu_planner::validate_work_origin(index, origin)
 }
 
 fn ensure_homogeneous_approved_transitions(candidates: &[TargetSuggestion]) -> Result<()> {
@@ -10160,7 +9889,9 @@ mod tests {
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
         let (basis, csrf, projection) = projection_and_basis(&app).await;
         let feature = projection["specifications"]["specifications"]
             .as_array()
@@ -10176,6 +9907,8 @@ mod tests {
                 })
             })
             .expect("enabled Feature binding origin");
+        let selected_origin: WorkOrigin =
+            serde_json::from_value(origin.clone()).expect("server-projected Feature origin");
         let response = json_mutation(
             &app,
             Method::POST,
@@ -10199,6 +9932,47 @@ mod tests {
             "feature-implementation-binding"
         );
         assert_eq!(created["work"]["request"]["requested_target_count"], 1);
+        let request = service
+            .session
+            .read()
+            .expect("Feature-origin session")
+            .draft_request
+            .clone()
+            .expect("created Feature-origin request");
+        assert_eq!(request.origin, selected_origin);
+        let expected_targets = match &selected_origin {
+            WorkOrigin::FeatureImplementationBinding { targets, .. } => targets.clone(),
+            _ => panic!("expected a Feature implementation binding origin"),
+        };
+        assert_eq!(
+            request
+                .requested_targets
+                .iter()
+                .map(|target| target.reference.clone())
+                .collect::<Vec<_>>(),
+            expected_targets,
+            "Work must retain the exact server-projected target boundary"
+        );
+
+        let mut broadened = request.clone();
+        if let WorkOrigin::FeatureImplementationBinding { targets, .. } = &mut broadened.origin {
+            targets.clear();
+        }
+        let workspace = SpecWorkspace::load(temp.path()).expect("fixture workspace");
+        let index = workspace.index().expect("fixture index");
+        let revision = service
+            .snapshot()
+            .expect("fixture snapshot")
+            .revision
+            .clone();
+        let plan = syu_planner::plan(&broadened, &workspace, &index, &revision)
+            .expect("invalid exact origin becomes a blocked plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(
+            plan.diagnostics
+                .iter()
+                .any(|diagnostic| { diagnostic.message.contains("exact Work origin is invalid") })
+        );
     }
 
     #[tokio::test]
