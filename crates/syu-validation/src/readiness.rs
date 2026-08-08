@@ -827,16 +827,33 @@ fn canonical_contract_plan(
         .contracts
         .get(contract)
         .map(|value| {
-            std::iter::once(value.source.clone())
-                .chain(
-                    value
-                        .participants
-                        .iter()
-                        .map(|participant| participant.target.clone()),
-                )
+            // A contract source is readonly context, not an editable origin.
+            // Probe the active implementation participants; the planner then
+            // derives the source and the other contract participants through
+            // the exact dependency closure.
+            value
+                .participants
+                .iter()
+                .filter(|participant| {
+                    index
+                        .bindings
+                        .get(&participant.target.binding)
+                        .is_some_and(|binding| {
+                            binding.role == syu_spec_model::BindingRole::Implementation
+                        })
+                })
+                .filter(|participant| {
+                    index.target(&participant.target).is_some_and(|target| {
+                        target.lifecycle != syu_spec_model::ArtifactTargetLifecycle::Absent
+                    })
+                })
+                .map(|participant| participant.target.clone())
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    if requested_targets.is_empty() {
+        bail!("contract {contract} has no active implementation participant");
+    }
     syu_planner::plan_probe(
         &syu_planner::PlanProbe {
             criterion,

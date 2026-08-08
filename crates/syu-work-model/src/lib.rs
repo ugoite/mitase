@@ -1125,13 +1125,12 @@ pub fn canonical_json_bytes(value: serde_json::Value) -> Vec<u8> {
                 )
             }
             serde_json::Value::Array(values) => {
-                let mut values = values.into_iter().map(normalize).collect::<Vec<_>>();
-                values.sort_by(|left, right| {
-                    serde_json::to_vec(left)
-                        .expect("serialize canonical array value")
-                        .cmp(&serde_json::to_vec(right).expect("serialize canonical array value"))
-                });
-                serde_json::Value::Array(values)
+                // Array order is part of the meaning for command arguments,
+                // patch writes, executions, and other ordered evidence. Set-
+                // like fields must sort themselves before calling this
+                // generic canonicalizer; silently sorting every array would
+                // let distinct execution plans share a digest.
+                serde_json::Value::Array(values.into_iter().map(normalize).collect())
             }
             other => other,
         }
@@ -1218,7 +1217,11 @@ mod tests {
                 "z": { "b": 2, "a": 1 },
                 "a": [3, 1, 2]
             })),
-            br#"{"a":[1,2,3],"z":{"a":1,"b":2}}"#
+            br#"{"a":[3,1,2],"z":{"a":1,"b":2}}"#
+        );
+        assert_ne!(
+            canonical_json_bytes(serde_json::json!(["cargo", "test"])),
+            canonical_json_bytes(serde_json::json!(["test", "cargo"])),
         );
         assert_eq!(
             execution_identity_digest(&ExecutionIdentity {
