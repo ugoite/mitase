@@ -184,13 +184,11 @@ pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result
             );
         }
     }
-    if matches!(
-        request.origin,
-        WorkOrigin::FeatureImplementationBinding { .. }
-            | WorkOrigin::FeatureImplementationTarget { .. }
-    ) {
-        validate_work_origin(index, &request.origin)?;
-    }
+    // The request may have crossed a process boundary, so the origin itself
+    // must be revalidated for every origin kind.  In particular, a
+    // Requirement origin is not a permission to infer a broader binding or
+    // substitute a target's own claims for the selected criterion.
+    validate_work_origin(index, &request.origin)?;
 
     let boundary = request_target_boundary(index, &request.origin, request.operation);
     if !request.constraints.exact_scope
@@ -207,7 +205,15 @@ pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result
             TargetTransition::RunOnly => &boundary.run_only,
             TargetTransition::Readonly => &boundary.readonly,
         };
-        if !allowed.contains(target.reference()) {
+        let allowed_add = matches!(
+            target.transition(request_default_transition(request.operation)),
+            TargetTransition::Add
+        ) && requirement_add_target_is_in_origin_binding(
+            index,
+            &request.origin,
+            target.reference(),
+        );
+        if !allowed.contains(target.reference()) && !allowed_add {
             bail!(
                 "requested target {} is outside the exact {} origin closure",
                 target.reference(),
@@ -296,34 +302,6 @@ fn request_target_boundary(
     } else {
         BTreeSet::new()
     };
-    let requirement_implementation_scope =
-        if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
-            let bindings = index
-                .all_criteria_to_implementation_targets
-                .get(criterion)
-                .into_iter()
-                .flatten()
-                .map(|target| target.binding.clone())
-                .collect::<BTreeSet<_>>();
-            bindings
-                .into_iter()
-                .flat_map(|binding_anchor| {
-                    index
-                        .bindings
-                        .get(&binding_anchor)
-                        .into_iter()
-                        .flat_map(move |binding| {
-                            let binding_anchor = binding_anchor.clone();
-                            binding.targets.iter().map(move |target| BoundTargetRef {
-                                binding: binding_anchor.clone(),
-                                target_id: target.id.clone(),
-                            })
-                        })
-                })
-                .collect::<BTreeSet<_>>()
-        } else {
-            BTreeSet::new()
-        };
     let editable = if matches!(origin, WorkOrigin::RequirementCriterion { .. })
         && operation == WorkOperation::Document
     {
@@ -331,7 +309,7 @@ fn request_target_boundary(
     } else if operation == WorkOperation::Investigate {
         BTreeSet::new()
     } else if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
-        requirement_implementation_scope
+        implementation_roots.iter().cloned().collect()
     } else {
         implementation_roots.iter().cloned().collect()
     };
@@ -372,6 +350,53 @@ fn request_target_boundary(
     queue.extend(documentation_targets);
     extend_request_context(index, &mut boundary, queue);
     boundary
+}
+
+fn requirement_add_target_is_in_origin_binding(
+    index: &SpecIndex,
+    origin: &WorkOrigin,
+    target: &BoundTargetRef,
+) -> bool {
+    let WorkOrigin::RequirementCriterion { criterion } = origin else {
+        return false;
+    };
+    let Some(binding) = index.bindings.get(&target.binding) else {
+        return false;
+    };
+    if !matches!(
+        binding.role,
+        BindingRole::Implementation | BindingRole::Verification
+    ) || !matches!(
+        index.item_status.get(&target.binding.item),
+        Some(ItemStatus::Implemented | ItemStatus::Planned)
+    ) {
+        return false;
+    }
+    let Some(declared) = index.target(target) else {
+        return false;
+    };
+    let has_exact_binding = match binding.role {
+        BindingRole::Implementation => index
+            .criteria_to_implementation_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .any(|root| root.binding == target.binding),
+        BindingRole::Verification => declared.claims.iter().any(|claim| {
+            matches!(claim, TargetClaim::Verifies { criterion: actual, .. } if actual == criterion)
+        }),
+        _ => false,
+    };
+    let has_other_criterion_claim = declared.claims.iter().any(|claim| match claim {
+        TargetClaim::Satisfies { criterion: actual }
+        | TargetClaim::Verifies {
+            criterion: actual, ..
+        } => actual != criterion,
+        _ => false,
+    });
+    has_exact_binding
+        && !has_other_criterion_claim
+        && !index.target_to_artifact.contains_key(target)
 }
 
 fn extend_request_context(
@@ -431,37 +456,6 @@ fn validate_requirement_origin(index: &SpecIndex, criterion: &SpecAnchor) -> Res
         .collect::<Vec<_>>();
     if implementations.is_empty() {
         bail!("origin criterion {criterion} has no active implemented implementation target");
-    }
-    let verifications = index
-        .criteria_to_verification_targets
-        .get(criterion)
-        .into_iter()
-        .flatten()
-        .filter(|target| {
-            index.bindings.get(&target.binding).is_some_and(|binding| {
-                binding.role == BindingRole::Verification
-                    && index.item_status.get(&target.binding.item) == Some(&ItemStatus::Implemented)
-                    && index.target(target).is_some_and(|artifact| {
-                        !matches!(artifact.lifecycle, ArtifactTargetLifecycle::Absent)
-                    })
-            })
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    if verifications.is_empty() {
-        bail!("origin criterion {criterion} has no active implemented verification target");
-    }
-    for implementation in &implementations {
-        if !verifications.iter().any(|verification| {
-            index
-                .verification_by_target
-                .get(implementation)
-                .is_some_and(|covered| covered.contains(verification))
-        }) {
-            bail!(
-                "origin criterion {criterion} has no exact verification coverage for {implementation}"
-            );
-        }
     }
     validate_origin_contract_closure(index, criterion, &implementations)
 }
@@ -2713,123 +2707,108 @@ fn contract_readonly_context_for_target(
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> (Vec<PlannedTarget>, Vec<SpecAnchor>) {
+    let (related_targets, generated_targets, contracts) =
+        dependency_closure(index, std::slice::from_ref(implementation));
     let mut readonly = Vec::new();
-    let mut contracts = Vec::new();
-    for contract_anchor in index
-        .contracts_by_target
-        .get(implementation)
-        .cloned()
-        .unwrap_or_default()
-    {
-        contracts.push(contract_anchor.clone());
-        let Some(contract) = index.contracts.get(&contract_anchor) else {
+    for reference in related_targets {
+        if reference == *implementation {
+            continue;
+        }
+        let Some(binding) = index.bindings.get(&reference.binding) else {
             continue;
         };
-        if let Some(target) = index.target(&contract.source)
-            && let Some(binding) = index.bindings.get(&contract.source.binding)
-        {
-            readonly.extend(one_target(
-                workspace,
-                index,
-                &contract.source,
-                binding,
-                target,
-                TargetPlanOptions {
-                    policy: target_policy(TargetTransition::Readonly),
-                    reason: "Contract source constraining this implementation target.",
-                    operation: WorkOperation::Modify,
-                    add_budget_bytes: None,
-                    add_budget_lines: None,
-                    exclude_matcher,
+        let Some(target) = index.target(&reference) else {
+            continue;
+        };
+        let mut planned = one_target(
+            workspace,
+            index,
+            &reference,
+            binding,
+            target,
+            TargetPlanOptions {
+                policy: target_policy(TargetTransition::Readonly),
+                reason: if generated_targets.contains(&reference) {
+                    "Generated output in the complete derived closure; tools may not write it directly."
+                } else if index.generated_from.contains_key(&reference) {
+                    "Exact source of a generated artifact in the complete closure."
+                } else {
+                    "Readonly contract or dependency context in the complete closure."
                 },
-                blockers,
-            ));
-        }
-        for participant in &contract.participants {
-            if participant.target == *implementation {
-                continue;
-            }
-            if let Some(binding) = index.bindings.get(&participant.target.binding)
-                && let Some(target) = index.target(&participant.target)
-            {
-                readonly.extend(one_target(
-                    workspace,
-                    index,
-                    &participant.target,
-                    binding,
-                    target,
-                    TargetPlanOptions {
-                        policy: target_policy(TargetTransition::Readonly),
-                        reason: "Contract counterpart; readonly in this slice.",
-                        operation: WorkOperation::Modify,
-                        add_budget_bytes: None,
-                        add_budget_lines: None,
-                        exclude_matcher,
-                    },
-                    blockers,
-                ));
-            }
-        }
-    }
-    for generated in index
-        .generated_by_source
-        .get(implementation)
-        .cloned()
-        .unwrap_or_default()
-    {
-        if let Some(binding) = index.bindings.get(&generated.binding)
-            && let Some(target) = index.target(&generated)
-        {
-            let mut planned = one_target(
-                workspace,
-                index,
-                &generated,
-                binding,
-                target,
-                TargetPlanOptions {
-                    policy: target_policy(TargetTransition::Readonly),
-                    reason: "Generated output derived from this editable source; tools may not write it directly.",
-                    operation: WorkOperation::Modify,
-                    add_budget_bytes: None,
-                    add_budget_lines: None,
-                    exclude_matcher,
-                },
-                blockers,
-            );
+                operation: WorkOperation::Modify,
+                add_budget_bytes: None,
+                add_budget_lines: None,
+                exclude_matcher,
+            },
+            blockers,
+        );
+        if generated_targets.contains(&reference) {
             for target in &mut planned {
                 target.access = TargetAccessMode::Generated;
             }
-            readonly.extend(planned);
         }
+        readonly.extend(planned);
     }
-    for source in index
-        .generated_from
-        .get(implementation)
-        .cloned()
-        .unwrap_or_default()
-    {
-        if let Some(binding) = index.bindings.get(&source.binding)
-            && let Some(target) = index.target(&source)
+    (readonly, contracts.into_iter().collect())
+}
+
+/// Resolve the complete fixed-point dependency closure of exact targets. A
+/// generated chain or a contract participant can introduce another generated
+/// edge or contract, so one-hop collection is not an executable boundary.
+fn dependency_closure(
+    index: &SpecIndex,
+    roots: &[BoundTargetRef],
+) -> (
+    BTreeSet<BoundTargetRef>,
+    BTreeSet<BoundTargetRef>,
+    BTreeSet<SpecAnchor>,
+) {
+    let mut related_targets = roots.iter().cloned().collect::<BTreeSet<_>>();
+    let mut generated_targets = BTreeSet::new();
+    let mut contracts = BTreeSet::new();
+    let mut queue = roots.to_vec();
+    while let Some(current) = queue.pop() {
+        for generated in index
+            .generated_by_source
+            .get(&current)
+            .into_iter()
+            .flatten()
         {
-            readonly.extend(one_target(
-                workspace,
-                index,
-                &source,
-                binding,
-                target,
-                TargetPlanOptions {
-                    policy: target_policy(TargetTransition::Readonly),
-                    reason: "Exact source of this generated artifact.",
-                    operation: WorkOperation::Modify,
-                    add_budget_bytes: None,
-                    add_budget_lines: None,
-                    exclude_matcher,
-                },
-                blockers,
-            ));
+            if generated_targets.insert(generated.clone()) {
+                related_targets.insert(generated.clone());
+                queue.push(generated.clone());
+            }
+        }
+        for source in index.generated_from.get(&current).into_iter().flatten() {
+            if related_targets.insert(source.clone()) {
+                queue.push(source.clone());
+            }
+        }
+        for contract_anchor in index
+            .contracts_by_target
+            .get(&current)
+            .into_iter()
+            .flatten()
+        {
+            if !contracts.insert(contract_anchor.clone()) {
+                continue;
+            }
+            let Some(contract) = index.contracts.get(contract_anchor) else {
+                continue;
+            };
+            for related in std::iter::once(&contract.source).chain(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| &participant.target),
+            ) {
+                if related_targets.insert(related.clone()) {
+                    queue.push(related.clone());
+                }
+            }
         }
     }
-    (readonly, contracts)
+    (related_targets, generated_targets, contracts)
 }
 #[allow(clippy::too_many_arguments)]
 fn targets(
@@ -3572,57 +3551,12 @@ fn focused_split_closure(
         .iter()
         .map(|target| target.reference.binding.clone())
         .collect::<BTreeSet<_>>();
-    let mut related_targets = editable
+    let roots = editable
         .iter()
         .map(|target| target.reference.clone())
-        .collect::<BTreeSet<_>>();
-    let mut related_contracts = BTreeSet::new();
-    for target in editable {
-        if let Some(contracts) = index.contracts_by_target.get(&target.reference) {
-            related_contracts.extend(contracts.iter().cloned());
-        }
-        related_targets.extend(
-            index
-                .generated_by_source
-                .get(&target.reference)
-                .into_iter()
-                .flatten()
-                .cloned(),
-        );
-        related_targets.extend(
-            index
-                .generated_from
-                .get(&target.reference)
-                .into_iter()
-                .flatten()
-                .cloned(),
-        );
-    }
-    for anchor in &original.contracts {
-        let Some(contract) = index.contracts.get(anchor) else {
-            continue;
-        };
-        let contract_targets = std::iter::once(&contract.source).chain(
-            contract
-                .participants
-                .iter()
-                .map(|participant| &participant.target),
-        );
-        if contract_targets
-            .clone()
-            .any(|target| related_targets.contains(target))
-        {
-            related_contracts.insert(anchor.clone());
-            for target in std::iter::once(&contract.source).chain(
-                contract
-                    .participants
-                    .iter()
-                    .map(|participant| &participant.target),
-            ) {
-                related_targets.insert(target.clone());
-            }
-        }
-    }
+        .collect::<Vec<_>>();
+    let (related_targets, _generated_targets, related_contracts) =
+        dependency_closure(index, &roots);
     let readonly = original
         .readonly_context
         .iter()
@@ -4582,19 +4516,27 @@ mod tests {
         let tempdir = tempdir().expect("tempdir");
         write_minimal_workspace(tempdir.path());
         let feature_path = tempdir.path().join("spec/feature.yaml");
-        let feature = fs::read_to_string(&feature_path)
-            .expect("feature spec")
-            .replace("    status: implemented", "    status: planned")
-            .replace("        role: implementation", "        role: verification")
-            .replace(
-                "            claims: []\n",
-                concat!(
-                    "            claims:\n",
-                    "              - kind: verifies\n",
-                    "                criterion: REQ-TEST-001#criterion.test\n",
-                    "                covers: []\n",
-                    "                runner: { runner: cargo-test, arguments: { package: sample, test: added_handler } }\n",
-                ),
+        let feature = fs::read_to_string(&feature_path).expect("feature spec")
+            + concat!(
+                "\n  - id: FEAT-TEST-VERIFICATION-001\n",
+                "    title: Planned verification\n",
+                "    summary: Add an exact verification target after approval.\n",
+                "    status: planned\n",
+                "    bindings:\n",
+                "      - id: verification\n",
+                "        role: verification\n",
+                "        facet: verification\n",
+                "        responsibility: Verify the test criterion.\n",
+                "        targets:\n",
+                "          - id: missing-test\n",
+                "            adapter: rust\n",
+                "            path: src/handler.rs\n",
+                "            selector: { kind: symbol, name: added_handler }\n",
+                "            claims:\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-TEST-001#criterion.test\n",
+                "                covers: []\n",
+                "                runner: { runner: cargo-test, arguments: { package: sample, test: added_handler } }\n",
             );
         fs::write(feature_path, feature).expect("verification target spec");
         fs::write(
@@ -4605,9 +4547,10 @@ mod tests {
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         let index = workspace.index().expect("index");
         let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
-        let reference: BoundTargetRef = "FEAT-TEST-001#binding.impl/target.handler-missing"
-            .parse()
-            .unwrap();
+        let reference: BoundTargetRef =
+            "FEAT-TEST-VERIFICATION-001#binding.verification/target.missing-test"
+                .parse()
+                .unwrap();
         let request = WorkRequest {
             schema: WORK_REQUEST_SCHEMA.into(),
             id: "WORK-TEST-VERIFICATION-ADD".into(),
@@ -4632,14 +4575,14 @@ mod tests {
         assert_eq!(plan.status, PlanStatus::Ready, "{plan:?}");
         let slice = plan.slices.first().expect("verification add slice");
         assert!(slice.editable_targets.iter().any(|target| {
-            target.reference.target_id.to_string() == "handler-missing"
+            target.reference.target_id.to_string() == "missing-test"
                 && target.transition == TargetTransition::Add
                 && target.access == TargetAccessMode::Editable
         }));
         let verification = slice
             .verification_targets
             .iter()
-            .find(|target| target.reference.target_id.to_string() == "handler-missing")
+            .find(|target| target.reference.target_id.to_string() == "missing-test")
             .expect("new test is also a verification target");
         assert_eq!(verification.access, TargetAccessMode::RunOnly);
         assert_eq!(verification.transition, TargetTransition::RunOnly);
@@ -5606,7 +5549,6 @@ mod tests {
             target.reference.to_string() == "FEAT-DEPENDENCY-001#binding.generated/target.output"
                 && target.access == TargetAccessMode::Generated
         }));
-
         let output: BoundTargetRef = "FEAT-DEPENDENCY-001#binding.generated/target.output"
             .parse()
             .unwrap();

@@ -126,6 +126,21 @@ impl DeliveryStore {
         self.ensure()?;
         validate_completion_attempt_schema(attempt)?;
         validate_attempt_digest(attempt)?;
+        let identity = ExecutionIdentity {
+            plan_digest: attempt.plan_digest.clone(),
+            slice_id: attempt.slice_id.clone(),
+        };
+        let approval = self.approval(&identity).with_context(|| {
+            format!(
+                "completion attempt {} requires an approval for its plan and slice",
+                attempt.attempt_id
+            )
+        })?;
+        if approval.plan_digest != attempt.approved_plan_digest
+            || approval.plan_digest != attempt.plan_digest
+        {
+            bail!("completion attempt is not tied to its approved plan");
+        }
         let path = self.attempt_path(attempt);
         write_immutable_json(&path, attempt)
     }
@@ -490,6 +505,7 @@ impl DeliveryStore {
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
             validate_agent_event_schema(&event)?;
+            validate_agent_event_references(self, &event)?;
             validate_agent_event_digest(&path, &event)?;
             events.push(event);
         }
@@ -592,6 +608,8 @@ fn validate_plan_approval_schema(approval: &PlanApproval) -> Result<()> {
     )?;
     if approval.plan_digest != approval.plan.canonical_digest
         || approval.plan_digest != work_plan_digest(&approval.plan)
+        || approval.revision != approval.plan.basis.revision
+        || approval.workspace_fingerprint != approval.plan.basis.workspace_fingerprint
         || approval.slice_id
             != approval
                 .plan
@@ -633,6 +651,16 @@ fn validate_completion_attempt_schema(attempt: &CompletionAttempt) -> Result<()>
         if receipt.plan_digest != attempt.plan_digest || receipt.slice_id != attempt.slice_id {
             bail!("verification receipt does not match its attempt execution identity");
         }
+        if attempt.verification.status != syu_work_model::VerificationAttemptStatus::Complete
+            || attempt.report.receipt_digest.as_deref()
+                != Some(DeliveryStore::verification_digest(receipt)?.as_str())
+        {
+            bail!("completion attempt receipt is not fully bound to its report");
+        }
+    } else if attempt.verification.status != syu_work_model::VerificationAttemptStatus::Failed
+        || attempt.report.receipt_digest.is_some()
+    {
+        bail!("failed completion attempt must not carry a verification receipt");
     }
     Ok(())
 }
@@ -712,8 +740,47 @@ fn validate_agent_event_references(store: &DeliveryStore, event: &AgentEvent) ->
         if attempt.plan_digest != event.plan_digest || attempt.slice_id != event.slice_id {
             bail!("verification event attempt does not match its execution identity");
         }
+        let run = store.persisted_run_for_event(event)?;
+        if run.run_id != event.run_id
+            || run.plan_digest != event.plan_digest
+            || run.slice_id != event.slice_id
+        {
+            bail!("verification event run does not match its execution identity");
+        }
     }
     Ok(())
+}
+
+impl DeliveryStore {
+    fn persisted_run_for_event(&self, event: &AgentEvent) -> Result<AgentRun> {
+        for path in json_files(&self.agent_events_dir())? {
+            let candidate: AgentEvent = read_json(&path)?;
+            validate_agent_event_schema(&candidate)?;
+            validate_agent_event_digest(&path, &candidate)?;
+            let AgentEventKind::RunStarted { run } = candidate.event else {
+                continue;
+            };
+            if candidate.run_id != event.run_id
+                || candidate.plan_digest != event.plan_digest
+                || candidate.slice_id != event.slice_id
+                || run.run_id != event.run_id
+            {
+                continue;
+            }
+            let approval = self.approval(&ExecutionIdentity {
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+            })?;
+            if approval.approval_id != run.approval_id {
+                bail!("persisted agent run does not reference its approval");
+            }
+            return Ok(*run);
+        }
+        bail!(
+            "verification event references run {} without a persisted RunStarted event",
+            event.run_id
+        )
+    }
 }
 
 fn validate_agent_event_digest(path: &Path, event: &AgentEvent) -> Result<()> {
@@ -1047,6 +1114,7 @@ mod tests {
             executions: vec![],
             lifecycle_proofs: vec![],
         };
+        let receipt_digest = DeliveryStore::verification_digest(&receipt).expect("receipt digest");
         let mut attempt = CompletionAttempt {
             schema: COMPLETION_ATTEMPT_SCHEMA.into(),
             attempt_id: "attempt-test".into(),
@@ -1067,7 +1135,7 @@ mod tests {
                 attempt_id: "attempt-test".into(),
                 plan_digest: plan.canonical_digest.clone(),
                 slice_id,
-                receipt_digest: None,
+                receipt_digest: Some(receipt_digest),
                 status: CompletionStatus::Complete,
                 demonstrated: vec![],
                 checks: vec![],
@@ -1319,6 +1387,7 @@ mod tests {
         incomplete.verification.status = syu_work_model::VerificationAttemptStatus::Failed;
         incomplete.receipt = None;
         incomplete.report.attempt_id = incomplete.attempt_id.clone();
+        incomplete.report.receipt_digest = None;
         incomplete.report.status = CompletionStatus::Blocked;
         incomplete.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&incomplete)).unwrap();
