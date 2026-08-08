@@ -339,16 +339,19 @@ fn request_target_boundary(
             .bindings
             .iter()
             .flat_map(|(binding_anchor, binding)| {
-                binding.targets.iter().filter_map(|target| {
-                    (binding.role == BindingRole::Documentation
-                        && target.claims.iter().any(|claim| {
-                            matches!(claim, TargetClaim::Documents { anchor } if anchor == criterion)
-                        }))
-                    .then(|| BoundTargetRef {
+                binding
+                    .targets
+                    .iter()
+                    .filter(|target| {
+                        binding.role == BindingRole::Documentation
+                            && target.claims.iter().any(|claim| {
+                                matches!(claim, TargetClaim::Documents { anchor } if anchor == criterion)
+                            })
+                    })
+                    .map(|target| BoundTargetRef {
                         binding: binding_anchor.clone(),
                         target_id: target.id.clone(),
                     })
-                })
             })
             .collect::<BTreeSet<_>>()
     } else {
