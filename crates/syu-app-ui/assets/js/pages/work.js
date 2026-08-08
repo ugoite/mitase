@@ -269,6 +269,15 @@ function run(state, action) {
 
 function dispatchJourneyAction(state, action) {
   if (action.action === 'choose_specification') {
+    const anchor = state.projection.journey?.advanced?.specification_anchor;
+    if (anchor) {
+      state.journeyIntentSearch = true;
+      state.journeyCandidateAnchor = anchor;
+      state.selectedSpecification = anchor.split('#')[0];
+      state.go('specifications');
+      reviewJourneyTargetSuggestions(state, anchor);
+      return;
+    }
     state.go('specifications');
     return;
   }

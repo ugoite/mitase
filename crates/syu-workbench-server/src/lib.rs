@@ -1023,6 +1023,36 @@ fn basis(
     Ok(snapshot)
 }
 
+fn ensure_no_active_agent_run(service: &WorkbenchService) -> Result<()> {
+    let session_active = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .agent_run
+        .as_ref()
+        .is_some_and(|run| matches!(run.status, AgentRunStatus::Active));
+    let persisted_active = DeliveryStore::for_workspace(&service.workspace_root)?
+        .latest_agent_run()?
+        .is_some_and(|run| matches!(run.status, AgentRunStatus::Active));
+    if session_active || persisted_active {
+        anyhow::bail!(
+            "specification and config edits are unavailable while an agent run is active"
+        );
+    }
+    Ok(())
+}
+
+fn clear_work_execution_state(session: &mut WorkbenchSession) {
+    session.plan = None;
+    session.selected_slice = None;
+    session.context_pack = None;
+    session.verification_receipt = None;
+    session.agent_run = None;
+    session.last_validation = None;
+    session.rejected_target_suggestions.clear();
+    session.approved_target_suggestions.clear();
+}
+
 /// Execution is intentionally based on the plan's immutable revision rather
 /// than the pre-edit workspace fingerprint. Editable source changes are the
 /// expected transition between validation and verification/result; the
@@ -2801,6 +2831,7 @@ async fn api_specification_apply(
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
+    ensure_no_active_agent_run(&service)?;
     let workspace = &snapshot.workspace;
     let path = specification_path(workspace, &anchor)?;
     let content = edit_content(workspace, &path, &command.patch)?;
@@ -2825,6 +2856,11 @@ async fn api_specification_apply(
         atomic_replace(&path, &old)?;
         return Err(error.into());
     }
+    let mut session = service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    clear_work_execution_state(&mut session);
     Ok(Json(preview))
 }
 
@@ -2863,6 +2899,7 @@ async fn api_specification_candidate_apply(
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
+    ensure_no_active_agent_run(&service)?;
     let workspace = &snapshot.workspace;
     validate_feature_criterion_link(&snapshot, &command.patch)?;
     let path = patch_path(workspace, &command.patch)?;
@@ -2901,17 +2938,11 @@ async fn api_specification_candidate_apply(
         atomic_replace(&path, &old)?;
         return Err(error.into());
     }
-    if requires_replan {
-        let mut session = service
-            .session
-            .write()
-            .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-        session.plan = None;
-        session.context_pack = None;
-        session.verification_receipt = None;
-        session.last_validation = None;
-        session.selected_slice = None;
-    }
+    let mut session = service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    clear_work_execution_state(&mut session);
     Ok(Json(preview))
 }
 
@@ -2946,6 +2977,7 @@ async fn api_config_apply(
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
+    ensure_no_active_agent_run(&service)?;
     let workspace = &snapshot.workspace;
     let content = edit_content(workspace, &workspace.root.join("syu.yaml"), &command.patch)?;
     let config: syu_project_model::ProjectConfig = serde_yaml::from_str(&content)
@@ -2970,6 +3002,11 @@ async fn api_config_apply(
         atomic_replace(&path, &old)?;
         return Err(error.into());
     }
+    let mut session = service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    clear_work_execution_state(&mut session);
     Ok(Json(preview))
 }
 
@@ -3816,13 +3853,24 @@ async fn api_journey_action(
             )
             .await?;
         }
-        JourneyAction::Start { execution } | JourneyAction::Retry { execution } => {
+        JourneyAction::Start { execution } => {
             let _ = api_agent_start(
                 State(service.clone()),
                 Json(AgentStartCommand {
                     basis: basis_command.clone(),
                     execution,
                 }),
+            )
+            .await?;
+        }
+        JourneyAction::Retry { execution } => {
+            let _ = api_agent_start_with_retry(
+                State(service.clone()),
+                Json(AgentStartCommand {
+                    basis: basis_command.clone(),
+                    execution,
+                }),
+                true,
             )
             .await?;
         }
@@ -4363,6 +4411,14 @@ async fn api_agent_start(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<AgentStartCommand>,
 ) -> Result<Json<AgentRun>, ApiError> {
+    api_agent_start_with_retry(State(service), Json(command), false).await
+}
+
+async fn api_agent_start_with_retry(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<AgentStartCommand>,
+    retry: bool,
+) -> Result<Json<AgentRun>, ApiError> {
     let snapshot = basis(&service, &command.basis)?;
     let (plan, selected_slice) = {
         let session = service
@@ -4398,7 +4454,12 @@ async fn api_agent_start(
             anyhow::anyhow!("session plan differs from the approved plan"),
         ));
     }
-    let run = syu_agent::start_run(&snapshot.workspace, &approval, &command.execution.slice_id)?;
+    let run = syu_agent::start_run(
+        &snapshot.workspace,
+        &approval,
+        &command.execution.slice_id,
+        retry,
+    )?;
     service
         .session
         .write()
@@ -6249,10 +6310,17 @@ fn split_reason(plan: &WorkPlan, config: &syu_project_model::ProjectConfig) -> S
             .diagnostics
             .first()
             .map(|diagnostic| diagnostic.message.as_str())
+            .or_else(|| {
+                plan.slices
+                    .iter()
+                    .flat_map(|slice| slice.blockers.iter())
+                    .next()
+                    .map(|diagnostic| diagnostic.message.as_str())
+            })
             .unwrap_or("The candidate exceeds a configured execution limit.");
         let lower = message.to_ascii_lowercase();
         let code = if lower.contains("verification") {
-            "verification-budget"
+            "verification-coverage"
         } else if lower.contains("readonly") {
             "readonly-budget"
         } else if lower.contains("byte") {

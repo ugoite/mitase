@@ -685,6 +685,7 @@ pub fn suggest_targets(
         Some(AnchorValue::Criterion(value)) => value.statement.as_str(),
         _ => bail!("target suggestions require an exact criterion anchor"),
     };
+    let workspace_fingerprint = workspace.try_fingerprint()?;
     let criterion_terms = significant_terms(statement);
     let governing_rules = index
         .criteria_to_rules
@@ -833,6 +834,8 @@ pub fn suggest_targets(
             let path = target.path.to_string_lossy().into_owned();
             let selector = selector_text(&target.selector);
             let existing_file = workspace.root.join(target.path.as_path()).is_file();
+            let budget_bytes = (transition == TargetTransition::Add).then_some(512);
+            let budget_lines = (transition == TargetTransition::Add).then_some(32);
             let confidence = if directly_claims || enforces_governing_rule || supports_contract {
                 SuggestionConfidence::High
             } else if score >= 40 || matched_terms.len() >= 2 {
@@ -852,9 +855,25 @@ pub fn suggest_targets(
                 })
                 .map(|unit| unit.digest.as_str())
                 .unwrap_or_default();
-            let evidence_fingerprint =
-                suggestion_digest(criterion, &reference, statement, artifact_digest, &evidence);
             let id = suggestion_id(&reference);
+            let evidence_fingerprint = suggestion_digest(
+                criterion,
+                &workspace_fingerprint,
+                &id,
+                &reference,
+                binding.role,
+                transition,
+                lifecycle,
+                &path,
+                &selector,
+                existing_file,
+                budget_bytes,
+                budget_lines,
+                confidence,
+                statement,
+                artifact_digest,
+                &evidence,
+            );
             ranked.push((
                 score,
                 id,
@@ -865,6 +884,8 @@ pub fn suggest_targets(
                 path,
                 selector,
                 existing_file,
+                budget_bytes,
+                budget_lines,
                 confidence,
                 evidence,
                 evidence_fingerprint,
@@ -888,6 +909,8 @@ pub fn suggest_targets(
                     path,
                     selector,
                     existing_file,
+                    budget_bytes,
+                    budget_lines,
                     confidence,
                     evidence,
                     evidence_fingerprint,
@@ -903,8 +926,8 @@ pub fn suggest_targets(
                     path,
                     selector,
                     existing_file,
-                    budget_bytes: (transition == TargetTransition::Add).then_some(512),
-                    budget_lines: (transition == TargetTransition::Add).then_some(32),
+                    budget_bytes,
+                    budget_lines,
                     confidence,
                     evidence,
                     evidence_fingerprint,
@@ -971,19 +994,43 @@ fn suggestion_id(reference: &BoundTargetRef) -> String {
 
 fn suggestion_digest(
     criterion: &SpecAnchor,
+    workspace_fingerprint: &str,
+    id: &str,
     reference: &BoundTargetRef,
+    role: BindingRole,
+    transition: TargetTransition,
+    lifecycle: TargetLifecycle,
+    path: &str,
+    selector: &str,
+    existing_file: bool,
+    budget_bytes: Option<usize>,
+    budget_lines: Option<usize>,
+    confidence: SuggestionConfidence,
     criterion_statement: &str,
     artifact_digest: &str,
     evidence: &[String],
 ) -> String {
+    let authority = serde_json::json!({
+        "schema": "syu/work-target-suggestion-authority/v1",
+        "criterion": criterion,
+        "workspace_fingerprint": workspace_fingerprint,
+        "id": id,
+        "reference": reference,
+        "role": role,
+        "transition": transition,
+        "lifecycle": lifecycle,
+        "path": path,
+        "selector": selector,
+        "existing_file": existing_file,
+        "budget_bytes": budget_bytes,
+        "budget_lines": budget_lines,
+        "confidence": confidence,
+        "criterion_statement": criterion_statement,
+        "artifact_digest": artifact_digest,
+        "evidence": evidence,
+    });
     let mut hash = Sha256::new();
-    hash.update(criterion.to_string().as_bytes());
-    hash.update(reference.to_string().as_bytes());
-    hash.update(criterion_statement.as_bytes());
-    hash.update(artifact_digest.as_bytes());
-    for item in evidence {
-        hash.update(item.as_bytes());
-    }
+    hash.update(syu_work_model::canonical_json_bytes(authority));
     hex_digest(&hash.finalize())
 }
 
@@ -1403,6 +1450,17 @@ pub fn plan(
             "SYU-WORK-002",
             "request produced no execution slices",
         ));
+    }
+    for slice in &mut slices {
+        if request.operation != WorkOperation::Investigate
+            && !slice_has_verification_coverage(index, request, slice)
+        {
+            slice.blockers.push(Diagnostic::error(
+                "SYU-WORK-015",
+                "every editable target requires exact active verification coverage; approve an exact verification Add target before proceeding",
+                "work-plan",
+            ));
+        }
     }
     let status = if slices.iter().any(|s| !s.blockers.is_empty()) {
         PlanStatus::Blocked
@@ -2662,6 +2720,56 @@ fn default_non_goals(request: &WorkRequest) -> Vec<NonGoal> {
         _ => {}
     }
     non_goals
+}
+
+fn slice_has_verification_coverage(
+    index: &SpecIndex,
+    request: &WorkRequest,
+    slice: &ExecutionSlice,
+) -> bool {
+    if slice.editable_targets.is_empty() {
+        return true;
+    }
+    let criterion = request.origin.criterion();
+    let explicit_verification_adds = request
+        .requested_targets
+        .iter()
+        .filter(|requested| {
+            requested.criterion() == Some(criterion)
+                && requested.transition(default_transition(request.operation))
+                    == TargetTransition::Add
+                && index
+                    .bindings
+                    .get(&requested.reference().binding)
+                    .is_some_and(|binding| binding.role == BindingRole::Verification)
+        })
+        .map(|requested| requested.reference())
+        .collect::<BTreeSet<_>>();
+    slice.editable_targets.iter().all(|editable| {
+        if explicit_verification_adds.contains(&editable.reference) {
+            return true;
+        }
+        slice.verification_targets.iter().any(|verification| {
+            verification
+                .verification_claim
+                .as_ref()
+                .is_some_and(|claim| {
+                    claim.criterion == *criterion
+                        && claim.target == verification.reference
+                        && (index
+                            .verification_by_target
+                            .get(&editable.reference)
+                            .is_some_and(|covered| covered.contains(&verification.reference))
+                            || (explicit_verification_adds.contains(&verification.reference)
+                                && index
+                                    .all_verification_by_target
+                                    .get(&editable.reference)
+                                    .is_some_and(|covered| {
+                                        covered.contains(&verification.reference)
+                                    })))
+                })
+        })
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4456,7 +4564,7 @@ mod tests {
         };
         let candidate_plan =
             plan(&request, &workspace, &index, "revision").expect("candidate plan");
-        assert_eq!(candidate_plan.status, PlanStatus::Ready);
+        assert_eq!(candidate_plan.status, PlanStatus::Blocked);
         assert_eq!(candidate_plan.slices.len(), 2);
         let candidate = candidate_plan.slices.first().expect("candidate slice");
 
@@ -4482,7 +4590,7 @@ mod tests {
         };
         let selected_plan =
             plan(&selected_request, &workspace, &index, "revision").expect("selected plan");
-        assert_eq!(selected_plan.status, PlanStatus::Ready);
+        assert_eq!(selected_plan.status, PlanStatus::Blocked);
         assert_eq!(selected_plan.slices.len(), 1);
         assert_eq!(
             selected_plan.slices[0]
@@ -5053,7 +5161,7 @@ mod tests {
             }],
         };
         let plan = plan(&request, &workspace, &index, "rev-1").expect("plan");
-        assert_eq!(plan.status, PlanStatus::Ready);
+        assert_eq!(plan.status, PlanStatus::Blocked);
         assert!(plan.slices.iter().any(|slice| {
             slice.editable_targets.iter().any(|target| {
                 target.transition == TargetTransition::Add
@@ -5343,30 +5451,15 @@ mod tests {
             }],
         };
         let plan = plan(&request, &workspace, &index, "rev-2").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(
+            plan.slices
+                .iter()
+                .flat_map(|slice| &slice.blockers)
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-015")
+        );
         let slice = plan.slices.first().expect("slice");
-        let pack = export_context(&plan, &slice.id, &workspace, &index, "rev-2").expect("pack");
-        let intended_entries = pack
-            .artifact_context
-            .iter()
-            .filter(|entry| matches!(entry, ArtifactContextEntry::IntendedTarget(_)))
-            .count();
-        let support_entries = pack
-            .artifact_context
-            .iter()
-            .filter(|entry| matches!(entry, ArtifactContextEntry::Support(_)))
-            .count();
-        assert_eq!(intended_entries, 1);
-        assert_eq!(support_entries, 1);
-        let support = pack
-            .artifact_context
-            .iter()
-            .find_map(|entry| match entry {
-                ArtifactContextEntry::Support(value) => Some(value),
-                _ => None,
-            })
-            .expect("support entry");
-        assert_eq!(support.supports.target_id.to_string(), "handler-missing");
-        assert!(support.support_id.starts_with("support:"));
+        assert!(export_context(&plan, &slice.id, &workspace, &index, "rev-2").is_err());
     }
 
     fn write_dependency_workspace(root: &Path) {
@@ -5525,7 +5618,7 @@ mod tests {
             ],
         };
         let combined_plan = plan(&request, &workspace, &index, "rev-contract").expect("plan");
-        assert_eq!(combined_plan.status, PlanStatus::Ready);
+        assert_eq!(combined_plan.status, PlanStatus::Blocked);
         assert_eq!(combined_plan.slices.len(), 1);
         let slice = &combined_plan.slices[0];
         assert_eq!(
@@ -5574,7 +5667,7 @@ mod tests {
         };
         let provider_plan =
             plan(&provider_only, &workspace, &index, "rev-provider").expect("provider plan");
-        assert_eq!(provider_plan.status, PlanStatus::Ready);
+        assert_eq!(provider_plan.status, PlanStatus::Blocked);
         assert!(
             provider_plan.slices[0]
                 .readonly_context
@@ -5605,7 +5698,7 @@ mod tests {
             requested_targets: vec![],
         };
         let criterion_plan = plan(&criterion_seed, &workspace, &index, "criterion").unwrap();
-        assert_eq!(criterion_plan.status, PlanStatus::Ready);
+        assert_eq!(criterion_plan.status, PlanStatus::Blocked);
         assert_eq!(criterion_plan.slices.len(), 1);
         assert_eq!(criterion_plan.slices[0].editable_targets.len(), 2);
         let provider: BoundTargetRef = "FEAT-DEPENDENCY-001#binding.provider/target.provider"
@@ -5627,7 +5720,11 @@ mod tests {
             requested_targets: vec![],
         };
         let changed_plan = plan(&changed_seed, &workspace, &index, "changed").unwrap();
-        assert_eq!(changed_plan.status, PlanStatus::Ready, "{changed_plan:#?}");
+        assert_eq!(
+            changed_plan.status,
+            PlanStatus::Blocked,
+            "{changed_plan:#?}"
+        );
         assert_eq!(changed_plan.slices.len(), 1);
         let editable = &changed_plan.slices[0].editable_targets;
         assert_eq!(editable.len(), 2);
@@ -5740,7 +5837,7 @@ mod tests {
         };
         let source_plan =
             plan(&source_request, &workspace, &index, "rev-generated").expect("source plan");
-        assert_eq!(source_plan.status, PlanStatus::Ready);
+        assert_eq!(source_plan.status, PlanStatus::Blocked);
         assert!(source_plan.slices[0].readonly_context.iter().any(|target| {
             target.reference.to_string() == "FEAT-DEPENDENCY-001#binding.generated/target.output"
                 && target.access == TargetAccessMode::Generated
@@ -5759,7 +5856,7 @@ mod tests {
         });
         let exact_plan = plan(&exact_request, &workspace, &index, "rev-generated-exact")
             .expect("exact generated replan");
-        assert_eq!(exact_plan.status, PlanStatus::Ready);
+        assert_eq!(exact_plan.status, PlanStatus::Blocked);
         assert!(exact_plan.slices[0].readonly_context.iter().any(|target| {
             target.reference.to_string() == "FEAT-DEPENDENCY-001#binding.generated/target.output"
                 && target.access == TargetAccessMode::Generated

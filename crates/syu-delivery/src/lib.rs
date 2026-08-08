@@ -9,6 +9,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::Command,
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
@@ -23,6 +24,7 @@ use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
 
 pub const STORE_SCHEMA: &str = "syu/completion/v1";
+static AGENT_EVENT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct DeliveryStore {
@@ -500,14 +502,60 @@ impl DeliveryStore {
     }
 
     pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
+        self.append_agent_event_with_retry(event, false)
+    }
+
+    pub fn append_agent_event_for_retry(
+        &self,
+        event: &AgentEvent,
+        retry: bool,
+    ) -> Result<AgentEvent> {
+        self.append_agent_event_with_retry(event, retry)
+    }
+
+    fn append_agent_event_with_retry(&self, event: &AgentEvent, retry: bool) -> Result<AgentEvent> {
         self.ensure()?;
+        let _event_guard = AGENT_EVENT_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .map_err(|_| anyhow::anyhow!("agent event lifecycle lock"))?;
         validate_agent_event_schema(event)?;
         validate_agent_event_references(self, event, true)?;
-        if !matches!(&event.event, AgentEventKind::RunStarted { .. }) {
-            let identity = ExecutionIdentity {
-                plan_digest: event.plan_digest.clone(),
-                slice_id: event.slice_id.clone(),
-            };
+        let identity = ExecutionIdentity {
+            plan_digest: event.plan_digest.clone(),
+            slice_id: event.slice_id.clone(),
+        };
+        if let AgentEventKind::RunStarted { .. } = &event.event {
+            if let Some(current) = self.latest_agent_run_for_identity(&identity)? {
+                match current.status {
+                    AgentRunStatus::Active => {
+                        bail!(
+                            "execution {} already has an active agent run {}",
+                            identity.slice_id,
+                            current.run_id
+                        )
+                    }
+                    AgentRunStatus::Blocked if !retry => {
+                        bail!(
+                            "execution {} is blocked; retry the existing agent run",
+                            identity.slice_id
+                        )
+                    }
+                    AgentRunStatus::Blocked => {}
+                    AgentRunStatus::Completed => {
+                        bail!(
+                            "execution {} already has a completed agent run",
+                            identity.slice_id
+                        )
+                    }
+                }
+            } else if retry {
+                bail!(
+                    "retry requires an existing blocked agent run for execution {}",
+                    identity.slice_id
+                );
+            }
+        } else {
             let current = self.agent_run(&identity, &event.run_id)?;
             let allowed = match &event.event {
                 AgentEventKind::PatchRecorded { .. }
@@ -609,6 +657,30 @@ impl DeliveryStore {
             }
         }
         Ok(run)
+    }
+
+    fn latest_agent_run_for_identity(
+        &self,
+        identity: &ExecutionIdentity,
+    ) -> Result<Option<AgentRun>> {
+        let mut started = self
+            .agent_events_all()?
+            .into_iter()
+            .filter_map(|event| match event.event {
+                AgentEventKind::RunStarted { run }
+                    if run.plan_digest == identity.plan_digest
+                        && run.slice_id == identity.slice_id =>
+                {
+                    Some((event.created_at, event.event_id, run.run_id.clone()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        started.sort();
+        started
+            .last()
+            .map(|(_, _, run_id)| self.agent_run(identity, run_id))
+            .transpose()
     }
 
     pub fn latest_agent_run(&self) -> Result<Option<AgentRun>> {
@@ -1878,9 +1950,18 @@ mod tests {
             },
         };
         store.append_agent_event(&valid_start).unwrap();
-        let mut duplicate_start = valid_start;
+        let mut duplicate_start = valid_start.clone();
         duplicate_start.event_id = "event-duplicate-run-start".into();
         assert!(store.append_agent_event(&duplicate_start).is_err());
+        let mut concurrent_start = valid_start.clone();
+        concurrent_start.event_id = "event-concurrent-run-start".into();
+        concurrent_start.run_id = "run-concurrent-start".into();
+        if let AgentEventKind::RunStarted { run } = &mut concurrent_start.event {
+            let mut replacement = (**run).clone();
+            replacement.run_id = concurrent_start.run_id.clone();
+            *run = Box::new(replacement);
+        }
+        assert!(store.append_agent_event(&concurrent_start).is_err());
 
         assert_eq!(attempt.report.status, CompletionStatus::Blocked);
         store.append_attempt(&workspace, &attempt).unwrap();
@@ -1907,8 +1988,8 @@ mod tests {
             event_id: "event-late-blocker".into(),
             event_digest: String::new(),
             run_id: "run-start-test".into(),
-            plan_digest: identity.plan_digest,
-            slice_id: identity.slice_id,
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
             created_at: "3".into(),
             event: AgentEventKind::BlockerRecorded {
                 blocker: syu_work_model::AgentBlocker {
@@ -1919,6 +2000,27 @@ mod tests {
             },
         };
         assert!(store.append_agent_event(&late_blocker).is_err());
+        let mut retry_run = match &valid_start.event {
+            AgentEventKind::RunStarted { run } => (**run).clone(),
+            _ => unreachable!("valid_start is a RunStarted event"),
+        };
+        retry_run.run_id = "run-retry-test".into();
+        retry_run.status = AgentRunStatus::Active;
+        let retry_event = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-retry-run-start".into(),
+            event_digest: String::new(),
+            run_id: retry_run.run_id.clone(),
+            plan_digest: identity.plan_digest,
+            slice_id: identity.slice_id,
+            created_at: "4".into(),
+            event: AgentEventKind::RunStarted {
+                run: Box::new(retry_run),
+            },
+        };
+        store
+            .append_agent_event_for_retry(&retry_event, true)
+            .unwrap();
     }
 
     #[test]

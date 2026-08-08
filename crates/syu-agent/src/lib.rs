@@ -6,6 +6,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 use syu_delivery::DeliveryStore;
@@ -21,11 +22,13 @@ use syu_work_model::{
 use syu_workspace::SpecWorkspace;
 
 pub const AGENT_CONTEXT_SCHEMA: &str = syu_work_model::AGENT_CONTEXT_SCHEMA;
+static PATCH_WORKSPACE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub fn start_run(
     workspace: &SpecWorkspace,
     approval: &PlanApproval,
     slice_id: &str,
+    retry: bool,
 ) -> Result<AgentRun> {
     let index = workspace.index()?;
     let revision = repository_revision(&workspace.root)?;
@@ -87,7 +90,7 @@ pub fn start_run(
             run: Box::new(run.clone()),
         },
     };
-    store.append_agent_event(&event)?;
+    store.append_agent_event_for_retry(&event, retry)?;
     Ok(run)
 }
 
@@ -96,6 +99,10 @@ pub fn apply_scoped_patch(
     run: &AgentRun,
     patch: &AgentPatch,
 ) -> Result<AgentPatchRecord> {
+    let _workspace_guard = PATCH_WORKSPACE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("agent workspace mutation lock"))?;
     let run = validate_run(workspace, run)?;
     let store = DeliveryStore::for_workspace(&workspace.root)?;
     let before_fingerprint = workspace.try_fingerprint()?;
@@ -262,6 +269,7 @@ fn apply_patch_inner(
         .ok_or_else(|| anyhow::anyhow!("agent slice is absent from its approved plan"))?;
     let mut replacements: BTreeMap<PathBuf, Vec<Replacement>> = BTreeMap::new();
     let mut appends: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+    let mut approved_containers: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut created_files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut removed_files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut seen_targets = std::collections::BTreeSet::new();
@@ -324,6 +332,14 @@ fn apply_patch_inner(
                         "target {target} containing file is stale; refresh the plan before writing"
                     );
                 }
+                if let Some(previous) = approved_containers.get(&path)
+                    && previous != &current
+                {
+                    bail!(
+                        "target {target} containing file was read more than once with different bytes"
+                    );
+                }
+                approved_containers.entry(path.clone()).or_insert(current);
                 ensure_added_budget(target, planned, content)?;
                 appends.entry(path).or_default().push(content.clone());
             }
@@ -396,8 +412,11 @@ fn apply_patch_inner(
                 bail!("patch contains overlapping writes in {}", path.display());
             }
         }
-        let original =
-            fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let original_bytes = approved_containers
+            .remove(&path)
+            .unwrap_or(fs::read(&path).with_context(|| format!("read {}", path.display()))?);
+        let original = String::from_utf8(original_bytes.clone())
+            .with_context(|| format!("decode {}", path.display()))?;
         let mut updated = original.clone();
         for change in &changes {
             let current = updated
@@ -417,13 +436,18 @@ fn apply_patch_inner(
         files.insert(
             path,
             FileMutation {
-                original: Some(original.into_bytes()),
+                original: Some(original_bytes),
                 updated: Some(updated.into_bytes()),
             },
         );
     }
     for (path, additions) in appends {
-        let original = required_file_bytes(&path)?;
+        let original = approved_containers.remove(&path).ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing the exact approved container bytes for {}",
+                path.display()
+            )
+        })?;
         let mut updated = String::from_utf8(original.clone())?;
         for addition in additions {
             updated.push_str(&addition);
