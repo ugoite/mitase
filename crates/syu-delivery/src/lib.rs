@@ -16,11 +16,12 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
-    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentContextPack, AgentEvent,
-    AgentEventKind, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA,
-    CONTEXT_PACK_SCHEMA, CompletionAttempt, CompletionBlocker, CompletionStatus, ExecutionIdentity,
-    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
-    PlanApproval, VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
+    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
+    AgentEvent, AgentEventKind, AgentPatchRecord, AgentRun, AgentRunStatus,
+    COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CONTEXT_PACK_SCHEMA, CompletionAttempt,
+    CompletionBlocker, CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA,
+    FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval,
+    ScopeExpansionRequest, VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -41,6 +42,29 @@ pub struct DeliveryStore {
 pub struct WorkspaceLock {
     file: File,
 }
+
+/// A small durable write-ahead record for the two multi-file mutations in the
+/// delivery boundary. It is intentionally pre-v1 and workspace-local: the
+/// next process either observes the committed evidence or restores the exact
+/// bytes captured before the mutation began.
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MutationJournal {
+    pub schema: String,
+    pub operation: String,
+    pub operation_id: String,
+    pub files: Vec<MutationJournalFile>,
+    pub created_dirs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MutationJournalFile {
+    pub path: String,
+    pub original: Option<Vec<u8>>,
+}
+
+pub const MUTATION_JOURNAL_SCHEMA: &str = "syu/workspace-mutation-journal/v1";
 
 impl Drop for WorkspaceLock {
     fn drop(&mut self) {
@@ -96,10 +120,164 @@ impl DeliveryStore {
             .write(true)
             .open(path)?;
         file.lock_exclusive()?;
-        Ok(WorkspaceLock { file })
+        let lock = WorkspaceLock { file };
+        if let Err(error) = self.recover_mutation_journal() {
+            drop(lock);
+            return Err(error);
+        }
+        Ok(lock)
+    }
+
+    /// Persist the bytes needed to recover a mutation. Callers must already
+    /// hold `lock_workspace`; this method deliberately does not acquire the
+    /// file lock again.
+    pub fn write_mutation_journal(
+        &self,
+        operation: &str,
+        operation_id: &str,
+        files: Vec<MutationJournalFile>,
+        created_dirs: Vec<PathBuf>,
+    ) -> Result<()> {
+        if operation.trim().is_empty() || operation_id.trim().is_empty() {
+            bail!("mutation journal requires an operation and operation id");
+        }
+        let files = files
+            .into_iter()
+            .map(|mut file| {
+                file.path = relative_workspace_path(&self.workspace_root, Path::new(&file.path))?;
+                Ok(file)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let created_dirs = created_dirs
+            .into_iter()
+            .map(|path| relative_workspace_path(&self.workspace_root, &path))
+            .collect::<Result<Vec<_>>>()?;
+        let journal = MutationJournal {
+            schema: MUTATION_JOURNAL_SCHEMA.into(),
+            operation: operation.into(),
+            operation_id: operation_id.into(),
+            files,
+            created_dirs,
+        };
+        let path = self.mutation_journal_path();
+        if path.exists() {
+            bail!(
+                "workspace mutation journal already exists at {}",
+                path.display()
+            );
+        }
+        write_atomic_json(&path, &journal)
+    }
+
+    pub fn clear_mutation_journal(&self) -> Result<()> {
+        let path = self.mutation_journal_path();
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn recover_mutation_journal(&self) -> Result<()> {
+        let path = self.mutation_journal_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        let journal: MutationJournal = read_json(&path)?;
+        if journal.schema != MUTATION_JOURNAL_SCHEMA
+            || journal.operation.trim().is_empty()
+            || journal.operation_id.trim().is_empty()
+        {
+            bail!("workspace mutation journal is invalid");
+        }
+        for relative in journal
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .chain(journal.created_dirs.iter().map(String::as_str))
+        {
+            let path = Path::new(relative);
+            if path.is_absolute()
+                || path
+                    .components()
+                    .any(|component| matches!(component, std::path::Component::ParentDir))
+            {
+                bail!("workspace mutation journal contains a path outside the workspace");
+            }
+        }
+        let committed = match journal.operation.as_str() {
+            "agent-patch" => {
+                let mut committed = false;
+                for path in json_files(&self.agent_events_dir())? {
+                    let event: AgentEvent = read_json(&path)?;
+                    validate_agent_event_schema(&event)?;
+                    validate_agent_event_digest(&path, &event)?;
+                    if let AgentEventKind::PatchRecorded { patch } = event.event
+                        && patch.patch_id == journal.operation_id
+                    {
+                        committed = true;
+                    }
+                }
+                committed
+            }
+            "finalization" => {
+                let mut committed = false;
+                for path in json_files(&self.finalizations_dir())? {
+                    let receipt: FinalizationReceipt = read_json(&path)?;
+                    validate_finalization_schema(&receipt)?;
+                    let mut without_digest = receipt.clone();
+                    let supplied = without_digest.finalization_digest.clone();
+                    without_digest.finalization_digest.clear();
+                    if supplied != Self::finalization_digest(&without_digest)? {
+                        bail!("stored finalization has an invalid digest");
+                    }
+                    if receipt.attempt_id == journal.operation_id {
+                        committed = true;
+                    }
+                }
+                committed
+            }
+            _ => bail!("unknown workspace mutation journal operation"),
+        };
+        if !committed {
+            let mut errors = Vec::new();
+            for file in &journal.files {
+                let path = self.workspace_root.join(&file.path);
+                let result = match &file.original {
+                    Some(bytes) => atomic_write(&path, bytes),
+                    None => match fs::remove_file(&path) {
+                        Ok(()) => Ok(()),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                        Err(error) => Err(error.into()),
+                    },
+                };
+                if let Err(error) = result {
+                    errors.push(format!("{}: {error}", path.display()));
+                }
+            }
+            for directory in journal.created_dirs.iter().rev() {
+                let path = self.workspace_root.join(directory);
+                if let Err(error) = fs::remove_dir(&path)
+                    && error.kind() != std::io::ErrorKind::NotFound
+                    && error.kind() != std::io::ErrorKind::DirectoryNotEmpty
+                {
+                    errors.push(format!("{}: {error}", path.display()));
+                }
+            }
+            if !errors.is_empty() {
+                bail!("workspace mutation recovery failed: {}", errors.join("; "));
+            }
+        }
+        fs::remove_file(path)?;
+        Ok(())
     }
 
     pub fn approve(&self, approval: &PlanApproval) -> Result<PlanApproval> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.approve_while_locked(approval)
+    }
+
+    pub fn approve_while_locked(&self, approval: &PlanApproval) -> Result<PlanApproval> {
         self.ensure()?;
         validate_plan_approval_schema(approval)?;
         if approval.plan_digest != approval.plan.canonical_digest {
@@ -107,6 +285,12 @@ impl DeliveryStore {
         }
         if approval.plan.slices.len() != 1 || approval.slice_id != approval.plan.slices[0].id {
             bail!("approval must bind exactly one canonical execution slice");
+        }
+        let workspace = SpecWorkspace::load(&self.workspace_root)?;
+        if approval.workspace_fingerprint != workspace.try_fingerprint()?
+            || approval.revision != repository_revision(&workspace.root)?
+        {
+            bail!("approval basis is stale; review the current workspace again");
         }
         let identity = ExecutionIdentity {
             plan_digest: approval.plan_digest.clone(),
@@ -157,6 +341,26 @@ impl DeliveryStore {
         Ok(false)
     }
 
+    pub fn has_current_approval_for_plan(
+        &self,
+        workspace: &SpecWorkspace,
+        plan_digest: &str,
+    ) -> Result<bool> {
+        self.require_workspace(workspace)?;
+        for path in json_files(&self.approvals_dir())? {
+            let approval: PlanApproval = read_json(&path)?;
+            validate_plan_approval_schema(&approval)?;
+            if approval.plan_digest != plan_digest {
+                continue;
+            }
+            return Ok(
+                approval.workspace_fingerprint == workspace.try_fingerprint()?
+                    && approval.revision == repository_revision(&workspace.root)?,
+            );
+        }
+        Ok(false)
+    }
+
     pub fn execute_and_append_attempt(
         &self,
         workspace: &SpecWorkspace,
@@ -173,7 +377,19 @@ impl DeliveryStore {
         plan: &syu_work_model::WorkPlan,
         slice_id: &str,
     ) -> Result<CompletionAttempt> {
+        self.execute_and_append_attempt_for_agent_while_locked(workspace, plan, slice_id, None)
+    }
+
+    pub fn execute_and_append_attempt_for_agent_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        plan: &syu_work_model::WorkPlan,
+        slice_id: &str,
+        agent_run_id: Option<&str>,
+    ) -> Result<CompletionAttempt> {
         self.require_workspace(workspace)?;
+        let fresh_workspace = SpecWorkspace::load(&self.workspace_root)?;
+        let workspace = &fresh_workspace;
         let identity = ExecutionIdentity {
             plan_digest: plan.canonical_digest.clone(),
             slice_id: slice_id.into(),
@@ -181,6 +397,9 @@ impl DeliveryStore {
         let approval = self.approval(&identity)?;
         if approval.plan != *plan {
             bail!("verification requires the exact approved plan");
+        }
+        if plan.basis.spec_fingerprint != workspace.spec_fingerprint()? {
+            bail!("verification plan is stale against the current specification and config");
         }
         let slice = plan
             .slices
@@ -208,6 +427,7 @@ impl DeliveryStore {
             attempt_digest: String::new(),
             plan_digest: plan.canonical_digest.clone(),
             slice_id: slice_id.into(),
+            agent_run_id: agent_run_id.map(str::to_owned),
             approved_plan_digest: approval.plan_digest,
             started_at,
             completed_at: now_nanos().to_string(),
@@ -406,12 +626,23 @@ impl DeliveryStore {
         workspace: &SpecWorkspace,
         attempt: &CompletionAttempt,
     ) -> Result<FinalizationPreview> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.finalization_preview_while_locked(workspace, attempt)
+    }
+
+    pub fn finalization_preview_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        attempt: &CompletionAttempt,
+    ) -> Result<FinalizationPreview> {
+        self.require_workspace(workspace)?;
         let identity = ExecutionIdentity {
             plan_digest: attempt.plan_digest.clone(),
             slice_id: attempt.slice_id.clone(),
         };
+        let attempt = self.attempt(&identity, &attempt.attempt_id)?;
         let approval = self.approval(&identity)?;
-        if approval.plan != attempt_plan(&approval, attempt)? {
+        if approval.plan != attempt_plan(&approval, &attempt)? {
             bail!("attempt is not tied to its approved plan");
         }
         let pre_workspace_fingerprint = workspace.try_fingerprint()?;
@@ -511,28 +742,62 @@ impl DeliveryStore {
         preview: &FinalizationPreview,
         token: &str,
     ) -> Result<FinalizationReceipt> {
-        if preview.preview_token != token || preview.status != CompletionStatus::Complete {
-            bail!("finalization preview token is stale or blocked");
-        }
+        self.require_workspace(workspace)?;
         let identity = ExecutionIdentity {
             plan_digest: attempt.plan_digest.clone(),
             slice_id: attempt.slice_id.clone(),
         };
+        let attempt = self.attempt(&identity, &attempt.attempt_id)?;
+        if preview.preview_token != token || preview.status != CompletionStatus::Complete {
+            bail!("finalization preview token is stale or blocked");
+        }
         if let Some(existing) = self.finalization(&identity, &attempt.attempt_id)? {
             return Ok(existing);
         }
-        let current = self.finalization_preview(workspace, attempt)?;
+        let current = self.finalization_preview_while_locked(workspace, &attempt)?;
         if current != preview.clone()
             || current.preview_token != token
             || current.pre_workspace_fingerprint != preview.pre_workspace_fingerprint
         {
             bail!("workspace changed after finalization preview; preview again");
         }
-        let old = apply_status_overlay(workspace, &preview.promoted_items)?;
-        let post_workspace_fingerprint = match validate_finalized_workspace(&workspace.root) {
-            Ok(candidate) => candidate.try_fingerprint()?,
+        let journal_files = preview
+            .changed_files
+            .iter()
+            .map(|relative| {
+                let path = workspace.root.join(relative);
+                Ok(MutationJournalFile {
+                    path: path.to_string_lossy().into_owned(),
+                    original: Some(
+                        fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+                    ),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.write_mutation_journal(
+            "finalization",
+            &attempt.attempt_id,
+            journal_files,
+            Vec::new(),
+        )?;
+        let old = match apply_status_overlay(workspace, &preview.promoted_items) {
+            Ok(old) => old,
+            Err(error) => return Err(error),
+        };
+        let post_workspace_fingerprint = match (|| -> Result<String> {
+            let candidate = validate_finalized_workspace(&workspace.root)?;
+            Ok(candidate.try_fingerprint()?)
+        })() {
+            Ok(fingerprint) => fingerprint,
             Err(error) => {
-                restore_files(&old)?;
+                let restored = restore_files(&old);
+                let cleared = self.clear_mutation_journal();
+                if let Err(restore) = restored {
+                    return Err(anyhow::anyhow!(
+                        "finalization validation failed: {error}; rollback failed: {restore}"
+                    ));
+                }
+                cleared?;
                 return Err(error);
             }
         };
@@ -559,10 +824,21 @@ impl DeliveryStore {
         receipt.finalization_digest =
             Self::finalization_digest(&finalization_without_digest(&receipt))?;
         match self.append_finalization(&receipt) {
-            Ok(receipt) => Ok(receipt),
+            Ok(receipt) => {
+                self.clear_mutation_journal()?;
+                Ok(receipt)
+            }
             Err(error) => {
-                restore_files(&old)?;
-                Err(error)
+                let restored = restore_files(&old);
+                let cleared = self.clear_mutation_journal();
+                if let Err(restore) = restored {
+                    Err(anyhow::anyhow!(
+                        "finalization evidence append failed: {error}; rollback failed: {restore}"
+                    ))
+                } else {
+                    cleared?;
+                    Err(error)
+                }
             }
         }
     }
@@ -571,16 +847,153 @@ impl DeliveryStore {
         format!("{prefix}-{}-{}", now_nanos(), Uuid::new_v4())
     }
 
-    pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
+    pub fn start_agent_run(&self, run: &AgentRun, retry: bool) -> Result<AgentEvent> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.start_agent_run_while_locked(run, retry)
+    }
+
+    pub fn start_agent_run_while_locked(&self, run: &AgentRun, retry: bool) -> Result<AgentEvent> {
+        self.append_agent_event_while_locked(
+            &AgentEvent {
+                schema: AGENT_EVENT_SCHEMA.into(),
+                event_id: self.new_id("agent-event"),
+                event_digest: String::new(),
+                run_id: run.run_id.clone(),
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+                created_at: now_nanos().to_string(),
+                event: AgentEventKind::RunStarted {
+                    run: Box::new(run.clone()),
+                },
+            },
+            retry,
+        )
+    }
+
+    pub fn record_agent_patch_while_locked(
+        &self,
+        run: &AgentRun,
+        patch: AgentPatchRecord,
+    ) -> Result<AgentEvent> {
+        self.append_agent_event_while_locked(
+            &AgentEvent {
+                schema: AGENT_EVENT_SCHEMA.into(),
+                event_id: self.new_id("agent-event"),
+                event_digest: String::new(),
+                run_id: run.run_id.clone(),
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+                created_at: now_nanos().to_string(),
+                event: AgentEventKind::PatchRecorded { patch },
+            },
+            false,
+        )
+    }
+
+    pub fn record_agent_blocker(
+        &self,
+        run: &AgentRun,
+        blocker: AgentBlocker,
+    ) -> Result<AgentEvent> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.record_agent_blocker_while_locked(run, blocker)
+    }
+
+    pub fn record_agent_blocker_while_locked(
+        &self,
+        run: &AgentRun,
+        blocker: AgentBlocker,
+    ) -> Result<AgentEvent> {
+        self.append_agent_event_while_locked(
+            &AgentEvent {
+                schema: AGENT_EVENT_SCHEMA.into(),
+                event_id: self.new_id("agent-event"),
+                event_digest: String::new(),
+                run_id: run.run_id.clone(),
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+                created_at: now_nanos().to_string(),
+                event: AgentEventKind::BlockerRecorded { blocker },
+            },
+            false,
+        )
+    }
+
+    pub fn request_agent_scope_expansion_while_locked(
+        &self,
+        run: &AgentRun,
+        request: ScopeExpansionRequest,
+    ) -> Result<AgentEvent> {
+        self.append_agent_event_while_locked(
+            &AgentEvent {
+                schema: AGENT_EVENT_SCHEMA.into(),
+                event_id: self.new_id("agent-event"),
+                event_digest: String::new(),
+                run_id: run.run_id.clone(),
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+                created_at: now_nanos().to_string(),
+                event: AgentEventKind::ScopeExpansionRequested { request },
+            },
+            false,
+        )
+    }
+
+    pub fn record_agent_verification_while_locked(
+        &self,
+        run: &AgentRun,
+        attempt_id: &str,
+    ) -> Result<AgentEvent> {
+        self.append_agent_event_while_locked(
+            &AgentEvent {
+                schema: AGENT_EVENT_SCHEMA.into(),
+                event_id: self.new_id("agent-event"),
+                event_digest: String::new(),
+                run_id: run.run_id.clone(),
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+                created_at: now_nanos().to_string(),
+                event: AgentEventKind::VerificationRecorded {
+                    attempt_id: attempt_id.into(),
+                },
+            },
+            false,
+        )
+    }
+
+    pub fn abandon_agent_run(&self, run: &AgentRun, reason: String) -> Result<AgentEvent> {
+        let _workspace_lock = self.lock_workspace()?;
+        self.abandon_agent_run_while_locked(run, reason)
+    }
+
+    pub fn abandon_agent_run_while_locked(
+        &self,
+        run: &AgentRun,
+        reason: String,
+    ) -> Result<AgentEvent> {
+        self.append_agent_event_while_locked(
+            &AgentEvent {
+                schema: AGENT_EVENT_SCHEMA.into(),
+                event_id: self.new_id("agent-event"),
+                event_digest: String::new(),
+                run_id: run.run_id.clone(),
+                plan_digest: run.plan_digest.clone(),
+                slice_id: run.slice_id.clone(),
+                created_at: now_nanos().to_string(),
+                event: AgentEventKind::RunAbandoned { reason },
+            },
+            false,
+        )
+    }
+
+    #[cfg(test)]
+    fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
         let _workspace_lock = self.lock_workspace()?;
         self.append_agent_event_with_retry(event, false)
     }
 
-    pub fn append_agent_event_for_retry(
-        &self,
-        event: &AgentEvent,
-        retry: bool,
-    ) -> Result<AgentEvent> {
+    #[cfg(test)]
+    fn append_agent_event_for_retry(&self, event: &AgentEvent, retry: bool) -> Result<AgentEvent> {
         let _workspace_lock = self.lock_workspace()?;
         self.append_agent_event_with_retry(event, retry)
     }
@@ -588,7 +1001,7 @@ impl DeliveryStore {
     /// Append the event while the caller already owns `lock_workspace`.
     /// Keeping this explicit prevents verification and its terminal event from
     /// being interleaved by another Workbench or CLI process.
-    pub fn append_agent_event_while_locked(
+    fn append_agent_event_while_locked(
         &self,
         event: &AgentEvent,
         retry: bool,
@@ -631,6 +1044,7 @@ impl DeliveryStore {
                             identity.slice_id
                         )
                     }
+                    AgentRunStatus::Abandoned => {}
                 }
             } else if retry {
                 bail!(
@@ -647,6 +1061,10 @@ impl DeliveryStore {
                     matches!(current.status, AgentRunStatus::Active)
                 }
                 AgentEventKind::ScopeExpansionRequested { .. } => matches!(
+                    current.status,
+                    AgentRunStatus::Active | AgentRunStatus::Blocked
+                ),
+                AgentEventKind::RunAbandoned { .. } => matches!(
                     current.status,
                     AgentRunStatus::Active | AgentRunStatus::Blocked
                 ),
@@ -737,6 +1155,15 @@ impl DeliveryStore {
                         CompletionStatus::Blocked => AgentRunStatus::Blocked,
                     };
                 }
+                AgentEventKind::RunAbandoned { reason } => {
+                    if reason.trim().is_empty() {
+                        bail!("agent abandonment requires a reason");
+                    }
+                    if !matches!(run.status, AgentRunStatus::Active | AgentRunStatus::Blocked) {
+                        bail!("agent abandonment follows a terminal run {}", run.run_id);
+                    }
+                    run.status = AgentRunStatus::Abandoned;
+                }
             }
         }
         Ok(run)
@@ -791,6 +1218,19 @@ impl DeliveryStore {
     }
 
     pub fn active_agent_runs(&self) -> Result<Vec<AgentRun>> {
+        self.agent_runs_with_status(|status| matches!(status, AgentRunStatus::Active))
+    }
+
+    pub fn unresolved_agent_runs(&self) -> Result<Vec<AgentRun>> {
+        self.agent_runs_with_status(|status| {
+            matches!(status, AgentRunStatus::Active | AgentRunStatus::Blocked)
+        })
+    }
+
+    fn agent_runs_with_status(
+        &self,
+        include: impl Fn(&AgentRunStatus) -> bool,
+    ) -> Result<Vec<AgentRun>> {
         let mut started = self
             .agent_events_all()?
             .into_iter()
@@ -812,7 +1252,7 @@ impl DeliveryStore {
                 slice_id,
             };
             let run = self.agent_run(&identity, &run_id)?;
-            if matches!(run.status, AgentRunStatus::Active) {
+            if include(&run.status) {
                 active.push(run);
             }
         }
@@ -888,6 +1328,10 @@ impl DeliveryStore {
             .join(format!("{}.json", component(&event.event_id)))
     }
 
+    fn mutation_journal_path(&self) -> PathBuf {
+        self.root.join("mutation-journal.json")
+    }
+
     fn require_workspace(&self, workspace: &SpecWorkspace) -> Result<()> {
         if workspace.root.canonicalize()? != self.workspace_root.canonicalize()? {
             bail!("delivery evidence must use the store's workspace");
@@ -912,6 +1356,27 @@ fn now_nanos() -> u128 {
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     serde_json::from_slice(&fs::read(path).with_context(|| format!("read {}", path.display()))?)
         .with_context(|| format!("parse {}", path.display()))
+}
+
+fn write_atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    atomic_write(path, serde_json::to_vec_pretty(value)?)
+}
+
+fn relative_workspace_path(root: &Path, path: &Path) -> Result<String> {
+    let relative = path
+        .strip_prefix(root)
+        .with_context(|| format!("mutation path {} is outside the workspace", path.display()))?;
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        bail!(
+            "mutation path {} is not a workspace-relative file",
+            path.display()
+        );
+    }
+    Ok(relative.to_string_lossy().into_owned())
 }
 
 fn require_schema(actual: &str, expected: &str, artifact: &str) -> Result<()> {
@@ -1273,6 +1738,12 @@ fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
             }
             Ok(())
         }
+        AgentEventKind::RunAbandoned { reason } => {
+            if reason.trim().is_empty() {
+                bail!("agent abandonment requires a reason");
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1284,6 +1755,31 @@ fn validate_agent_event_references(
     match &event.event {
         AgentEventKind::RunStarted { run } => {
             validate_run_started_reference(store, event, run, validate_current_context)?;
+        }
+        AgentEventKind::PatchRecorded { patch } => {
+            if patch.status == syu_work_model::AgentPatchStatus::Accepted {
+                if patch.changes.is_empty()
+                    || patch.before_workspace_fingerprint.trim().is_empty()
+                    || patch.after_workspace_fingerprint.trim().is_empty()
+                    || patch.before_workspace_fingerprint == patch.after_workspace_fingerprint
+                {
+                    bail!("accepted agent patch must carry a non-empty workspace transition");
+                }
+            } else if !patch.changes.is_empty() || !patch.after_workspace_fingerprint.is_empty() {
+                bail!("rejected agent patch must not claim workspace changes");
+            }
+            if validate_current_context {
+                let workspace = SpecWorkspace::load(&store.workspace_root)?;
+                let current = workspace.try_fingerprint()?;
+                let expected = if patch.status == syu_work_model::AgentPatchStatus::Accepted {
+                    &patch.after_workspace_fingerprint
+                } else {
+                    &patch.before_workspace_fingerprint
+                };
+                if expected != &current {
+                    bail!("agent patch record is not bound to the current workspace fingerprint");
+                }
+            }
         }
         AgentEventKind::VerificationRecorded { attempt_id } => {
             let identity = ExecutionIdentity {
@@ -1298,12 +1794,27 @@ fn validate_agent_event_references(
             if attempt.plan_digest != event.plan_digest || attempt.slice_id != event.slice_id {
                 bail!("verification event attempt does not match its execution identity");
             }
+            if attempt.agent_run_id.as_deref() != Some(event.run_id.as_str()) {
+                bail!("verification event attempt is not bound to its originating agent run");
+            }
             let run = store.persisted_run_for_event(event)?;
             if run.run_id != event.run_id
                 || run.plan_digest != event.plan_digest
                 || run.slice_id != event.slice_id
             {
                 bail!("verification event run does not match its execution identity");
+            }
+        }
+        AgentEventKind::RunAbandoned { reason } => {
+            if reason.trim().is_empty() {
+                bail!("agent abandonment requires a reason");
+            }
+            let run = store.persisted_run_for_event(event)?;
+            if run.run_id != event.run_id
+                || run.plan_digest != event.plan_digest
+                || run.slice_id != event.slice_id
+            {
+                bail!("agent abandonment run does not match its execution identity");
             }
         }
         _ => {}
@@ -1520,6 +2031,7 @@ fn changed_document_paths(workspace: &SpecWorkspace, items: &[SpecItemRef]) -> R
         .iter()
         .map(|item| item.0.clone())
         .collect::<std::collections::BTreeSet<_>>();
+    let canonical_root = workspace.root.canonicalize()?;
     Ok(workspace
         .documents
         .iter()
@@ -1535,8 +2047,10 @@ fn changed_document_paths(workspace: &SpecWorkspace, items: &[SpecItemRef]) -> R
         .map(|document| {
             document
                 .path
-                .strip_prefix(&workspace.root)
-                .unwrap_or(&document.path)
+                .canonicalize()
+                .ok()
+                .and_then(|path| path.strip_prefix(&canonical_root).ok().map(PathBuf::from))
+                .unwrap_or_else(|| document.path.clone())
                 .to_string_lossy()
                 .into_owned()
         })
@@ -1609,27 +2123,31 @@ fn apply_status_overlay(
             let original = match fs::read(&path) {
                 Ok(value) => value,
                 Err(error) => {
-                    let _ = restore_files(&old);
-                    return Err(error.into());
+                    return Err(rollback_or_error(error.into(), &old));
                 }
             };
             let serialized = match serde_yaml::to_string(&document) {
                 Ok(value) => value,
                 Err(error) => {
-                    let _ = restore_files(&old);
-                    return Err(error.into());
+                    return Err(rollback_or_error(error.into(), &old));
                 }
             };
             old.push((path.clone(), original));
             if let Err(error) = atomic_write(&path, serialized) {
                 // A previous document may already have been promoted. Restore
                 // it before exposing the error so finalization is all-or-none.
-                let _ = restore_files(&old);
-                return Err(error);
+                return Err(rollback_or_error(error, &old));
             }
         }
     }
     Ok(old)
+}
+
+fn rollback_or_error(error: anyhow::Error, old: &[(PathBuf, Vec<u8>)]) -> anyhow::Error {
+    match restore_files(old) {
+        Ok(()) => error,
+        Err(restore) => anyhow::anyhow!("{error}; rollback failed: {restore}"),
+    }
 }
 
 fn restore_files(old: &[(PathBuf, Vec<u8>)]) -> Result<()> {
@@ -1767,6 +2285,7 @@ mod tests {
             attempt_digest: String::new(),
             plan_digest: plan.canonical_digest.clone(),
             slice_id: plan.slices[0].id.clone(),
+            agent_run_id: None,
             approved_plan_digest: plan.canonical_digest.clone(),
             started_at: "0".into(),
             completed_at: "1".into(),
@@ -1795,6 +2314,34 @@ mod tests {
         assert!(store.attempts_dir().is_dir());
         assert!(store.finalizations_dir().is_dir());
         assert!(store.agent_events_dir().is_dir());
+    }
+
+    #[test]
+    fn uncommitted_mutation_journal_restores_workspace_on_next_lock() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        init_git_repo(temp.path());
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let path = temp.path().join("src/lib.rs");
+        let original = fs::read(&path).unwrap();
+        let lock = store.lock_workspace().unwrap();
+        fs::write(&path, b"partially-written").unwrap();
+        store
+            .write_mutation_journal(
+                "agent-patch",
+                "patch-crashed",
+                vec![MutationJournalFile {
+                    path: path.to_string_lossy().into_owned(),
+                    original: Some(original.clone()),
+                }],
+                Vec::new(),
+            )
+            .unwrap();
+        drop(lock);
+
+        let _recovery_lock = store.lock_workspace().unwrap();
+        assert_eq!(fs::read(path).unwrap(), original);
+        assert!(!store.mutation_journal_path().exists());
     }
 
     #[test]
@@ -1858,7 +2405,10 @@ mod tests {
         tampered_approval.plan.request.constraints.max_slices = Some(2);
         assert!(store.approve(&tampered_approval).is_err());
 
-        let attempt = fixture_attempt(&workspace, &plan, &approval, &revision);
+        let mut attempt = fixture_attempt(&workspace, &plan, &approval, &revision);
+        attempt.agent_run_id = Some("run-start-test".into());
+        attempt.attempt_digest =
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&attempt)).unwrap();
         let mut invalid_attempt = attempt.clone();
         invalid_attempt.schema = "syu/legacy-attempt/v0".into();
         assert!(store.append_attempt(&workspace, &invalid_attempt).is_err());

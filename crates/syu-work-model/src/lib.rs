@@ -637,6 +637,7 @@ pub enum AgentRunStatus {
     Active,
     Blocked,
     Completed,
+    Abandoned,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -776,6 +777,7 @@ pub enum AgentEventKind {
     BlockerRecorded { blocker: AgentBlocker },
     ScopeExpansionRequested { request: ScopeExpansionRequest },
     VerificationRecorded { attempt_id: String },
+    RunAbandoned { reason: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -944,6 +946,8 @@ pub struct CompletionAttempt {
     pub attempt_digest: String,
     pub plan_digest: String,
     pub slice_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_run_id: Option<String>,
     pub approved_plan_digest: String,
     pub started_at: String,
     pub completed_at: String,

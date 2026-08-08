@@ -369,6 +369,25 @@ fn workspace_signature(root: &Path) -> Result<String> {
         }
         paths.insert(path);
     }
+    // Git's `--exclude-standard` intentionally omits ignored files, but the
+    // Workbench's governance boundary is the loaded config and specification
+    // documents. Include their bytes explicitly so an ignored spec/config
+    // edit cannot survive in a cached snapshot.
+    let workspace = SpecWorkspace::load(root)?;
+    let canonical_root = root.canonicalize()?;
+    paths.insert(PathBuf::from("syu.yaml"));
+    for document in &workspace.documents {
+        let document_path = document.path.canonicalize()?;
+        let relative = document_path
+            .strip_prefix(&canonical_root)
+            .with_context(|| {
+                format!(
+                    "specification path {} is outside workspace",
+                    document.path.display()
+                )
+            })?;
+        paths.insert(relative.to_path_buf());
+    }
     let mut hash = Sha256::new();
     hash.update(b"syu/workbench-snapshot/v1\0");
     hash.update(revision.as_bytes());
@@ -689,6 +708,7 @@ pub struct SliceCommand {
 pub struct ResultCommand {
     pub basis: MutationBasis,
     pub execution: ExecutionIdentity,
+    pub attempt_id: String,
     pub receipt: VerificationReceipt,
 }
 
@@ -1065,9 +1085,9 @@ fn ensure_no_active_agent_run(service: &WorkbenchService) -> Result<()> {
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?
         .agent_run
         .as_ref()
-        .is_some_and(|run| matches!(run.status, AgentRunStatus::Active));
+        .is_some_and(|run| matches!(run.status, AgentRunStatus::Active | AgentRunStatus::Blocked));
     let persisted_active = !DeliveryStore::for_workspace(&service.workspace_root)?
-        .active_agent_runs()?
+        .unresolved_agent_runs()?
         .is_empty();
     if session_active || persisted_active {
         anyhow::bail!(
@@ -1084,10 +1104,28 @@ fn clear_work_execution_state(session: &mut WorkbenchSession) {
     session.selected_slice = None;
     session.context_pack = None;
     session.verification_receipt = None;
-    session.agent_run = None;
+    // Keep a durable active/blocked run visible after a governance edit or a
+    // process restart. The explicit Cancel action records abandonment before
+    // clearing it; silently dropping this handle would strand the run.
     session.last_validation = None;
     session.rejected_target_suggestions.clear();
     session.approved_target_suggestions.clear();
+}
+
+fn abandon_active_agent_runs(service: &WorkbenchService, reason: &str) -> Result<()> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
+    let mut runs = store.active_agent_runs()?;
+    if let Some(run) = store.latest_agent_run()?
+        && matches!(run.status, AgentRunStatus::Blocked)
+        && !runs.iter().any(|candidate| candidate.run_id == run.run_id)
+    {
+        runs.push(run);
+    }
+    for run in runs {
+        store.abandon_agent_run_while_locked(&run, reason.to_owned())?;
+    }
+    Ok(())
 }
 
 /// Execution is intentionally based on the plan's immutable revision rather
@@ -3796,6 +3834,7 @@ async fn api_journey_action(
                     anyhow::anyhow!("target suggestions changed; review the refreshed evidence"),
                 ));
             }
+            abandon_active_agent_runs(&service, "work request was replaced")?;
             if requirement_origin {
                 session
                     .approved_target_suggestions
@@ -3999,8 +4038,19 @@ fn select_slice(
     slice_id: &str,
 ) -> Result<(), ApiError> {
     let store = DeliveryStore::for_workspace(&service.workspace_root).map_err(ApiError::from)?;
+    let _workspace_lock = store.lock_workspace().map_err(ApiError::from)?;
+    let snapshot = basis(service, basis_command).map_err(|error| {
+        work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "stale-basis",
+            error.to_string(),
+            Some(candidate_plan_digest.to_owned()),
+            vec![],
+        )
+    })?;
     if store
-        .has_approval_for_plan(candidate_plan_digest)
+        .has_current_approval_for_plan(&snapshot.workspace, candidate_plan_digest)
         .map_err(ApiError::from)?
     {
         return Err(work_action_error(
@@ -4012,16 +4062,6 @@ fn select_slice(
             vec![],
         ));
     }
-    let snapshot = basis(service, basis_command).map_err(|error| {
-        work_action_error(
-            StatusCode::CONFLICT,
-            "select_slice",
-            "stale-basis",
-            error.to_string(),
-            Some(candidate_plan_digest.to_owned()),
-            vec![],
-        )
-    })?;
     let (request, candidate_plan) = {
         let session = service
             .session
@@ -4400,6 +4440,8 @@ async fn api_approve(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<ApproveCommand>,
 ) -> Result<Json<PlanApproval>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = basis(&service, &command.basis)?;
     let session = service
         .session
@@ -4430,7 +4472,6 @@ async fn api_approve(
             anyhow::anyhow!("only a ready plan can be approved"),
         ));
     }
-    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     if canonical.slices.len() != 1 || canonical.slices[0].id != command.execution.slice_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -4442,12 +4483,12 @@ async fn api_approve(
         approval_id: store.new_id("approval"),
         plan_digest: canonical.canonical_digest.clone(),
         slice_id: command.execution.slice_id.clone(),
-        workspace_fingerprint: snapshot.projection.snapshot.fingerprint.clone(),
+        workspace_fingerprint: snapshot.workspace.try_fingerprint()?,
         revision: snapshot.revision.clone(),
         reviewed_at: timestamp(),
         plan: canonical,
     };
-    Ok(Json(store.approve(&approval)?))
+    Ok(Json(store.approve_while_locked(&approval)?))
 }
 
 async fn api_agent_start(
@@ -4614,6 +4655,8 @@ async fn api_agent_verify(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
 ) -> Result<Json<CompletionAttempt>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = execution_basis(&service, &command.basis)?;
     let run = service
         .session
@@ -4637,8 +4680,6 @@ async fn api_agent_verify(
             anyhow::anyhow!("agent run is not active; resolve its blocker or start a new run"),
         ));
     }
-    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
-    let _workspace_lock = store.lock_workspace()?;
     let approval = store
         .approval(&ExecutionIdentity {
             plan_digest: run.plan_digest.clone(),
@@ -4650,10 +4691,11 @@ async fn api_agent_verify(
                 anyhow::anyhow!("agent verification requires an approved plan: {error}"),
             )
         })?;
-    let attempt = store.execute_and_append_attempt_while_locked(
+    let attempt = store.execute_and_append_attempt_for_agent_while_locked(
         &snapshot.workspace,
         &approval.plan,
         &command.execution.slice_id,
+        Some(&run.run_id),
     )?;
     if let Err(error) =
         syu_agent::record_verification_while_locked(&snapshot.workspace, &run, &attempt.attempt_id)
@@ -4730,6 +4772,8 @@ async fn api_verify(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
 ) -> Result<Json<CompletionAttempt>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = execution_basis(&service, &command.basis)?;
     let mut session = service
         .session
@@ -4739,7 +4783,6 @@ async fn api_verify(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let approval = store.approval(&command.execution).map_err(|error| {
         ApiError(
             StatusCode::CONFLICT,
@@ -4767,8 +4810,11 @@ async fn api_verify(
             anyhow::anyhow!("verification requires a validated selected slice"),
         ));
     }
-    let attempt =
-        store.execute_and_append_attempt(&snapshot.workspace, plan, &command.execution.slice_id)?;
+    let attempt = store.execute_and_append_attempt_while_locked(
+        &snapshot.workspace,
+        plan,
+        &command.execution.slice_id,
+    )?;
     session.verification_receipt = attempt.receipt.clone();
     Ok(Json(attempt))
 }
@@ -4777,8 +4823,9 @@ async fn api_finalize_preview(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<FinalizeCommand>,
 ) -> Result<Json<FinalizationPreview>, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = execution_basis(&service, &command.basis)?;
-    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let attempt = store.attempt(&command.execution, &command.attempt_id)?;
     if attempt.plan_digest != command.execution.plan_digest
         || attempt.slice_id != command.execution.slice_id
@@ -4788,9 +4835,10 @@ async fn api_finalize_preview(
             anyhow::anyhow!("attempt does not match execution identity"),
         ));
     }
-    Ok(Json(
-        store.finalization_preview(&snapshot.workspace, &attempt)?,
-    ))
+    Ok(Json(store.finalization_preview_while_locked(
+        &snapshot.workspace,
+        &attempt,
+    )?))
 }
 
 async fn api_finalize_apply(
@@ -4803,8 +4851,9 @@ async fn api_finalize_apply(
             anyhow::anyhow!("preview_token is required"),
         )
     })?;
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = execution_basis(&service, &command.basis)?;
-    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let attempt = store.attempt(&command.execution, &command.attempt_id)?;
     if attempt.plan_digest != command.execution.plan_digest
         || attempt.slice_id != command.execution.slice_id
@@ -4814,8 +4863,8 @@ async fn api_finalize_apply(
             anyhow::anyhow!("attempt does not match execution identity"),
         ));
     }
-    let preview = store.finalization_preview(&snapshot.workspace, &attempt)?;
-    Ok(Json(store.apply_finalization(
+    let preview = store.finalization_preview_while_locked(&snapshot.workspace, &attempt)?;
+    Ok(Json(store.apply_finalization_while_locked(
         &snapshot.workspace,
         &attempt,
         &preview,
@@ -4827,29 +4876,28 @@ async fn api_result(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<ResultCommand>,
 ) -> Result<StatusCode, ApiError> {
+    let store = DeliveryStore::for_workspace(&service.workspace_root)?;
+    let _workspace_lock = store.lock_workspace()?;
     let snapshot = execution_basis(&service, &command.basis)?;
-    let (plan, canonical) = service
-        .session
-        .read()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))
-        .and_then(|session| {
-            Ok((
-                session
-                    .plan
-                    .clone()
-                    .ok_or_else(|| anyhow::anyhow!("no work plan"))?,
-                session.verification_receipt.clone().ok_or_else(|| {
-                    anyhow::anyhow!("no server-generated verification receipt exists")
-                })?,
-            ))
-        })?;
-    if command.execution.plan_digest != plan.canonical_digest
+    let attempt = store.attempt(&command.execution, &command.attempt_id)?;
+    let plan = store.approval(&command.execution)?.plan;
+    let canonical = attempt.receipt.clone().ok_or_else(|| {
+        anyhow::anyhow!("completion attempt has no successful verification receipt")
+    })?;
+    if attempt.attempt_id != command.attempt_id
+        || attempt.report.attempt_id != command.attempt_id
+        || attempt.report.status != CompletionStatus::Complete
+        || attempt.report.receipt_digest.as_deref()
+            != Some(DeliveryStore::verification_digest(&canonical)?.as_str())
+        || command.execution.plan_digest != plan.canonical_digest
         || command.execution.slice_id != canonical.slice_id
         || command.receipt != canonical
     {
         return Err(ApiError(
             StatusCode::CONFLICT,
-            anyhow::anyhow!("verification receipt does not close the selected plan"),
+            anyhow::anyhow!(
+                "result must reference the exact complete durable verification attempt"
+            ),
         ));
     }
     validate_verification_receipt(
@@ -4913,6 +4961,7 @@ async fn api_result(
     Ok(StatusCode::NO_CONTENT)
 }
 async fn api_discard(State(service): State<Arc<WorkbenchService>>) -> Result<StatusCode, ApiError> {
+    abandon_active_agent_runs(&service, "work request was cancelled or restarted")?;
     *service
         .session
         .write()
@@ -5139,6 +5188,7 @@ pub struct CompletionAttemptView {
     pub blockers: Vec<syu_work_model::CompletionBlocker>,
     pub next_action: Option<String>,
     pub finalized: bool,
+    pub stale: bool,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkRequestView {
@@ -6520,6 +6570,8 @@ fn verification_receipt_view(receipt: &VerificationReceipt) -> VerificationRecei
 fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView> {
     let store = DeliveryStore::for_workspace(&workspace.root)?;
     let attempts = store.attempts()?;
+    let current_fingerprint = workspace.try_fingerprint()?;
+    let current_revision = current_revision(&workspace.root)?;
     let mut views = Vec::with_capacity(attempts.len());
     for attempt in attempts {
         let next_action = attempt
@@ -6541,6 +6593,16 @@ fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView
             )
             .map(|receipt| receipt.is_some())
             .unwrap_or(false);
+        let stale = store
+            .approval(&ExecutionIdentity {
+                plan_digest: attempt.plan_digest.clone(),
+                slice_id: attempt.slice_id.clone(),
+            })
+            .map(|approval| {
+                approval.workspace_fingerprint != current_fingerprint
+                    || approval.revision != current_revision
+            })
+            .unwrap_or(true);
         views.push(CompletionAttemptView {
             attempt_id: attempt.attempt_id,
             plan_digest: attempt.plan_digest,
@@ -6555,6 +6617,7 @@ fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView
             blockers: attempt.report.blockers,
             next_action,
             finalized,
+            stale,
         });
     }
     let mut iter = views.into_iter();
@@ -6800,6 +6863,35 @@ fn journey_view(
     session: &WorkbenchSession,
 ) -> Result<WorkJourneyView> {
     if work.request.is_none() {
+        if work.agent.as_ref().is_some_and(|agent| {
+            matches!(
+                agent.status,
+                AgentRunStatus::Active | AgentRunStatus::Blocked
+            )
+        }) {
+            return Ok(WorkJourneyView {
+                title: "Interrupted implementation".into(),
+                title_key: None,
+                current_step: "implement".into(),
+                steps: journey_steps("implement"),
+                primary_action: cancel_action(),
+                recovery_action: None,
+                approved_scope: None,
+                evidence: JourneyEvidenceView {
+                    status: "recovery_required".into(),
+                    summary: "A durable implementation run is still present. Cancel it to record abandonment before starting new work.".into(),
+                    blockers: vec![],
+                },
+                related_specification: None,
+                advanced: JourneyAdvancedView {
+                    request_id: None,
+                    plan_id: None,
+                    selected_slice_id: None,
+                    attempt_id: None,
+                    specification_anchor: None,
+                },
+            });
+        }
         return Ok(empty_journey());
     }
     let title = session
@@ -8572,6 +8664,7 @@ mod tests {
                     plan_digest: plan.canonical_digest.clone(),
                     slice_id: receipt.slice_id.clone(),
                 },
+                attempt_id: attempt.attempt_id.clone(),
                 receipt,
             },
         )
@@ -12400,6 +12493,7 @@ mod tests {
             blockers: vec![],
             next_action: None,
             finalized: false,
+            stale: false,
         };
         let history = CompletionHistoryView {
             current: Some(attempt("attempt-old", "plan-old", "slice-old")),

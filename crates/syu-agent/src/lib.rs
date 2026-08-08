@@ -14,10 +14,10 @@ use syu_inventory::ArtifactUnit;
 use syu_spec_model::{BoundTargetRef, format_sha256};
 use syu_validation::canonical_plan_for_execution;
 use syu_work_model::{
-    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
-    AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun,
-    AgentRunStatus, AgentTargetChange, AgentTargetWrite, ExecutionIdentity, PLAN_APPROVAL_SCHEMA,
-    PlanApproval, PlanStatus, TargetAccessMode, TargetLifecycle, TargetTransition,
+    AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack, AgentEvent,
+    AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun, AgentRunStatus,
+    AgentTargetChange, AgentTargetWrite, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval,
+    PlanStatus, TargetAccessMode, TargetLifecycle, TargetTransition,
 };
 use syu_workspace::SpecWorkspace;
 
@@ -78,19 +78,7 @@ pub fn start_run(
         context: agent_context,
         created_at: timestamp(),
     };
-    let event = AgentEvent {
-        schema: AGENT_EVENT_SCHEMA.into(),
-        event_id: store.new_id("agent-event"),
-        event_digest: String::new(),
-        run_id: run.run_id.clone(),
-        plan_digest: run.plan_digest.clone(),
-        slice_id: run.slice_id.clone(),
-        created_at: timestamp(),
-        event: AgentEventKind::RunStarted {
-            run: Box::new(run.clone()),
-        },
-    };
-    store.append_agent_event_for_retry(&event, retry)?;
+    store.start_agent_run(&run, retry)?;
     Ok(run)
 }
 
@@ -105,11 +93,13 @@ pub fn apply_scoped_patch(
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| anyhow::anyhow!("agent workspace mutation lock"))?;
+    let fresh_workspace = SpecWorkspace::load(&workspace.root)?;
+    let workspace = &fresh_workspace;
     let run = validate_run(workspace, run)?;
     let before_fingerprint = workspace.try_fingerprint()?;
     let now = timestamp();
     let patch_id = store.new_id("agent-patch");
-    let result = apply_patch_inner(workspace, &run, patch);
+    let result = apply_patch_inner(workspace, &run, patch, &store, &patch_id);
     match result {
         Ok(applied) => {
             let record = AgentPatchRecord {
@@ -127,9 +117,18 @@ pub fn apply_scoped_patch(
                 created_at: now,
             };
             match append_patch_event_while_locked(&store, &run, record.clone()) {
-                Ok(()) => Ok(record),
+                Ok(()) => {
+                    store.clear_mutation_journal()?;
+                    Ok(record)
+                }
                 Err(error) => {
-                    restore_rollback(&applied.rollback)?;
+                    let restored = restore_rollback(&applied.rollback);
+                    if let Err(restore) = restored {
+                        return Err(anyhow::anyhow!(
+                            "patch event append failed: {error}; rollback failed: {restore}"
+                        ));
+                    }
+                    store.clear_mutation_journal()?;
                     Err(error)
                 }
             }
@@ -237,14 +236,13 @@ fn record_verification_inner(
     if attempt_id.trim().is_empty() {
         bail!("verification evidence requires an attempt id");
     }
-    append_event_with_lock_mode(
-        workspace,
-        &run,
-        AgentEventKind::VerificationRecorded {
-            attempt_id: attempt_id.into(),
-        },
-        workspace_locked,
-    )
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    if workspace_locked {
+        store.record_agent_verification_while_locked(&run, attempt_id)
+    } else {
+        let _workspace_lock = store.lock_workspace()?;
+        store.record_agent_verification_while_locked(&run, attempt_id)
+    }
 }
 
 pub fn events(workspace: &SpecWorkspace, run: &AgentRun) -> Result<Vec<AgentEvent>> {
@@ -263,6 +261,8 @@ fn apply_patch_inner(
     workspace: &SpecWorkspace,
     run: &AgentRun,
     patch: &AgentPatch,
+    store: &DeliveryStore,
+    patch_id: &str,
 ) -> Result<PatchApplied> {
     if patch.schema != AGENT_PATCH_SCHEMA {
         bail!("patch schema must be {AGENT_PATCH_SCHEMA}");
@@ -497,7 +497,25 @@ fn apply_patch_inner(
             },
         );
     }
-    let rollback = apply_file_mutations(&files)?;
+    let journal_files = files
+        .iter()
+        .map(|(path, mutation)| syu_delivery::MutationJournalFile {
+            path: path.to_string_lossy().into_owned(),
+            original: mutation.original.clone(),
+        })
+        .collect::<Vec<_>>();
+    let created_dirs = files
+        .iter()
+        .filter_map(|(path, mutation)| mutation.updated.as_ref().map(|_| path.clone()))
+        .flat_map(|path| missing_parent_dirs(&path))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    store.write_mutation_journal("agent-patch", patch_id, journal_files, created_dirs)?;
+    let rollback = match apply_file_mutations(&files) {
+        Ok(rollback) => rollback,
+        Err(error) => return Err(error),
+    };
     let post_write = (|| {
         let candidate = SpecWorkspace::load(&workspace.root)?;
         let candidate_index = candidate.index()?;
@@ -510,7 +528,13 @@ fn apply_patch_inner(
     let (after_fingerprint, changes) = match post_write {
         Ok(applied) => applied,
         Err(error) => {
-            restore_rollback(&rollback)?;
+            let restored = restore_rollback(&rollback);
+            if let Err(restore) = restored {
+                return Err(anyhow::anyhow!(
+                    "patch post-write validation failed: {error}; rollback failed: {restore}"
+                ));
+            }
+            store.clear_mutation_journal()?;
             return Err(error);
         }
     };
@@ -519,6 +543,22 @@ fn apply_patch_inner(
         changes,
         rollback,
     })
+}
+
+fn missing_parent_dirs(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let mut missing = Vec::new();
+    let mut cursor = parent.to_path_buf();
+    while !cursor.exists() {
+        missing.push(cursor.clone());
+        if !cursor.pop() {
+            break;
+        }
+    }
+    missing.reverse();
+    missing
 }
 
 fn approved_plan(workspace: &SpecWorkspace, run: &AgentRun) -> Result<syu_work_model::WorkPlan> {
@@ -1176,22 +1216,13 @@ fn append_patch_event_with_lock_mode(
     patch: AgentPatchRecord,
     workspace_locked: bool,
 ) -> Result<()> {
-    let event = AgentEvent {
-        schema: AGENT_EVENT_SCHEMA.into(),
-        event_id: store.new_id("agent-event"),
-        event_digest: String::new(),
-        run_id: run.run_id.clone(),
-        plan_digest: run.plan_digest.clone(),
-        slice_id: run.slice_id.clone(),
-        created_at: timestamp(),
-        event: AgentEventKind::PatchRecorded { patch },
-    };
-    if workspace_locked {
-        store.append_agent_event_while_locked(&event, false)
+    if !workspace_locked {
+        let _workspace_lock = store.lock_workspace()?;
+        store.record_agent_patch_while_locked(run, patch)?;
     } else {
-        store.append_agent_event(&event)
+        store.record_agent_patch_while_locked(run, patch)?;
     }
-    .map(|_| ())
+    Ok(()).map(|_| ())
 }
 
 fn append_event(
@@ -1209,20 +1240,40 @@ fn append_event_with_lock_mode(
     workspace_locked: bool,
 ) -> Result<AgentEvent> {
     let store = DeliveryStore::for_workspace(&workspace.root)?;
-    let value = AgentEvent {
-        schema: AGENT_EVENT_SCHEMA.into(),
-        event_id: store.new_id("agent-event"),
-        event_digest: String::new(),
-        run_id: run.run_id.clone(),
-        plan_digest: run.plan_digest.clone(),
-        slice_id: run.slice_id.clone(),
-        created_at: timestamp(),
-        event,
-    };
-    if workspace_locked {
-        store.append_agent_event_while_locked(&value, false)
-    } else {
-        store.append_agent_event(&value)
+    match event {
+        AgentEventKind::BlockerRecorded { blocker } => {
+            if workspace_locked {
+                store.record_agent_blocker_while_locked(run, blocker)
+            } else {
+                store.record_agent_blocker(run, blocker)
+            }
+        }
+        AgentEventKind::ScopeExpansionRequested { request } => {
+            if !workspace_locked {
+                let _workspace_lock = store.lock_workspace()?;
+                store.request_agent_scope_expansion_while_locked(run, request)
+            } else {
+                store.request_agent_scope_expansion_while_locked(run, request)
+            }
+        }
+        AgentEventKind::RunAbandoned { reason } => {
+            if workspace_locked {
+                store.abandon_agent_run_while_locked(run, reason)
+            } else {
+                store.abandon_agent_run(run, reason)
+            }
+        }
+        AgentEventKind::RunStarted { .. } | AgentEventKind::PatchRecorded { .. } => {
+            bail!("agent event kind is not appendable through the generic agent API")
+        }
+        AgentEventKind::VerificationRecorded { attempt_id } => {
+            if workspace_locked {
+                store.record_agent_verification_while_locked(run, &attempt_id)
+            } else {
+                let _workspace_lock = store.lock_workspace()?;
+                store.record_agent_verification_while_locked(run, &attempt_id)
+            }
+        }
     }
 }
 

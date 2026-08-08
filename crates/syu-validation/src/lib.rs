@@ -793,8 +793,12 @@ pub fn execute_verification(
                 runner_ref.runner
             );
         }
+        let arguments = canonical_runner_arguments(&configured.executable, arguments);
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
+        if configured.executable == "cargo" && arguments.iter().any(|argument| argument == "-Z") {
+            command.env("RUSTC_BOOTSTRAP", "1");
+        }
         if configured.executable == "cargo" {
             // Reuse one target directory for all exact verification jobs in a
             // workspace. Keep an explicitly supplied target directory (the
@@ -889,7 +893,26 @@ pub fn execute_verification_attempt(
 )> {
     let result = match execute_verification(workspace, index, submitted, slice_id, revision) {
         Ok(receipt) => {
-            let mut report = evaluate_completion(workspace, index, submitted, &receipt)?;
+            let mut report = match evaluate_completion(workspace, index, submitted, &receipt) {
+                Ok(report) => report,
+                Err(error) => CompletionReport {
+                    schema: COMPLETION_REPORT_SCHEMA.into(),
+                    attempt_id: attempt_id.into(),
+                    plan_digest: submitted.canonical_digest.clone(),
+                    slice_id: slice_id.into(),
+                    receipt_digest: None,
+                    status: CompletionStatus::Blocked,
+                    demonstrated: vec![],
+                    checks: vec![],
+                    blockers: vec![CompletionBlocker {
+                        code: "SYU-COMPLETION-EVALUATION".into(),
+                        message: durable_failure_message(&error),
+                        next_action:
+                            "Resolve the completion evaluation failure, then retry the same approved plan and slice."
+                                .into(),
+                    }],
+                },
+            };
             report.attempt_id = attempt_id.into();
             report.receipt_digest = Some(verification_receipt_digest(&receipt)?);
             let executions = receipt
@@ -1055,6 +1078,7 @@ pub fn validate_verification_receipt(
             .iter()
             .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
             .collect::<Vec<_>>();
+        let arguments = canonical_runner_arguments(&configured.executable, arguments);
         let expected_command = std::iter::once(configured.executable.clone())
             .chain(arguments)
             .collect::<Vec<_>>();
@@ -1526,19 +1550,68 @@ fn ensure_exact_test_executed(
     if test_identity != name && !test_identity.ends_with(&format!("::{name}")) {
         bail!("cargo verification argument {test_identity} does not identify selector {name}");
     }
-    let output = String::from_utf8_lossy(stdout);
-    let marker = format!("test {test_identity} ");
-    let matched_count = output
-        .lines()
-        .filter(|line| line.trim_start().starts_with(&marker))
-        .count();
-    if matched_count == 0 {
-        bail!("configured verification command ran zero exact tests for {name}");
+    let mut matched_count = 0;
+    for line in String::from_utf8_lossy(stdout).lines() {
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if event.get("type").and_then(serde_json::Value::as_str) != Some("test") {
+            continue;
+        }
+        let event_name = event.get("name").and_then(serde_json::Value::as_str);
+        let exact_identity = event_name == Some(test_identity.as_str())
+            || event_name.is_some_and(|value| value.ends_with(&format!("::{test_identity}")));
+        if !exact_identity {
+            continue;
+        }
+        match event.get("event").and_then(serde_json::Value::as_str) {
+            Some("ok") => matched_count += 1,
+            Some("ignored") | Some("failed") | Some("timeout") => {
+                bail!("configured verification command did not complete exact test {name}");
+            }
+            _ => {}
+        }
+    }
+    if matched_count != 1 {
+        bail!(
+            "configured verification command must emit exactly one successful structured event for {name}; found {matched_count}"
+        );
     }
     Ok(ExactTestEvidence {
         identity: test_identity.clone(),
         matched_count,
     })
+}
+
+/// Cargo's human test output is not an authority boundary: a test can print a
+/// line that looks like a harness result. Force libtest's structured stream
+/// and keep the injected arguments in the receipt's canonical command.
+pub fn canonical_runner_arguments(executable: &str, mut arguments: Vec<String>) -> Vec<String> {
+    if executable == "cargo"
+        && arguments.iter().any(|argument| argument == "test")
+        && !arguments.iter().any(|argument| argument == "--format")
+    {
+        if let Some(index) = arguments.iter().position(|argument| argument == "--") {
+            arguments.splice(
+                index + 1..index + 1,
+                [
+                    "-Z".into(),
+                    "unstable-options".into(),
+                    "--format".into(),
+                    "json".into(),
+                ],
+            );
+        } else {
+            arguments.extend([
+                "--".into(),
+                "-Z".into(),
+                "unstable-options".into(),
+                "--format".into(),
+                "json".into(),
+            ]);
+        }
+    }
+    arguments
 }
 
 pub(crate) fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
@@ -5682,16 +5755,38 @@ requirements:
             "cargo",
             &target,
             &arguments,
-            b"test tests::exact_test_execution_requires_match ... ok\n",
+            br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
+{"type":"suite","event":"ok"}
+"#,
         )
         .expect("exact test marker");
         assert_eq!(proof.identity, "tests::exact_test_execution_requires_match");
         assert_eq!(proof.matched_count, 1);
+        assert!(
+            ensure_exact_test_executed(
+                "cargo",
+                &target,
+                &arguments,
+                br#"{"type":"test","name":"tests::other","event":"ok"}
+"#,
+            )
+            .is_err()
+        );
         assert!(ensure_exact_test_executed(
             "cargo",
             &target,
             &arguments,
-            b"test tests::other ... ok\n",
+            br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ignored"}
+"#,
+        )
+        .is_err());
+        assert!(ensure_exact_test_executed(
+            "cargo",
+            &target,
+            &arguments,
+            br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
+{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
+"#,
         )
         .is_err());
         assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());

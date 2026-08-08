@@ -96,6 +96,8 @@ struct ValidateResultOptions {
     #[command(flatten)]
     validate: ValidateOptions,
     #[arg(long)]
+    attempt_id: String,
+    #[arg(long)]
     receipt: PathBuf,
 }
 #[derive(Debug, Args)]
@@ -472,7 +474,7 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
         .plan
         .as_ref()
         .context("validate result requires --plan")?;
-    let plan: WorkPlan = read_yaml(plan_path)?;
+    let submitted_plan: WorkPlan = read_yaml(plan_path)?;
     let plan_digest = args
         .validate
         .plan_digest
@@ -483,16 +485,41 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
         .slice_id
         .as_deref()
         .context("validate result requires --slice-id")?;
-    if plan.canonical_digest != plan_digest {
+    if submitted_plan.canonical_digest != plan_digest {
         bail!("submitted plan does not match --plan-digest");
     }
-    let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
-    if receipt.plan_digest != plan_digest || receipt.slice_id != slice_id {
-        bail!("receipt does not match the exact --plan-digest and --slice-id pair");
-    }
     let workspace = SpecWorkspace::load(&args.validate.workspace)?;
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let identity = ExecutionIdentity {
+        plan_digest: plan_digest.to_owned(),
+        slice_id: slice_id.to_owned(),
+    };
+    let attempt = store.attempt(&identity, &args.attempt_id)?;
+    if attempt.attempt_id != args.attempt_id
+        || attempt.report.attempt_id != args.attempt_id
+        || attempt.report.status != CompletionStatus::Complete
+    {
+        bail!("attempt is not a complete durable verification attempt");
+    }
+    let approval = store.approval(&identity)?;
+    if approval.plan != submitted_plan {
+        bail!("submitted plan differs from the approved durable plan");
+    }
+    let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
+    let canonical = attempt
+        .receipt
+        .as_ref()
+        .context("complete attempt has no durable verification receipt")?;
+    if receipt != *canonical
+        || receipt.plan_digest != plan_digest
+        || receipt.slice_id != slice_id
+        || attempt.report.receipt_digest.as_deref()
+            != Some(DeliveryStore::verification_digest(canonical)?.as_str())
+    {
+        bail!("receipt does not match the exact durable verification attempt");
+    }
     let index = workspace.index()?;
-    let report = syu_validation::evaluate_completion(&workspace, &index, &plan, &receipt)?;
+    let report = syu_validation::evaluate_completion(&workspace, &index, &approval.plan, &receipt)?;
     match args.validate.format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => {
@@ -534,6 +561,8 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             format,
         } => {
             let workspace = SpecWorkspace::load(&root)?;
+            let store = DeliveryStore::for_workspace(&workspace.root)?;
+            let _workspace_lock = store.lock_workspace()?;
             let index = workspace.index()?;
             let revision = revision(&workspace.root)?;
             let submitted: WorkPlan = read_yaml(&plan_path)?;
@@ -549,7 +578,6 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             {
                 bail!("approval requires the exact --plan-digest and --slice-id pair");
             }
-            let store = DeliveryStore::for_workspace(&workspace.root)?;
             let approval = PlanApproval {
                 schema: PLAN_APPROVAL_SCHEMA.into(),
                 approval_id: store.new_id("approval"),
@@ -560,7 +588,7 @@ fn run_task(args: TaskArgs) -> Result<i32> {
                 reviewed_at: now_timestamp(),
                 plan: canonical,
             };
-            let approval = store.approve(&approval)?;
+            let approval = store.approve_while_locked(&approval)?;
             emit_task_value(&approval, format, "approved plan")?;
             Ok(0)
         }
