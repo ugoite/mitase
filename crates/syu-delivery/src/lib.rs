@@ -106,8 +106,10 @@ impl DeliveryStore {
             self.finalizations_dir(),
             self.agent_events_dir(),
         ] {
-            fs::create_dir_all(path)?;
+            fs::create_dir_all(&path)?;
+            sync_directory(&path)?;
         }
+        sync_directory(&self.root)?;
         Ok(())
     }
 
@@ -172,7 +174,7 @@ impl DeliveryStore {
     pub fn clear_mutation_journal(&self) -> Result<()> {
         let path = self.mutation_journal_path();
         match fs::remove_file(path) {
-            Ok(()) => Ok(()),
+            Ok(()) => sync_directory(&self.root),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error.into()),
         }
@@ -220,6 +222,32 @@ impl DeliveryStore {
                 }
                 committed
             }
+            "agent-verification" => {
+                let mut committed = false;
+                for path in json_files(&self.agent_events_dir())? {
+                    let event: AgentEvent = read_json(&path)?;
+                    validate_agent_event_schema(&event)?;
+                    validate_agent_event_digest(&path, &event)?;
+                    if let AgentEventKind::VerificationRecorded { attempt_id } = event.event
+                        && attempt_id == journal.operation_id
+                    {
+                        committed = true;
+                    }
+                }
+                if !committed {
+                    for path in json_files(&self.attempts_dir())? {
+                        let attempt: CompletionAttempt = read_json(&path)?;
+                        if attempt.attempt_id == journal.operation_id {
+                            fs::remove_file(&path)?;
+                            if let Some(parent) = path.parent() {
+                                sync_directory(parent)?;
+                            }
+                        }
+                    }
+                }
+                committed
+            }
+            "governance-edit" => false,
             "finalization" => {
                 let mut committed = false;
                 for path in json_files(&self.finalizations_dir())? {
@@ -269,6 +297,7 @@ impl DeliveryStore {
             }
         }
         fs::remove_file(path)?;
+        sync_directory(&self.root)?;
         Ok(())
     }
 
@@ -291,6 +320,16 @@ impl DeliveryStore {
             || approval.revision != repository_revision(&workspace.root)?
         {
             bail!("approval basis is stale; review the current workspace again");
+        }
+        let index = workspace.index()?;
+        let canonical = syu_validation::canonical_plan_for_execution(
+            &workspace,
+            &index,
+            &approval.plan,
+            &approval.revision,
+        )?;
+        if canonical != approval.plan {
+            bail!("approval plan is not the exact ready canonical planner output");
         }
         let identity = ExecutionIdentity {
             plan_digest: approval.plan_digest.clone(),
@@ -380,7 +419,7 @@ impl DeliveryStore {
         self.execute_and_append_attempt_for_agent_while_locked(workspace, plan, slice_id, None)
     }
 
-    pub fn execute_and_append_attempt_for_agent_while_locked(
+    fn execute_and_append_attempt_for_agent_while_locked(
         &self,
         workspace: &SpecWorkspace,
         plan: &syu_work_model::WorkPlan,
@@ -397,6 +436,15 @@ impl DeliveryStore {
         let approval = self.approval(&identity)?;
         if approval.plan != *plan {
             bail!("verification requires the exact approved plan");
+        }
+        if let Some(agent_run_id) = agent_run_id {
+            let run = self.agent_run(&identity, agent_run_id)?;
+            if !matches!(run.status, AgentRunStatus::Active)
+                || run.plan_digest != identity.plan_digest
+                || run.slice_id != identity.slice_id
+            {
+                bail!("verification attempt is not bound to an active agent run");
+            }
         }
         if plan.basis.spec_fingerprint != workspace.spec_fingerprint()? {
             bail!("verification plan is stale against the current specification and config");
@@ -438,7 +486,60 @@ impl DeliveryStore {
         let mut without_digest = attempt.clone();
         without_digest.attempt_digest.clear();
         attempt.attempt_digest = Self::verification_digest(&without_digest)?;
-        self.append_attempt(workspace, &attempt)
+        let journaled = agent_run_id.is_some();
+        if journaled {
+            self.write_mutation_journal(
+                "agent-verification",
+                &attempt.attempt_id,
+                Vec::new(),
+                Vec::new(),
+            )?;
+        }
+        match self.append_attempt(workspace, &attempt) {
+            Ok(attempt) => Ok(attempt),
+            Err(error) => {
+                if journaled {
+                    self.clear_mutation_journal()?;
+                }
+                Err(error)
+            }
+        }
+    }
+
+    /// Persist an agent verification attempt and its terminal event under one
+    /// recovery journal. A crash before the event removes the orphan attempt;
+    /// a crash after the event preserves the committed pair.
+    pub fn execute_and_record_agent_verification_while_locked(
+        &self,
+        workspace: &SpecWorkspace,
+        run: &AgentRun,
+        plan: &syu_work_model::WorkPlan,
+        slice_id: &str,
+    ) -> Result<CompletionAttempt> {
+        let attempt = self.execute_and_append_attempt_for_agent_while_locked(
+            workspace,
+            plan,
+            slice_id,
+            Some(&run.run_id),
+        )?;
+        match self.record_agent_verification_while_locked(run, &attempt.attempt_id) {
+            Ok(_) => {
+                self.clear_mutation_journal()?;
+                Ok(attempt)
+            }
+            Err(error) => {
+                let removed = self.remove_unfinalized_attempt_while_locked(&attempt);
+                let cleared = self.clear_mutation_journal();
+                match (removed, cleared) {
+                    (Ok(()), Ok(())) => Err(error),
+                    (removed, cleared) => Err(anyhow::anyhow!(
+                        "agent verification event failed: {error}; attempt cleanup: {:?}; journal cleanup: {:?}",
+                        removed.err(),
+                        cleared.err()
+                    )),
+                }
+            }
+        }
     }
 
     pub fn remove_unfinalized_attempt_while_locked(
@@ -486,6 +587,15 @@ impl DeliveryStore {
             || approval.plan_digest != attempt.plan_digest
         {
             bail!("completion attempt is not tied to its approved plan");
+        }
+        if let Some(agent_run_id) = attempt.agent_run_id.as_deref() {
+            let run = self.agent_run(&identity, agent_run_id)?;
+            if !matches!(run.status, AgentRunStatus::Active)
+                || run.plan_digest != identity.plan_digest
+                || run.slice_id != identity.slice_id
+            {
+                bail!("completion attempt is not bound to an active agent run");
+            }
         }
         if let Some(receipt) = &attempt.receipt {
             let index = workspace.index()?;
@@ -1497,7 +1607,7 @@ fn validate_completion_attempt_against_plan(
             for execution in &receipt.executions {
                 if execution.exit_code != 0
                     || execution.command.is_empty()
-                    || execution.proof.matched_count == 0
+                    || execution.proof.matched_count != 1
                     || execution
                         .claim
                         .as_ref()
@@ -1983,6 +2093,7 @@ fn write_immutable_json<T: Serialize + DeserializeOwned>(path: &Path, value: &T)
     temporary
         .persist_noclobber(path)
         .map_err(|error| anyhow::anyhow!(error))?;
+    sync_directory(parent)?;
     Ok(serde_json::from_slice(&bytes)?)
 }
 
@@ -2165,6 +2276,19 @@ fn atomic_write(path: &Path, content: impl AsRef<[u8]>) -> Result<()> {
     temporary
         .persist(path)
         .map_err(|error| anyhow::anyhow!(error))?;
+    sync_directory(parent)?;
+    Ok(())
+}
+
+fn sync_directory(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        File::open(path)?.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
     Ok(())
 }
 
@@ -2345,6 +2469,41 @@ mod tests {
     }
 
     #[test]
+    fn uncommitted_agent_verification_journal_removes_orphan_attempt() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = store
+            .approve(&fixture_approval(&workspace, &plan, &revision))
+            .unwrap();
+        let attempt = fixture_attempt(&workspace, &plan, &approval, &revision);
+        let attempt_id = attempt.attempt_id.clone();
+        store.append_attempt(&workspace, &attempt).unwrap();
+        let lock = store.lock_workspace().unwrap();
+        store
+            .write_mutation_journal("agent-verification", &attempt_id, Vec::new(), Vec::new())
+            .unwrap();
+        drop(lock);
+
+        let _recovery_lock = store.lock_workspace().unwrap();
+        assert!(
+            store
+                .attempt(
+                    &ExecutionIdentity {
+                        plan_digest: attempt.plan_digest,
+                        slice_id: attempt.slice_id,
+                    },
+                    &attempt_id,
+                )
+                .is_err()
+        );
+        assert!(!store.mutation_journal_path().exists());
+    }
+
+    #[test]
     fn receipt_digest_domains_have_literal_vectors() {
         let value = serde_json::json!({
             "attempt_id": "attempt-1",
@@ -2385,6 +2544,13 @@ mod tests {
                 .unwrap(),
             approval
         );
+
+        let mut blocked = approval.clone();
+        blocked.approval_id = "approval-blocked".into();
+        blocked.plan.status = syu_work_model::PlanStatus::Blocked;
+        blocked.plan.canonical_digest = work_plan_digest(&blocked.plan);
+        blocked.plan_digest = blocked.plan.canonical_digest.clone();
+        assert!(store.approve(&blocked).is_err());
     }
 
     #[test]
@@ -2823,6 +2989,24 @@ mod tests {
         complete.attempt_digest =
             DeliveryStore::verification_digest(&attempt_with_empty_digest(&complete)).unwrap();
         assert!(store.append_attempt(&workspace, &complete).is_ok());
+
+        let mut duplicate_test = complete.clone();
+        duplicate_test.attempt_id = "attempt-duplicate-test".into();
+        duplicate_test.report.attempt_id = duplicate_test.attempt_id.clone();
+        let (duplicate_proof, duplicate_receipt_digest) = {
+            let receipt = duplicate_test.receipt.as_mut().unwrap();
+            receipt.executions[0].proof.matched_count = 2;
+            (
+                receipt.executions[0].proof.clone(),
+                DeliveryStore::verification_digest(receipt).unwrap(),
+            )
+        };
+        duplicate_test.verification.executions[0].proof = Some(duplicate_proof);
+        duplicate_test.report.receipt_digest = Some(duplicate_receipt_digest);
+        duplicate_test.attempt_digest =
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&duplicate_test))
+                .unwrap();
+        assert!(store.append_attempt(&workspace, &duplicate_test).is_err());
 
         let mut invalid = complete.clone();
         invalid.attempt_id = "attempt-invalid-report".into();

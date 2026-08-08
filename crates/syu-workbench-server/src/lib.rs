@@ -374,6 +374,7 @@ fn workspace_signature(root: &Path) -> Result<String> {
     // documents. Include their bytes explicitly so an ignored spec/config
     // edit cannot survive in a cached snapshot.
     let workspace = SpecWorkspace::load(root)?;
+    let governed_fingerprint = workspace.try_fingerprint()?;
     let canonical_root = root.canonicalize()?;
     paths.insert(PathBuf::from("syu.yaml"));
     for document in &workspace.documents {
@@ -391,6 +392,8 @@ fn workspace_signature(root: &Path) -> Result<String> {
     let mut hash = Sha256::new();
     hash.update(b"syu/workbench-snapshot/v1\0");
     hash.update(revision.as_bytes());
+    hash.update(b"\0governed-artifacts\0");
+    hash.update(governed_fingerprint.as_bytes());
     for path in paths {
         hash.update(b"\0path\0");
         hash.update(path.to_string_lossy().as_bytes());
@@ -1115,13 +1118,7 @@ fn clear_work_execution_state(session: &mut WorkbenchSession) {
 fn abandon_active_agent_runs(service: &WorkbenchService, reason: &str) -> Result<()> {
     let store = DeliveryStore::for_workspace(&service.workspace_root)?;
     let _workspace_lock = store.lock_workspace()?;
-    let mut runs = store.active_agent_runs()?;
-    if let Some(run) = store.latest_agent_run()?
-        && matches!(run.status, AgentRunStatus::Blocked)
-        && !runs.iter().any(|candidate| candidate.run_id == run.run_id)
-    {
-        runs.push(run);
-    }
+    let runs = store.unresolved_agent_runs()?;
     for run in runs {
         store.abandon_agent_run_while_locked(&run, reason.to_owned())?;
     }
@@ -2876,10 +2873,14 @@ fn atomic_replace(path: &Path, content: &str) -> Result<()> {
             .as_nanos()
     ));
     fs::write(&temporary, content)?;
+    #[cfg(unix)]
+    fs::File::open(&temporary)?.sync_all()?;
     if let Err(error) = fs::rename(&temporary, path) {
         let _ = fs::remove_file(&temporary);
         return Err(error.into());
     }
+    #[cfg(unix)]
+    fs::File::open(parent)?.sync_all()?;
     Ok(())
 }
 
@@ -2927,10 +2928,20 @@ async fn api_specification_apply(
             ),
         ));
     }
+    store.write_mutation_journal(
+        "governance-edit",
+        &preview.preview_token,
+        vec![syu_delivery::MutationJournalFile {
+            path: path.to_string_lossy().into_owned(),
+            original: Some(old.as_bytes().to_vec()),
+        }],
+        Vec::new(),
+    )?;
     atomic_replace(&path, &content)?;
     if let Err(error) = SpecWorkspace::load(&workspace.root).and_then(|candidate| candidate.index())
     {
         atomic_replace(&path, &old)?;
+        store.clear_mutation_journal()?;
         return Err(error.into());
     }
     let mut session = service
@@ -2938,6 +2949,7 @@ async fn api_specification_apply(
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     clear_work_execution_state(&mut session);
+    store.clear_mutation_journal()?;
     Ok(Json(preview))
 }
 
@@ -3011,10 +3023,20 @@ async fn api_specification_candidate_apply(
             ),
         ));
     }
+    store.write_mutation_journal(
+        "governance-edit",
+        &preview.preview_token,
+        vec![syu_delivery::MutationJournalFile {
+            path: path.to_string_lossy().into_owned(),
+            original: Some(old.as_bytes().to_vec()),
+        }],
+        Vec::new(),
+    )?;
     atomic_replace(&path, &content)?;
     if let Err(error) = SpecWorkspace::load(&workspace.root).and_then(|candidate| candidate.index())
     {
         atomic_replace(&path, &old)?;
+        store.clear_mutation_journal()?;
         return Err(error.into());
     }
     let mut session = service
@@ -3022,6 +3044,7 @@ async fn api_specification_candidate_apply(
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     clear_work_execution_state(&mut session);
+    store.clear_mutation_journal()?;
     Ok(Json(preview))
 }
 
@@ -3077,10 +3100,20 @@ async fn api_config_apply(
             ),
         ));
     }
+    store.write_mutation_journal(
+        "governance-edit",
+        &preview.preview_token,
+        vec![syu_delivery::MutationJournalFile {
+            path: path.to_string_lossy().into_owned(),
+            original: Some(old.as_bytes().to_vec()),
+        }],
+        Vec::new(),
+    )?;
     atomic_replace(&path, &content)?;
     if let Err(error) = SpecWorkspace::load(&workspace.root).and_then(|candidate| candidate.index())
     {
         atomic_replace(&path, &old)?;
+        store.clear_mutation_journal()?;
         return Err(error.into());
     }
     let mut session = service
@@ -3088,6 +3121,7 @@ async fn api_config_apply(
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     clear_work_execution_state(&mut session);
+    store.clear_mutation_journal()?;
     Ok(Json(preview))
 }
 
@@ -4691,18 +4725,12 @@ async fn api_agent_verify(
                 anyhow::anyhow!("agent verification requires an approved plan: {error}"),
             )
         })?;
-    let attempt = store.execute_and_append_attempt_for_agent_while_locked(
+    let attempt = store.execute_and_record_agent_verification_while_locked(
         &snapshot.workspace,
+        &run,
         &approval.plan,
         &command.execution.slice_id,
-        Some(&run.run_id),
     )?;
-    if let Err(error) =
-        syu_agent::record_verification_while_locked(&snapshot.workspace, &run, &attempt.attempt_id)
-    {
-        store.remove_unfinalized_attempt_while_locked(&attempt)?;
-        return Err(error.into());
-    }
     let mut session = service
         .session
         .write()

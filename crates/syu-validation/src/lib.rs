@@ -1049,8 +1049,8 @@ pub fn validate_verification_receipt(
         if execution.exit_code != 0 {
             bail!("verification receipt contains failed executions");
         }
-        if execution.proof.matched_count == 0 {
-            bail!("verification receipt proves zero exact tests");
+        if execution.proof.matched_count != 1 {
+            bail!("verification receipt must prove exactly one exact test");
         }
         let claim = execution.claim.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
