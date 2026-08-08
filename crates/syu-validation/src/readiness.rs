@@ -1395,7 +1395,7 @@ fn validate_durable_completion_report(
     let expected_checks = slice
         .completion
         .iter()
-        .map(|check| serde_json::to_string(check))
+        .map(serde_json::to_string)
         .collect::<Result<BTreeSet<_>, _>>()?;
     let actual_checks = attempt
         .report
