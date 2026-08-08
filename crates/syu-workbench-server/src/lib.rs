@@ -10766,7 +10766,14 @@ mod tests {
             },
         )
         .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "specification apply response: {}",
+            String::from_utf8_lossy(&response_body)
+        );
         let updated = fs::read_to_string(temp.path().join("spec/requirement.yaml"))
             .expect("updated requirement");
         assert!(updated.contains("The fixture behavior remains true."));

@@ -1595,8 +1595,23 @@ fn write_atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 }
 
 fn relative_workspace_path(root: &Path, path: &Path) -> Result<String> {
-    let relative = path
-        .strip_prefix(root)
+    if !path.is_absolute() {
+        bail!("mutation path {} is outside the workspace", path.display());
+    }
+    let canonical_root = root
+        .canonicalize()
+        .with_context(|| format!("canonicalize mutation workspace root {}", root.display()))?;
+    let canonical_path = path.canonicalize().or_else(|_| {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("mutation path {} has no parent", path.display()))?;
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("mutation path {} has no file name", path.display()))?;
+        Ok::<_, anyhow::Error>(parent.canonicalize()?.join(file_name))
+    })?;
+    let relative = canonical_path
+        .strip_prefix(&canonical_root)
         .with_context(|| format!("mutation path {} is outside the workspace", path.display()))?;
     if relative.as_os_str().is_empty()
         || relative
