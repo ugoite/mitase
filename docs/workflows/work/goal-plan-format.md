@@ -15,7 +15,7 @@ A work plan contains:
 Validation entry points:
 
 ```bash
-cargo run --quiet -- validate . --plan plan.yaml
+cargo run --quiet -- validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 cargo run --quiet -- work export-context --workspace . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 ```
 

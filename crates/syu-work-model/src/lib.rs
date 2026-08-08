@@ -111,6 +111,14 @@ pub struct WorkConstraints {
     /// the canonical replan of that selection.
     #[serde(default)]
     pub exact_scope: bool,
+    /// Generated targets retained by the selected execution slice. Their
+    /// access mode is derived from the target graph, so a selected slice
+    /// carries this small authoritative boundary across a replan.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exact_generated_targets: Vec<BoundTargetRef>,
+    /// Contract closure retained by the selected execution slice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exact_contracts: Vec<SpecAnchor>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

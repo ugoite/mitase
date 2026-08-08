@@ -139,6 +139,8 @@ impl WorkbenchServer {
         let index = workspace.index()?;
         validate_work_origin(&workspace, &index, &request.origin)
             .context("preloaded Work request requires an exact implemented origin")?;
+        syu_planner::validate_work_request(&index, &request)
+            .context("preloaded Work request contains an out-of-scope target")?;
         if let Ok(mut session) = self.service.session.write() {
             session.draft_request = Some(request);
         }
@@ -4102,6 +4104,13 @@ fn select_slice(
     selected_request.requested_targets = requested_targets;
     selected_request.constraints.max_slices = Some(1);
     selected_request.constraints.exact_scope = true;
+    selected_request.constraints.exact_generated_targets = candidate
+        .readonly_context
+        .iter()
+        .filter(|target| target.access == TargetAccessMode::Generated)
+        .map(|target| target.reference.clone())
+        .collect();
+    selected_request.constraints.exact_contracts = candidate.contracts.clone();
     let replanned = syu_planner::plan(
         &selected_request,
         &snapshot.workspace,
@@ -4240,6 +4249,8 @@ async fn api_plan(
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no work request selected"))?;
     validate_work_origin(&snapshot.workspace, &snapshot.index, &request.origin)
+        .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+    syu_planner::validate_work_request(&snapshot.index, &request)
         .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
     let plan = plan(
         &request,

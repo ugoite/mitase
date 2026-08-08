@@ -43,7 +43,7 @@ Typical flow:
 
 ```bash
 cargo run --quiet -- work plan --workspace . --request request.yaml --out plan.yaml
-cargo run --quiet -- validate . --plan plan.yaml
+cargo run --quiet -- validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 ```
 
 `Requirement criterion` is the human-facing semantic meaning of “behavior” in
@@ -54,3 +54,9 @@ targets, criteria, or contracts.
 
 Use `syu/work-request/v1` as the current request wire format. Old `summary`,
 `seeds`, and generic identity payloads are intentionally rejected before v1.
+
+Workbench split recovery may add the internal `exact_scope` closure fields to
+the same v1 request when a user selects one proposed slice. Those fields are
+server-owned evidence of the selected Generated targets and contracts; they
+are revalidated against the origin closure before planning and are not a
+second user-editable scope mechanism.

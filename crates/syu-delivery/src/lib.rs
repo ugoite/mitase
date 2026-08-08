@@ -16,7 +16,7 @@ use syu_work_model::{
     AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionAttempt,
     CompletionBlocker, CompletionStatus, ExecutionIdentity, FINALIZATION_RECEIPT_SCHEMA,
     FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA, PlanApproval,
-    VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA,
+    VERIFICATION_RECEIPT_SCHEMA, WORK_PLAN_SCHEMA, work_plan_digest,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -394,6 +394,7 @@ impl DeliveryStore {
     pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
         self.ensure()?;
         validate_agent_event_schema(event)?;
+        validate_agent_event_references(self, event)?;
         let mut canonical = event.clone();
         let supplied = canonical.event_digest.clone();
         canonical.event_digest.clear();
@@ -415,6 +416,7 @@ impl DeliveryStore {
         for path in json_files(&self.agent_events_dir())? {
             let event: AgentEvent = read_json(&path)?;
             validate_agent_event_schema(&event)?;
+            validate_agent_event_references(self, &event)?;
             validate_agent_event_digest(&path, &event)?;
             if event.run_id == run_id
                 && event.plan_digest == identity.plan_digest
@@ -589,6 +591,7 @@ fn validate_plan_approval_schema(approval: &PlanApproval) -> Result<()> {
         "approved work plan",
     )?;
     if approval.plan_digest != approval.plan.canonical_digest
+        || approval.plan_digest != work_plan_digest(&approval.plan)
         || approval.slice_id
             != approval
                 .plan
@@ -614,7 +617,9 @@ fn validate_completion_attempt_schema(attempt: &CompletionAttempt) -> Result<()>
         COMPLETION_REPORT_SCHEMA,
         "completion report",
     )?;
-    if attempt.report.plan_digest != attempt.plan_digest
+    if attempt.approved_plan_digest != attempt.plan_digest
+        || attempt.report.attempt_id != attempt.attempt_id
+        || attempt.report.plan_digest != attempt.plan_digest
         || attempt.report.slice_id != attempt.slice_id
     {
         bail!("completion report does not match its attempt execution identity");
@@ -691,6 +696,24 @@ fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
             Ok(())
         }
     }
+}
+
+fn validate_agent_event_references(store: &DeliveryStore, event: &AgentEvent) -> Result<()> {
+    if let AgentEventKind::VerificationRecorded { attempt_id } = &event.event {
+        let identity = ExecutionIdentity {
+            plan_digest: event.plan_digest.clone(),
+            slice_id: event.slice_id.clone(),
+        };
+        let attempt = store.attempt(&identity, attempt_id).with_context(|| {
+            format!(
+                "verification event references attempt {attempt_id} outside its execution identity"
+            )
+        })?;
+        if attempt.plan_digest != event.plan_digest || attempt.slice_id != event.slice_id {
+            bail!("verification event attempt does not match its execution identity");
+        }
+    }
+    Ok(())
 }
 
 fn validate_agent_event_digest(path: &Path, event: &AgentEvent) -> Result<()> {
@@ -1130,6 +1153,9 @@ mod tests {
         let mut invalid_approval = approval.clone();
         invalid_approval.schema = "syu/legacy-approval/v0".into();
         assert!(store.approve(&invalid_approval).is_err());
+        let mut tampered_approval = approval.clone();
+        tampered_approval.plan.request.constraints.max_slices = Some(2);
+        assert!(store.approve(&tampered_approval).is_err());
 
         let attempt = fixture_attempt(&plan, &approval, &revision);
         let mut invalid_attempt = attempt.clone();
@@ -1141,6 +1167,19 @@ mod tests {
         invalid_report_identity.attempt_digest =
             DeliveryStore::verification_digest(&invalid_report_identity).unwrap();
         assert!(store.append_attempt(&invalid_report_identity).is_err());
+        let mut invalid_attempt_identity = attempt.clone();
+        invalid_attempt_identity.approved_plan_digest = "sha256:other-plan".into();
+        invalid_attempt_identity.attempt_digest = DeliveryStore::verification_digest(
+            &attempt_with_empty_digest(&invalid_attempt_identity),
+        )
+        .unwrap();
+        assert!(store.append_attempt(&invalid_attempt_identity).is_err());
+        let mut invalid_report_attempt = attempt.clone();
+        invalid_report_attempt.report.attempt_id = "attempt-other".into();
+        invalid_report_attempt.attempt_digest =
+            DeliveryStore::verification_digest(&attempt_with_empty_digest(&invalid_report_attempt))
+                .unwrap();
+        assert!(store.append_attempt(&invalid_report_attempt).is_err());
 
         let identity = ExecutionIdentity {
             plan_digest: plan.canonical_digest.clone(),
@@ -1176,6 +1215,19 @@ mod tests {
             },
         };
         assert!(store.append_agent_event(&invalid_event).is_err());
+        let missing_attempt_event = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-missing-attempt".into(),
+            event_digest: String::new(),
+            run_id: "run-test".into(),
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
+            created_at: String::new(),
+            event: AgentEventKind::VerificationRecorded {
+                attempt_id: "attempt-missing".into(),
+            },
+        };
+        assert!(store.append_agent_event(&missing_attempt_event).is_err());
         let invalid_nested_patch = AgentEvent {
             schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
             event_id: "event-patch-test".into(),

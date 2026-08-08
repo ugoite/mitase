@@ -503,6 +503,8 @@ pub fn canonical_plan_for_execution(
     if submitted.schema != WORK_PLAN_SCHEMA {
         bail!("plan schema must be {WORK_PLAN_SCHEMA}");
     }
+    syu_planner::validate_work_request(index, &submitted.request)
+        .context("submitted plan contains targets outside its exact Work origin")?;
     validate_work_origin(index, &submitted.request.origin)
         .context("submitted plan requires an exact implemented Work origin")?;
     if submitted.basis.revision != revision {
@@ -2200,20 +2202,8 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
     let syu_config = git_show(root, revision, Path::new("syu.yaml"))
         .map_err(anyhow::Error::msg)
         .context("read baseline syu.yaml")?;
-    let (syu_config, config) = match serde_yaml::from_str::<ProjectConfig>(&syu_config) {
-        Ok(config) => (syu_config, config),
-        Err(_) => {
-            // Change validation must still be able to compare a branch with a
-            // revision that used the earlier v1 readiness shape. Readiness is
-            // irrelevant to the baseline graph, so remove only those legacy
-            // probe fields and keep the historical inventory/spec inputs.
-            let normalized = normalize_legacy_baseline_config(&syu_config)
-                .context("normalize legacy baseline readiness config")?;
-            let config = serde_yaml::from_str::<ProjectConfig>(&normalized)
-                .context("parse normalized baseline config")?;
-            (normalized, config)
-        }
-    };
+    let config =
+        serde_yaml::from_str::<ProjectConfig>(&syu_config).context("parse v1 baseline syu.yaml")?;
     let tempdir = tempfile::Builder::new()
         .prefix("syu-baseline-")
         .tempdir()
@@ -2257,24 +2247,6 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
         workspace,
         index,
     })
-}
-
-fn normalize_legacy_baseline_config(source: &str) -> Option<String> {
-    let mut value = serde_yaml::from_str::<serde_yaml::Value>(source).ok()?;
-    let readiness = value
-        .get_mut("validation")?
-        .get_mut("readiness")?
-        .as_mapping_mut()?;
-    readiness.remove(serde_yaml::Value::String("scopes".into()));
-    if let Some(probes) = readiness
-        .get_mut(serde_yaml::Value::String("probes".into()))
-        .and_then(serde_yaml::Value::as_mapping_mut)
-    {
-        for key in ["implemented_criteria", "public_entrypoints", "contracts"] {
-            probes.remove(serde_yaml::Value::String(key.into()));
-        }
-    }
-    serde_yaml::to_string(&value).ok()
 }
 
 fn repository_revision(root: &Path) -> Result<String> {
@@ -4641,41 +4613,6 @@ mod tests {
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         let index = workspace.index().expect("index");
         (tempdir, workspace, index)
-    }
-
-    #[test]
-    fn legacy_readiness_shape_is_normalized_only_for_historical_baselines() {
-        let source = fs::read_to_string(fixture_root().join("syu.yaml"))
-            .expect("fixture config")
-            .replace(
-                "    target: closed-loop\n",
-                concat!(
-                    "    target: traceable\n",
-                    "    scopes: { auth: work-ready }\n",
-                    "    probes: { implemented_criteria: REQ-AUTH-001#criterion.invalid-credentials, public_entrypoints: all, changed_units: false }\n",
-                ),
-            );
-        assert!(serde_yaml::from_str::<ProjectConfig>(&source).is_err());
-        let normalized =
-            normalize_legacy_baseline_config(&source).expect("normalized baseline config");
-        let config =
-            serde_yaml::from_str::<ProjectConfig>(&normalized).expect("current config shape");
-        assert!(
-            config
-                .validation
-                .readiness
-                .probes
-                .implemented_criteria
-                .is_empty()
-        );
-        assert!(
-            config
-                .validation
-                .readiness
-                .probes
-                .public_entrypoints
-                .is_none()
-        );
     }
 
     fn validate_loaded_workspace(workspace: &SpecWorkspace, index: &SpecIndex) -> ValidationResult {

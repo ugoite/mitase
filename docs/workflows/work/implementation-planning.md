@@ -6,7 +6,7 @@ Minimal flow:
 
 ```bash
 cargo run --quiet -- work plan --workspace . --request request.yaml --out plan.yaml
-cargo run --quiet -- validate . --plan plan.yaml
+cargo run --quiet -- validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 cargo run --quiet -- work export-context --workspace . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 ```
 
@@ -15,7 +15,7 @@ Guidelines:
 - Keep the typed `origin` and `requested_targets` exact. A Requirement
   criterion is the semantic “behavior” identity; Feature implementation
   origins are server-resolved exact target sets.
-- Treat a ready work plan as executable only after `validate --plan` passes.
+- Treat a ready work plan as executable only after `validate plan` passes for the exact digest and slice.
 - `syu/work-plan/v1` uses `execution: isolated-slices`.
 - Execute each slice from the plan basis revision in its own worktree or branch.
 - Validate post-state with the exact `--plan-digest <digest> --slice-id <slice-id>` pair against only that isolated slice workspace.

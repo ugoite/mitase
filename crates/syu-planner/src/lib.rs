@@ -159,7 +159,14 @@ pub fn validate_work_origin(index: &SpecIndex, origin: &WorkOrigin) -> Result<()
     }
 }
 
-fn validate_planning_origin(request: &WorkRequest, index: &SpecIndex) -> Result<()> {
+/// Validate a request after it has crossed a serialization boundary.
+///
+/// Requested targets deliberately do not repeat the origin criterion on the
+/// wire. That criterion is derived here from the authoritative origin, and
+/// every requested target is checked against the resulting executable or
+/// contextual closure. A target's own claims are never allowed to silently
+/// replace the selected origin.
+pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result<()> {
     let criterion = request.origin.criterion();
     if criterion.kind != syu_spec_model::LocalAnchorKind::Criterion
         || !matches!(index.anchor(criterion), Some(AnchorValue::Criterion(_)))
@@ -177,11 +184,229 @@ fn validate_planning_origin(request: &WorkRequest, index: &SpecIndex) -> Result<
             );
         }
     }
-    match &request.origin {
-        WorkOrigin::RequirementCriterion { .. } => Ok(()),
+    if matches!(
+        request.origin,
         WorkOrigin::FeatureImplementationBinding { .. }
-        | WorkOrigin::FeatureImplementationTarget { .. } => {
-            validate_work_origin(index, &request.origin)
+            | WorkOrigin::FeatureImplementationTarget { .. }
+    ) {
+        validate_work_origin(index, &request.origin)?;
+    }
+
+    let boundary = request_target_boundary(index, &request.origin, request.operation);
+    if !request.constraints.exact_scope
+        && (!request.constraints.exact_generated_targets.is_empty()
+            || !request.constraints.exact_contracts.is_empty())
+    {
+        bail!("exact selected-slice closure is only valid with exact_scope");
+    }
+    for target in &request.requested_targets {
+        let allowed = match target.transition(request_default_transition(request.operation)) {
+            TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove => {
+                &boundary.editable
+            }
+            TargetTransition::RunOnly => &boundary.run_only,
+            TargetTransition::Readonly => &boundary.readonly,
+        };
+        if !allowed.contains(target.reference()) {
+            bail!(
+                "requested target {} is outside the exact {} origin closure",
+                target.reference(),
+                match target.transition(request_default_transition(request.operation)) {
+                    TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove =>
+                        "editable",
+                    TargetTransition::RunOnly => "verification",
+                    TargetTransition::Readonly => "readonly",
+                }
+            );
+        }
+    }
+    let generated = request
+        .constraints
+        .exact_generated_targets
+        .iter()
+        .collect::<BTreeSet<_>>();
+    if generated.iter().any(|target| {
+        !boundary.readonly.contains(target) || !index.generated_from.contains_key(target)
+    }) {
+        bail!("exact generated target closure is outside the selected origin");
+    }
+    if request
+        .constraints
+        .exact_contracts
+        .iter()
+        .any(|contract| !boundary.contracts.contains(contract))
+    {
+        bail!("exact contract closure is outside the selected origin");
+    }
+    Ok(())
+}
+
+fn validate_planning_origin(request: &WorkRequest, index: &SpecIndex) -> Result<()> {
+    validate_work_request(index, request)
+}
+
+#[derive(Default)]
+struct RequestTargetBoundary {
+    editable: BTreeSet<BoundTargetRef>,
+    run_only: BTreeSet<BoundTargetRef>,
+    readonly: BTreeSet<BoundTargetRef>,
+    contracts: BTreeSet<SpecAnchor>,
+}
+
+fn request_default_transition(operation: WorkOperation) -> TargetTransition {
+    match operation {
+        WorkOperation::Add => TargetTransition::Add,
+        WorkOperation::Remove => TargetTransition::Remove,
+        _ => TargetTransition::Modify,
+    }
+}
+
+fn request_target_boundary(
+    index: &SpecIndex,
+    origin: &WorkOrigin,
+    operation: WorkOperation,
+) -> RequestTargetBoundary {
+    let criterion = origin.criterion();
+    let implementation_roots = match origin {
+        WorkOrigin::RequirementCriterion { .. } => index
+            .criteria_to_implementation_targets
+            .get(criterion)
+            .cloned()
+            .unwrap_or_default(),
+        WorkOrigin::FeatureImplementationBinding { targets, .. } => targets.clone(),
+        WorkOrigin::FeatureImplementationTarget { target, .. } => vec![target.clone()],
+    };
+    let documentation_targets = if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
+        index
+            .bindings
+            .iter()
+            .flat_map(|(binding_anchor, binding)| {
+                binding.targets.iter().filter_map(|target| {
+                    (binding.role == BindingRole::Documentation
+                        && target.claims.iter().any(|claim| {
+                            matches!(claim, TargetClaim::Documents { anchor } if anchor == criterion)
+                        }))
+                    .then(|| BoundTargetRef {
+                        binding: binding_anchor.clone(),
+                        target_id: target.id.clone(),
+                    })
+                })
+            })
+            .collect::<BTreeSet<_>>()
+    } else {
+        BTreeSet::new()
+    };
+    let requirement_implementation_scope =
+        if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
+            let bindings = index
+                .all_criteria_to_implementation_targets
+                .get(criterion)
+                .into_iter()
+                .flatten()
+                .map(|target| target.binding.clone())
+                .collect::<BTreeSet<_>>();
+            bindings
+                .into_iter()
+                .flat_map(|binding_anchor| {
+                    index
+                        .bindings
+                        .get(&binding_anchor)
+                        .into_iter()
+                        .flat_map(move |binding| {
+                            let binding_anchor = binding_anchor.clone();
+                            binding.targets.iter().map(move |target| BoundTargetRef {
+                                binding: binding_anchor.clone(),
+                                target_id: target.id.clone(),
+                            })
+                        })
+                })
+                .collect::<BTreeSet<_>>()
+        } else {
+            BTreeSet::new()
+        };
+    let editable = if matches!(origin, WorkOrigin::RequirementCriterion { .. })
+        && operation == WorkOperation::Document
+    {
+        documentation_targets.clone()
+    } else if operation == WorkOperation::Investigate {
+        BTreeSet::new()
+    } else if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
+        requirement_implementation_scope
+    } else {
+        implementation_roots.iter().cloned().collect()
+    };
+    let mut boundary = RequestTargetBoundary {
+        editable,
+        ..RequestTargetBoundary::default()
+    };
+    boundary.run_only.extend(boundary.editable.iter().cloned());
+    boundary.readonly.extend(boundary.editable.iter().cloned());
+    for implementation in &implementation_roots {
+        for verification in index
+            .criteria_to_verification_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+        {
+            if index
+                .verification_by_target
+                .get(implementation)
+                .is_some_and(|covered| covered.contains(verification))
+            {
+                boundary.run_only.insert(verification.clone());
+            }
+        }
+    }
+    if matches!(origin, WorkOrigin::RequirementCriterion { .. }) {
+        boundary
+            .readonly
+            .extend(implementation_roots.iter().cloned());
+    }
+    if operation == WorkOperation::Document {
+        boundary
+            .readonly
+            .extend(implementation_roots.iter().cloned());
+    }
+
+    let mut queue = implementation_roots;
+    queue.extend(documentation_targets);
+    extend_request_context(index, &mut boundary, queue);
+    boundary
+}
+
+fn extend_request_context(
+    index: &SpecIndex,
+    boundary: &mut RequestTargetBoundary,
+    mut queue: Vec<BoundTargetRef>,
+) {
+    let mut seen = BTreeSet::new();
+    while let Some(target) = queue.pop() {
+        if !seen.insert(target.clone()) {
+            continue;
+        }
+        for generated in index.generated_by_source.get(&target).into_iter().flatten() {
+            boundary.readonly.insert(generated.clone());
+            queue.push(generated.clone());
+        }
+        for source in index.generated_from.get(&target).into_iter().flatten() {
+            boundary.readonly.insert(source.clone());
+            queue.push(source.clone());
+        }
+        for contract_anchor in index.contracts_by_target.get(&target).into_iter().flatten() {
+            boundary.contracts.insert(contract_anchor.clone());
+            let Some(contract) = index.contracts.get(contract_anchor) else {
+                continue;
+            };
+            let related = std::iter::once(&contract.source).chain(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| &participant.target),
+            );
+            for related in related {
+                boundary.readonly.insert(related.clone());
+                queue.push(related.clone());
+            }
         }
     }
 }
@@ -1893,6 +2118,21 @@ fn finalize_requested_slice(
     criterion: Option<SpecAnchor>,
 ) -> Result<ExecutionSlice> {
     normalize_generated_access(index, &editable, &mut readonly);
+    if request.constraints.exact_scope {
+        let exact_generated = request
+            .constraints
+            .exact_generated_targets
+            .iter()
+            .collect::<BTreeSet<_>>();
+        for target in &mut readonly {
+            if exact_generated.contains(&target.reference) {
+                target.access = TargetAccessMode::Generated;
+            }
+        }
+        if !request.constraints.exact_contracts.is_empty() {
+            contracts = request.constraints.exact_contracts.clone();
+        }
+    }
     drop_readonly_overlaps(&mut readonly, &editable, &verification);
     validate_target_access_uniqueness(
         &mut blockers,
@@ -2140,6 +2380,21 @@ fn finalize_slice(
         dedup(&mut readonly);
     }
     normalize_generated_access(index, &editable, &mut readonly);
+    if request.constraints.exact_scope {
+        let exact_generated = request
+            .constraints
+            .exact_generated_targets
+            .iter()
+            .collect::<BTreeSet<_>>();
+        for target in &mut readonly {
+            if exact_generated.contains(&target.reference) {
+                target.access = TargetAccessMode::Generated;
+            }
+        }
+        if !request.constraints.exact_contracts.is_empty() {
+            contracts = request.constraints.exact_contracts.clone();
+        }
+    }
     anchors.extend(contracts.clone());
     if true {
         for rule in index.criteria_to_rules.get(criterion).into_iter().flatten() {
@@ -4132,6 +4387,76 @@ mod tests {
     }
 
     #[test]
+    fn serialized_request_cannot_cross_requirement_origin() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let mut feature = fs::read_to_string(&feature_path).expect("feature spec");
+        feature.push_str(concat!(
+            "      - id: other-impl\n",
+            "        role: implementation\n",
+            "        facet: unrelated\n",
+            "        responsibility: Implement another criterion.\n",
+            "        targets:\n",
+            "          - id: other\n",
+            "            adapter: rust\n",
+            "            path: src/other.rs\n",
+            "            selector: { kind: symbol, name: other }\n",
+            "            claims:\n",
+            "              - kind: satisfies\n",
+            "                criterion: REQ-OTHER-001#criterion.other\n",
+        ));
+        fs::write(feature_path, feature).expect("feature with unrelated binding");
+        let requirement_path = tempdir.path().join("spec/requirement.yaml");
+        let mut requirement = fs::read_to_string(&requirement_path).expect("requirements");
+        requirement.push_str(concat!(
+            "  - id: REQ-OTHER-001\n",
+            "    title: Other requirement\n",
+            "    description: Other requirement.\n",
+            "    priority: low\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: other\n",
+            "        kind: behavior\n",
+            "        statement: Other behavior.\n",
+            "        governed_by: []\n",
+        ));
+        fs::write(requirement_path, requirement).expect("requirements with unrelated criterion");
+        fs::write(tempdir.path().join("src/other.rs"), "pub fn other() {}\n")
+            .expect("unrelated source");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-CROSS-ORIGIN".into(),
+            title: "Cross origin request".into(),
+            operation: WorkOperation::Modify,
+            origin: WorkOrigin::RequirementCriterion {
+                criterion: "REQ-TEST-001#criterion.test".parse().unwrap(),
+            },
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-TEST-001#binding.other-impl/target.other"
+                    .parse()
+                    .unwrap(),
+                criterion: Some("REQ-OTHER-001#criterion.other".parse().unwrap()),
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let wire = serde_yaml::to_string(&request).expect("serialize request");
+        let roundtrip: WorkRequest = serde_yaml::from_str(&wire).expect("deserialize request");
+        assert!(roundtrip.requested_targets[0].criterion.is_none());
+        let plan = plan(&roundtrip, &workspace, &index, "cross-origin").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(plan.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("outside the exact editable origin closure")
+        }));
+    }
+
+    #[test]
     fn target_suggestions_rank_exact_claims_with_reviewable_evidence() {
         let tempdir = tempdir().expect("tempdir");
         write_minimal_workspace(tempdir.path());
@@ -5247,6 +5572,14 @@ mod tests {
     fn generated_outputs_are_derived_context_and_never_directly_editable() {
         let tempdir = tempdir().expect("tempdir");
         write_dependency_workspace(tempdir.path());
+        let feature = fs::read_to_string(tempdir.path().join("spec/feature.yaml"))
+            .expect("feature spec")
+            .replacen(
+                "          - { id: source, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: generate }, claims: [] }",
+                "          - { id: source, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: generate }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }",
+                1,
+            );
+        fs::write(tempdir.path().join("spec/feature.yaml"), feature).expect("linked feature");
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         let index = workspace.index().expect("index");
         let source_request = WorkRequest {
@@ -5274,6 +5607,26 @@ mod tests {
                 && target.access == TargetAccessMode::Generated
         }));
 
+        let output: BoundTargetRef = "FEAT-DEPENDENCY-001#binding.generated/target.output"
+            .parse()
+            .unwrap();
+        let mut exact_request = source_request.clone();
+        exact_request.id = "WORK-GENERATED-EXACT".into();
+        exact_request.constraints.exact_scope = true;
+        exact_request.constraints.exact_generated_targets = vec![output.clone()];
+        exact_request.requested_targets.push(RequestedTarget {
+            reference: output,
+            criterion: None,
+            transition: TargetTransition::Readonly,
+        });
+        let exact_plan = plan(&exact_request, &workspace, &index, "rev-generated-exact")
+            .expect("exact generated replan");
+        assert_eq!(exact_plan.status, PlanStatus::Ready);
+        assert!(exact_plan.slices[0].readonly_context.iter().any(|target| {
+            target.reference.to_string() == "FEAT-DEPENDENCY-001#binding.generated/target.output"
+                && target.access == TargetAccessMode::Generated
+        }));
+
         let direct_request = WorkRequest {
             schema: WORK_REQUEST_SCHEMA.into(),
             id: "WORK-GENERATED-DIRECT".into(),
@@ -5294,9 +5647,10 @@ mod tests {
         let direct_plan =
             plan(&direct_request, &workspace, &index, "rev-generated").expect("direct plan");
         assert_eq!(direct_plan.status, PlanStatus::Blocked);
-        assert!(direct_plan.slices[0].blockers.iter().any(|diagnostic| {
-            diagnostic.rule_id == "SYU-WORK-013"
-                && diagnostic.message.contains("generated-from source")
+        assert!(direct_plan.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("outside the exact editable origin closure")
         }));
     }
 

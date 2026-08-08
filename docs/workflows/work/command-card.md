@@ -46,8 +46,8 @@ syu validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id
 syu task approve --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .
 syu task verify --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .
 syu task attempts list --workspace .
-syu task finalize preview --attempt <attempt-id> --workspace .
-syu task finalize apply --attempt <attempt-id> --workspace . --preview-token <preview-token>
+syu task finalize preview --attempt <attempt-id> --plan-digest <digest> --slice-id <slice-id> --workspace .
+syu task finalize apply --attempt <attempt-id> --plan-digest <digest> --slice-id <slice-id> --workspace . --preview-token <preview-token>
 ```
 
 ### Export one execution slice

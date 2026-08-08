@@ -7,7 +7,7 @@ Suggested sequence:
 ```bash
 cargo run --quiet -- validate .
 cargo run --quiet -- validate . --range origin/main...HEAD
-cargo run --quiet -- validate . --plan plan.yaml
+cargo run --quiet -- validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 cargo run --quiet -- workbench project --workspace . --format json
 ```
 
