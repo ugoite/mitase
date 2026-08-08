@@ -883,7 +883,7 @@ fn validate_completion_attempt_against_plan(
 
     match attempt.report.status {
         CompletionStatus::Complete => {
-            if attempt.report.blockers.first().is_some()
+            if !attempt.report.blockers.is_empty()
                 || attempt.report.checks.iter().any(|check| !check.passed)
                 || !matches!(
                     attempt.verification.status,
