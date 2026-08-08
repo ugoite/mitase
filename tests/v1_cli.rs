@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
 };
-use syu_work_model::WorkPlan;
+use syu_work_model::{CompletionAttempt, WorkPlan};
 use tempfile::tempdir;
 
 #[test]
@@ -303,6 +303,25 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["task", "approve", "--plan"])
+        .arg(&plan_path)
+        .args(["--plan-digest"])
+        .arg(&plan.canonical_digest)
+        .args(["--slice-id"])
+        .arg(&slice)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "approval failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
     if out_of_scope {
         fs::write(
             temp.path().join("src/unrelated.rs"),
@@ -318,9 +337,10 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
     }
 
     let receipt_path = artifacts.path().join("receipt.yaml");
+
     let output = Command::cargo_bin("syu")
         .unwrap()
-        .args(["work", "verify", "--plan"])
+        .args(["task", "verify", "--plan"])
         .arg(&plan_path)
         .args(["--plan-digest"])
         .arg(&plan.canonical_digest)
@@ -328,15 +348,43 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         .arg(&slice)
         .args(["--workspace"])
         .arg(temp.path())
-        .args(["--out"])
-        .arg(&receipt_path)
+        .args(["--format", "json"])
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "verification failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let attempt: CompletionAttempt =
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+            panic!(
+                "invalid attempt output: {error}; status={} stdout={} stderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
+    if out_of_scope {
+        assert!(
+            !output.status.success(),
+            "out-of-scope verification unexpectedly passed"
+        );
+        assert_eq!(
+            attempt.report.status,
+            syu_work_model::CompletionStatus::Blocked
+        );
+        assert!(!attempt.report.blockers.is_empty());
+        return false;
+    } else {
+        assert!(
+            output.status.success(),
+            "unexpected verification status: {}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert_eq!(
+            attempt.report.status,
+            syu_work_model::CompletionStatus::Complete
+        );
+        let receipt = attempt.receipt.as_ref().expect("complete attempt receipt");
+        fs::write(&receipt_path, serde_yaml::to_string(receipt).unwrap()).unwrap();
+    }
 
     let output = Command::cargo_bin("syu")
         .unwrap()
@@ -348,37 +396,20 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         .arg(&plan.canonical_digest)
         .args(["--slice-id"])
         .arg(&slice)
+        .args(["--attempt-id"])
+        .arg(&attempt.attempt_id)
         .args(["--receipt"])
         .arg(&receipt_path)
         .args(["--format", "json"])
         .output()
         .unwrap();
-    let report: serde_json::Value =
-        serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
-            panic!(
-                "invalid result output: {error}; status={} stdout={} stderr={}",
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            )
-        });
-    let result_is_valid = report["status"] == "complete";
-    if out_of_scope {
-        assert!(
-            !output.status.success(),
-            "out-of-scope result unexpectedly passed"
-        );
-        assert!(!report["blockers"].as_array().unwrap().is_empty());
-    } else {
-        assert!(
-            output.status.success(),
-            "unexpected result status: {}\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout)
-        );
-        assert!(result_is_valid, "in-scope result had error diagnostics");
-    }
-    output.status.success()
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        output.status.success(),
+        "result validation failed: {report}"
+    );
+    assert_eq!(report["status"], "complete");
+    true
 }
 
 #[test]

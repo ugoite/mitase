@@ -794,6 +794,10 @@ pub fn execute_verification(
             );
         }
         let arguments = canonical_runner_arguments(&configured.executable, arguments);
+        let test_identity = runner_ref.arguments.get("test").ok_or_else(|| {
+            anyhow::anyhow!("cargo verification claim must name the exact test identity")
+        })?;
+        require_exact_runner_filter(&configured.executable, &arguments, test_identity)?;
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
         if configured.executable == "cargo" && arguments.iter().any(|argument| argument == "-Z") {
@@ -1079,6 +1083,10 @@ pub fn validate_verification_receipt(
             .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
             .collect::<Vec<_>>();
         let arguments = canonical_runner_arguments(&configured.executable, arguments);
+        let test_identity = runner_ref.arguments.get("test").ok_or_else(|| {
+            anyhow::anyhow!("cargo verification claim must name the exact test identity")
+        })?;
+        require_exact_runner_filter(&configured.executable, &arguments, test_identity)?;
         let expected_command = std::iter::once(configured.executable.clone())
             .chain(arguments)
             .collect::<Vec<_>>();
@@ -1583,6 +1591,37 @@ fn ensure_exact_test_executed(
         identity: test_identity.clone(),
         matched_count,
     })
+}
+
+fn require_exact_runner_filter(
+    executable: &str,
+    arguments: &[String],
+    test_identity: &str,
+) -> Result<()> {
+    if executable != "cargo" {
+        return Ok(());
+    }
+    let separator = arguments
+        .iter()
+        .position(|argument| argument == "--")
+        .ok_or_else(|| {
+            anyhow::anyhow!("cargo verification runner must provide an exact harness filter")
+        })?;
+    if !arguments[..separator]
+        .iter()
+        .any(|argument| argument == test_identity)
+    {
+        bail!(
+            "cargo verification runner must pass the exact test identity {test_identity} before --"
+        );
+    }
+    if !arguments[separator + 1..]
+        .iter()
+        .any(|argument| argument == "--exact")
+    {
+        bail!("cargo verification runner must pass --exact to the test harness");
+    }
+    Ok(())
 }
 
 /// Cargo's human test output is not an authority boundary: a test can print a
