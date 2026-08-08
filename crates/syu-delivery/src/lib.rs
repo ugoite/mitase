@@ -1856,7 +1856,7 @@ mod tests {
     }
 
     #[test]
-    fn finalization_preview_requires_current_complete_attempt() {
+    fn finalization_preview_requires_complete_attempt() {
         let temp = tempfile::tempdir().unwrap();
         copy_dir(&workbench_fixture_root(), temp.path());
         let revision = init_git_repo(temp.path());
