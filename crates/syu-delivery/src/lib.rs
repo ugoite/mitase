@@ -973,25 +973,66 @@ fn validate_agent_event_schema(event: &AgentEvent) -> Result<()> {
 }
 
 fn validate_agent_event_references(store: &DeliveryStore, event: &AgentEvent) -> Result<()> {
-    if let AgentEventKind::VerificationRecorded { attempt_id } = &event.event {
-        let identity = ExecutionIdentity {
-            plan_digest: event.plan_digest.clone(),
-            slice_id: event.slice_id.clone(),
-        };
-        let attempt = store.attempt(&identity, attempt_id).with_context(|| {
-            format!(
-                "verification event references attempt {attempt_id} outside its execution identity"
-            )
-        })?;
-        if attempt.plan_digest != event.plan_digest || attempt.slice_id != event.slice_id {
-            bail!("verification event attempt does not match its execution identity");
+    match &event.event {
+        AgentEventKind::RunStarted { run } => {
+            validate_run_started_reference(store, event, run)?;
         }
-        let run = store.persisted_run_for_event(event)?;
-        if run.run_id != event.run_id
-            || run.plan_digest != event.plan_digest
-            || run.slice_id != event.slice_id
+        AgentEventKind::VerificationRecorded { attempt_id } => {
+            let identity = ExecutionIdentity {
+                plan_digest: event.plan_digest.clone(),
+                slice_id: event.slice_id.clone(),
+            };
+            let attempt = store.attempt(&identity, attempt_id).with_context(|| {
+                format!(
+                    "verification event references attempt {attempt_id} outside its execution identity"
+                )
+            })?;
+            if attempt.plan_digest != event.plan_digest || attempt.slice_id != event.slice_id {
+                bail!("verification event attempt does not match its execution identity");
+            }
+            let run = store.persisted_run_for_event(event)?;
+            if run.run_id != event.run_id
+                || run.plan_digest != event.plan_digest
+                || run.slice_id != event.slice_id
+            {
+                bail!("verification event run does not match its execution identity");
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_run_started_reference(
+    store: &DeliveryStore,
+    event: &AgentEvent,
+    run: &AgentRun,
+) -> Result<()> {
+    let identity = ExecutionIdentity {
+        plan_digest: event.plan_digest.clone(),
+        slice_id: event.slice_id.clone(),
+    };
+    let approval = store.approval(&identity).with_context(|| {
+        format!(
+            "agent run {} requires an approval for its plan and slice",
+            run.run_id
+        )
+    })?;
+    if run.approval_id != approval.approval_id
+        || run.plan_digest != identity.plan_digest
+        || run.slice_id != identity.slice_id
+    {
+        bail!("agent run does not reference its exact approval identity");
+    }
+    for path in json_files(&store.agent_events_dir())? {
+        let candidate: AgentEvent = read_json(&path)?;
+        validate_agent_event_schema(&candidate)?;
+        validate_agent_event_digest(&path, &candidate)?;
+        if candidate.event_id != event.event_id
+            && candidate.run_id == event.run_id
+            && matches!(&candidate.event, AgentEventKind::RunStarted { .. })
         {
-            bail!("verification event run does not match its execution identity");
+            bail!("agent run {} has duplicate RunStarted events", run.run_id);
         }
     }
     Ok(())
@@ -1003,7 +1044,7 @@ impl DeliveryStore {
             let candidate: AgentEvent = read_json(&path)?;
             validate_agent_event_schema(&candidate)?;
             validate_agent_event_digest(&path, &candidate)?;
-            let AgentEventKind::RunStarted { run } = candidate.event else {
+            let AgentEventKind::RunStarted { ref run } = candidate.event else {
                 continue;
             };
             if candidate.run_id != event.run_id
@@ -1013,14 +1054,8 @@ impl DeliveryStore {
             {
                 continue;
             }
-            let approval = self.approval(&ExecutionIdentity {
-                plan_digest: run.plan_digest.clone(),
-                slice_id: run.slice_id.clone(),
-            })?;
-            if approval.approval_id != run.approval_id {
-                bail!("persisted agent run does not reference its approval");
-            }
-            return Ok(*run);
+            validate_run_started_reference(self, &candidate, &run)?;
+            return Ok((**run).clone());
         }
         bail!(
             "verification event references run {} without a persisted RunStarted event",
@@ -1254,10 +1289,11 @@ mod tests {
     use super::*;
     use std::{fs, process::Command};
     use syu_work_model::{
-        AgentEvent, AgentEventKind, AgentPatchRecord, AgentPatchStatus, COMPLETION_ATTEMPT_SCHEMA,
-        COMPLETION_REPORT_SCHEMA, CompletionReport, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
-        VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult, VerificationAttemptStatus,
-        VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation, WorkOrigin, WorkRequest,
+        AgentEvent, AgentEventKind, AgentPatchRecord, AgentPatchStatus, AgentRun,
+        COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CONTEXT_PACK_SCHEMA, CompletionReport,
+        FinalizationReceipt, PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA,
+        VerificationAttemptResult, VerificationAttemptStatus, VerificationReceipt,
+        WORK_REQUEST_SCHEMA, WorkOperation, WorkOrigin, WorkRequest,
     };
 
     fn workbench_fixture_root() -> PathBuf {
@@ -1513,6 +1549,7 @@ mod tests {
         let plan = fixture_plan(temp.path(), &revision);
         let store = DeliveryStore::for_workspace(temp.path()).unwrap();
         let approval = fixture_approval(&workspace, &plan, &revision);
+        store.approve(&approval).unwrap();
 
         let mut invalid_approval = approval.clone();
         invalid_approval.schema = "syu/legacy-approval/v0".into();
@@ -1635,6 +1672,81 @@ mod tests {
             },
         };
         assert!(store.append_agent_event(&invalid_nested_patch).is_err());
+
+        let run_json = |approval_id: &str| {
+            serde_json::json!({
+                "schema": syu_work_model::AGENT_RUN_SCHEMA,
+                "run_id": "run-start-test",
+                "approval_id": approval_id,
+                "plan_digest": identity.plan_digest.clone(),
+                "slice_id": identity.slice_id.clone(),
+                "status": "active",
+                "created_at": "0",
+                "context": {
+                    "schema": "syu/agent-context/v1",
+                    "plan_digest": identity.plan_digest.clone(),
+                    "slice_id": identity.slice_id.clone(),
+                    "context": {
+                        "schema": CONTEXT_PACK_SCHEMA,
+                        "plan_digest": identity.plan_digest.clone(),
+                        "slice_id": identity.slice_id.clone(),
+                        "basis": {
+                            "revision": revision.clone(),
+                            "workspace_fingerprint": approval.workspace_fingerprint.clone(),
+                            "spec_fingerprint": "",
+                            "ownership_fingerprint": "",
+                            "readonly_fingerprint": ""
+                        },
+                        "instructions": { "goal": "", "non_goals": [] },
+                        "spec_context": [],
+                        "artifact_context": [],
+                        "completion": []
+                    },
+                    "budget": {
+                        "editable_files": 0,
+                        "editable_symbols": 0,
+                        "verification_targets": 0,
+                        "readonly_targets": 0,
+                        "total_bytes": 0
+                    },
+                    "editable_targets": [],
+                    "verification_targets": [],
+                    "readonly_targets": []
+                }
+            })
+        };
+        let invalid_run: AgentRun = serde_json::from_value(run_json("approval-other")).unwrap();
+        let invalid_start = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-invalid-run-start".into(),
+            event_digest: String::new(),
+            run_id: invalid_run.run_id.clone(),
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
+            created_at: "0".into(),
+            event: AgentEventKind::RunStarted {
+                run: Box::new(invalid_run),
+            },
+        };
+        assert!(store.append_agent_event(&invalid_start).is_err());
+
+        let valid_run: AgentRun = serde_json::from_value(run_json(&approval.approval_id)).unwrap();
+        let valid_start = AgentEvent {
+            schema: syu_work_model::AGENT_EVENT_SCHEMA.into(),
+            event_id: "event-valid-run-start".into(),
+            event_digest: String::new(),
+            run_id: valid_run.run_id.clone(),
+            plan_digest: identity.plan_digest.clone(),
+            slice_id: identity.slice_id.clone(),
+            created_at: "1".into(),
+            event: AgentEventKind::RunStarted {
+                run: Box::new(valid_run),
+            },
+        };
+        store.append_agent_event(&valid_start).unwrap();
+        let mut duplicate_start = valid_start;
+        duplicate_start.event_id = "event-duplicate-run-start".into();
+        assert!(store.append_agent_event(&duplicate_start).is_err());
     }
 
     #[test]

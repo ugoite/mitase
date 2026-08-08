@@ -994,21 +994,22 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
           candidate.origin?.kind === 'requirement-criterion'
           && candidate.origin.criterion === value.anchor
         );
-        if (!capability) return;
-        const createWork = button(t('items.create_work'), '→', () => state.runAction(
-          () => state.api.runJourneyAction(state.projection, {
-            action: 'create',
-            schema: capability.schema,
-            origin: capability.origin,
-          title: `${t('work.request.title_from_origin').replace('{anchor}', value.anchor)}`,
-          }),
-          () => { state.selectedSlice = null; state.go('work'); },
-        ), 'btn small');
-        createWork.setAttribute('data-create-work', '');
-        createWork.setAttribute('data-create-work-anchor', value.anchor);
-        createWork.disabled = !capability.enabled;
-        if (!capability.enabled) createWork.title = capability.disabled_message || '';
-        row.append(createWork);
+        if (capability) {
+          const createWork = button(t('items.create_work'), '→', () => state.runAction(
+            () => state.api.runJourneyAction(state.projection, {
+              action: 'create',
+              schema: capability.schema,
+              origin: capability.origin,
+              title: `${t('work.request.title_from_origin').replace('{anchor}', value.anchor)}`,
+            }),
+            () => { state.selectedSlice = null; state.go('work'); },
+          ), 'btn small');
+          createWork.setAttribute('data-create-work', '');
+          createWork.setAttribute('data-create-work-anchor', value.anchor);
+          createWork.disabled = !capability.enabled;
+          if (!capability.enabled) createWork.title = capability.disabled_message || '';
+          row.append(createWork);
+        }
       }
       if (!readOnly && kind === 'criterion') {
         const reviewSuggestions = button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {

@@ -5969,11 +5969,11 @@ fn split_candidate_blockers(
         .chain(slice.verification_targets.iter())
         .chain(slice.readonly_context.iter())
     {
-        if !active_exact_target(index, &target.reference) {
+        if !candidate_target_is_valid(index, target) {
             blockers.push(syu_diagnostics::Diagnostic::error(
                 "target-lifecycle",
                 format!(
-                    "candidate target {} is not an active exact artifact",
+                    "candidate target {} has no valid exact pre-state or planned lifecycle artifact",
                     target.reference
                 ),
                 target.resolved_path.clone(),
@@ -6034,7 +6034,22 @@ fn slice_targets_are_active(index: &SpecIndex, slice: &syu_work_model::Execution
         .iter()
         .chain(slice.verification_targets.iter())
         .chain(slice.readonly_context.iter())
-        .all(|target| active_exact_target(index, &target.reference))
+        .all(|target| candidate_target_is_valid(index, target))
+}
+
+fn candidate_target_is_valid(index: &SpecIndex, target: &syu_work_model::PlannedTarget) -> bool {
+    match target.lifecycle {
+        syu_work_model::TargetLifecycle::Stable => active_exact_target(index, &target.reference),
+        syu_work_model::TargetLifecycle::EnsurePresent => {
+            active_exact_target(index, &target.reference)
+                || (target.transition == TargetTransition::Add
+                    && index.target(&target.reference).is_some())
+        }
+        syu_work_model::TargetLifecycle::EnsureAbsent => {
+            target.transition == TargetTransition::Remove
+                && index.all_target_to_artifact.contains_key(&target.reference)
+        }
+    }
 }
 
 fn verification_covers_editable_targets(
@@ -6160,12 +6175,24 @@ fn origin_closure_is_complete(
     {
         return false;
     }
+    let planned_targets = slice
+        .editable_targets
+        .iter()
+        .chain(slice.verification_targets.iter())
+        .chain(slice.readonly_context.iter())
+        .map(|target| (&target.reference, target))
+        .collect::<BTreeMap<_, _>>();
     if closure
         .implementation_targets
         .iter()
         .chain(closure.verification_targets.iter())
         .chain(closure.readonly_targets.iter())
-        .any(|target| !active_exact_target(index, target))
+        .any(|target| {
+            !planned_targets
+                .get(target)
+                .is_some_and(|planned| candidate_target_is_valid(index, planned))
+                && !active_exact_target(index, target)
+        })
     {
         return false;
     }
@@ -7784,6 +7811,41 @@ mod tests {
             .get_or_init(|| Mutex::new(()))
             .lock()
             .await
+    }
+
+    #[test]
+    fn split_candidate_accepts_a_planned_remove_with_an_exact_pre_state_artifact() {
+        let reference: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.removed"
+            .parse()
+            .unwrap();
+        let mut index = SpecIndex::default();
+        index
+            .all_target_to_artifact
+            .insert(reference.clone(), "artifact-before-remove".into());
+        let target: syu_work_model::PlannedTarget = serde_json::from_value(serde_json::json!({
+            "ref": reference,
+            "transition": "remove",
+            "lifecycle": "ensure-absent",
+            "access": "editable",
+            "resolved_path": "src/removed.rs",
+            "resolved_selector": { "description": "removed", "symbols": ["removed"] },
+            "content_hash": "sha256:before",
+            "excerpt_hash": "sha256:excerpt",
+            "adapter": "rust",
+            "facet": "work",
+            "role": "implementation",
+            "byte_start": 0,
+            "byte_end": 20,
+            "line_start": 1,
+            "line_end": 1,
+            "budget_bytes": 20,
+            "reason": "remove the exact planned target"
+        }))
+        .expect("planned remove target");
+
+        assert!(candidate_target_is_valid(&index, &target));
+        index.all_target_to_artifact.clear();
+        assert!(!candidate_target_is_valid(&index, &target));
     }
 
     #[test]
