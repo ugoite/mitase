@@ -106,6 +106,11 @@ pub struct WorkConstraints {
     pub max_added_bytes_per_target: Option<usize>,
     #[serde(default)]
     pub max_added_lines_per_target: Option<usize>,
+    /// Internal v1 boundary used when a user selects one already-planned
+    /// execution slice. It prevents criterion-wide context expansion during
+    /// the canonical replan of that selection.
+    #[serde(default)]
+    pub exact_scope: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

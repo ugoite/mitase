@@ -1709,6 +1709,12 @@ fn build_requested_criterion_slice(
     let mut anchors = vec![criterion.clone()];
     let mut goal = request.title.clone();
     let requested_transitions = transition_map(requested_targets);
+    let exact_scope = request.constraints.exact_scope
+        || matches!(
+            request.origin,
+            WorkOrigin::FeatureImplementationBinding { .. }
+                | WorkOrigin::FeatureImplementationTarget { .. }
+        );
     for requested in requested_targets {
         let reference = requested.reference();
         let binding = index
@@ -1777,7 +1783,7 @@ fn build_requested_criterion_slice(
         .criterion_status
         .get(criterion)
         .is_none_or(|status| *status == ItemStatus::Implemented);
-    if criterion_is_implemented {
+    if criterion_is_implemented && !exact_scope {
         verification.extend(criterion_verification_targets(
             request,
             workspace,
@@ -1790,7 +1796,7 @@ fn build_requested_criterion_slice(
             &mut blockers,
         ));
     }
-    let implementations = if criterion_is_implemented {
+    let implementations = if criterion_is_implemented && !exact_scope {
         index
             .criteria_to_implementation_targets
             .get(criterion)
@@ -4018,6 +4024,111 @@ mod tests {
             ),
         )
         .expect("requirement spec");
+    }
+
+    #[test]
+    fn exact_scope_replan_keeps_one_candidate_boundary() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let mut feature = fs::read_to_string(&feature_path).expect("feature spec");
+        feature.push_str(concat!(
+            "      - id: impl-two\n",
+            "        role: implementation\n",
+            "        facet: frontend\n",
+            "        responsibility: Implement the second target.\n",
+            "        targets:\n",
+            "          - id: other\n",
+            "            adapter: rust\n",
+            "            path: src/other.rs\n",
+            "            selector: { kind: symbol, name: other }\n",
+            "            claims:\n",
+            "              - kind: satisfies\n",
+            "                criterion: REQ-TEST-001#criterion.test\n",
+        ));
+        fs::write(feature_path, feature).expect("two implementation targets");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("first target");
+        fs::write(tempdir.path().join("src/other.rs"), "pub fn other() {}\n")
+            .expect("second target");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-EXACT-SCOPE".into(),
+            title: "select one implementation boundary".into(),
+            operation: WorkOperation::Modify,
+            origin: WorkOrigin::RequirementCriterion {
+                criterion: criterion.clone(),
+            },
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![],
+        };
+        let candidate_plan =
+            plan(&request, &workspace, &index, "revision").expect("candidate plan");
+        assert_eq!(candidate_plan.status, PlanStatus::Ready);
+        assert_eq!(candidate_plan.slices.len(), 2);
+        let candidate = candidate_plan.slices.first().expect("candidate slice");
+
+        let requested_targets = candidate
+            .editable_targets
+            .iter()
+            .chain(candidate.verification_targets.iter())
+            .chain(candidate.readonly_context.iter())
+            .map(|target| RequestedTarget {
+                reference: target.reference.clone(),
+                criterion: Some(criterion.clone()),
+                transition: target.transition,
+            })
+            .collect();
+        let selected_request = WorkRequest {
+            constraints: WorkConstraints {
+                exact_scope: true,
+                max_slices: Some(1),
+                ..request.constraints.clone()
+            },
+            requested_targets,
+            ..request
+        };
+        let selected_plan =
+            plan(&selected_request, &workspace, &index, "revision").expect("selected plan");
+        assert_eq!(selected_plan.status, PlanStatus::Ready);
+        assert_eq!(selected_plan.slices.len(), 1);
+        assert_eq!(
+            selected_plan.slices[0]
+                .editable_targets
+                .iter()
+                .map(|target| target.reference.clone())
+                .collect::<Vec<_>>(),
+            candidate
+                .editable_targets
+                .iter()
+                .map(|target| target.reference.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            selected_plan.slices[0]
+                .readonly_context
+                .iter()
+                .map(|target| target.reference.clone())
+                .collect::<Vec<_>>(),
+            candidate
+                .readonly_context
+                .iter()
+                .map(|target| target.reference.clone())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            selected_plan.slices[0]
+                .editable_targets
+                .iter()
+                .all(|target| target.reference == candidate.editable_targets[0].reference)
+        );
     }
 
     #[test]

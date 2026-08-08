@@ -4050,6 +4050,7 @@ fn select_slice(
         .editable_targets
         .iter()
         .chain(candidate.verification_targets.iter())
+        .chain(candidate.readonly_context.iter())
         .map(|target| RequestedTarget {
             reference: target.reference.clone(),
             criterion: Some(request.origin.criterion().clone()),
@@ -4100,6 +4101,7 @@ fn select_slice(
     let mut selected_request = request;
     selected_request.requested_targets = requested_targets;
     selected_request.constraints.max_slices = Some(1);
+    selected_request.constraints.exact_scope = true;
     let replanned = syu_planner::plan(
         &selected_request,
         &snapshot.workspace,
@@ -4127,6 +4129,24 @@ fn select_slice(
         ));
     }
     let returned_slice_id = replanned.slices[0].id.clone();
+    let selected = &replanned.slices[0];
+    if !target_boundaries_match(&selected.editable_targets, &candidate.editable_targets)
+        || !target_boundaries_match(
+            &selected.verification_targets,
+            &candidate.verification_targets,
+        )
+        || !target_boundaries_match(&selected.readonly_context, &candidate.readonly_context)
+        || selected.contracts != candidate.contracts
+    {
+        return Err(work_action_error(
+            StatusCode::CONFLICT,
+            "select_slice",
+            "scope-drift",
+            "the selected execution boundary changed during canonical replan",
+            Some(candidate_plan_digest.to_owned()),
+            vec![slice_nearest_entry(candidate, candidate_plan_digest)],
+        ));
+    }
     let mut session = service
         .session
         .write()
@@ -4151,6 +4171,26 @@ fn select_slice(
     session.context_pack = None;
     session.last_validation = None;
     Ok(())
+}
+
+fn target_boundaries_match(
+    selected: &[syu_work_model::PlannedTarget],
+    candidate: &[syu_work_model::PlannedTarget],
+) -> bool {
+    if selected.len() != candidate.len() {
+        return false;
+    }
+    selected.iter().zip(candidate).all(|(selected, candidate)| {
+        let mut selected = selected.clone();
+        let mut candidate = candidate.clone();
+        // The canonical planner may describe the same readonly target from
+        // its explicit request or from criterion context. Provenance text is
+        // explanatory; the execution boundary is the exact target identity,
+        // mode, transition, selector, and content basis.
+        selected.reason.clear();
+        candidate.reason.clear();
+        selected == candidate
+    })
 }
 
 fn slice_nearest(plan: &WorkPlan, candidate_plan_digest: &str) -> Vec<serde_json::Value> {
@@ -11956,6 +11996,18 @@ mod tests {
                         .any(|planned| planned.reference == requested.reference)
                 })
         );
+        assert!(target_boundaries_match(
+            &selected_plan.slices[0].editable_targets,
+            &candidate_slice.editable_targets
+        ));
+        assert!(target_boundaries_match(
+            &selected_plan.slices[0].verification_targets,
+            &candidate_slice.verification_targets
+        ));
+        assert!(target_boundaries_match(
+            &selected_plan.slices[0].readonly_context,
+            &candidate_slice.readonly_context
+        ));
     }
 
     #[test]
