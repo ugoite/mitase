@@ -5,4 +5,5 @@ operation: modify
 origin:
   kind: requirement-criterion
   criterion: REQ-AUTH-001#criterion.invalid-credentials
+requested_targets: []
 constraints: { include_facets: [ui, backend, api], exclude_paths: [], max_slices: 3 }
