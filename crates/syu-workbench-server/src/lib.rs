@@ -11620,10 +11620,10 @@ mod tests {
         }
         let (basis, csrf, _) = projection_and_basis(app).await;
         let response = json_mutation(app, Method::POST, "/api/work/plan", &csrf, &basis).await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let plan: WorkPlan =
-            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
-                .expect("lifecycle plan");
+        let status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+        let plan: WorkPlan = serde_json::from_slice(&body).expect("lifecycle plan");
         assert_eq!(plan.status, syu_work_model::PlanStatus::Ready, "{plan:?}");
         let slice = plan
             .slices
@@ -12570,7 +12570,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-v1 cutover: planned Feature lifecycle origins are rejected before agent execution"]
     async fn workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -12611,6 +12610,18 @@ mod tests {
         for (target_id, transition, path, changed_content, expected_blocker) in cases {
             let temp = tempfile::tempdir().expect("lifecycle precondition fixture tempdir");
             copy_fixture_tree(&fixture, temp.path());
+            // Exercise agent-time stale-state rejection after the request has
+            // been admitted. The fixture features are advisory by default,
+            // so promote them only in this isolated test workspace.
+            let feature_path = temp.path().join("spec/feature.yaml");
+            let feature = fs::read_to_string(&feature_path).expect("lifecycle feature fixture");
+            fs::write(
+                feature_path,
+                feature
+                    .replace("status: planned", "status: implemented")
+                    .replace("lifecycle: absent", "lifecycle: present"),
+            )
+            .expect("activate lifecycle feature fixture");
             initialize_fixture_git(temp.path());
             let server = WorkbenchServer::new(temp.path().to_path_buf());
             let app = server.router();
