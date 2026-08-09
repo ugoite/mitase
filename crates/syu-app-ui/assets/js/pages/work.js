@@ -1,11 +1,6 @@
 import { localizeEnum, localizeSpecificationTitle, translate } from '../i18n.js';
 import { renderDiff } from '../components/diff.js';
-import {
-  renderEditor,
-  renderSourceDetail,
-  renderSpecificationDetail,
-  renderTargetSuggestions,
-} from './specifications.js';
+import { renderSpecificationDetail } from './specifications.js';
 import { renderReadinessPage } from './readiness.js';
 import { renderDiagnostics } from './diagnostics.js';
 
@@ -237,7 +232,6 @@ function renderNoMatchRecovery(root, state) {
   recovery.append(choices);
   root.append(recovery);
 }
-
 function run(state, action) {
   return state.runAction(
     () => state.api.runJourneyAction(state.projection, action),
@@ -253,6 +247,54 @@ function run(state, action) {
   );
 }
 
+function renderJourneyDiscovery(root, state) {
+  const card = element('section', 'journey-discovery card');
+  card.append(element('h2', null, t('journey.discovery.title')));
+  card.append(element('p', null, t('journey.discovery.explanation')));
+  const form = document.createElement('form');
+  form.className = 'journey-discovery-form';
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.required = true;
+  input.value = state.journeyQuery || '';
+  input.placeholder = t('journey.discovery.placeholder');
+  input.setAttribute('aria-label', t('journey.discovery.input'));
+  const submit = button(t('journey.discovery.search'), () => form.requestSubmit(), true, '⌕');
+  submit.type = 'submit';
+  form.append(input, submit);
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    discoverJourneyCandidates(state, input.value.trim());
+  });
+  card.append(form);
+  if (state.journeyDiscoveryLoading) {
+    card.append(element('p', 'empty-state', t('common.loading')));
+  } else if (Array.isArray(state.journeyCandidates) && state.journeyCandidates.length) {
+    const list = element('div', 'journey-candidate-list');
+    journeyAnchorCandidates(state).forEach(({ item, criterion, candidate }) => {
+      const row = button(`${item.id} · ${criterion.statement}`, () => {
+        state.journeyContextItemId = item.id;
+        state.journeyCandidateAnchor = criterion.anchor;
+        state.journeyIntentSearch = false;
+        state.journeySpecificationExpanded = true;
+        state.specificationTraceNode = null;
+        state.specificationTrace = null;
+        resetContextSource(state);
+        syncWorkSpecificationLocation(state);
+        state.render();
+      }, false, '◈');
+      row.classList.add('journey-candidate');
+      const evidence = candidateEvidence(candidate);
+      if (evidence.length) row.title = evidence.map(value => value.detail || value).join(' · ');
+      list.append(row);
+    });
+    card.append(list);
+  } else if (Array.isArray(state.journeyCandidates)) {
+    renderNoMatchRecovery(card, state);
+  }
+  root.append(card);
+}
+
 function dispatchJourneyAction(state, action) {
   if (action.action === 'choose_specification') {
     state.go('specifications');
@@ -263,90 +305,15 @@ function dispatchJourneyAction(state, action) {
 
 function renderStart(root, journey, state) {
   const action = journey?.primary_action;
-  if (journey?.current_step === 'select_specification' && action && !state.journeyIntentSearch) {
-    const empty = element('section', 'context-empty-state work-start');
-    empty.append(
-      element('span', 'context-empty-icon', '◈'),
-      element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
-      element('p', null, actionText(action, 'explanation')),
-      button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
-      button(t('journey.action.describe_intent'), () => {
-        state.journeyIntentSearch = true;
-        state.render();
-      }, false, '⌕'),
-    );
-    root.append(empty);
-    return;
-  }
-  root.append(element('p', 'journey-copy', t('journey.intro')));
-  const form = element('form', 'journey-intake');
-  const label = element('label', null, t('journey.prompt'));
-  const input = document.createElement('textarea');
-  input.rows = 3;
-  input.value = state.journeyQuery || '';
-  input.placeholder = t('journey.placeholder');
-  label.append(input);
-  form.append(label);
-  form.append(button(t('journey.find'), event => {
-    event.preventDefault();
-    discoverJourneyCandidates(state, input.value.trim());
-  }, true, '⌕'));
-  form.addEventListener('submit', event => event.preventDefault());
-  root.append(form);
-  if (state.journeyAuthoringNotice) {
-    root.append(element('p', 'status-message status-success', state.journeyAuthoringNotice));
-  }
-  if (!String(state.journeyQuery || '').trim()) return;
-  if (state.journeyDiscoveryLoading) {
-    root.append(element('p', 'empty-state', t('common.loading')));
-    return;
-  }
-  if (state.journeyDiscoveryError) {
-    root.append(element('p', 'status-message status-error', state.journeyDiscoveryError));
-    return;
-  }
-  if (state.journeyCandidates === null) return;
-  const candidates = journeyAnchorCandidates(state);
-  root.append(element('h2', 'journey-section-title', t('journey.choose')));
-  if (!candidates.length && !state.targetSuggestions) {
-    state.journeyCandidateAnchor = null;
-    renderNoMatchRecovery(root, state);
-    return;
-  }
-  candidates.slice(0, 6).forEach(({ candidate, item, criterion }) => {
-    const selected = criterion.anchor === state.journeyCandidateAnchor;
-    const card = element('article', `journey-card${selected ? ' selected' : ''}`);
-    card.append(element('h3', null, item.title));
-    const meta = element('div', 'meta-line');
-    meta.append(element(
-      'span',
-      `chip status-component status-${item.status || 'planned'}`,
-      localizeEnum('status', item.status || item.kind),
-    ));
-    card.append(meta);
-    card.append(element('p', 'path', criterion.anchor));
-    const rationale = element('ul', 'compact-list');
-    candidateEvidence(candidate).forEach(entry => {
-      rationale.append(element('li', null, `${entry.source}: ${entry.detail}`));
-    });
-    card.append(rationale);
-    card.append(button(t('journey.preview'), () => {
-      state.journeyCandidateAnchor = criterion.anchor;
-      state.targetSuggestions = null;
-      state.targetSuggestionSelection = [];
-      state.journeyContextTab = 'specification';
-      state.render();
-    }, selected, '◈'));
-    root.append(card);
-  });
-  if (state.journeyTargetSuggestionsLoading) {
-    root.append(element('p', 'empty-state', t('common.loading')));
-  } else if (state.specificationError) {
-    root.append(element('p', 'status-message status-error', state.specificationError));
-  } else if (state.targetSuggestions) {
-    root.append(element('h2', 'journey-section-title', t('items.suggestions.title')));
-    renderTargetSuggestions(root, state);
-}
+  if (!action) return;
+  const empty = element('section', 'context-empty-state work-start');
+  empty.append(
+    element('span', 'context-empty-icon', '◈'),
+    element('h2', null, journey.title_key ? t(journey.title_key) : journey.title),
+    element('p', null, actionText(action, 'explanation')),
+    button(actionText(action, 'label'), () => dispatchJourneyAction(state, action), true, '→'),
+  );
+  root.append(empty);
 }
 
 function progressIcon(status) {
@@ -602,6 +569,60 @@ function resetContextSource(state) {
   state.specificationSourceFull = false;
 }
 
+function syncWorkSpecificationLocation(state, push = true) {
+  const parameters = new URLSearchParams(location.search);
+  parameters.set('page', 'work');
+  // Work has its own detail namespace. Do not leave a Specifications deep
+  // link active alongside the Work context when a related item is opened.
+  ['item', 'detailTab', 'node', 'traceMode', 'depth', 'specificationsTab'].forEach(key => parameters.delete(key));
+  if (state.journeyContextItemId) parameters.set('workItem', state.journeyContextItemId);
+  else parameters.delete('workItem');
+  if (state.specificationDetailTab) parameters.set('workDetailTab', state.specificationDetailTab);
+  if (state.specificationTraceNode) parameters.set('workNode', state.specificationTraceNode);
+  else parameters.delete('workNode');
+  if (state.specificationTraceMode === 'exact') parameters.set('workTraceMode', 'exact');
+  else parameters.delete('workTraceMode');
+  if (state.specificationTraceDepth > 1) parameters.set('workDepth', String(state.specificationTraceDepth));
+  else parameters.delete('workDepth');
+  const url = `?${parameters.toString()}`;
+  if (push) history.pushState({}, '', url); else history.replaceState({}, '', url);
+}
+
+function workSpecificationWorkspaceAdapter(state) {
+  return {
+    getSelectedItem: () => state.journeyContextItemId,
+    setSelectedItem: itemId => {
+      if (itemId === state.journeyContextItemId) return;
+      if (state.journeyContextItemId) state.journeyContextHistory.push(state.journeyContextItemId);
+      state.journeyContextItemId = itemId;
+      state.specificationTraceNode = null;
+      state.specificationTrace = null;
+      resetContextSource(state);
+      syncWorkSpecificationLocation(state);
+      state.render();
+    },
+    getSelectedNode: () => state.specificationTraceNode,
+    setSelectedNode: nodeId => {
+      state.specificationTraceNode = nodeId;
+      syncWorkSpecificationLocation(state);
+    },
+    openTarget: target => {
+      state.journeyContextTarget = target;
+      state.specificationTraceNode = target.reference;
+      state.specificationSourceTarget = target;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
+      syncWorkSpecificationLocation(state);
+      state.render();
+    },
+    closeTarget: () => {
+      resetContextSource(state);
+      state.specificationTraceNode = null;
+    },
+    syncLocation: (nextState, push = true) => syncWorkSpecificationLocation(nextState, push),
+  };
+}
+
 function renderContextTabs(root, state, hasScope, hasWorkInsights) {
   const tabs = element('div', 'journey-context-tabs');
   const addTab = (id, label, icon) => {
@@ -672,9 +693,13 @@ function renderScopeDetail(root, journey, state, work) {
     );
     targetButton.addEventListener('click', () => {
       state.journeyContextTarget = target;
+      state.journeyContextTab = 'specification';
+      state.specificationTraceNode = target.reference;
       state.specificationSourceTarget = target;
       state.specificationSource = null;
       state.specificationSourceFull = false;
+      state.journeySpecificationExpanded = true;
+      syncWorkSpecificationLocation(state);
       state.render();
     });
     targetList.append(targetButton);
@@ -686,52 +711,40 @@ function renderScopeDetail(root, journey, state, work) {
 
 function renderSpecification(root, workspace, journey, state, work) {
   const specification = journey?.related_specification;
-  const specificationAnchor = journey?.advanced?.specification_anchor
-    || state.journeyCandidateAnchor
-    || null;
-  const createdItem = state.journeyCreatedSpecification
-    ? (state.projection.specifications?.specifications || [])
-      .find(item => item.id === state.journeyCreatedSpecification)
-    : null;
-  const candidates = String(state.journeyQuery || '').trim()
-    ? journeyAnchorCandidates(state)
-    : [];
-  const candidate = candidates.find(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)
-    || null;
-  const contextAnchor = specificationAnchor || candidate?.criterion.anchor || null;
+  const specificationAnchor = journey?.advanced?.specification_anchor || null;
+  const contextAnchor = specificationAnchor;
   if (state.journeySpecificationAnchor !== specificationAnchor) {
     state.journeySpecificationAnchor = specificationAnchor;
     state.journeySpecificationExpanded = false;
     state.journeyContextTab = 'specification';
-    state.journeyContextItemId = contextAnchor?.split('#')[0] || null;
+    state.relatedKind = 'specification';
+    if (state.journeyRouteItemId !== undefined) {
+      state.journeyContextItemId = state.journeyRouteItemId;
+      state.journeyRouteItemId = undefined;
+    } else {
+      state.journeyContextItemId = contextAnchor?.split('#')[0] || null;
+    }
     state.journeyContextHistory = [];
     resetContextSource(state);
   }
-  if (!specification && candidate && state.journeyContextItemId !== candidate.item.id) {
-    state.journeyContextItemId = candidate.item.id;
-    state.journeyContextHistory = [];
-    resetContextSource(state);
-  }
-  if (!specification && !candidate && createdItem && state.journeyContextItemId !== createdItem.id) {
-    state.journeyContextItemId = createdItem.id;
-    state.journeyContextHistory = [];
-    resetContextSource(state);
-  }
-  const hasContext = Boolean(specification || candidate || createdItem);
+  const hasContext = Boolean(specification);
   const hasScope = Boolean(journey?.approved_scope && work?.plan?.slices?.length);
   const hasWorkInsights = Boolean(work?.request);
+  const hasDiscovery = Boolean(state.journeyIntentSearch || journey?.current_step === 'select_specification');
   if (!hasScope && state.journeyContextTab === 'scope') state.journeyContextTab = 'specification';
-  const hasPanel = hasContext || hasWorkInsights;
+  const hasPanel = hasContext || hasWorkInsights || hasDiscovery;
   root.hidden = !hasPanel;
   workspace?.classList.toggle('has-specification', hasPanel);
   root.replaceChildren();
   if (!hasPanel) return;
+  if (hasDiscovery && !specification && !state.journeyContextItemId) {
+    renderJourneyDiscovery(root, state);
+    return;
+  }
 
   const header = element('header', 'journey-specification-head');
   const heading = element('div');
   heading.append(element('p', 'eyebrow', t('journey.context')));
-  if (candidate && !specification) heading.append(element('h2', null, t('journey.specification.preview')));
-  if (createdItem && !specification && !candidate) heading.append(element('h2', null, t('journey.specification.created')));
   header.append(heading);
   const toggle = element('button', 'journey-specification-toggle');
   toggle.type = 'button';
@@ -780,15 +793,7 @@ function renderSpecification(root, workspace, journey, state, work) {
     root.append(body);
     return;
   }
-  if (state.journeyContextTarget) {
-    state.specificationSourceTarget = state.journeyContextTarget;
-    renderSourceDetail(body, state, state.journeyContextTarget, () => {
-      resetContextSource(state);
-      state.render();
-    });
-    root.append(body);
-    return;
-  }
+  if (state.journeyContextTarget) state.specificationSourceTarget = state.journeyContextTarget;
   if (state.journeyContextTab === 'scope') {
     renderScopeDetail(body, journey, state, work);
     root.append(body);
@@ -796,7 +801,6 @@ function renderSpecification(root, workspace, journey, state, work) {
   }
   const items = state.projection.specifications?.specifications || [];
   const selected = items.find(item => item.id === state.journeyContextItemId)
-    || createdItem
     || items.find(item => item.id === contextAnchor?.split('#')[0]);
   if (!selected) {
     body.append(element('p', 'context-empty', t('journey.specification.empty')));
@@ -809,37 +813,21 @@ function renderSpecification(root, workspace, journey, state, work) {
       state.journeyContextTarget = null;
       state.specificationSourceTarget = null;
       state.specificationSource = null;
+      state.specificationTraceNode = null;
+      syncWorkSpecificationLocation(state);
       state.render();
     }, false, '←'));
   }
+  const workspaceAdapter = workSpecificationWorkspaceAdapter(state);
   renderSpecificationDetail(body, state, selected, {
     readOnly: true,
     hideHeading: false,
     highlightedAnchor: contextAnchor,
-    action: candidate && !specification ? {
-      label: t('items.suggestions.review'),
-      icon: '◎',
-      onClick: () => reviewJourneyTargetSuggestions(state, candidate.criterion.anchor),
-    } : null,
-    onItem: itemId => {
-      if (itemId === state.journeyContextItemId) return;
-      state.journeyContextHistory.push(state.journeyContextItemId);
-      state.journeyContextItemId = itemId;
-      state.render();
-    },
-    onTarget: target => {
-      state.journeyContextTarget = target;
-      state.specificationSourceTarget = target;
-      state.specificationSource = null;
-      state.specificationSourceFull = false;
-      state.render();
-    },
+    workspaceAdapter,
+    onSourceClose: workspaceAdapter.closeTarget,
   });
-  body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
+  body.querySelector('.specification-detail-head h2')?.setAttribute('data-work-specification-title', '');
   body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
-  if (candidate && !specification) {
-    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
-  }
   root.append(body);
 }
 
@@ -931,10 +919,7 @@ export function renderWork(work, state) {
   if (!root) return;
   const content = element('div', 'journey');
   if (state.error) content.append(element('p', 'status-message status-error', state.error.message));
-  if (state.specificationEditor?.journey) renderEditor(content, state);
-  else if (!journey || journey.current_step === 'describe' || journey.current_step === 'select_specification') {
-    renderStart(content, journey, state);
-  }
+  if (!journey || journey.current_step === 'select_specification') renderStart(content, journey, state);
   else renderJourney(content, journey, state, work);
   replace(root, content);
   if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state, work);

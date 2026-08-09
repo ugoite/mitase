@@ -34,6 +34,19 @@ description: "Generated reference for docs/syu/features/workbench/target-suggest
       - **role**: implementation
       - **facet**: planning
       - **responsibility**: Derive, review, reject, and approve exact target candidates without silently widening executable scope.
+      - **owns**:
+        - **id**: planner-implemented-missing-target-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::tests::implemented_missing_exact_target_is_not_reframed_as_add
+        - **id**: server-target-suggestions-api
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::api_target_suggestions
       - **targets**:
         - **id**: rank-candidates
           - **adapter**: rust
@@ -80,6 +93,15 @@ features:
     role: implementation
     facet: planning
     responsibility: Derive, review, reject, and approve exact target candidates without silently widening executable scope.
+    owns:
+    - id: planner-implemented-missing-target-test
+      adapter: rust
+      path: crates/syu-planner/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::implemented_missing_exact_target_is_not_reframed_as_add' }
+    - id: server-target-suggestions-api
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::api_target_suggestions' }
     targets:
     - id: rank-candidates
       adapter: rust
