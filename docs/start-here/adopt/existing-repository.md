@@ -21,7 +21,7 @@ validation:
   preset: agent-ready
   readiness:
     target: off
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
   changed: { require_owned_changes: false, require_plan: false }
 verification:
   runners:
@@ -60,7 +60,7 @@ validation:
         - criterion: REQ-FIRST-001#criterion.behavior
           level: work-ready
       changed_units: false
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
   changed:
     require_owned_changes: true
     require_plan: true

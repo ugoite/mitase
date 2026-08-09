@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
 
 - **id**: FEAT-WORKBENCH-SCOPED-AGENT-001
   - **title**: Scoped agent evidence
-  - **summary**: Expose the approved lifecycle-aware agent boundary and append-only execution evidence in Workbench.
+  - **summary**: Expose the approved lifecycle-aware agent boundary and append-only execution evidence under an exact plan-and-slice identity.
   - **status**: implemented
   - **bindings**:
     - **id**: agent-api
@@ -82,7 +82,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-SCOPED-AGENT-001
   title: Scoped agent evidence
-  summary: Expose the approved lifecycle-aware agent boundary and append-only execution evidence in Workbench.
+  summary: Expose the approved lifecycle-aware agent boundary and append-only execution evidence under an exact plan-and-slice identity.
   status: implemented
   bindings:
   - id: agent-api

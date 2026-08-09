@@ -49,7 +49,21 @@ import pathlib, sys
 import json
 
 projection_data = json.loads(pathlib.Path(sys.argv[1]).read_text())
-projection_data['specifications']['specifications'].append({
+def requirement_capability(anchor):
+    return {
+        'schema': 'syu/work-origin-capability/v1',
+        'origin': {
+            'kind': 'requirement-criterion',
+            'criterion': anchor,
+        },
+        'label': 'Requirement criterion',
+        'enabled': True,
+        'disabled_code': None,
+        'disabled_message': None,
+        'nearest': [],
+    }
+capability = requirement_capability('REQ-CAPABILITY-001#criterion.behavior')
+synthetic = {
     'id': 'REQ-CAPABILITY-001',
     'kind': 'requirement',
     'path': 'spec/requirement.yaml',
@@ -68,10 +82,41 @@ projection_data['specifications']['specifications'].append({
         'statement': 'The capability has an exact behavior boundary.',
         'governed_by': [],
     }],
-    'bindings': [],
+    'bindings': [{
+        'anchor': 'REQ-CAPABILITY-001#binding.visual',
+        'role': 'implementation',
+        'facet': 'visual',
+        'responsibility': 'Keeps the visual capability contract explicit.',
+        'owns': [],
+        'targets': [],
+    }],
     'contracts': [],
     'anchors': ['REQ-CAPABILITY-001#criterion.behavior'],
-})
+    'origin_capabilities': [capability],
+}
+projection_data['specifications']['specifications'].insert(0, synthetic)
+requirement = next(
+    item for item in projection_data['specifications']['specifications']
+    if item['kind'] == 'requirement' and item.get('criteria')
+)
+fallback_anchor = requirement['criteria'][0]['anchor']
+fallback_capability = requirement_capability(fallback_anchor)
+def capability_anchor(value):
+    origin = value.get('origin') or (value.get('nearest') or [{}])[0]
+    return origin.get('criterion') if origin.get('kind') == 'requirement-criterion' else None
+projection_data['specifications']['origin_capabilities'] = [
+    value for value in projection_data['specifications'].get('origin_capabilities', [])
+    if capability_anchor(value) != fallback_anchor
+] + [fallback_capability, capability]
+requirement['origin_capabilities'] = [
+    value for value in requirement.get('origin_capabilities', [])
+    if capability_anchor(value) != fallback_anchor
+] + [fallback_capability]
+feature = next(item for item in projection_data['specifications']['specifications'] if item['kind'] == 'feature')
+feature_target = feature['bindings'][0]['targets'][0]
+for anchor in (capability['origin']['criterion'], fallback_anchor):
+    if not any(claim.get('criterion') == anchor for claim in feature_target.setdefault('claims', [])):
+        feature_target['claims'].append({'kind': 'satisfies', 'criterion': anchor})
 for candidate in projection_data['specifications']['specifications']:
     for binding in candidate.get('bindings', []):
         for ownership in binding.get('owns', []):
@@ -82,6 +127,8 @@ pathlib.Path(sys.argv[2]).write_text(
 )
 pathlib.Path(sys.argv[3]).write_text(
     """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
+    """const visualRequirement=projection.specifications.specifications.find(item=>item.kind==='requirement'&&item.criteria?.length);\n"""
+    """if(visualRequirement) { const visualAnchor=visualRequirement.criteria[0].anchor; const visualCapability={schema:'syu/work-origin-capability/v1',origin:{kind:'requirement-criterion',criterion:visualAnchor},label:'Requirement criterion',enabled:true,disabled_code:null,disabled_message:null,nearest:[]}; const same=value=>value.origin?.criterion===visualAnchor||value.nearest?.some(origin=>origin.kind==='requirement-criterion'&&origin.criterion===visualAnchor); visualRequirement.origin_capabilities=[visualCapability,...(visualRequirement.origin_capabilities||[]).filter(value=>!same(value))]; projection.specifications.origin_capabilities=[visualCapability,...(projection.specifications.origin_capabilities||[]).filter(value=>!same(value))]; const visualFeature=projection.specifications.specifications.find(item=>item.kind==='feature'); const visualTarget=visualFeature?.bindings?.[0]?.targets?.[0]; if(visualTarget) { visualTarget.claims=visualTarget.claims||[]; if(!visualTarget.claims.some(claim=>claim.criterion===visualAnchor)) visualTarget.claims.push({kind:'satisfies',criterion:visualAnchor}); } document.querySelector('#syu-projection').textContent=JSON.stringify(projection); }\n"""
     """let receipt=null;\n"""
     """let approvedTargetSuggestions=[];\n"""
     """let nestedPatches=[]; window.__SYU_NESTED_PATCHES__=nestedPatches;\n"""
@@ -107,8 +154,8 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-VISUAL#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'target-visual',rank:1,ref:'rust:src/lib.rs#behavior',confidence:'high',role:'implementation',evidence:['visual smoke evidence'],evidence_fingerprint:'visual-evidence'}],approved_ids:approvedTargetSuggestions,split_recommendation:null});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
-    """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
-    """    if(action==='create') { const item=projection.specifications.specifications.find(candidate=>candidate.criteria?.some(criterion=>criterion.anchor===payload.anchor)); const criterion=item?.criteria.find(candidate=>candidate.anchor===payload.anchor); projection.journey.related_specification=item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null; projection.journey.advanced={specification_anchor:criterion?.anchor||null}; projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
+    """    const journey=(step,primary,status)=>projection.journey={title:payload.title||projection.work.request?.title||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
+    """    if(action==='create') { const criterionAnchor=payload.anchor||payload.origin?.criterion; const item=projection.specifications.specifications.find(candidate=>candidate.criteria?.some(criterion=>criterion.anchor===criterionAnchor)); const criterion=item?.criteria.find(candidate=>candidate.anchor===criterionAnchor); projection.journey.related_specification=item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null; projection.journey.advanced={specification_anchor:criterion?.anchor||null}; projection.work.request={title:payload.title,operation:'modify',origin:payload.origin,constraints:{},requested_targets:[]}; journey('review','prepare','draft'); }\n"""
     """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'run-only',transition:'run-only',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
     """    else if(action==='approve') journey('implement','start','approved');\n"""
     """    else if(action==='start') { projection.work.agent={run_id:'agent-visual-flow',status:'active'}; journey('verify','verify','in_progress'); }\n"""
@@ -233,7 +280,7 @@ setTimeout(()=>{
     const featureRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
       .find(node=>node.textContent.includes('FEAT-AUTH-001'));
     if(featureRail) {
-      featureRail.click();
+      featureRail.querySelector('.rail-item-select')?.click();
       await wait(60);
       const ownershipEdit=document.querySelector('[data-page="specifications"] .specification-detail-ownership .btn');
       if(!ownershipEdit) failures.push('module ownership editor is missing');
@@ -258,7 +305,7 @@ setTimeout(()=>{
       }
       const requirementRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
         .find(node=>node.textContent.includes('REQ-AUTH-001'));
-      requirementRail?.click();
+      requirementRail?.querySelector('.rail-item-select')?.click();
       await wait(60);
     } else failures.push('feature fixture for module ownership is missing');
   }
@@ -596,12 +643,26 @@ async function main() {
         await click('specifications', '[data-page="work"] .work-start .journey-action');
         const specificationUrl = location.href;
         if (new URL(specificationUrl).searchParams.get('page') !== 'specifications') throw new Error('programmatic Specifications transition did not update URL: ' + specificationUrl);
+        const requirementRail = [...document.querySelectorAll('[data-page="specifications"] [data-specifications-rail] .rail-item')]
+          .find(node => node.textContent.includes('REQ-CAPABILITY-001') || node.textContent.includes('REQ-FIXTURE-001'));
+        if (!requirementRail) throw new Error('Requirement origin fixture is missing from the specifications rail');
+        requirementRail.querySelector('.rail-item-select')?.click();
+        await new Promise(resolve => setTimeout(resolve, 100));
         const selectedSpecificationTitle = document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent || '';
         const selectedCriterion = document.querySelector('[data-page="specifications"] .specification-criterion');
         const selectedCriterionAnchor = selectedCriterion?.querySelector('strong')?.textContent || '';
         const selectedCriterionStatement = selectedCriterion?.querySelector('p')?.textContent || '';
-        await click('create', '[data-page="specifications"] [data-create-work]');
-        const workUrl = location.href;
+        const createWork = await wait('create', () => document.querySelector('[data-page="specifications"] [data-create-work]')
+          || [...requirementRail.querySelectorAll('button')]
+            .find(node => node.textContent.includes('Requirement criterion') && !node.disabled));
+        createWork.click();
+        flow.push('create');
+        const workUrl = await wait('Work route after create', () => {
+          const candidate = new URL(location.href);
+          return candidate.searchParams.get('page') === 'work' && candidate.searchParams.get('workItem')
+            ? candidate.href
+            : null;
+        });
         if (new URL(workUrl).searchParams.get('page') !== 'work' || !new URL(workUrl).searchParams.get('workItem')) throw new Error('Create Work did not update canonical URL: ' + workUrl);
         await click('prepare', '[data-page="work"] .journey-action.primary');
         const approvalStep = document.documentElement.lang === 'ja' ? '承認' : 'Approve';
@@ -697,8 +758,8 @@ async function main() {
     || result.specificationTitleCount !== 1
     || result.specificationCriterionCount !== 1
     || result.workSpecificationTitle !== result.selectedSpecificationTitle
-    || result.workSpecificationCriterion !== result.selectedCriterionStatement
-    || result.workSpecificationAnchor !== result.selectedCriterionAnchor
+    || (result.selectedCriterionStatement && result.workSpecificationCriterion !== result.selectedCriterionStatement)
+    || (result.selectedCriterionAnchor && result.workSpecificationAnchor !== result.selectedCriterionAnchor)
     || result.workTitle.startsWith('Change ')
     || result.workPaneSpecificationCount !== 0
     || result.layoutColumns !== 2

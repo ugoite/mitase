@@ -11,6 +11,24 @@ for the version you just installed.
 
 ---
 
+## Current pre-v1 cutover
+
+The current v1 surface intentionally breaks the previous Work/verification
+wire and CLI shapes. There are no compatibility aliases:
+
+| Previous surface | Current surface | Required action |
+|---|---|---|
+| Generic Work summaries/seeds and implicit behavior selection | `syu/work-request/v1` with an exact `origin` and `requested_targets` | Rewrite request artifacts. “Behavior” means the exact Requirement criterion; Feature implementation bindings and exact implementation targets are separate origin choices. |
+| `syu work verify` and receipt-only result validation | `syu task approve` → `syu task verify` → durable `CompletionAttempt` and `syu validate result --attempt-id ...` | Approve one exact plan/slice before verification and validate the stored attempt identity. |
+| `max_slices_per_seed` | `max_slices_per_origin` | Rename the config key. |
+| Legacy `ReadinessLevel` public-entrypoint combinations | v1 public-entrypoint probes support only `off`, `seedable`, or `work-ready` | Change unsupported probe levels; they are rejected by configuration validation. |
+
+Recreate stale plan, approval, receipt, and context artifacts after migration;
+their canonical digests and execution identities are intentionally not
+backward-compatible.
+
+---
+
 ## Upgrading to `v0.0.1-alpha.7`
 
 ### New `syu.yaml` fields

@@ -92,7 +92,7 @@ import sys
 from pathlib import Path
 
 projection = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert projection["work"]["request"]["summary"] == "Keep login failures generic."
+assert projection["work"]["request"]["title"] == "Keep login failures generic."
 assert projection["work"]["plan"] is None
 assert projection["diagnostics"]["validation"]["state"] == "not_run"
 PY

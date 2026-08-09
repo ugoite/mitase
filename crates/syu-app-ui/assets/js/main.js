@@ -1,4 +1,4 @@
-import { createState } from './state.js';
+import { createState, replaceProjection } from './state.js';
 import { bindRouter, navigate, syncPageLocation } from './router.js';
 import * as api from './api.js';
 import { renderWork } from './pages/work.js';
@@ -32,9 +32,13 @@ async function refreshAfterAction(state, action, onResult, busyLabel) {
   state.render();
   try {
     const result = await action();
-    state.projection = result?.snapshot && result?.work
-      ? result
+    const returnedProjection = result?.schema === 'syu/work-select-slice-response/v1'
+      ? result.projection
+      : result;
+    const nextProjection = returnedProjection?.snapshot && returnedProjection?.work
+      ? returnedProjection
       : await api.readProjection();
+    Object.assign(state, replaceProjection(state, nextProjection));
     onResult?.(result);
   } catch (error) {
     state.error = error;

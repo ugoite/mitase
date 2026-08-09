@@ -38,13 +38,13 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
         - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-002
   - **title**: Work session
-  - **description**: A Workbench session carries a WorkRequest, canonical WorkPlan, context, verification, and result state.
+  - **description**: A Workbench session carries one typed WorkRequest origin, a canonical candidate or selected WorkPlan, context, verification, and result state.
   - **priority**: critical
   - **status**: implemented
   - **criteria**:
     - **id**: work-session
       - **kind**: behavior
-      - **statement**: A selected work origin can be planned and validated through the canonical session API.
+      - **statement**: A selected Requirement criterion, Feature implementation binding, or exact implementation target can be planned, split into server-projected choices, selected as one canonical slice, and validated through the session API.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
   - **bindings**:
@@ -517,13 +517,13 @@ requirements:
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-002
     title: Work session
-    description: A Workbench session carries a WorkRequest, canonical WorkPlan, context, verification, and result state.
+    description: A Workbench session carries one typed WorkRequest origin, a canonical candidate or selected WorkPlan, context, verification, and result state.
     priority: critical
     status: implemented
     criteria:
       - id: work-session
         kind: behavior
-        statement: A selected work origin can be planned and validated through the canonical session API.
+        statement: A selected Requirement criterion, Feature implementation binding, or exact implementation target can be planned, split into server-projected choices, selected as one canonical slice, and validated through the session API.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
     bindings:
       - id: work-check

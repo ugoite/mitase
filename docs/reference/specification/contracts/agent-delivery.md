@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
 
 - **id**: FEAT-PUBLIC-AGENT-DELIVERY-001
   - **title**: Agent delivery evidence
-  - **summary**: Govern scoped-agent and durable delivery evidence entrypoints.
+  - **summary**: Govern scoped-agent and durable delivery evidence entrypoints under the exact plan-and-slice identity.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-agent-current-run
@@ -139,7 +139,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-AGENT-DELIVERY-001
   title: Agent delivery evidence
-  summary: Govern scoped-agent and durable delivery evidence entrypoints.
+  summary: Govern scoped-agent and durable delivery evidence entrypoints under the exact plan-and-slice identity.
   status: implemented
   bindings:
   - id: public-api-agent-current-run
