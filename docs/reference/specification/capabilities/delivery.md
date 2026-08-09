@@ -46,6 +46,18 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
           - **selector**:
             - **kind**: module
             - **name**: lib::impl(DeliveryStore)::agent_events_all
+        - **id**: delivery-finalization-preview-locked
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(DeliveryStore)::finalization_preview_while_locked
+        - **id**: delivery-apply-finalization-locked
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(DeliveryStore)::apply_finalization_while_locked
         - **id**: delivery-fixture-attempt
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -670,6 +682,14 @@ features:
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::impl(DeliveryStore)::agent_events_all' }
+          - id: delivery-finalization-preview-locked
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(DeliveryStore)::finalization_preview_while_locked' }
+          - id: delivery-apply-finalization-locked
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(DeliveryStore)::apply_finalization_while_locked' }
           - id: delivery-fixture-attempt
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
