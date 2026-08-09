@@ -8139,14 +8139,15 @@ fn origin_closure_is_complete(
         .iter()
         .filter(|anchor| {
             index.contracts.get(*anchor).is_some_and(|contract| {
-                std::iter::once(&contract.source)
-                    .chain(
-                        contract
-                            .participants
-                            .iter()
-                            .map(|participant| &participant.target),
-                    )
-                    .any(|target| slice_targets.contains(target))
+                contract.guarantees.contains(request.origin.criterion())
+                    && std::iter::once(&contract.source)
+                        .chain(
+                            contract
+                                .participants
+                                .iter()
+                                .map(|participant| &participant.target),
+                        )
+                        .any(|target| slice_targets.contains(target))
             })
         })
         .all(|anchor| {
@@ -8154,10 +8155,7 @@ fn origin_closure_is_complete(
                 return false;
             };
             if contract.guarantees.is_empty()
-                || contract
-                    .guarantees
-                    .iter()
-                    .any(|guarantee| guarantee != request.origin.criterion())
+                || !contract.guarantees.contains(request.origin.criterion())
             {
                 return false;
             }

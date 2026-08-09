@@ -120,7 +120,7 @@ assert "result.request" not in SPECIFICATIONS_JS
 assert "schema: 'syu/work-origin-capability/v1'" in SPECIFICATIONS_JS
 assert "origin_capabilities" in SPECIFICATIONS_JS
 assert "work.request.summary_from_anchor" not in SPECIFICATIONS_JS
-assert SPECIFICATIONS_JS.count("state.go('work')") >= 2
+assert SPECIFICATIONS_JS.count("openWorkFromSpecification") >= 4
 assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") >= 2
 assert "data-create-work-from-suggestions" in SPECIFICATIONS_JS
 assert "WORK-SUGGESTION-" not in SERVER_RS

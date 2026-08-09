@@ -3,6 +3,13 @@ import { SPECIFICATION_DETAIL_TABS, syncSpecificationLocation } from '../router.
 
 const t = key => translate(key);
 
+function openWorkFromSpecification(state, itemId) {
+  state.selectedSlice = null;
+  state.journeyContextTab = 'specification';
+  if (itemId) state.journeyContextItemId = itemId;
+  state.go('work', itemId ? { workItem: itemId } : {});
+}
+
 function button(label, icon, onClick, className = 'btn small') {
   const node = document.createElement('button');
   node.type = 'button';
@@ -633,8 +640,7 @@ function renderTargetSuggestions(root, state) {
           () => {
             state.targetSuggestions = null;
             state.targetSuggestionSelection = [];
-            state.selectedSlice = null;
-            state.go('work');
+            openWorkFromSpecification(state, state.selectedSpecification);
           },
         ), 'btn primary');
         createWork.setAttribute('data-create-work-from-suggestions', '');
@@ -1005,7 +1011,7 @@ function renderInformation(root, state, selected, onItem, onTarget, options = {}
               origin: capability.origin,
               title: `${t('work.request.title_from_origin').replace('{anchor}', value.anchor)}`,
             }),
-            () => { state.selectedSlice = null; state.go('work'); },
+            () => openWorkFromSpecification(state, selected.id),
           ), 'btn small');
           createWork.setAttribute('data-create-work', '');
           createWork.setAttribute('data-create-work-anchor', value.anchor);
@@ -1612,7 +1618,7 @@ function renderSpecificationWorkspace(root, state, selected, options) {
             origin,
             title: `${localizeSpecificationTitle(selected)} · ${reference || capability.label}`,
           }),
-          () => { state.selectedSlice = null; state.go('work'); },
+          () => openWorkFromSpecification(state, selected.id),
         ),
         `btn small ${capability.enabled ? '' : 'disabled'}`,
       );
@@ -1848,7 +1854,7 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
             origin: capability.origin,
             title: `${localizeSpecificationTitle(item)} · ${capability.label}`,
           }),
-          () => { state.selectedSlice = null; state.go('work'); },
+          () => openWorkFromSpecification(state, item.id),
         ));
         originActions.append(action);
       });

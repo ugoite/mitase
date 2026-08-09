@@ -273,7 +273,7 @@ setTimeout(()=>{
     const featureRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
       .find(node=>node.textContent.includes('FEAT-AUTH-001'));
     if(featureRail) {
-      featureRail.click();
+      featureRail.querySelector('.rail-item-select')?.click();
       await wait(60);
       const ownershipEdit=document.querySelector('[data-page="specifications"] .specification-detail-ownership .btn');
       if(!ownershipEdit) failures.push('module ownership editor is missing');
@@ -298,7 +298,7 @@ setTimeout(()=>{
       }
       const requirementRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
         .find(node=>node.textContent.includes('REQ-AUTH-001'));
-      requirementRail?.click();
+      requirementRail?.querySelector('.rail-item-select')?.click();
       await wait(60);
     } else failures.push('feature fixture for module ownership is missing');
   }

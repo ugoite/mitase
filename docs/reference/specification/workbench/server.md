@@ -760,12 +760,6 @@ description: "Generated reference for docs/syu/features/workbench/server.yaml"
           - **selector**:
             - **kind**: module
             - **name**: lib::target_suggestions_view
-        - **id**: server-review-extra-005
-          - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::create_work_requires_an_exact_implemented_requirement_criterion
         - **id**: server-review-extra-006
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -1804,10 +1798,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::target_suggestions_view' }
-    - id: server-review-extra-005
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::tests::create_work_requires_an_exact_implemented_requirement_criterion' }
     - id: server-review-extra-006
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs

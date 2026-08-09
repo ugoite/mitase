@@ -658,15 +658,8 @@ fn validate_origin_contract_closure(
             let contract = index.contracts.get(contract_anchor).ok_or_else(|| {
                 anyhow::anyhow!("origin target {target} has an unresolved contract closure")
             })?;
-            if contract.guarantees.is_empty()
-                || contract
-                    .guarantees
-                    .iter()
-                    .any(|guarantee| guarantee != criterion)
-            {
-                bail!(
-                    "origin target {target} has a contract without the exact criterion guarantee"
-                );
+            if contract.guarantees.is_empty() || !contract.guarantees.contains(criterion) {
+                continue;
             }
             let mut related = vec![contract.source.clone()];
             related.extend(
