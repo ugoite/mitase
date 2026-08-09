@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/workbench/target-suggest
 
 - **id**: FEAT-WORKBENCH-TARGET-SUGGESTIONS-001
   - **title**: Workbench target suggestions
-  - **summary**: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through criterion-level Create Work.
+  - **summary**: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through a server-projected exact-origin Create Work capability.
   - **status**: implemented
   - **bindings**:
     - **id**: suggestions
@@ -86,7 +86,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-TARGET-SUGGESTIONS-001
   title: Workbench target suggestions
-  summary: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through criterion-level Create Work.
+  summary: Rank exact targets with evidence, persist reviewed approvals, and consume them into WorkRequest scope only through a server-projected exact-origin Create Work capability.
   status: implemented
   bindings:
   - id: suggestions

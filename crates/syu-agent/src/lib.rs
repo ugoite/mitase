@@ -6,6 +6,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 use syu_delivery::DeliveryStore;
@@ -13,20 +14,21 @@ use syu_inventory::ArtifactUnit;
 use syu_spec_model::{BoundTargetRef, format_sha256};
 use syu_validation::canonical_plan_for_execution;
 use syu_work_model::{
-    AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
-    AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun,
-    AgentRunStatus, AgentTargetChange, AgentTargetDigest, AgentTargetWrite, ContextPack,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetAccessMode, TargetLifecycle,
-    TargetTransition,
+    AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack, AgentEvent,
+    AgentEventKind, AgentPatch, AgentPatchRecord, AgentRun, AgentRunStatus, AgentTargetChange,
+    AgentTargetWrite, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
+    TargetAccessMode, TargetLifecycle, TargetTransition,
 };
 use syu_workspace::SpecWorkspace;
 
-pub const AGENT_CONTEXT_SCHEMA: &str = "syu/agent-context/v1";
+pub const AGENT_CONTEXT_SCHEMA: &str = syu_work_model::AGENT_CONTEXT_SCHEMA;
+static PATCH_WORKSPACE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub fn start_run(
     workspace: &SpecWorkspace,
     approval: &PlanApproval,
     slice_id: &str,
+    retry: bool,
 ) -> Result<AgentRun> {
     let index = workspace.index()?;
     let revision = repository_revision(&workspace.root)?;
@@ -64,7 +66,7 @@ pub fn start_run(
         bail!("agent only supports editable Add, Modify, and Remove targets");
     }
     let context = syu_planner::export_context(&plan, slice_id, workspace, &index, &revision)?;
-    let agent_context = agent_context(&plan.canonical_digest, slice_id, &context, slice)?;
+    let agent_context = AgentContextPack::from_slice(&plan.canonical_digest, context, slice);
     let store = DeliveryStore::for_workspace(&workspace.root)?;
     let run = AgentRun {
         schema: AGENT_RUN_SCHEMA.into(),
@@ -76,19 +78,7 @@ pub fn start_run(
         context: agent_context,
         created_at: timestamp(),
     };
-    let event = AgentEvent {
-        schema: AGENT_EVENT_SCHEMA.into(),
-        event_id: store.new_id("agent-event"),
-        event_digest: String::new(),
-        run_id: run.run_id.clone(),
-        plan_digest: run.plan_digest.clone(),
-        slice_id: run.slice_id.clone(),
-        created_at: timestamp(),
-        event: AgentEventKind::RunStarted {
-            run: Box::new(run.clone()),
-        },
-    };
-    store.append_agent_event(&event)?;
+    store.start_agent_run(&run, retry)?;
     Ok(run)
 }
 
@@ -97,34 +87,43 @@ pub fn apply_scoped_patch(
     run: &AgentRun,
     patch: &AgentPatch,
 ) -> Result<AgentPatchRecord> {
-    let run = validate_run(workspace, run)?;
     let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let _workspace_lock = store.lock_workspace()?;
+    let _workspace_guard = PATCH_WORKSPACE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("agent workspace mutation lock"))?;
+    let fresh_workspace = SpecWorkspace::load(&workspace.root)?;
+    let workspace = &fresh_workspace;
+    let run = validate_run(workspace, run)?;
     let before_fingerprint = workspace.try_fingerprint()?;
-    let now = timestamp();
     let patch_id = store.new_id("agent-patch");
-    let result = apply_patch_inner(workspace, &run, patch);
+    let result = apply_patch_inner(workspace, &run, patch, &store, &patch_id);
     match result {
         Ok(applied) => {
-            let record = AgentPatchRecord {
-                schema: AGENT_PATCH_SCHEMA.into(),
-                patch_id,
-                run_id: run.run_id.clone(),
-                plan_digest: run.plan_digest.clone(),
-                slice_id: run.slice_id.clone(),
-                status: AgentPatchStatus::Accepted,
-                writes: patch.writes.clone(),
-                changes: applied.changes,
-                before_workspace_fingerprint: before_fingerprint,
-                after_workspace_fingerprint: applied.after_fingerprint,
-                blockers: vec![],
-                created_at: now,
-            };
-            match append_patch_event(&store, &run, record.clone()) {
-                Ok(()) => Ok(record),
+            let applied_workspace = SpecWorkspace::load(&workspace.root)?;
+            let record = match store.record_agent_patch_after_apply_while_locked(
+                &applied_workspace,
+                &run,
+                patch,
+                &patch_id,
+                &before_fingerprint,
+            ) {
+                Ok(record) => record,
                 Err(error) => {
-                    restore_rollback(&applied.rollback)?;
-                    Err(error)
+                    let restored = restore_rollback(&applied.rollback);
+                    if let Err(restore) = restored {
+                        return Err(anyhow::anyhow!(
+                            "patch event append failed: {error}; rollback failed: {restore}"
+                        ));
+                    }
+                    store.clear_mutation_journal()?;
+                    return Err(error);
                 }
+            };
+            {
+                store.clear_mutation_journal()?;
+                Ok(record)
             }
         }
         Err(error) => {
@@ -133,21 +132,14 @@ pub fn apply_scoped_patch(
                 message: error.to_string(),
                 next_action: "Keep the approved slice unchanged, resolve the blocker, or request explicit scope expansion.".into(),
             };
-            let record = AgentPatchRecord {
-                schema: AGENT_PATCH_SCHEMA.into(),
-                patch_id,
-                run_id: run.run_id.clone(),
-                plan_digest: run.plan_digest.clone(),
-                slice_id: run.slice_id.clone(),
-                status: AgentPatchStatus::Rejected,
-                writes: patch.writes.clone(),
-                changes: vec![],
-                before_workspace_fingerprint: before_fingerprint,
-                after_workspace_fingerprint: String::new(),
-                blockers: vec![blocker.clone()],
-                created_at: now,
-            };
-            append_patch_event(&store, &run, record)?;
+            store.record_rejected_agent_patch_while_locked(
+                workspace,
+                &run,
+                patch,
+                &patch_id,
+                &before_fingerprint,
+                blocker,
+            )?;
             Err(error)
         }
     }
@@ -206,6 +198,23 @@ pub fn record_verification(
     run: &AgentRun,
     attempt_id: &str,
 ) -> Result<AgentEvent> {
+    record_verification_inner(workspace, run, attempt_id, false)
+}
+
+pub fn record_verification_while_locked(
+    workspace: &SpecWorkspace,
+    run: &AgentRun,
+    attempt_id: &str,
+) -> Result<AgentEvent> {
+    record_verification_inner(workspace, run, attempt_id, true)
+}
+
+fn record_verification_inner(
+    workspace: &SpecWorkspace,
+    run: &AgentRun,
+    attempt_id: &str,
+    workspace_locked: bool,
+) -> Result<AgentEvent> {
     let run = validate_run(workspace, run)?;
     if !matches!(run.status, AgentRunStatus::Active) {
         bail!("agent run is not active; resolve its blocker or start a new run");
@@ -213,17 +222,21 @@ pub fn record_verification(
     if attempt_id.trim().is_empty() {
         bail!("verification evidence requires an attempt id");
     }
-    append_event(
-        workspace,
-        &run,
-        AgentEventKind::VerificationRecorded {
-            attempt_id: attempt_id.into(),
-        },
-    )
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    if workspace_locked {
+        store.record_agent_verification_while_locked(&run, attempt_id)
+    } else {
+        let _workspace_lock = store.lock_workspace()?;
+        store.record_agent_verification_while_locked(&run, attempt_id)
+    }
 }
 
-pub fn events(workspace: &SpecWorkspace, run_id: &str) -> Result<Vec<AgentEvent>> {
-    DeliveryStore::for_workspace(&workspace.root)?.agent_events(run_id)
+pub fn events(workspace: &SpecWorkspace, run: &AgentRun) -> Result<Vec<AgentEvent>> {
+    let identity = ExecutionIdentity {
+        plan_digest: run.plan_digest.clone(),
+        slice_id: run.slice_id.clone(),
+    };
+    DeliveryStore::for_workspace(&workspace.root)?.agent_events(&identity, &run.run_id)
 }
 
 pub fn current_run(workspace: &SpecWorkspace, run: &AgentRun) -> Result<AgentRun> {
@@ -234,6 +247,8 @@ fn apply_patch_inner(
     workspace: &SpecWorkspace,
     run: &AgentRun,
     patch: &AgentPatch,
+    store: &DeliveryStore,
+    patch_id: &str,
 ) -> Result<PatchApplied> {
     if patch.schema != AGENT_PATCH_SCHEMA {
         bail!("patch schema must be {AGENT_PATCH_SCHEMA}");
@@ -259,6 +274,7 @@ fn apply_patch_inner(
         .ok_or_else(|| anyhow::anyhow!("agent slice is absent from its approved plan"))?;
     let mut replacements: BTreeMap<PathBuf, Vec<Replacement>> = BTreeMap::new();
     let mut appends: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+    let mut approved_containers: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut created_files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut removed_files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut seen_targets = std::collections::BTreeSet::new();
@@ -321,6 +337,14 @@ fn apply_patch_inner(
                         "target {target} containing file is stale; refresh the plan before writing"
                     );
                 }
+                if let Some(previous) = approved_containers.get(&path)
+                    && previous != &current
+                {
+                    bail!(
+                        "target {target} containing file was read more than once with different bytes"
+                    );
+                }
+                approved_containers.entry(path.clone()).or_insert(current);
                 ensure_added_budget(target, planned, content)?;
                 appends.entry(path).or_default().push(content.clone());
             }
@@ -393,8 +417,11 @@ fn apply_patch_inner(
                 bail!("patch contains overlapping writes in {}", path.display());
             }
         }
-        let original =
-            fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let original_bytes = approved_containers
+            .remove(&path)
+            .unwrap_or(fs::read(&path).with_context(|| format!("read {}", path.display()))?);
+        let original = String::from_utf8(original_bytes.clone())
+            .with_context(|| format!("decode {}", path.display()))?;
         let mut updated = original.clone();
         for change in &changes {
             let current = updated
@@ -414,13 +441,18 @@ fn apply_patch_inner(
         files.insert(
             path,
             FileMutation {
-                original: Some(original.into_bytes()),
+                original: Some(original_bytes),
                 updated: Some(updated.into_bytes()),
             },
         );
     }
     for (path, additions) in appends {
-        let original = required_file_bytes(&path)?;
+        let original = approved_containers.remove(&path).ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing the exact approved container bytes for {}",
+                path.display()
+            )
+        })?;
         let mut updated = String::from_utf8(original.clone())?;
         for addition in additions {
             updated.push_str(&addition);
@@ -451,6 +483,21 @@ fn apply_patch_inner(
             },
         );
     }
+    let journal_files = files
+        .iter()
+        .map(|(path, mutation)| syu_delivery::MutationJournalFile {
+            path: path.to_string_lossy().into_owned(),
+            original: mutation.original.clone(),
+        })
+        .collect::<Vec<_>>();
+    let created_dirs = files
+        .iter()
+        .filter_map(|(path, mutation)| mutation.updated.as_ref().map(|_| path.clone()))
+        .flat_map(|path| missing_parent_dirs(&path))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    store.write_mutation_journal("agent-patch", patch_id, journal_files, created_dirs)?;
     let rollback = apply_file_mutations(&files)?;
     let post_write = (|| {
         let candidate = SpecWorkspace::load(&workspace.root)?;
@@ -458,26 +505,48 @@ fn apply_patch_inner(
         if let Some(error) = &candidate_index.inventory_error {
             bail!("patch produced an invalid inventory: {error}");
         }
-        let changes = validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
-        Ok((candidate.try_fingerprint()?, changes))
+        validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
+        Ok(())
     })();
-    let (after_fingerprint, changes) = match post_write {
+    match post_write {
         Ok(applied) => applied,
         Err(error) => {
-            restore_rollback(&rollback)?;
+            let restored = restore_rollback(&rollback);
+            if let Err(restore) = restored {
+                return Err(anyhow::anyhow!(
+                    "patch post-write validation failed: {error}; rollback failed: {restore}"
+                ));
+            }
+            store.clear_mutation_journal()?;
             return Err(error);
         }
     };
-    Ok(PatchApplied {
-        after_fingerprint,
-        changes,
-        rollback,
-    })
+    Ok(PatchApplied { rollback })
+}
+
+fn missing_parent_dirs(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let mut missing = Vec::new();
+    let mut cursor = parent.to_path_buf();
+    while !cursor.exists() {
+        missing.push(cursor.clone());
+        if !cursor.pop() {
+            break;
+        }
+    }
+    missing.reverse();
+    missing
 }
 
 fn approved_plan(workspace: &SpecWorkspace, run: &AgentRun) -> Result<syu_work_model::WorkPlan> {
     let store = DeliveryStore::for_workspace(&workspace.root)?;
-    let approval = store.approval(&run.plan_digest)?;
+    let identity = ExecutionIdentity {
+        plan_digest: run.plan_digest.clone(),
+        slice_id: run.slice_id.clone(),
+    };
+    let approval = store.approval(&identity)?;
     if approval.schema != PLAN_APPROVAL_SCHEMA {
         bail!("stored agent approval schema must be {PLAN_APPROVAL_SCHEMA}");
     }
@@ -503,7 +572,12 @@ fn validate_run(workspace: &SpecWorkspace, run: &AgentRun) -> Result<AgentRun> {
     {
         bail!("agent run context does not match its plan and slice");
     }
-    let stored = DeliveryStore::for_workspace(&workspace.root)?.agent_run(&run.run_id)?;
+    let identity = ExecutionIdentity {
+        plan_digest: run.plan_digest.clone(),
+        slice_id: run.slice_id.clone(),
+    };
+    let stored =
+        DeliveryStore::for_workspace(&workspace.root)?.agent_run(&identity, &run.run_id)?;
     let mut expected = run.clone();
     expected.status = stored.status.clone();
     if stored != expected {
@@ -557,8 +631,21 @@ fn validate_post_patch(
                 if before_identity.is_some() {
                     bail!("target {target} already existed before the patch");
                 }
-                if after_resolved.is_none() {
-                    bail!("target {target} was not created by the patch");
+                let resolved = after_resolved.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("target {target} was not created by the patch")
+                })?;
+                if let Some(content) = patch.writes.iter().find_map(|write| match write {
+                    AgentTargetWrite::AddToFile {
+                        target: candidate,
+                        content,
+                        ..
+                    } if candidate == target => Some(content),
+                    _ => None,
+                }) && content.trim() != resolved.excerpt.trim()
+                {
+                    bail!(
+                        "target {target} insertion content does not exactly match the approved target"
+                    );
                 }
             }
             TargetTransition::Remove => {
@@ -841,43 +928,6 @@ fn lifecycle_proof(
     }
 }
 
-fn agent_context(
-    plan_digest: &str,
-    slice_id: &str,
-    context: &ContextPack,
-    slice: &syu_work_model::ExecutionSlice,
-) -> Result<AgentContextPack> {
-    let targets = |targets: &[syu_work_model::PlannedTarget]| {
-        targets
-            .iter()
-            .map(|target| AgentTargetDigest {
-                reference: target.reference.clone(),
-                path: target.resolved_path.clone(),
-                access: target.access,
-                transition: target.transition,
-                lifecycle: target.lifecycle,
-                content_hash: target.content_hash.clone(),
-                excerpt_hash: target.excerpt_hash.clone(),
-                container_content_hash: target.container_content_hash.clone(),
-                line_start: target.line_start,
-                line_end: target.line_end,
-                budget_bytes: target.budget_bytes,
-                budget_lines: target.budget_lines,
-            })
-            .collect()
-    };
-    Ok(AgentContextPack {
-        schema: AGENT_CONTEXT_SCHEMA.into(),
-        plan_digest: plan_digest.into(),
-        slice_id: slice_id.into(),
-        context: context.clone(),
-        budget: slice.budget.clone(),
-        editable_targets: targets(&slice.editable_targets),
-        verification_targets: targets(&slice.verification_targets),
-        readonly_targets: targets(&slice.readonly_context),
-    })
-}
-
 #[derive(Debug)]
 struct Replacement {
     start: usize,
@@ -888,8 +938,6 @@ struct Replacement {
 }
 
 struct PatchApplied {
-    after_fingerprint: String,
-    changes: Vec<AgentTargetChange>,
     rollback: PatchRollback,
 }
 
@@ -1041,10 +1089,35 @@ fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Patch
         }
         applied.push(file_rollback);
     }
-    Ok(PatchRollback {
+    let rollback = PatchRollback {
         files: applied,
         created_dirs,
-    })
+    };
+    if let Err(error) = sync_mutation_directories(&rollback) {
+        return Err(rollback_error(error, rollback));
+    }
+    Ok(rollback)
+}
+
+fn sync_mutation_directories(rollback: &PatchRollback) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let mut directories = std::collections::BTreeSet::new();
+        directories.extend(
+            rollback
+                .files
+                .iter()
+                .filter_map(|file| file.path.parent().map(Path::to_path_buf)),
+        );
+        directories.extend(rollback.created_dirs.iter().cloned());
+        for directory in directories {
+            fs::File::open(&directory)
+                .with_context(|| format!("open mutation directory {}", directory.display()))?
+                .sync_all()
+                .with_context(|| format!("sync mutation directory {}", directory.display()))?;
+        }
+    }
+    Ok(())
 }
 
 fn cleanup_preparation_error(error: anyhow::Error, created_dirs: &[PathBuf]) -> anyhow::Error {
@@ -1131,41 +1204,56 @@ fn restore_rollback(rollback: &PatchRollback) -> Result<()> {
     }
 }
 
-fn append_patch_event(
-    store: &DeliveryStore,
-    run: &AgentRun,
-    patch: AgentPatchRecord,
-) -> Result<()> {
-    let event = AgentEvent {
-        schema: AGENT_EVENT_SCHEMA.into(),
-        event_id: store.new_id("agent-event"),
-        event_digest: String::new(),
-        run_id: run.run_id.clone(),
-        plan_digest: run.plan_digest.clone(),
-        slice_id: run.slice_id.clone(),
-        created_at: timestamp(),
-        event: AgentEventKind::PatchRecorded { patch },
-    };
-    store.append_agent_event(&event).map(|_| ())
-}
-
 fn append_event(
     workspace: &SpecWorkspace,
     run: &AgentRun,
     event: AgentEventKind,
 ) -> Result<AgentEvent> {
+    append_event_with_lock_mode(workspace, run, event, false)
+}
+
+fn append_event_with_lock_mode(
+    workspace: &SpecWorkspace,
+    run: &AgentRun,
+    event: AgentEventKind,
+    workspace_locked: bool,
+) -> Result<AgentEvent> {
     let store = DeliveryStore::for_workspace(&workspace.root)?;
-    let value = AgentEvent {
-        schema: AGENT_EVENT_SCHEMA.into(),
-        event_id: store.new_id("agent-event"),
-        event_digest: String::new(),
-        run_id: run.run_id.clone(),
-        plan_digest: run.plan_digest.clone(),
-        slice_id: run.slice_id.clone(),
-        created_at: timestamp(),
-        event,
-    };
-    store.append_agent_event(&value)
+    match event {
+        AgentEventKind::BlockerRecorded { blocker } => {
+            if workspace_locked {
+                store.record_agent_blocker_while_locked(run, blocker)
+            } else {
+                store.record_agent_blocker(run, blocker)
+            }
+        }
+        AgentEventKind::ScopeExpansionRequested { request } => {
+            if !workspace_locked {
+                let _workspace_lock = store.lock_workspace()?;
+                store.request_agent_scope_expansion_while_locked(run, request)
+            } else {
+                store.request_agent_scope_expansion_while_locked(run, request)
+            }
+        }
+        AgentEventKind::RunAbandoned { reason } => {
+            if workspace_locked {
+                store.abandon_agent_run_while_locked(run, reason)
+            } else {
+                store.abandon_agent_run(run, reason)
+            }
+        }
+        AgentEventKind::RunStarted { .. } | AgentEventKind::PatchRecorded { .. } => {
+            bail!("agent event kind is not appendable through the generic agent API")
+        }
+        AgentEventKind::VerificationRecorded { attempt_id } => {
+            if workspace_locked {
+                store.record_agent_verification_while_locked(run, &attempt_id)
+            } else {
+                let _workspace_lock = store.lock_workspace()?;
+                store.record_agent_verification_while_locked(run, &attempt_id)
+            }
+        }
+    }
 }
 
 fn repository_revision(root: &Path) -> Result<String> {

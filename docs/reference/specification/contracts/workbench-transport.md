@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 
 - **id**: FEAT-PUBLIC-WORKBENCH-TRANSPORT-001
   - **title**: Workbench client transport
-  - **summary**: Govern canonical browser transport, session, projection, scope, and source reads.
+  - **summary**: Govern canonical browser transport, exact-origin session projection, split recovery, execution identity, scope, and source reads.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-001
@@ -167,8 +167,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-WORKBENCH-TRANSPORT-001
   title: Workbench client transport
-  summary: Govern canonical browser transport, session, projection, scope, and source
-    reads.
+  summary: Govern canonical browser transport, exact-origin session projection, split recovery, execution identity, scope, and source reads.
   status: implemented
   bindings:
   - id: public-api-001

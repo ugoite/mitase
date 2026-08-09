@@ -159,6 +159,11 @@ description: "Generated reference for docs/syu/features/workbench/quality-gates.
           - **path**: scripts/ci/workbench-visual.sh
           - **selector**:
             - **kind**: file
+        - **id**: installed-binary-smoke
+          - **adapter**: declared
+          - **path**: scripts/ci/installed-binary-smoke.sh
+          - **selector**:
+            - **kind**: file
     - **id**: quality-gates-verification
       - **role**: verification
       - **facet**: repository-tooling
@@ -304,6 +309,10 @@ features:
     - id: workbench-visual-check
       adapter: declared
       path: scripts/ci/workbench-visual.sh
+      selector: { kind: file }
+    - id: installed-binary-smoke
+      adapter: declared
+      path: scripts/ci/installed-binary-smoke.sh
       selector: { kind: file }
   - id: quality-gates-verification
     role: verification

@@ -419,12 +419,6 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject
-        - **id**: validation-legacy-receipt-test
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::legacy_receipt_execution_deserializes_without_a_claim
         - **id**: validation-planned-ownership-test
           - **adapter**: rust
           - **path**: crates/syu-validation/src/lib.rs
@@ -801,10 +795,6 @@ features:
             adapter: rust
             path: crates/syu-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject' }
-          - id: validation-legacy-receipt-test
-            adapter: rust
-            path: crates/syu-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::legacy_receipt_execution_deserializes_without_a_claim' }
           - id: validation-planned-ownership-test
             adapter: rust
             path: crates/syu-validation/src/lib.rs

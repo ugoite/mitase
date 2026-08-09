@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use syu_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
-use syu_planner::plan as canonical_plan;
+use syu_planner::{plan as canonical_plan, validate_work_origin};
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::format_sha256;
 use syu_spec_model::{
@@ -504,6 +504,10 @@ pub fn canonical_plan_for_execution(
     if submitted.schema != WORK_PLAN_SCHEMA {
         bail!("plan schema must be {WORK_PLAN_SCHEMA}");
     }
+    syu_planner::validate_work_request(index, &submitted.request)
+        .context("submitted plan contains targets outside its exact Work origin")?;
+    validate_work_origin(index, &submitted.request.origin)
+        .context("submitted plan requires an exact implemented Work origin")?;
     if submitted.basis.revision != revision {
         bail!("plan basis revision is stale");
     }
@@ -628,7 +632,7 @@ fn current_readonly_fingerprint(
     readonly_targets_fingerprint_for_execution(&slices)
 }
 
-fn resolve_planned_target_for_workspace(
+pub(crate) fn resolve_planned_target_for_workspace(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
     target: &syu_work_model::PlannedTarget,
@@ -790,17 +794,36 @@ pub fn execute_verification(
                 runner_ref.runner
             );
         }
+        let arguments = canonical_runner_arguments(&configured.executable, arguments);
+        let test_identity = runner_ref.arguments.get("test").ok_or_else(|| {
+            anyhow::anyhow!("cargo verification claim must name the exact test identity")
+        })?;
+        require_exact_runner_filter(&configured.executable, &arguments, test_identity)?;
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
+        if configured.executable == "cargo" && arguments.iter().any(|argument| argument == "-Z") {
+            command.env("RUSTC_BOOTSTRAP", "1");
+        }
         if configured.executable == "cargo" {
-            // Reuse one ignored target directory for all exact verification
-            // jobs in this workspace. A fresh target per test is isolated but
-            // needlessly consumes gigabytes and makes a readiness report fail
-            // before the actual tests can run.
-            command.env(
-                "CARGO_TARGET_DIR",
-                workspace.root.join("target").join("syu-verification"),
-            );
+            // Reuse one target directory for all exact verification jobs in a
+            // workspace. Keep an explicitly supplied target directory (the
+            // test runner uses this to stay off the source volume); otherwise
+            // use a workspace-specific temporary directory so verification
+            // never mutates or nests a target directory inside a temporary
+            // clone's source tree.
+            let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join("syu-verification")
+                        // `sha256:` is part of Syu's digest wire format, but
+                        // `:` is a library-path separator on Unix.
+                        .join(
+                            digest(workspace.root.to_string_lossy().as_bytes())
+                                .trim_start_matches("sha256:"),
+                        )
+                });
+            command.env("CARGO_TARGET_DIR", target_dir);
         }
         let output = command
             .output()
@@ -875,9 +898,28 @@ pub fn execute_verification_attempt(
 )> {
     let result = match execute_verification(workspace, index, submitted, slice_id, revision) {
         Ok(receipt) => {
-            let mut report = evaluate_completion(workspace, index, submitted, &receipt)?;
+            let mut report = match evaluate_completion(workspace, index, submitted, &receipt) {
+                Ok(report) => report,
+                Err(error) => CompletionReport {
+                    schema: COMPLETION_REPORT_SCHEMA.into(),
+                    attempt_id: attempt_id.into(),
+                    plan_digest: submitted.canonical_digest.clone(),
+                    slice_id: slice_id.into(),
+                    receipt_digest: None,
+                    status: CompletionStatus::Blocked,
+                    demonstrated: vec![],
+                    checks: vec![],
+                    blockers: vec![CompletionBlocker {
+                        code: "SYU-COMPLETION-EVALUATION".into(),
+                        message: durable_failure_message(&error),
+                        next_action:
+                            "Resolve the completion evaluation failure, then retry the same approved plan and slice."
+                                .into(),
+                    }],
+                },
+            };
             report.attempt_id = attempt_id.into();
-            report.receipt_digest = Some(digest(&serde_json::to_vec(&receipt)?));
+            report.receipt_digest = Some(verification_receipt_digest(&receipt)?);
             let executions = receipt
                 .executions
                 .iter()
@@ -1012,8 +1054,8 @@ pub fn validate_verification_receipt(
         if execution.exit_code != 0 {
             bail!("verification receipt contains failed executions");
         }
-        if execution.proof.matched_count == 0 {
-            bail!("verification receipt proves zero exact tests");
+        if execution.proof.matched_count != 1 {
+            bail!("verification receipt must prove exactly one exact test");
         }
         let claim = execution.claim.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
@@ -1041,6 +1083,11 @@ pub fn validate_verification_receipt(
             .iter()
             .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
             .collect::<Vec<_>>();
+        let arguments = canonical_runner_arguments(&configured.executable, arguments);
+        let test_identity = runner_ref.arguments.get("test").ok_or_else(|| {
+            anyhow::anyhow!("cargo verification claim must name the exact test identity")
+        })?;
+        require_exact_runner_filter(&configured.executable, &arguments, test_identity)?;
         let expected_command = std::iter::once(configured.executable.clone())
             .chain(arguments)
             .collect::<Vec<_>>();
@@ -1303,7 +1350,7 @@ pub fn evaluate_completion(
         attempt_id: String::new(),
         plan_digest: canonical.canonical_digest,
         slice_id: receipt.slice_id.clone(),
-        receipt_digest: Some(digest(&serde_json::to_vec(receipt)?)),
+        receipt_digest: Some(verification_receipt_digest(receipt)?),
         status,
         demonstrated,
         checks,
@@ -1449,13 +1496,41 @@ fn readiness_regression_blockers(
     };
     let before = evaluate_readiness(&basis.workspace, &basis.index, &plan.basis.revision, false)?;
     let after = evaluate_readiness(workspace, index, current_revision, false)?;
-    let approved_removed_inventory = plan
+    let approved_removed_targets = plan
         .slices
         .iter()
         .flat_map(|slice| slice.editable_targets.iter())
         .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
-        .filter_map(|target| basis.index.all_target_to_artifact.get(&target.reference))
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let approved_removed_artifacts = approved_removed_targets
+        .iter()
+        .filter_map(|target| basis.index.all_target_to_artifact.get(target))
+        .map(|identity| identity.as_str())
+        .collect::<BTreeSet<_>>();
+    let approved_removed_inventory = approved_removed_artifacts
+        .iter()
         .map(|identity| format!("inventory:{identity}"))
+        .collect::<BTreeSet<_>>();
+    let approved_removed_ownership = approved_removed_artifacts
+        .iter()
+        .map(|identity| format!("ownership:{identity}"))
+        .collect::<BTreeSet<_>>();
+    let approved_removed_features = approved_removed_targets
+        .iter()
+        .map(|target| format!("feature:{}", target.binding.item))
+        .collect::<BTreeSet<_>>();
+    let approved_removed_seedability = basis
+        .index
+        .criteria_to_implementation_targets
+        .iter()
+        .chain(basis.index.criteria_to_verification_targets.iter())
+        .flat_map(|(criterion, targets)| {
+            targets
+                .iter()
+                .filter(|target| approved_removed_targets.contains(*target))
+                .map(move |target| format!("criterion:{criterion}/target:{target}"))
+        })
         .collect::<BTreeSet<_>>();
     let axes = [
         ("inventory", &before.inventory, &after.inventory),
@@ -1480,7 +1555,17 @@ fn readiness_regression_blockers(
             .collect::<BTreeSet<_>>();
         let regressed = before_ready
             .difference(&after_ready)
-            .filter(|subject| name != "inventory" || !approved_removed_inventory.contains(*subject))
+            .filter(|subject| match name {
+                "inventory" => !approved_removed_inventory.contains(*subject),
+                "ownership" => !approved_removed_ownership.contains(*subject),
+                "seedability" => {
+                    approved_removed_seedability
+                        .iter()
+                        .all(|target| !subject.starts_with(target))
+                        && !approved_removed_features.contains(*subject)
+                }
+                _ => true,
+            })
             .cloned()
             .collect::<Vec<_>>();
         if !regressed.is_empty() {
@@ -1512,14 +1597,34 @@ fn ensure_exact_test_executed(
     if test_identity != name && !test_identity.ends_with(&format!("::{name}")) {
         bail!("cargo verification argument {test_identity} does not identify selector {name}");
     }
-    let output = String::from_utf8_lossy(stdout);
-    let marker = format!("test {test_identity} ");
-    let matched_count = output
-        .lines()
-        .filter(|line| line.trim_start().starts_with(&marker))
-        .count();
-    if matched_count == 0 {
-        bail!("configured verification command ran zero exact tests for {name}");
+    let mut matched_count = 0;
+    for line in String::from_utf8_lossy(stdout).lines() {
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if event.get("type").and_then(serde_json::Value::as_str) != Some("test") {
+            continue;
+        }
+        let event_name = event.get("name").and_then(serde_json::Value::as_str);
+        // `--exact` makes the runner's filter authoritative; the structured
+        // event must then carry that exact identity. A suffix match could
+        // accept the same test name from a different harness or module.
+        let exact_identity = event_name == Some(test_identity.as_str());
+        if !exact_identity {
+            continue;
+        }
+        match event.get("event").and_then(serde_json::Value::as_str) {
+            Some("ok") => matched_count += 1,
+            Some("ignored") | Some("failed") | Some("timeout") => {
+                bail!("configured verification command did not complete exact test {name}");
+            }
+            _ => {}
+        }
+    }
+    if matched_count != 1 {
+        bail!(
+            "configured verification command must emit exactly one successful structured event for {name}; found {matched_count}"
+        );
     }
     Ok(ExactTestEvidence {
         identity: test_identity.clone(),
@@ -1527,7 +1632,79 @@ fn ensure_exact_test_executed(
     })
 }
 
-fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
+fn require_exact_runner_filter(
+    executable: &str,
+    arguments: &[String],
+    test_identity: &str,
+) -> Result<()> {
+    if executable != "cargo" {
+        return Ok(());
+    }
+    let separator = arguments
+        .iter()
+        .position(|argument| argument == "--")
+        .ok_or_else(|| {
+            anyhow::anyhow!("cargo verification runner must provide an exact harness filter")
+        })?;
+    if !arguments[..separator]
+        .iter()
+        .any(|argument| argument == test_identity)
+    {
+        bail!(
+            "cargo verification runner must pass the exact test identity {test_identity} before --"
+        );
+    }
+    if !arguments[separator + 1..]
+        .iter()
+        .any(|argument| argument == "--exact")
+    {
+        bail!("cargo verification runner must pass --exact to the test harness");
+    }
+    Ok(())
+}
+
+/// Cargo's human test output is not an authority boundary: a test can print a
+/// line that looks like a harness result. Force libtest's structured stream
+/// and keep the injected arguments in the receipt's canonical command.
+pub fn canonical_runner_arguments(executable: &str, mut arguments: Vec<String>) -> Vec<String> {
+    if executable == "cargo" && arguments.iter().any(|argument| argument == "test") {
+        if let Some(index) = arguments.iter().position(|argument| argument == "--") {
+            let harness_start = index + 1;
+            if !arguments[harness_start..]
+                .iter()
+                .any(|argument| argument == "--exact")
+            {
+                arguments.insert(harness_start, "--exact".into());
+            }
+            if !arguments[harness_start..]
+                .iter()
+                .any(|argument| argument == "--format")
+            {
+                arguments.splice(
+                    harness_start..harness_start,
+                    [
+                        "-Z".into(),
+                        "unstable-options".into(),
+                        "--format".into(),
+                        "json".into(),
+                    ],
+                );
+            }
+        } else {
+            arguments.extend([
+                "--".into(),
+                "--exact".into(),
+                "-Z".into(),
+                "unstable-options".into(),
+                "--format".into(),
+                "json".into(),
+            ]);
+        }
+    }
+    arguments
+}
+
+pub(crate) fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
     values
         .iter()
         .fold(template.to_owned(), |value, (key, replacement)| {
@@ -1539,6 +1716,14 @@ fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
     format_sha256(hash.finalize())
+}
+
+fn verification_receipt_digest<T: Serialize>(value: &T) -> Result<String> {
+    let bytes = syu_work_model::canonical_json_bytes(serde_json::to_value(value)?);
+    let mut hash = Sha256::new();
+    hash.update(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
+    hash.update(bytes);
+    Ok(format_sha256(hash.finalize()))
 }
 
 fn epoch_seconds() -> String {
@@ -1651,6 +1836,20 @@ fn validate_config(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 "active inventory profile {} is not defined",
                 ctx.config.inventory.active_profile
             ),
+            "syu.yaml",
+            None,
+        );
+    }
+    if let Some(probe) = &ctx.config.validation.readiness.probes.public_entrypoints
+        && matches!(
+            probe.level,
+            ReadinessLevel::Traceable | ReadinessLevel::Verifiable | ReadinessLevel::ClosedLoop
+        )
+    {
+        push(
+            out,
+            "SYU-SCHEMA-003",
+            "public entrypoint readiness probes support only off, seedable, or work-ready in v1",
             "syu.yaml",
             None,
         );
@@ -2180,20 +2379,8 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
     let syu_config = git_show(root, revision, Path::new("syu.yaml"))
         .map_err(anyhow::Error::msg)
         .context("read baseline syu.yaml")?;
-    let (syu_config, config) = match serde_yaml::from_str::<ProjectConfig>(&syu_config) {
-        Ok(config) => (syu_config, config),
-        Err(_) => {
-            // Change validation must still be able to compare a branch with a
-            // revision that used the earlier v1 readiness shape. Readiness is
-            // irrelevant to the baseline graph, so remove only those legacy
-            // probe fields and keep the historical inventory/spec inputs.
-            let normalized = normalize_legacy_baseline_config(&syu_config)
-                .context("normalize legacy baseline readiness config")?;
-            let config = serde_yaml::from_str::<ProjectConfig>(&normalized)
-                .context("parse normalized baseline config")?;
-            (normalized, config)
-        }
-    };
+    let config =
+        serde_yaml::from_str::<ProjectConfig>(&syu_config).context("parse v1 baseline syu.yaml")?;
     let tempdir = tempfile::Builder::new()
         .prefix("syu-baseline-")
         .tempdir()
@@ -2237,24 +2424,6 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
         workspace,
         index,
     })
-}
-
-fn normalize_legacy_baseline_config(source: &str) -> Option<String> {
-    let mut value = serde_yaml::from_str::<serde_yaml::Value>(source).ok()?;
-    let readiness = value
-        .get_mut("validation")?
-        .get_mut("readiness")?
-        .as_mapping_mut()?;
-    readiness.remove(serde_yaml::Value::String("scopes".into()));
-    if let Some(probes) = readiness
-        .get_mut(serde_yaml::Value::String("probes".into()))
-        .and_then(serde_yaml::Value::as_mapping_mut)
-    {
-        for key in ["implemented_criteria", "public_entrypoints", "contracts"] {
-            probes.remove(serde_yaml::Value::String(key.into()));
-        }
-    }
-    serde_yaml::to_string(&value).ok()
 }
 
 fn repository_revision(root: &Path) -> Result<String> {
@@ -3765,7 +3934,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         push(
             out,
             "SYU-WORK-009",
-            "post-state validation requires --slice when a plan has multiple slices",
+            "post-state validation requires --slice-id when a plan has multiple slices",
             "work-plan",
             None,
         );
@@ -4145,7 +4314,7 @@ fn validate_slice_scope(
                 .any(|target| target_matches_changed_file_path(ctx, target, file));
             let editable_hit = editable_targets.iter().any(|target| {
                 editable_target_matches_hunkless_change(ctx, target, file)
-                    || editable_add_target_matches_file(target, file)
+                    || editable_add_target_matches_file(ctx, target, file)
             });
             let generated_hit = generated_targets.iter().any(|target| {
                 target_matches_changed_file_path(ctx, target, file)
@@ -4179,10 +4348,7 @@ fn validate_slice_scope(
             let readonly_hit = guarded_targets
                 .iter()
                 .any(|target| target_overlaps_change(ctx, target, file, &hunk));
-            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk)
-                || editable_targets
-                    .iter()
-                    .any(|target| editable_add_target_matches_file(target, file));
+            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
             let generated_hit = generated_targets.iter().any(|target| {
                 target_overlaps_change(ctx, target, file, &hunk)
                     && generated_target_has_changed_source(ctx, slice, target, files)
@@ -4236,16 +4402,15 @@ fn generated_target_has_changed_source(
 }
 
 fn editable_add_target_matches_file(
+    ctx: &ValidationContext<'_>,
     target: &syu_work_model::PlannedTarget,
     file: &ChangedFile,
 ) -> bool {
     target.transition == syu_work_model::TargetTransition::Add
         && target.content_hash.is_empty()
         && target.excerpt_hash.is_empty()
-        && file
-            .new_path
-            .as_ref()
-            .is_some_and(|path| path.to_string_lossy() == target.resolved_path)
+        && target_selector_is_file(target)
+        && target_matches_changed_file_path(ctx, target, file)
 }
 
 fn target_matches_changed_file_path(
@@ -4305,13 +4470,22 @@ fn change_is_within_editable_scope(
         None => true,
     };
     let new_ok = match file.new_path.as_ref() {
-        Some(path) => changed_side_is_fully_covered(
-            hunk.new_start,
-            hunk.new_end,
-            editable_targets
-                .iter()
-                .filter_map(|target| target_line_range(ctx, target, TargetRangeSide::New, path)),
-        ),
+        Some(path) => {
+            changed_side_is_fully_covered(
+                hunk.new_start,
+                hunk.new_end,
+                editable_targets.iter().filter_map(|target| {
+                    target_line_range(ctx, target, TargetRangeSide::New, path)
+                }),
+            ) || editable_targets.iter().any(|target| {
+                target.transition == TargetTransition::Add
+                    && target.container_content_hash.is_some()
+                    && hunk.old_start == hunk.old_end
+                    && target_line_range(ctx, target, TargetRangeSide::New, path).is_some_and(
+                        |range| changed_side_overlaps(hunk.new_start, hunk.new_end, range),
+                    )
+            })
+        }
         None => true,
     };
     old_ok && new_ok
@@ -4623,41 +4797,6 @@ mod tests {
         (tempdir, workspace, index)
     }
 
-    #[test]
-    fn legacy_readiness_shape_is_normalized_only_for_historical_baselines() {
-        let source = fs::read_to_string(fixture_root().join("syu.yaml"))
-            .expect("fixture config")
-            .replace(
-                "    target: closed-loop\n",
-                concat!(
-                    "    target: traceable\n",
-                    "    scopes: { auth: work-ready }\n",
-                    "    probes: { implemented_criteria: REQ-AUTH-001#criterion.invalid-credentials, public_entrypoints: all, changed_units: false }\n",
-                ),
-            );
-        assert!(serde_yaml::from_str::<ProjectConfig>(&source).is_err());
-        let normalized =
-            normalize_legacy_baseline_config(&source).expect("normalized baseline config");
-        let config =
-            serde_yaml::from_str::<ProjectConfig>(&normalized).expect("current config shape");
-        assert!(
-            config
-                .validation
-                .readiness
-                .probes
-                .implemented_criteria
-                .is_empty()
-        );
-        assert!(
-            config
-                .validation
-                .readiness
-                .probes
-                .public_entrypoints
-                .is_none()
-        );
-    }
-
     fn validate_loaded_workspace(workspace: &SpecWorkspace, index: &SpecIndex) -> ValidationResult {
         validate_without_readiness(&ValidationContext {
             config: &workspace.config,
@@ -4693,7 +4832,7 @@ mod tests {
                 "  preset: standard\n",
                 "  readiness:\n",
                 "    target: off\n",
-                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
                 "  changed:\n",
                 "    require_owned_changes: false\n",
                 "    require_plan: false\n",
@@ -4793,11 +4932,11 @@ mod tests {
         let request = syu_work_model::WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: "WORK-VALIDATION-BASIS".into(),
-            summary: "modify the fixture behavior".into(),
+            title: "modify the fixture behavior".into(),
             operation: syu_work_model::WorkOperation::Modify,
-            seeds: vec![syu_work_model::WorkSeed::Anchor(
-                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
-            )],
+            origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                criterion: "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            },
             constraints: Default::default(),
             requested_targets: vec![],
         };
@@ -5360,6 +5499,106 @@ requirements:
     }
 
     #[test]
+    fn add_to_existing_file_scope_rejects_a_sibling_change() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        fs::write(
+            tempdir.path().join("web/login.ts"),
+            "export function submitLogin() { return fetch('/sessions', { method: 'POST' }); }\nexport function sibling() {}\n",
+        )
+        .expect("post-state source");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("workspace index");
+        let reference: BoundTargetRef = "FEAT-AUTH-001#binding.ui/target.submit".parse().unwrap();
+        let declared = index.target(&reference).expect("declared target");
+        let resolved = resolve_target_in_workspace(&workspace, declared).expect("target");
+        let mut target = sample_target(
+            "web/login.ts",
+            &resolved.description,
+            (resolved.line_start, resolved.line_end),
+        );
+        target.reference = reference;
+        target.resolved_selector.symbols = resolved.symbols.clone();
+        target.content_hash.clear();
+        target.excerpt_hash.clear();
+        target.byte_start = resolved.byte_start;
+        target.byte_end = resolved.byte_end;
+
+        let ctx = ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PostState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        };
+        let sibling_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 2,
+                old_end: 2,
+                new_start: 2,
+                new_end: 2,
+            }],
+        };
+        assert!(!editable_add_target_matches_file(
+            &ctx,
+            &target,
+            &sibling_change
+        ));
+        assert!(!change_is_within_editable_scope(
+            &ctx,
+            &[&target],
+            &sibling_change,
+            &sibling_change.hunks[0],
+        ));
+        let target_and_sibling_change = ChangedFile {
+            hunks: vec![ChangedRange {
+                old_start: 1,
+                old_end: 1,
+                new_start: 1,
+                new_end: 2,
+            }],
+            ..sibling_change.clone()
+        };
+        assert!(!change_is_within_editable_scope(
+            &ctx,
+            &[&target],
+            &target_and_sibling_change,
+            &target_and_sibling_change.hunks[0],
+        ));
+
+        let slice = ExecutionSlice {
+            id: "add-existing-file-scope".into(),
+            goal: "Add only the approved target".into(),
+            anchors: vec![],
+            editable_targets: vec![target],
+            verification_targets: vec![],
+            readonly_context: vec![],
+            acceptance: vec![],
+            contracts: vec![],
+            non_goals: vec![],
+            completion: vec![CompletionCheck::DiffWithinScope],
+            budget: Default::default(),
+            confidence: PlanConfidence::Exact,
+            blockers: vec![],
+        };
+        let mut diagnostics = Vec::new();
+        validate_slice_scope(&ctx, &[sibling_change], &slice, &mut diagnostics);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-006")
+        );
+    }
+
+    #[test]
     fn generated_binding_without_source_is_rejected() {
         let tempdir = tempdir().expect("tempdir");
         write_generated_binding_workspace(tempdir.path());
@@ -5620,36 +5859,59 @@ requirements:
             "cargo",
             &target,
             &arguments,
-            b"test tests::exact_test_execution_requires_match ... ok\n",
+            br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
+{"type":"suite","event":"ok"}
+"#,
         )
         .expect("exact test marker");
         assert_eq!(proof.identity, "tests::exact_test_execution_requires_match");
         assert_eq!(proof.matched_count, 1);
+        assert!(
+            ensure_exact_test_executed(
+                "cargo",
+                &target,
+                &arguments,
+                br#"{"type":"test","name":"tests::other","event":"ok"}
+"#,
+            )
+            .is_err()
+        );
         assert!(ensure_exact_test_executed(
             "cargo",
             &target,
             &arguments,
-            b"test tests::other ... ok\n",
+            br#"{"type":"test","name":"other::tests::exact_test_execution_requires_match","event":"ok"}
+"#,
+        )
+        .is_err());
+        assert!(ensure_exact_test_executed(
+            "cargo",
+            &target,
+            &arguments,
+            br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ignored"}
+"#,
+        )
+        .is_err());
+        assert!(ensure_exact_test_executed(
+            "cargo",
+            &target,
+            &arguments,
+            br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
+{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
+"#,
         )
         .is_err());
         assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());
-    }
-
-    #[test]
-    fn legacy_receipt_execution_deserializes_without_a_claim() {
-        let execution: VerificationExecution = serde_json::from_value(serde_json::json!({
-            "target": "FEAT-AUTH-001#binding.ui/target.requested",
-            "runner": "cargo-test",
-            "command": ["cargo", "test"],
-            "exit_code": 0,
-            "stdout_digest": "sha256:stdout",
-            "stderr_digest": "sha256:stderr",
-            "proof": { "identity": "tests::behavior", "matched_count": 1 },
-            "implementation_digests": {},
-            "verification_digest": "sha256:verification"
-        }))
-        .expect("v2 execution remains readable");
-        assert!(execution.claim.is_none());
+        let command = canonical_runner_arguments(
+            "cargo",
+            vec!["test".into(), "--package".into(), "sample".into()],
+        );
+        assert!(command.windows(2).any(|window| window == ["--", "--exact"]));
+        assert!(
+            command
+                .windows(2)
+                .any(|window| window == ["--format", "json"])
+        );
     }
 
     #[test]
@@ -5712,9 +5974,11 @@ requirements:
                 let request = syu_work_model::WorkRequest {
                     schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
                     id: format!("WORK-SHARED-{}", criterion.local_id),
-                    summary: "Execute a shared verification claim.".into(),
+                    title: "Execute a shared verification claim.".into(),
                     operation: syu_work_model::WorkOperation::Modify,
-                    seeds: vec![syu_work_model::WorkSeed::Anchor(criterion.clone())],
+                    origin: syu_work_model::WorkOrigin::RequirementCriterion {
+                        criterion: criterion.clone(),
+                    },
                     constraints: Default::default(),
                     requested_targets: vec![],
                 };

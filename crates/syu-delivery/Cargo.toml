@@ -11,11 +11,10 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
+fs2.workspace = true
 uuid.workspace = true
 syu-work-model = { path = "../syu-work-model" }
 syu-spec-model = { path = "../syu-spec-model" }
+syu-planner = { path = "../syu-planner" }
 syu-workspace = { path = "../syu-workspace" }
 syu-validation = { path = "../syu-validation" }
-
-[dev-dependencies]
-syu-planner = { path = "../syu-planner" }

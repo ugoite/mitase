@@ -11,14 +11,14 @@ use std::{
 };
 use syu_delivery::DeliveryStore;
 use syu_inventory::{InventoryContext, InventoryRegistry};
-use syu_planner::{export_context, plan};
+use syu_planner::{export_context, plan, validate_work_origin, validate_work_request};
 use syu_project_model::{ChangeBaseline, GitRef};
 use syu_spec_model::RepoPath;
 use syu_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
 use syu_work_model::{
-    CompletionAttempt, CompletionStatus, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
+    CompletionStatus, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
     VerificationAttemptStatus, WorkPlan, WorkRequest,
 };
 use syu_workbench_server::project as project_workbench;
@@ -85,7 +85,9 @@ struct ValidateOptions {
     #[arg(long)]
     plan: Option<PathBuf>,
     #[arg(long)]
-    slice: Option<String>,
+    plan_digest: Option<String>,
+    #[arg(long)]
+    slice_id: Option<String>,
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
 }
@@ -93,6 +95,8 @@ struct ValidateOptions {
 struct ValidateResultOptions {
     #[command(flatten)]
     validate: ValidateOptions,
+    #[arg(long)]
+    attempt_id: String,
     #[arg(long)]
     receipt: PathBuf,
 }
@@ -111,6 +115,10 @@ enum TaskCommand {
     Approve {
         #[arg(long)]
         plan: PathBuf,
+        #[arg(long)]
+        plan_digest: String,
+        #[arg(long)]
+        slice_id: String,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
         #[arg(long, value_enum, default_value = "text")]
@@ -120,7 +128,9 @@ enum TaskCommand {
         #[arg(long)]
         plan: PathBuf,
         #[arg(long)]
-        slice: String,
+        plan_digest: String,
+        #[arg(long)]
+        slice_id: String,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
         #[arg(long, value_enum, default_value = "text")]
@@ -143,12 +153,16 @@ enum AttemptCommand {
         #[arg(long)]
         plan_digest: Option<String>,
         #[arg(long)]
-        slice: Option<String>,
+        slice_id: Option<String>,
         #[arg(long, value_enum, default_value = "text")]
         format: Format,
     },
     Show {
         attempt_id: String,
+        #[arg(long)]
+        plan_digest: String,
+        #[arg(long)]
+        slice_id: String,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
         #[arg(long, value_enum, default_value = "json")]
@@ -160,6 +174,10 @@ enum FinalizeCommand {
     Preview {
         #[arg(long)]
         attempt: String,
+        #[arg(long)]
+        plan_digest: String,
+        #[arg(long)]
+        slice_id: String,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
         #[arg(long, value_enum, default_value = "json")]
@@ -168,6 +186,10 @@ enum FinalizeCommand {
     Apply {
         #[arg(long)]
         attempt: String,
+        #[arg(long)]
+        plan_digest: String,
+        #[arg(long)]
+        slice_id: String,
         #[arg(long)]
         preview_token: String,
         #[arg(long, default_value = ".")]
@@ -217,21 +239,13 @@ enum WorkCommand {
         #[arg(long)]
         plan: PathBuf,
         #[arg(long)]
-        slice: String,
+        plan_digest: String,
+        #[arg(long)]
+        slice_id: String,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
         #[arg(long)]
         out: Option<PathBuf>,
-    },
-    Verify {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        slice: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        out: PathBuf,
     },
 }
 #[derive(Debug, Subcommand)]
@@ -354,8 +368,8 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         if args.range.is_some() || args.baseline.is_some() {
             bail!("--staged cannot be combined with --range or --baseline");
         }
-        if args.plan.is_some() || args.slice.is_some() {
-            bail!("--staged cannot be combined with --plan or --slice");
+        if args.plan.is_some() || args.slice_id.is_some() {
+            bail!("--staged cannot be combined with --plan or --slice-id");
         }
     }
     let staged_snapshot = args
@@ -373,23 +387,31 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         .as_ref()
         .map(|path| read_yaml::<WorkPlan>(path))
         .transpose()?;
+    match (&plan, &args.plan_digest) {
+        (Some(plan), Some(digest)) if plan.canonical_digest == *digest => {}
+        (Some(_), Some(_)) => bail!("submitted plan does not match --plan-digest"),
+        (Some(_), None) => bail!("--plan requires --plan-digest"),
+        (None, Some(_)) => bail!("--plan-digest requires --plan"),
+        (None, None) => {}
+    }
     // Every validation invocation gets one explicit revision. Changed-unit
     // probes use the same resolved baseline plus staged, working-tree, and
     // untracked changes below.
     let revision = Some(revision(&workspace.root)?);
-    let selected = match (&plan, &args.slice) {
+    let selected = match (&plan, &args.slice_id) {
         (Some(p), Some(id)) => Some(
             p.slices
                 .iter()
                 .find(|s| &s.id == id)
                 .with_context(|| format!("slice {id} not found"))?,
         ),
-        (None, Some(_)) => bail!("--slice requires --plan"),
-        _ => None,
+        (None, Some(_)) => bail!("--slice-id requires --plan"),
+        (Some(_), None) => bail!("--plan requires --slice-id"),
+        (None, None) => None,
     };
     let mut validation_inputs = validation_inputs_for_cli(&workspace, &args, plan.as_ref())?;
     if force_post_state {
-        if plan.as_ref().is_some_and(|plan| plan.slices.len() > 1) && args.slice.is_none() {
+        if plan.as_ref().is_some_and(|plan| plan.slices.len() > 1) && args.slice_id.is_none() {
             bail!("validate result requires the receipt-selected slice for a multi-slice plan");
         }
         validation_inputs.plan_mode = PlanValidationMode::PostState;
@@ -452,11 +474,52 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
         .plan
         .as_ref()
         .context("validate result requires --plan")?;
-    let plan: WorkPlan = read_yaml(plan_path)?;
-    let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
+    let submitted_plan: WorkPlan = read_yaml(plan_path)?;
+    let plan_digest = args
+        .validate
+        .plan_digest
+        .as_deref()
+        .context("validate result requires --plan-digest")?;
+    let slice_id = args
+        .validate
+        .slice_id
+        .as_deref()
+        .context("validate result requires --slice-id")?;
+    if submitted_plan.canonical_digest != plan_digest {
+        bail!("submitted plan does not match --plan-digest");
+    }
     let workspace = SpecWorkspace::load(&args.validate.workspace)?;
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let identity = ExecutionIdentity {
+        plan_digest: plan_digest.to_owned(),
+        slice_id: slice_id.to_owned(),
+    };
+    let attempt = store.attempt(&identity, &args.attempt_id)?;
+    if attempt.attempt_id != args.attempt_id
+        || attempt.report.attempt_id != args.attempt_id
+        || attempt.report.status != CompletionStatus::Complete
+    {
+        bail!("attempt is not a complete durable verification attempt");
+    }
+    let approval = store.approval(&identity)?;
+    if approval.plan != submitted_plan {
+        bail!("submitted plan differs from the approved durable plan");
+    }
+    let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
+    let canonical = attempt
+        .receipt
+        .as_ref()
+        .context("complete attempt has no durable verification receipt")?;
+    if receipt != *canonical
+        || receipt.plan_digest != plan_digest
+        || receipt.slice_id != slice_id
+        || attempt.report.receipt_digest.as_deref()
+            != Some(DeliveryStore::verification_digest(canonical)?.as_str())
+    {
+        bail!("receipt does not match the exact durable verification attempt");
+    }
     let index = workspace.index()?;
-    let report = syu_validation::evaluate_completion(&workspace, &index, &plan, &receipt)?;
+    let report = syu_validation::evaluate_completion(&workspace, &index, &approval.plan, &receipt)?;
     match args.validate.format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => {
@@ -492,10 +555,14 @@ fn run_task(args: TaskArgs) -> Result<i32> {
     match args.command {
         TaskCommand::Approve {
             plan: plan_path,
+            plan_digest,
+            slice_id,
             workspace: root,
             format,
         } => {
             let workspace = SpecWorkspace::load(&root)?;
+            let store = DeliveryStore::for_workspace(&workspace.root)?;
+            let _workspace_lock = store.lock_workspace()?;
             let index = workspace.index()?;
             let revision = revision(&workspace.root)?;
             let submitted: WorkPlan = read_yaml(&plan_path)?;
@@ -505,32 +572,44 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             if !matches!(canonical.status, PlanStatus::Ready) {
                 bail!("only a ready canonical plan can be approved");
             }
-            let store = DeliveryStore::for_workspace(&workspace.root)?;
+            if canonical.canonical_digest != plan_digest
+                || canonical.slices.len() != 1
+                || canonical.slices[0].id != slice_id
+            {
+                bail!("approval requires the exact --plan-digest and --slice-id pair");
+            }
             let approval = PlanApproval {
                 schema: PLAN_APPROVAL_SCHEMA.into(),
                 approval_id: store.new_id("approval"),
                 plan_digest: canonical.canonical_digest.clone(),
+                slice_id,
                 workspace_fingerprint: workspace.try_fingerprint()?,
                 revision,
                 reviewed_at: now_timestamp(),
                 plan: canonical,
             };
-            let approval = store.approve(&approval)?;
+            let approval = store.approve_while_locked(&approval)?;
             emit_task_value(&approval, format, "approved plan")?;
             Ok(0)
         }
         TaskCommand::Verify {
             plan: plan_path,
-            slice,
+            plan_digest,
+            slice_id,
             workspace: root,
             format,
         } => {
             let workspace = SpecWorkspace::load(&root)?;
-            let index = workspace.index()?;
             let plan: WorkPlan = read_yaml(&plan_path)?;
             let store = DeliveryStore::for_workspace(&workspace.root)?;
+            if plan.canonical_digest != plan_digest {
+                bail!("submitted plan does not match --plan-digest");
+            }
             let approval = store
-                .approval(&plan.canonical_digest)
+                .approval(&ExecutionIdentity {
+                    plan_digest: plan.canonical_digest.clone(),
+                    slice_id: slice_id.clone(),
+                })
                 .context("plan has not been explicitly approved; run syu task approve first")?;
             if approval.plan != plan {
                 bail!(
@@ -540,37 +619,12 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             let slice_value = plan
                 .slices
                 .iter()
-                .find(|value| value.id == slice)
-                .with_context(|| format!("slice {slice} not found"))?;
+                .find(|value| value.id == slice_id)
+                .with_context(|| format!("slice {slice_id} not found"))?;
             if slice_value.verification_targets.is_empty() {
                 bail!("selected slice has no verification targets");
             }
-            let attempt_id = store.new_id("attempt");
-            let started_at = now_timestamp();
-            let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
-                &workspace,
-                &index,
-                &plan,
-                &slice,
-                &revision(&workspace.root)?,
-                &attempt_id,
-            )?;
-            report.attempt_id = attempt_id.clone();
-            let mut attempt = CompletionAttempt {
-                schema: syu_work_model::COMPLETION_ATTEMPT_SCHEMA.into(),
-                attempt_id,
-                attempt_digest: String::new(),
-                plan_digest: plan.canonical_digest.clone(),
-                slice_id: slice,
-                approved_plan_digest: approval.plan_digest,
-                started_at,
-                completed_at: now_timestamp(),
-                verification,
-                receipt,
-                report,
-            };
-            attempt.attempt_digest = attempt_digest(&attempt)?;
-            let attempt = store.append_attempt(&attempt)?;
+            let attempt = store.execute_and_append_attempt(&workspace, &plan, &slice_id)?;
             emit_task_value(&attempt, format, "completion attempt")?;
             Ok(
                 if matches!(
@@ -594,7 +648,7 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             match command {
                 AttemptCommand::List {
                     plan_digest,
-                    slice,
+                    slice_id,
                     format,
                     ..
                 } => {
@@ -605,38 +659,63 @@ fn run_task(args: TaskArgs) -> Result<i32> {
                             plan_digest
                                 .as_ref()
                                 .is_none_or(|digest| &attempt.plan_digest == digest)
-                                && slice.as_ref().is_none_or(|id| &attempt.slice_id == id)
+                                && slice_id.as_ref().is_none_or(|id| &attempt.slice_id == id)
                         })
                         .collect::<Vec<_>>();
                     emit_task_value(&attempts, format, "completion attempts")?;
                     Ok(0)
                 }
                 AttemptCommand::Show {
-                    attempt_id, format, ..
+                    attempt_id,
+                    plan_digest,
+                    slice_id,
+                    format,
+                    ..
                 } => {
-                    let attempt = store.attempt(&attempt_id)?;
+                    let attempt = store.attempt(
+                        &ExecutionIdentity {
+                            plan_digest,
+                            slice_id,
+                        },
+                        &attempt_id,
+                    )?;
                     emit_task_value(&attempt, format, "completion attempt")?;
                     Ok(0)
                 }
             }
         }
         TaskCommand::Finalize { command } => {
-            let (attempt_id, root, format, token) = match command {
+            let (attempt_id, plan_digest, slice_id, root, format, token) = match command {
                 FinalizeCommand::Preview {
                     attempt,
+                    plan_digest,
+                    slice_id,
                     workspace,
                     format,
-                } => (attempt, workspace, format, None),
+                } => (attempt, plan_digest, slice_id, workspace, format, None),
                 FinalizeCommand::Apply {
                     attempt,
+                    plan_digest,
+                    slice_id,
                     preview_token,
                     workspace,
                     format,
-                } => (attempt, workspace, format, Some(preview_token)),
+                } => (
+                    attempt,
+                    plan_digest,
+                    slice_id,
+                    workspace,
+                    format,
+                    Some(preview_token),
+                ),
             };
             let workspace = SpecWorkspace::load(&root)?;
             let store = DeliveryStore::for_workspace(&workspace.root)?;
-            let attempt = store.attempt(&attempt_id)?;
+            let identity = ExecutionIdentity {
+                plan_digest,
+                slice_id,
+            };
+            let attempt = store.attempt(&identity, &attempt_id)?;
             let preview = store.finalization_preview(&workspace, &attempt)?;
             if let Some(token) = token {
                 let receipt = store.apply_finalization(&workspace, &attempt, &preview, &token)?;
@@ -663,12 +742,6 @@ fn emit_task_value<T: serde::Serialize>(value: &T, format: Format, label: &str) 
     Ok(())
 }
 
-fn attempt_digest(attempt: &CompletionAttempt) -> Result<String> {
-    let mut copy = attempt.clone();
-    copy.attempt_digest.clear();
-    DeliveryStore::digest(&copy)
-}
-
 fn now_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -689,6 +762,10 @@ fn run_work(args: WorkArgs) -> Result<i32> {
             let index = workspace.index()?;
             let request: WorkRequest = read_yaml(&request)?;
             ensure_clean_plan_workspace(&workspace)?;
+            validate_work_origin(&index, &request.origin)
+                .context("work plan requires an exact implemented Work origin")?;
+            validate_work_request(&index, &request)
+                .context("work plan contains an out-of-scope requested target")?;
             let plan = plan(&request, &workspace, &index, &revision(&workspace.root)?)?;
             write_yaml(&out, &plan)?;
             println!("wrote {} ({:?})", out.display(), plan.status);
@@ -707,19 +784,23 @@ fn run_work(args: WorkArgs) -> Result<i32> {
         }
         WorkCommand::ExportContext {
             plan,
-            slice,
+            plan_digest,
+            slice_id,
             workspace,
             out,
         } => {
             let workspace = SpecWorkspace::load(workspace)?;
             let index = workspace.index()?;
             let plan: WorkPlan = read_yaml(&plan)?;
+            if plan.canonical_digest != plan_digest {
+                bail!("submitted plan does not match --plan-digest");
+            }
             plan.slices
                 .iter()
-                .find(|s| s.id == slice)
-                .with_context(|| format!("slice {slice} not found"))?;
+                .find(|s| s.id == slice_id)
+                .with_context(|| format!("slice {slice_id} not found"))?;
             let current_revision = revision(&workspace.root)?;
-            let context = export_context(&plan, &slice, &workspace, &index, &current_revision)?;
+            let context = export_context(&plan, &slice_id, &workspace, &index, &current_revision)?;
             let yaml = serde_yaml::to_string(&context)?;
             if let Some(path) = out {
                 fs::write(&path, yaml)?;
@@ -728,36 +809,6 @@ fn run_work(args: WorkArgs) -> Result<i32> {
                 print!("{yaml}");
             }
             Ok(0)
-        }
-        WorkCommand::Verify {
-            plan: plan_path,
-            slice,
-            workspace,
-            out,
-        } => {
-            let workspace = SpecWorkspace::load(workspace)?;
-            let index = workspace.index()?;
-            let plan: WorkPlan = read_yaml(&plan_path)?;
-            let receipt = syu_validation::execute_verification(
-                &workspace,
-                &index,
-                &plan,
-                &slice,
-                &revision(&workspace.root)?,
-            )?;
-            write_yaml(&out, &receipt)?;
-            println!("wrote {}", out.display());
-            Ok(
-                if receipt
-                    .executions
-                    .iter()
-                    .all(|execution| execution.exit_code == 0)
-                {
-                    0
-                } else {
-                    1
-                },
-            )
         }
     }
 }
@@ -779,10 +830,15 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
             format,
         } => {
             let workspace = SpecWorkspace::load(workspace)?;
+            let index = workspace.index()?;
             let request = request
                 .as_ref()
                 .map(|path| read_yaml::<WorkRequest>(path))
                 .transpose()?;
+            if let Some(request) = &request {
+                validate_work_request(&index, request)
+                    .context("workbench projection request is outside its exact origin")?;
+            }
             let projection =
                 project_workbench(&workspace, request.as_ref(), &revision(&workspace.root)?)?;
             match format {
@@ -828,7 +884,7 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                     no_open,
                 });
             if let Some(request) = request {
-                server.with_request(request).run()?;
+                server.with_request(request)?.run()?;
             } else {
                 server.run()?;
             }

@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
 
 - **id**: FEAT-WORKBENCH-GUIDED-JOURNEY-001
   - **title**: Guided non-programmer journey
-  - **summary**: Project a safe change lifecycle as one explained next action at a time.
+  - **summary**: Project a safe change lifecycle as one explained next action at a time, including exact-origin split recovery.
   - **status**: implemented
   - **bindings**:
     - **id**: journey
@@ -151,7 +151,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-GUIDED-JOURNEY-001
   title: Guided non-programmer journey
-  summary: Project a safe change lifecycle as one explained next action at a time.
+  summary: Project a safe change lifecycle as one explained next action at a time, including exact-origin split recovery.
   status: implemented
   bindings:
   - id: journey
