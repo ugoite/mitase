@@ -14,7 +14,10 @@ use std::{
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
-use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
+use syu_spec_model::{
+    ArtifactTargetLifecycle, ItemStatus, LocalAnchorKind, SpecAnchor, SpecDocument, SpecItemRef,
+    format_sha256, lowercase_hex,
+};
 use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
     AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentRun, AgentRunStatus,
@@ -806,6 +809,7 @@ impl DeliveryStore {
             for target in &slice.editable_targets {
                 if index.item_status.get(&target.reference.binding.item)
                     == Some(&ItemStatus::Planned)
+                    || !matches!(target.lifecycle, syu_work_model::TargetLifecycle::Stable)
                 {
                     items.insert(target.reference.binding.item.clone());
                 }
@@ -892,7 +896,13 @@ impl DeliveryStore {
             journal_files,
             Vec::new(),
         )?;
-        let old = apply_status_overlay(workspace, &preview.promoted_items)?;
+        let approval = self.approval(&identity)?;
+        let old = apply_status_overlay(
+            workspace,
+            &preview.promoted_items,
+            &approval.plan,
+            &attempt.slice_id,
+        )?;
         let post_workspace_fingerprint = match (|| -> Result<String> {
             let candidate = validate_finalized_workspace(&workspace.root)?;
             candidate.try_fingerprint()
@@ -2524,11 +2534,36 @@ fn validate_finalized_workspace(root: &Path) -> Result<SpecWorkspace> {
 fn apply_status_overlay(
     workspace: &SpecWorkspace,
     items: &[SpecItemRef],
+    plan: &syu_work_model::WorkPlan,
+    slice_id: &str,
 ) -> Result<Vec<(PathBuf, Vec<u8>)>> {
     let ids = items
         .iter()
         .map(|item| item.0.clone())
         .collect::<std::collections::BTreeSet<_>>();
+    let lifecycle_updates = plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == slice_id)
+        .map(|slice| {
+            slice
+                .editable_targets
+                .iter()
+                .filter_map(|target| {
+                    let lifecycle = match target.lifecycle {
+                        syu_work_model::TargetLifecycle::EnsurePresent => {
+                            ArtifactTargetLifecycle::Present
+                        }
+                        syu_work_model::TargetLifecycle::EnsureAbsent => {
+                            ArtifactTargetLifecycle::Absent
+                        }
+                        syu_work_model::TargetLifecycle::Stable => return None,
+                    };
+                    Some((target.reference.clone(), lifecycle))
+                })
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
     let mut old = Vec::new();
     for loaded in &workspace.documents {
         let mut document = loaded.document.clone();
@@ -2544,9 +2579,30 @@ fn apply_status_overlay(
             }
             SpecDocument::Features { features, .. } => {
                 for item in features {
-                    if ids.contains(&item.id) && item.status == ItemStatus::Planned {
-                        item.status = ItemStatus::Implemented;
-                        changed = true;
+                    if ids.contains(&item.id) {
+                        if item.status == ItemStatus::Planned {
+                            item.status = ItemStatus::Implemented;
+                            changed = true;
+                        }
+                        for binding in &mut item.bindings {
+                            let binding_anchor = SpecAnchor {
+                                item: item.id.clone(),
+                                kind: LocalAnchorKind::Binding,
+                                local_id: binding.id.clone(),
+                            };
+                            for target in &mut binding.targets {
+                                let reference = syu_spec_model::BoundTargetRef {
+                                    binding: binding_anchor.clone(),
+                                    target_id: target.id.clone(),
+                                };
+                                if let Some(lifecycle) = lifecycle_updates.get(&reference)
+                                    && target.lifecycle != *lifecycle
+                                {
+                                    target.lifecycle = *lifecycle;
+                                    changed = true;
+                                }
+                            }
+                        }
                     }
                 }
             }

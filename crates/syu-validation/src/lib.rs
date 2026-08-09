@@ -1496,13 +1496,41 @@ fn readiness_regression_blockers(
     };
     let before = evaluate_readiness(&basis.workspace, &basis.index, &plan.basis.revision, false)?;
     let after = evaluate_readiness(workspace, index, current_revision, false)?;
-    let approved_removed_inventory = plan
+    let approved_removed_targets = plan
         .slices
         .iter()
         .flat_map(|slice| slice.editable_targets.iter())
         .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
-        .filter_map(|target| basis.index.all_target_to_artifact.get(&target.reference))
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let approved_removed_artifacts = approved_removed_targets
+        .iter()
+        .filter_map(|target| basis.index.all_target_to_artifact.get(target))
+        .map(|identity| identity.as_str())
+        .collect::<BTreeSet<_>>();
+    let approved_removed_inventory = approved_removed_artifacts
+        .iter()
         .map(|identity| format!("inventory:{identity}"))
+        .collect::<BTreeSet<_>>();
+    let approved_removed_ownership = approved_removed_artifacts
+        .iter()
+        .map(|identity| format!("ownership:{identity}"))
+        .collect::<BTreeSet<_>>();
+    let approved_removed_features = approved_removed_targets
+        .iter()
+        .map(|target| format!("feature:{}", target.binding.item))
+        .collect::<BTreeSet<_>>();
+    let approved_removed_seedability = basis
+        .index
+        .criteria_to_implementation_targets
+        .iter()
+        .chain(basis.index.criteria_to_verification_targets.iter())
+        .flat_map(|(criterion, targets)| {
+            targets
+                .iter()
+                .filter(|target| approved_removed_targets.contains(*target))
+                .map(move |target| format!("criterion:{criterion}/target:{target}"))
+        })
         .collect::<BTreeSet<_>>();
     let axes = [
         ("inventory", &before.inventory, &after.inventory),
@@ -1527,7 +1555,17 @@ fn readiness_regression_blockers(
             .collect::<BTreeSet<_>>();
         let regressed = before_ready
             .difference(&after_ready)
-            .filter(|subject| name != "inventory" || !approved_removed_inventory.contains(*subject))
+            .filter(|subject| match name {
+                "inventory" => !approved_removed_inventory.contains(*subject),
+                "ownership" => !approved_removed_ownership.contains(*subject),
+                "seedability" => {
+                    approved_removed_seedability
+                        .iter()
+                        .all(|target| !subject.starts_with(target))
+                        && !approved_removed_features.contains(*subject)
+                }
+                _ => true,
+            })
             .cloned()
             .collect::<Vec<_>>();
         if !regressed.is_empty() {

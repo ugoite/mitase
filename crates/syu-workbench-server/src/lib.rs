@@ -11536,6 +11536,43 @@ mod tests {
         assert!(projection["work"]["agent"].is_null());
     }
 
+    fn activate_lifecycle_feature_fixture(root: &Path, target_id: &str) {
+        let feature_id = match target_id {
+            "behavior" => "FEAT-FIXTURE-001",
+            "added-symbol" => "FEAT-LIFECYCLE-ADD-SYMBOL-001",
+            "added-file" => "FEAT-LIFECYCLE-ADD-FILE-001",
+            "removed-symbol" => "FEAT-LIFECYCLE-REMOVE-SYMBOL-001",
+            "removed-file" => "FEAT-LIFECYCLE-REMOVE-FILE-001",
+            _ => unreachable!("declared lifecycle fixture target"),
+        };
+        let feature_path = root.join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path).expect("lifecycle feature fixture");
+        let marker = format!("  - id: {feature_id}");
+        let start = feature
+            .find(&marker)
+            .expect("lifecycle feature fixture entry");
+        let end = feature[start + marker.len()..]
+            .find("\n  - id:")
+            .map(|offset| start + marker.len() + offset)
+            .unwrap_or(feature.len());
+        let mut section = feature[start..end].to_owned();
+        section = section.replace("status: planned", "status: implemented");
+        if matches!(target_id, "removed-symbol" | "removed-file") {
+            section = section.replace("lifecycle: absent", "lifecycle: present");
+        }
+        let mut updated = feature;
+        updated.replace_range(start..end, &section);
+        fs::write(feature_path, updated).expect("activate lifecycle feature fixture");
+        if target_id == "added-file" {
+            let source_path = root.join("src/lib.rs");
+            let mut source = fs::read_to_string(&source_path).expect("lifecycle source fixture");
+            source.push_str(
+                "\n// Keep the planned file target visible to inventory once it is created.\n#[cfg(any())]\n#[path = \"added.rs\"]\nmod added;\n",
+            );
+            fs::write(source_path, source).expect("activate added-file inventory fixture");
+        }
+    }
+
     async fn start_lifecycle_agent(
         server: &WorkbenchServer,
         app: &Router,
@@ -12164,7 +12201,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-v1 cutover: planned Feature lifecycle origins are rejected before agent execution"]
     async fn workbench_agent_applies_all_approved_lifecycle_writes() {
         let _workspace_lock = workspace_test_lock().await;
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -12202,6 +12238,8 @@ mod tests {
         for (target_id, transition, description) in cases {
             let temp = tempfile::tempdir().expect("lifecycle fixture tempdir");
             copy_fixture_tree(&fixture, temp.path());
+            // Exercise the approved lifecycle write path after admission.
+            activate_lifecycle_feature_fixture(temp.path(), target_id);
             if target_id == "removed-symbol" {
                 let config_path = temp.path().join("syu.yaml");
                 let config = fs::read_to_string(&config_path).expect("fixture config");
@@ -12610,18 +12648,8 @@ mod tests {
         for (target_id, transition, path, changed_content, expected_blocker) in cases {
             let temp = tempfile::tempdir().expect("lifecycle precondition fixture tempdir");
             copy_fixture_tree(&fixture, temp.path());
-            // Exercise agent-time stale-state rejection after the request has
-            // been admitted. The fixture features are advisory by default,
-            // so promote them only in this isolated test workspace.
-            let feature_path = temp.path().join("spec/feature.yaml");
-            let feature = fs::read_to_string(&feature_path).expect("lifecycle feature fixture");
-            fs::write(
-                feature_path,
-                feature
-                    .replace("status: planned", "status: implemented")
-                    .replace("lifecycle: absent", "lifecycle: present"),
-            )
-            .expect("activate lifecycle feature fixture");
+            // Exercise agent-time stale-state rejection after admission.
+            activate_lifecycle_feature_fixture(temp.path(), target_id);
             initialize_fixture_git(temp.path());
             let server = WorkbenchServer::new(temp.path().to_path_buf());
             let app = server.router();
