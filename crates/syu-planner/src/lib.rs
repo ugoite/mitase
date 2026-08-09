@@ -1008,6 +1008,7 @@ fn suggestion_id(reference: &BoundTargetRef) -> String {
     format!("target-{}", &hex_digest(&digest)[..16])
 }
 
+#[allow(clippy::too_many_arguments)]
 fn suggestion_digest(
     criterion: &SpecAnchor,
     workspace_fingerprint: &str,
