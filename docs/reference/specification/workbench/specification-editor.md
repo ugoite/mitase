@@ -259,6 +259,193 @@ description: "Generated reference for docs/syu/features/workbench/specification-
           - **path**: crates/syu-app-ui/src/shell.rs
           - **selector**:
             - **kind**: file
+- **id**: FEAT-WORKBENCH-SPEC-DETAIL-001
+  - **title**: Canonical specification detail workspace
+  - **summary**: Present a bounded server-owned intent-to-evidence trace and typed nested edits without changing the meaning of existing discovery contracts.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: detail-workspace
+      - **role**: implementation
+      - **facet**: specification-detail
+      - **responsibility**: Render the canonical detail, trace, item-scoped evidence, and strict typed edit workspace.
+      - **targets**:
+        - **id**: detail-trace
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: specification_trace_view
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-016#criterion.bounded-detail-context
+        - **id**: detail-nested-edit
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: nested_patch_content
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
+        - **id**: detail-browser-workspace
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderSpecificationWorkspace
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
+        - **id**: detail-specification-location-sync
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: syncSpecificationLocation
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
+        - **id**: detail-work-route-state
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: syncWorkSpecificationLocation
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
+        - **id**: detail-work-workspace-adapter
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: workSpecificationWorkspaceAdapter
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - **id**: detail-verification
+      - **role**: verification
+      - **facet**: verification
+      - **responsibility**: Verify the bounded trace, item-scoped evidence, typed nested edits, and route-aware browser workspace.
+      - **targets**:
+        - **id**: detail-trace-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
+        - **id**: detail-nested-edit-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::typed_nested_edit_round_trip_covers_all_entity_variants
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-nested-edit
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::typed_nested_edit_round_trip_covers_all_entity_variants
+        - **id**: detail-browser-test
+          - **adapter**: declared
+          - **path**: scripts/ci/workbench-visual.sh
+          - **selector**:
+            - **kind**: file
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+              - **runner**:
+                - **runner**: shell
+                - **arguments**:
+                  - **script**: scripts/ci/workbench-visual.sh
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+              - **runner**:
+                - **runner**: shell
+                - **arguments**:
+                  - **script**: scripts/ci/workbench-visual.sh
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+              - **runner**:
+                - **runner**: shell
+                - **arguments**:
+                  - **script**: scripts/ci/workbench-visual.sh
+        - **id**: detail-evidence-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::specification_trace_is_deterministic_and_preserves_canonical_claims
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::specification_trace_is_deterministic_and_preserves_canonical_claims
+    - **id**: detail-contract-source
+      - **role**: contract-source
+      - **facet**: specification-detail
+      - **responsibility**: Define the route coordination boundary shared by the detail workspace and Workbench navigation.
+      - **targets**:
+        - **id**: detail-route-coordination-source
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: workSpecificationWorkspaceAdapter
+  - **contracts**:
+    - **id**: detail-route-coordination
+      - **kind**: function
+      - **source**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-contract-source/target.detail-route-coordination-source
+      - **participants**:
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+          - **role**: producer
+        - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+          - **role**: consumer
+      - **guarantees**:
+        - REQ-WORKBENCH-015#criterion.detail-deep-link
 
 ## Source YAML
 
@@ -460,4 +647,150 @@ features:
       path: crates/syu-app-ui/src/shell.rs
       selector:
         kind: file
+
+- id: FEAT-WORKBENCH-SPEC-DETAIL-001
+  title: Canonical specification detail workspace
+  summary: Present a bounded server-owned intent-to-evidence trace and typed nested edits without changing the meaning of existing discovery contracts.
+  status: implemented
+  bindings:
+  - id: detail-workspace
+    role: implementation
+    facet: specification-detail
+    responsibility: Render the canonical detail, trace, item-scoped evidence, and strict typed edit workspace.
+    targets:
+    - id: detail-trace
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: specification_trace_view }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-016#criterion.bounded-detail-context
+    - id: detail-nested-edit
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: nested_patch_content }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
+    - id: detail-browser-workspace
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector: { kind: symbol, name: renderSpecificationWorkspace }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-specification-location-sync
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/router.js
+      selector: { kind: symbol, name: syncSpecificationLocation }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-work-route-state
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: syncWorkSpecificationLocation }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+    - id: detail-work-workspace-adapter
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: workSpecificationWorkspaceAdapter }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+  - id: detail-verification
+    role: verification
+    facet: verification
+    responsibility: Verify the bounded trace, item-scoped evidence, typed nested edits, and route-aware browser workspace.
+    targets:
+    - id: detail-trace-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::specification_trace_reaches_external_workbench_targets_from_spec_index }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
+    - id: detail-nested-edit-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::typed_nested_edit_round_trip_covers_all_entity_variants }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-nested-edit
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_edit_round_trip_covers_all_entity_variants } }
+    - id: detail-browser-test
+      adapter: declared
+      path: scripts/ci/workbench-visual.sh
+      selector: { kind: file }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+        runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+        runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
+    - id: detail-evidence-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: tests::specification_trace_is_deterministic_and_preserves_canonical_claims }
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
+        covers:
+        - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_is_deterministic_and_preserves_canonical_claims } }
+  - id: detail-contract-source
+    role: contract-source
+    facet: specification-detail
+    responsibility: Define the route coordination boundary shared by the detail workspace and Workbench navigation.
+    targets:
+    - id: detail-route-coordination-source
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/work.js
+      selector: { kind: symbol, name: workSpecificationWorkspaceAdapter }
+  contracts:
+  - id: detail-route-coordination
+    kind: function
+    source: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-contract-source/target.detail-route-coordination-source
+    participants:
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-browser-workspace
+      role: producer
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-specification-location-sync
+      role: producer
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-route-state
+      role: producer
+    - target: FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-work-workspace-adapter
+      role: producer
+    - target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+      role: consumer
+    guarantees:
+    - REQ-WORKBENCH-015#criterion.detail-deep-link
 ```

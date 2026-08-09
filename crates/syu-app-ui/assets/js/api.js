@@ -45,6 +45,14 @@ export const runDiagnostics = (projection, context, range = '') => post('/api/di
 });
 export const readSource = path => request(`/api/source?path=${encodeURIComponent(path)}`);
 export const readTargetSource = target => request(`/api/source?target=${encodeURIComponent(target)}`);
+export const readSpecificationTrace = (itemId, options = {}) => {
+  const params = new URLSearchParams();
+  params.set('depth', String(options.depth ?? 1));
+  params.set('mode', options.mode === 'exact' ? 'exact' : 'readable');
+  params.set('node_budget', String(options.nodeBudget ?? 80));
+  params.set('edge_budget', String(options.edgeBudget ?? 160));
+  return request(`/api/specifications/${encodeURIComponent(itemId)}/trace?${params.toString()}`);
+};
 
 export const searchSpecificationCandidates = (query = '', kind = '') => {
   const params = new URLSearchParams();

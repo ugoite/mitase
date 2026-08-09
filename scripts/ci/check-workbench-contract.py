@@ -105,9 +105,9 @@ assert "journey-advanced" in WORK_JS
 assert "work-start" in WORK_JS
 assert "select_specification" in WORK_JS
 assert "journey.start." not in WORK_JS
-assert "journeyIntentSearch" in WORK_JS
-assert "journey-intake" in WORK_JS
-assert "journey-card" in WORK_JS
+assert "current_step === 'describe'" not in WORK_JS
+assert "journey-intake" not in WORK_JS
+assert "journey-card" not in WORK_JS
 assert "data-scope-create-work" not in HTML
 assert "scope-create-work" not in SCOPE_JS
 assert "action: 'create'" not in SCOPE_JS
@@ -123,15 +123,12 @@ assert "work.request.summary_from_anchor" not in SPECIFICATIONS_JS
 assert SPECIFICATIONS_JS.count("state.go('work')") >= 2
 assert SPECIFICATIONS_JS.count("state.api.runJourneyAction(state.projection") >= 2
 assert "data-create-work-from-suggestions" in SPECIFICATIONS_JS
+assert "WORK-SUGGESTION-" not in SERVER_RS
 assert "approved_target_suggestions" in SERVER_RS
 assert "validate_requirement_origin" in SERVER_RS
 assert '"/api/work/request"' not in SERVER_RS
 assert "WorkRequestCommand" not in SERVER_RS
-assert "resolve_approved_target_candidates" in SERVER_RS
-assert "operation," in SERVER_RS
-assert "max_added_bytes_per_target" in SERVER_RS
-assert "max_added_lines_per_target" in SERVER_RS
-assert "approve one transition group at a time" in SERVER_RS
+assert "draft_request = Some(request.clone())" not in SERVER_RS
 assert "Describe the change you want to make" not in SERVER_RS
 assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
@@ -151,6 +148,22 @@ assert "pub transition: TargetTransition" in SERVER_RS
 assert 'access: format!("{:?}"' not in SERVER_RS
 assert 'transition: format!("{:?}"' not in SERVER_RS
 assert "presentation_title_key: builtin_presentation_title_key" in SERVER_RS
+assert "Box::leak" not in SERVER_RS
+assert "kind: String" in SERVER_RS and "lane: String" in SERVER_RS
+assert "semantic_candidate_count" in SERVER_RS and "hidden_closure_target_count" in SERVER_RS
+for entity in ("binding", "ownership", "target", "claim", "contract"):
+    assert f"entity: '{entity}'" in SPECIFICATIONS_JS, f"missing typed {entity} edit"
+assert "selector_kind" in SPECIFICATIONS_JS
+assert "claim_kind" in SPECIFICATIONS_JS
+assert "runtime_timestamp" in SPECIFICATIONS_JS and "runtime_receipt" in SPECIFICATIONS_JS
+assert "ArrowRight" in SPECIFICATIONS_JS and "event.key === 'Home'" in SPECIFICATIONS_JS
+assert "specificationSourceFocusKey" in SPECIFICATIONS_JS
+assert "kind === 'module'" in SPECIFICATIONS_JS and "kind === 'path-prefix'" in SPECIFICATIONS_JS
+assert "Runner arguments must be valid JSON" in SPECIFICATIONS_JS
+assert "input.readOnly = true" in SPECIFICATIONS_JS and "currentId" in SPECIFICATIONS_JS
+assert "current_id" in SERVER_RS and "ids are immutable" in SERVER_RS
+assert "onLocationChange" in SPECIFICATIONS_JS and "syncWorkSpecificationLocation" in WORK_JS
+assert "[1, 2, 3, 4, 5, 6, 7, 8]" in SPECIFICATIONS_JS
 for key in (
     "criterion.kind.behavior",
     "criterion.kind.quality",

@@ -1,5 +1,5 @@
 import { createState, replaceProjection } from './state.js';
-import { bindRouter, navigate } from './router.js';
+import { bindRouter, navigate, syncPageLocation } from './router.js';
 import * as api from './api.js';
 import { renderWork } from './pages/work.js';
 import { initReadiness, renderReadinessPage } from './pages/readiness.js';
@@ -124,8 +124,17 @@ export async function startWorkbench() {
   initReadiness(state);
   initDiagnostics(state);
   initScope(state);
-  state.go = (page) => {
+  state.go = (page, routeState = {}) => {
+    if (page === 'work' && Object.prototype.hasOwnProperty.call(routeState, 'workItem')) {
+      state.journeyRouteItemId = routeState.workItem;
+      state.journeyContextItemId = routeState.workItem;
+      state.journeySpecificationAnchor = null;
+    }
+    if (page === 'specifications' && Object.prototype.hasOwnProperty.call(routeState, 'item')) {
+      state.selectedSpecification = routeState.item;
+    }
     state.selectedPage = navigate(page, false);
+    syncPageLocation(state, state.selectedPage, routeState);
     state.render();
   };
   state.runAction = (action, onResult, busyLabel) => refreshAfterAction(state, action, onResult, busyLabel);
