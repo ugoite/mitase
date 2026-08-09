@@ -119,6 +119,7 @@ impl DeliveryStore {
         let path = self.root.join("workspace.lock");
         let file = File::options()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(path)?;
@@ -891,13 +892,10 @@ impl DeliveryStore {
             journal_files,
             Vec::new(),
         )?;
-        let old = match apply_status_overlay(workspace, &preview.promoted_items) {
-            Ok(old) => old,
-            Err(error) => return Err(error),
-        };
+        let old = apply_status_overlay(workspace, &preview.promoted_items)?;
         let post_workspace_fingerprint = match (|| -> Result<String> {
             let candidate = validate_finalized_workspace(&workspace.root)?;
-            Ok(candidate.try_fingerprint()?)
+            candidate.try_fingerprint()
         })() {
             Ok(fingerprint) => fingerprint,
             Err(error) => {
@@ -3112,7 +3110,7 @@ mod tests {
         if let AgentEventKind::RunStarted { run } = &mut concurrent_start.event {
             let mut replacement = (**run).clone();
             replacement.run_id = concurrent_start.run_id.clone();
-            *run = Box::new(replacement);
+            **run = replacement;
         }
         assert!(store.append_agent_event(&concurrent_start).is_err());
 

@@ -215,6 +215,7 @@ pub fn validate_work_request(index: &SpecIndex, request: &WorkRequest) -> Result
             index,
             &request.origin,
             target.reference(),
+            target.criterion.is_none(),
         );
         let allowed_declared_editable = matches!(
             target.transition(request_default_transition(request.operation)),
@@ -426,6 +427,7 @@ fn requirement_add_target_is_in_origin_binding(
     index: &SpecIndex,
     origin: &WorkOrigin,
     target: &BoundTargetRef,
+    allow_unclaimed_target: bool,
 ) -> bool {
     let WorkOrigin::RequirementCriterion { criterion } = origin else {
         return false;
@@ -455,16 +457,16 @@ fn requirement_add_target_is_in_origin_binding(
     }
     let has_exact_binding = match binding.role {
         BindingRole::Implementation => {
+            let binding_is_in_origin = index
+                .criteria_to_implementation_targets
+                .get(criterion)
+                .into_iter()
+                .flatten()
+                .any(|root| root.binding == target.binding);
             let target_claims_criterion = declared.claims.iter().any(|claim| {
                 matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
             });
-            target_claims_criterion
-                && index
-                    .criteria_to_implementation_targets
-                    .get(criterion)
-                    .into_iter()
-                    .flatten()
-                    .any(|root| root.binding == target.binding)
+            binding_is_in_origin && (allow_unclaimed_target || target_claims_criterion)
         }
         BindingRole::Verification => declared.claims.iter().any(|claim| {
             matches!(claim, TargetClaim::Verifies { criterion: actual, .. } if actual == criterion)
@@ -1231,16 +1233,6 @@ pub fn plan(
     if let Some(error) = &index.inventory_error {
         bail!("inventory failed; plan generation is refused: {error}");
     }
-    if let Err(error) = validate_planning_origin(request, index) {
-        return Ok(blocked_plan(
-            request,
-            workspace,
-            index,
-            revision,
-            "SYU-WORK-001",
-            format!("exact Work origin is invalid: {error}"),
-        ));
-    }
     // Force the inventory-backed fingerprint before any blocked/ready plan is
     // serialized. A fallback UI fingerprint must never become an execution
     // basis.
@@ -1255,6 +1247,16 @@ pub fn plan(
             revision,
             "SYU-WORK-001",
             "add budgets must be greater than zero",
+        ));
+    }
+    if let Err(error) = validate_planning_origin(request, index) {
+        return Ok(blocked_plan(
+            request,
+            workspace,
+            index,
+            revision,
+            "SYU-WORK-001",
+            format!("exact Work origin is invalid: {error}"),
         ));
     }
     let exclude_matcher = compile_exclude_matcher(&request.constraints.exclude_paths)?;

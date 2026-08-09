@@ -498,10 +498,7 @@ fn apply_patch_inner(
         .into_iter()
         .collect::<Vec<_>>();
     store.write_mutation_journal("agent-patch", patch_id, journal_files, created_dirs)?;
-    let rollback = match apply_file_mutations(&files) {
-        Ok(rollback) => rollback,
-        Err(error) => return Err(error),
-    };
+    let rollback = apply_file_mutations(&files)?;
     let post_write = (|| {
         let candidate = SpecWorkspace::load(&workspace.root)?;
         let candidate_index = candidate.index()?;
