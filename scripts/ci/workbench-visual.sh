@@ -657,8 +657,12 @@ async function main() {
             .find(node => node.textContent.includes('Requirement criterion') && !node.disabled));
         createWork.click();
         flow.push('create');
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const workUrl = location.href;
+        const workUrl = await wait('Work route after create', () => {
+          const candidate = new URL(location.href);
+          return candidate.searchParams.get('page') === 'work' && candidate.searchParams.get('workItem')
+            ? candidate.href
+            : null;
+        });
         if (new URL(workUrl).searchParams.get('page') !== 'work' || !new URL(workUrl).searchParams.get('workItem')) throw new Error('Create Work did not update canonical URL: ' + workUrl);
         await click('prepare', '[data-page="work"] .journey-action.primary');
         const approvalStep = document.documentElement.lang === 'ja' ? '承認' : 'Approve';
