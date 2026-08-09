@@ -72,6 +72,10 @@ projection_data['specifications']['specifications'].append({
     'contracts': [],
     'anchors': ['REQ-CAPABILITY-001#criterion.behavior'],
 })
+for candidate in projection_data['specifications']['specifications']:
+    for binding in candidate.get('bindings', []):
+        for ownership in binding.get('owns', []):
+            ownership['selector'] = {'kind': 'module', 'name': '*'}
 projection = json.dumps(projection_data).replace('<', '\\u003c')
 pathlib.Path(sys.argv[2]).write_text(
     f'<script type="application/json" id="syu-projection">{projection}</script>'
@@ -80,6 +84,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
     """let receipt=null;\n"""
     """let approvedTargetSuggestions=[];\n"""
+    """let nestedPatches=[]; window.__SYU_NESTED_PATCHES__=nestedPatches;\n"""
     """const csrfToken='visual-csrf-token';\n"""
     """window.__SYU_FLOW__=[];\n"""
     """const body=(value,status=200,headers={})=>Promise.resolve({ok:status>=200&&status<300,status,headers:{get:name=>headers[name.toLowerCase()]||null},text:async()=>value==null?'':typeof value==='string'?value:JSON.stringify(value)});\n"""
@@ -91,16 +96,14 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
-    """  if(path.includes('/api/specifications/candidates/preview')) return body({preview_token:'visual-authoring-token',impact:{readiness_before:{status:'blocked'},readiness_after:{status:'blocked'},changed_anchors:[],affected_ownership:[],implementation_targets:[],verification_targets:[],target_suggestions:[],work:{reason:'review exact criterion'}}});\n"""
-    """  if(path.includes('/api/specifications/candidates/apply')) { const patch=payload.patch||{}; if(patch.kind==='add_criterion') { const item=projection.specifications.specifications.find(value=>value.id===patch.requirement_id); const criterion={anchor:`${patch.requirement_id}#criterion.${patch.criterion.id}`,kind:patch.criterion.kind,statement:patch.criterion.statement,governed_by:patch.criterion.governed_by||[]}; item.criteria=[...(item.criteria||[]),criterion]; item.anchors=[...(item.anchors||[]),criterion.anchor]; } return body({}); }\n"""
-    """  if(path.includes('/api/specifications/candidates')) { const query=new URL(path,location.href).searchParams.get('q')||''; if(query==='no-match') return body([]); const item=projection.specifications.specifications.find(value=>value.kind==='requirement'&&value.criteria?.length); return body(item?[{item,matches:[{anchor:item.criteria[0].anchor,kind:'criterion',text:item.criteria[0].statement}],relevance:['lexical criterion match'],score:1,evidence:[{source:'lexical',detail:'lexical criterion match'},{source:'graph',detail:'one exact criterion anchor'}],stable_anchors:item.criteria.map(criterion=>criterion.anchor)}]:[]); }\n"""
-    """  if(path.includes('/target-suggestions/approve')) { approvedTargetSuggestions.push(...(payload.suggestion_ids||['target-visual'])); return body({approved_ids:approvedTargetSuggestions,split_recommendation:null}); }\n"""
-    """  if(path.includes('/target-suggestions')) { const marker='/api/specifications/'; const anchor=decodeURIComponent(path.slice(path.indexOf(marker)+marker.length).split('/target-suggestions')[0]); return body({criterion:anchor,suggestion_token:'visual-suggestion-token',suggestions:[{id:'visual-target',rank:1,ref:'FEAT-FIXTURE-001#binding.implementation/target.behavior',confidence:'high',role:'implementation',evidence:['exact fixture target']} ]}); }\n"""
+    """  if(path.includes('/api/specifications/candidates/preview')) { nestedPatches.push(payload.patch); return body({preview_token:'visual-preview-token',old_hash:'visual-old-hash',new_hash:'visual-new-hash',workspace_fingerprint:'visual-fingerprint',impact:{readiness_before:{status:'ready'},readiness_after:{status:'ready'},changed_anchors:[],affected_ownership:[],implementation_targets:[],verification_targets:[],target_suggestions:[]}},200,{'x-syu-csrf-token':csrfToken}); }\n"""
+    """  if(path.includes('/api/specifications/') && path.includes('/trace')) { const itemId=decodeURIComponent(path.split('/api/specifications/')[1].split('/')[0]); const criterion=projection.specifications.specifications.find(item=>item.id===itemId)?.criteria?.[0]?.anchor||`${itemId}#criterion.behavior`; const runtimeTarget='FEAT-AUTH-001#binding.backend/target.handler'; const related={specification:itemId==='REQ-AUTH-001'?[{item_id:'FEAT-AUTH-001',kind:'feature',title:'Authentication feature',presentation_title_key:null}]:[],implementation:[{item_id:'FEAT-AUTH-001',target:{reference:runtimeTarget,path:'src/handlers.rs',selector:{kind:'symbol',name:'handler'},adapter:'rust',lifecycle:'present',claims:[]}}],verification:[]}; return body({root_item_id:itemId,revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',source_hash:'visual-source-hash',mode:path.includes('mode=exact')?'exact':'readable',nodes:[],edges:[],related,closures:[{criterion,implementation_targets:[runtimeTarget],verification_targets:[runtimeTarget,'FEAT-AUTH-001#binding.backend/target.test'],state:'declaration-only',reasons:[],runtime_status:'partial',runtime_timestamp:'2026-08-02T00:00:00Z',runtime_revision:'visual-revision',runtime_receipt:'slice-visual@visual-revision@2026-08-02T00:00:00Z',runtime_executions:[{identity:'slice-visual#execution-0',target:runtimeTarget,claim:{target:runtimeTarget,criterion},status:'passed'}],readiness_blockers:[],diagnostics:[],hidden_target_count:0,hidden_reason_count:0,hidden_readiness_count:0,hidden_diagnostic_count:0}],truncated:false,hidden_node_count:0,hidden_edge_count:0}); }\n"""
     """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
     """  if(path.includes('/api/scope/branch')) return body({branch:{range:'origin/main...HEAD',state:'ready',reason:null,changed:[{path:'src/lib.rs',status:'modified',owners:['FEAT-VISUAL'],anchors:['REQ-VISUAL#criterion.behavior'],artifact_identities:['rust:src/lib.rs']}],owned:[],unowned:[],affected_items:[]}});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
+    """  if(path.includes('/target-suggestions/approve')) { approvedTargetSuggestions.push('target-visual'); return body({approved_ids:['target-visual'],split_recommendation:null}); }\n"""
     """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-VISUAL#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'target-visual',rank:1,ref:'rust:src/lib.rs#behavior',confidence:'high',role:'implementation',evidence:['visual smoke evidence'],evidence_fingerprint:'visual-evidence'}],approved_ids:approvedTargetSuggestions,split_recommendation:null});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
@@ -162,37 +165,136 @@ setTimeout(()=>{
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const click=async s=>{const node=document.querySelector(s);if(!node){failures.push(`missing ${s}`);return;}node.click();await wait(80);};
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
-  const setValue=(s,value)=>{const node=document.querySelector(s);if(!node){failures.push(`missing ${s}`);return;}node.value=value;node.dispatchEvent(new Event('input',{bubbles:true}));};
 
   (async()=>{
-  await click('[data-page="work"] .work-start .journey-action:not(.primary)');
-  const noMatchQuery=document.querySelector('[data-page="work"] .journey-intake textarea');
-  if(!noMatchQuery) failures.push('intent search did not open from the specification-first start');
-  else {
-    setValue('[data-page="work"] .journey-intake textarea','no-match');
-    await click('[data-page="work"] .journey-intake .journey-action');
-    if(!document.querySelector('[data-page="work"] .journey-recovery')) failures.push('no-match recovery did not render');
-    await click('[data-page="work"] .journey-recovery .journey-action');
-    setValue('[data-page="work"] .specification-editor input[name="criterion_id"]','browser-recovery');
-    setValue('[data-page="work"] .specification-editor textarea[name="criterion_statement"]','The browser recovery journey has an exact target suggestion.');
-    await click('[data-page="work"] .specification-editor .actions .primary');
-    await click('[data-page="work"] .specification-editor .specification-apply');
-    if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('no-match authoring did not refetch target suggestions');
-    if(!document.querySelector('[data-page="work"] .target-suggestions')?.dataset.criterion.includes('browser-recovery')) failures.push('refetched suggestions did not retain the authored Criterion anchor');
+  const workStart=document.querySelector('[data-page="work"] .work-start');
+  if(!workStart) failures.push('Work did not show the specification-first start state');
+  if(document.querySelector('[data-page="work"] .journey-intake, [data-page="work"] .journey-card')) failures.push('Work still shows the legacy behavior search');
+  const locale=document.documentElement.dataset.locale;
+  if(locale==='ja') {
+    if(workStart?.querySelector('h2')?.textContent!=='作業を作る仕様を選ぶ') failures.push('Japanese initial Work title is not localized');
+    if(workStart?.querySelector('.journey-action-label')?.textContent!=='仕様一覧を開く') failures.push('Japanese initial Work CTA is not localized');
+    if(!workStart?.querySelector('p')?.textContent.includes('仕様一覧から対象を選びます')) failures.push('Japanese initial Work explanation is not localized');
   }
-  setValue('[data-page="work"] .journey-intake textarea','behavior');
-  await click('[data-page="work"] .journey-intake .journey-action');
-  await click('[data-page="work"] .journey-card .journey-action');
-  if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
-  if(!document.querySelector('[data-work-specification] [data-journey-preview]')) failures.push('search did not render the specification preview');
-  const previewColumns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
-  if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
-  await click('[data-work-specification] .actions .primary');
-  if(!document.querySelector('[data-page="work"] .target-suggestions')) failures.push('candidate did not open target suggestion review');
-  if(projection.work.request) failures.push('target suggestion display created a draft WorkRequest');
-  await click('[data-page="work"] .target-suggestions .primary');
-  await click('[data-page="work"] [data-create-work-from-suggestions]');
-  if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
+  window.SyuPreferences.translate('ja');
+  await wait(40);
+  if(document.documentElement.lang!=='ja') failures.push('Japanese locale did not apply');
+  if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='作業') failures.push('already-rendered Work page did not rerender in Japanese');
+  window.SyuPreferences.translate('en');
+  await wait(40);
+  if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
+  await click('[data-page="work"] .work-start .journey-action');
+  if(!visible('[data-page="specifications"]')) failures.push('Work start did not open Specifications');
+  if(new URL(location.href).searchParams.get('page')!=='specifications') failures.push('programmatic Work start did not synchronize the Specifications URL');
+  history.back();
+  await wait(100);
+  if(new URL(location.href).searchParams.get('page')!=='work' || !visible('[data-page="work"]')) failures.push('back navigation did not restore the Work route after programmatic transition');
+  history.forward();
+  await wait(100);
+  if(new URL(location.href).searchParams.get('page')!=='specifications' || !visible('[data-page="specifications"]')) failures.push('forward navigation did not restore the Specifications route after programmatic transition');
+  const detailTabs=document.querySelector('[data-page="specifications"] .specification-detail-tabs');
+  const detailTabButtons=[...(detailTabs?.querySelectorAll('[role="tab"]')||[])];
+  if(detailTabButtons.length!==3) failures.push('Specification detail tabs are incomplete');
+  else {
+    detailTabButtons[0].focus();
+    detailTabs.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+    await wait(40);
+    if(!document.querySelector('[data-page="specifications"] [data-detail-tab="trace"][aria-selected="true"]')) failures.push('detail ArrowRight did not select Trace');
+    if(document.activeElement?.dataset.detailTab!=='trace') failures.push('detail ArrowRight did not move focus');
+    document.querySelector('[data-page="specifications"] .specification-detail-tabs')?.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
+    await wait(40);
+    if(!document.querySelector('[data-page="specifications"] [data-detail-tab="evidence"][aria-selected="true"]')) failures.push('detail End did not select Evidence');
+    document.querySelector('[data-page="specifications"] .specification-detail-tabs')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+    await wait(40);
+    document.querySelector('[data-page="specifications"] [data-detail-tab="evidence"]')?.click();
+    await wait(80);
+    if(!document.querySelector('[data-page="specifications"] .closure-card')?.textContent.includes('slice-visual#execution-0')) failures.push('runtime execution identity was not rendered separately');
+    if(!document.querySelector('[data-page="specifications"] .closure-card')?.textContent.includes('partial')) failures.push('partial runtime evidence was not surfaced');
+    document.querySelector('[data-page="specifications"] [data-detail-tab="information"]')?.click();
+    await wait(40);
+    const bindingEdit=document.querySelector('[data-page="specifications"] .specification-detail-binding .spec-detail-anchor-head .btn');
+    if(!bindingEdit) failures.push('typed binding editor is missing');
+    else {
+      bindingEdit.click();
+      await wait(40);
+      const facet=document.querySelector('[data-page="specifications"] .specification-editor input[name="facet"]');
+      if(!facet) failures.push('typed binding facet field is missing');
+      else {
+        facet.value='visual-edited';
+        facet.dispatchEvent(new Event('input',{bubbles:true}));
+        document.querySelector('[data-page="specifications"] .specification-editor').requestSubmit();
+        await wait(100);
+        const patch=window.__SYU_NESTED_PATCHES__?.[0];
+        if(!patch || patch.edit?.entity!=='binding' || patch.edit?.binding?.anchor) failures.push('browser did not send the typed binding payload');
+      }
+      document.querySelector('[data-page="specifications"] .specification-editor .canvas-head button')?.click();
+      await wait(40);
+    }
+    const featureRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
+      .find(node=>node.textContent.includes('FEAT-AUTH-001'));
+    if(featureRail) {
+      featureRail.click();
+      await wait(60);
+      const ownershipEdit=document.querySelector('[data-page="specifications"] .specification-detail-ownership .btn');
+      if(!ownershipEdit) failures.push('module ownership editor is missing');
+      else {
+        ownershipEdit.click();
+        await wait(40);
+        const editor=document.querySelector('[data-page="specifications"] .specification-editor');
+        const selectorKind=editor?.querySelector('[name="selector_kind"]');
+        const selectorName=editor?.querySelector('[name="selector_name"]');
+        if(!selectorKind || !selectorName) failures.push('module ownership selector fields are missing');
+        else {
+          selectorKind.value='module';
+          selectorName.value='*';
+          editor.requestSubmit();
+          await wait(100);
+          const patches=window.__SYU_NESTED_PATCHES__||[];
+          const patch=patches[patches.length-1];
+          if(patch?.edit?.entity!=='ownership' || patch.edit.ownership.selector?.kind!=='module' || patch.edit.ownership.selector?.name!=='*') failures.push('module ownership selector did not round-trip losslessly');
+        }
+        document.querySelector('[data-page="specifications"] .specification-editor .canvas-head button')?.click();
+        await wait(40);
+      }
+      const requirementRail=[...document.querySelectorAll('[data-page="specifications"] .rail-item')]
+        .find(node=>node.textContent.includes('REQ-AUTH-001'));
+      requirementRail?.click();
+      await wait(60);
+    } else failures.push('feature fixture for module ownership is missing');
+  }
+  const selectedSpecificationTitle=document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent;
+  const selectedCriterion=document.querySelector('[data-page="specifications"] .specification-criterion');
+  const selectedCriterionAnchor=selectedCriterion?.querySelector('strong')?.textContent;
+  const selectedCriterionStatement=selectedCriterion?.querySelector('p')?.textContent;
+  await click('[data-page="specifications"] [data-review-target-suggestions]');
+  if(!document.querySelector('[data-page="specifications"] .target-suggestions')) failures.push('Target Suggestions did not open');
+  await click('[data-page="specifications"] [data-approve-target-suggestions]');
+  if(!visible('[data-page="specifications"]')) failures.push('Target Suggestions approval left Specifications');
+  if(projection.work.request) failures.push('Target Suggestions approval created a WorkRequest');
+  await click('[data-page="specifications"] .target-suggestions .btn.ghost');
+  await click('[data-page="specifications"] [data-review-target-suggestions]');
+  if(!document.querySelector('[data-page="specifications"] [data-target-suggestion-approved]')) failures.push('accepted target suggestion state was not restored');
+  await click('[data-page="specifications"] .target-suggestions .btn.ghost');
+  await click('[data-page="specifications"] [data-create-work]');
+  if(!visible('[data-page="work"]')) failures.push('specification Create Work did not open Work');
+  if(new URL(location.href).searchParams.get('page')!=='work' || !new URL(location.href).searchParams.get('workItem')) failures.push('Create Work did not synchronize page=work and workItem');
+  if(document.querySelector('[data-page="work"] .journey-header h2')?.textContent.startsWith('Change ')) failures.push('Create Work title still has the English Change prefix');
+  if(document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent!==selectedSpecificationTitle) failures.push('related specification does not match the selected specification');
+  if(document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent!==selectedCriterionStatement) failures.push('related criterion does not match the selected criterion');
+  if(document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor!==selectedCriterionAnchor) failures.push('Work seed anchor does not match the selected criterion');
+  const workTraceTab=document.querySelector('[data-page="work"] [data-detail-tab="trace"]');
+  if(workTraceTab) {
+    workTraceTab.click();
+    await wait(80);
+    if(new URL(location.href).searchParams.get('page')!=='work') failures.push('Work trace tab rewrote the route to Specifications');
+    history.back();
+    await wait(100);
+    if(new URL(location.href).searchParams.get('page')!=='work') failures.push('Work back navigation left the Work route');
+    history.forward();
+    await wait(100);
+    if(new URL(location.href).searchParams.get('workDetailTab')!=='trace') failures.push('Work forward navigation did not restore Trace context');
+    await click('[data-page="work"] [data-detail-tab="information"]');
+  } else failures.push('Work trace tab is missing');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
@@ -223,6 +325,14 @@ setTimeout(()=>{
         relatedCode.click();
         await wait(80);
         if(!document.querySelector('[data-work-specification] .source-code')) failures.push('related source excerpt did not render');
+        const sourceReference=relatedCode.dataset.sourceTarget;
+        const sourceClose=document.querySelector('[data-work-specification] .specification-source-inspector .source-inspector-head button');
+        if(!sourceClose) failures.push('source inspector close control is missing');
+        else {
+          sourceClose.click();
+          await wait(80);
+          if(document.activeElement?.dataset.sourceTarget!==sourceReference) failures.push('source inspector did not restore trigger focus');
+        }
       }
     }
   }
@@ -285,7 +395,7 @@ HTML
 
 for viewport in 1280,900 760,900; do
   for locale in en ja; do
-    behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=6000 --dump-dom "file://$tmp/workbench.html?page=work&lang=$locale&theme=light")"
+    behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=12000 --dump-dom "file://$tmp/workbench.html?page=work&lang=$locale&theme=light")"
     if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
       echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
       exit 1
@@ -483,12 +593,16 @@ async function main() {
         const initialWorkTitle = initialWorkStart?.querySelector('h2')?.textContent || '';
         const initialWorkCta = initialWorkStart?.querySelector('.journey-action-label')?.textContent || '';
         const initialWorkExplanation = initialWorkStart?.querySelector('p')?.textContent || '';
-        await click('specifications', '[data-route="specifications"]');
+        await click('specifications', '[data-page="work"] .work-start .journey-action');
+        const specificationUrl = location.href;
+        if (new URL(specificationUrl).searchParams.get('page') !== 'specifications') throw new Error('programmatic Specifications transition did not update URL: ' + specificationUrl);
         const selectedSpecificationTitle = document.querySelector('[data-page="specifications"] [data-specifications-detail] .canvas-head h2')?.textContent || '';
         const selectedCriterion = document.querySelector('[data-page="specifications"] .specification-criterion');
         const selectedCriterionAnchor = selectedCriterion?.querySelector('strong')?.textContent || '';
         const selectedCriterionStatement = selectedCriterion?.querySelector('p')?.textContent || '';
         await click('create', '[data-page="specifications"] [data-create-work]');
+        const workUrl = location.href;
+        if (new URL(workUrl).searchParams.get('page') !== 'work' || !new URL(workUrl).searchParams.get('workItem')) throw new Error('Create Work did not update canonical URL: ' + workUrl);
         await click('prepare', '[data-page="work"] .journey-action.primary');
         const approvalStep = document.documentElement.lang === 'ja' ? '承認' : 'Approve';
         await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === approvalStep);
@@ -504,6 +618,8 @@ async function main() {
           selectedSpecificationTitle,
           selectedCriterionAnchor,
           selectedCriterionStatement,
+          specificationUrl,
+          workUrl,
           workSpecificationTitle: document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent || '',
           workSpecificationCriterion: document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent || '',
           workSpecificationAnchor: document.querySelector('[data-page="work"] [data-work-specification-anchor]')?.dataset.workSpecificationAnchor || '',
@@ -517,6 +633,57 @@ async function main() {
   });
   if (evaluation.exceptionDetails) throw new Error(evaluation.exceptionDetails.text || 'browser flow failed');
   const result = { ...evaluation.result.value, mutationResponses };
+  const navigateAndWait = async url => {
+    const loaded = new Promise(resolve => {
+      const handler = () => resolve();
+      devtools.on('Page.loadEventFired', handler);
+    });
+    await devtools.send('Page.navigate', { url });
+    await loaded;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  };
+  await navigateAndWait(result.specificationUrl);
+  const specificationRestore = await devtools.send('Runtime.evaluate', {
+    awaitPromise: true,
+    returnByValue: true,
+    expression: `(async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const page = document.querySelector('[data-page]:not([hidden])')?.dataset.page;
+        if (page === 'specifications') return { page, url: location.href };
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return { page: document.querySelector('[data-page]:not([hidden])')?.dataset.page || '', url: location.href };
+    })()`,
+  });
+  await navigateAndWait(result.workUrl);
+  const workRestore = await devtools.send('Runtime.evaluate', {
+    awaitPromise: true,
+    returnByValue: true,
+    expression: `(async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const page = document.querySelector('[data-page]:not([hidden])')?.dataset.page;
+        const title = document.querySelector('[data-page="work"] [data-work-specification-title]')?.textContent || '';
+        const criterion = document.querySelector('[data-page="work"] [data-work-specification-criterion]')?.textContent || '';
+        if (page === 'work' && title && criterion) return { page, title, criterion, url: location.href };
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return { page: document.querySelector('[data-page]:not([hidden])')?.dataset.page || '', title: '', criterion: '', url: location.href };
+    })()`,
+  });
+  const restoredSpecifications = specificationRestore.result?.value || {};
+  const restoredWork = workRestore.result?.value || {};
+  if (restoredSpecifications.page !== 'specifications' || new URL(restoredSpecifications.url).searchParams.get('page') !== 'specifications') {
+    throw new Error(`Specifications route did not survive reload: ${JSON.stringify(restoredSpecifications)}`);
+  }
+  if (
+    restoredWork.page !== 'work'
+    || new URL(restoredWork.url).searchParams.get('page') !== 'work'
+    || !new URL(restoredWork.url).searchParams.get('workItem')
+    || restoredWork.title !== result.workSpecificationTitle
+    || restoredWork.criterion !== result.workSpecificationCriterion
+  ) {
+    throw new Error(`Work context did not survive reload: ${JSON.stringify({ restoredWork, expectedTitle: result.workSpecificationTitle, expectedCriterion: result.workSpecificationCriterion })}`);
+  }
   const expectedFlow = ['specifications', 'create', 'prepare'];
   if (JSON.stringify(result.flow) !== JSON.stringify(expectedFlow)) {
     throw new Error(`unexpected Workbench browser flow: ${JSON.stringify(result)}`);

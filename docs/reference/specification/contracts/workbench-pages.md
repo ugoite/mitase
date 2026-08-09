@@ -156,20 +156,6 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
-    - **id**: public-api-render-source-detail
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Govern linked source detail rendering.
-      - **targets**:
-        - **id**: entrypoint-render-source-detail
-          - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
-          - **selector**:
-            - **kind**: symbol
-            - **name**: renderSourceDetail
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-render-specification-detail
       - **role**: implementation
       - **facet**: public
@@ -321,20 +307,6 @@ features:
       selector:
         kind: symbol
         name: initSpecifications
-      claims:
-      - kind: exposes
-        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
-  - id: public-api-render-source-detail
-    role: implementation
-    facet: public
-    responsibility: Govern linked source detail rendering.
-    targets:
-    - id: entrypoint-render-source-detail
-      adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
-      selector:
-        kind: symbol
-        name: renderSourceDetail
       claims:
       - kind: exposes
         target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project

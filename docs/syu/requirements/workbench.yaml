@@ -327,3 +327,52 @@ requirements:
                   - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-discovery
                   - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-target-suggestions
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
+
+  - id: REQ-WORKBENCH-015
+    title: Canonical specification detail workspace
+    description: The specification detail surface is one bounded, server-owned workspace for canonical trace, evidence, and typed nested edits.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: canonical-detail-trace
+        kind: behavior
+        statement: Specification detail renders a deterministic bounded neighbourhood from the server-owned SpecIndex, preserving readable and exact canonical facts without browser-side claim joins or closure inference.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: typed-nested-specification-edit
+        kind: behavior
+        statement: Binding, ownership, target, claim, and contract changes use typed nested operations with the same basis, preview, stale rejection, and impact invalidation as top-level edits.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: declaration-runtime-evidence
+        kind: behavior
+        statement: Evidence distinguishes declared implementation and verification targets from item-scoped runtime status and never labels declaration-only facts as a completed run.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: detail-deep-link
+        kind: quality
+        statement: Detail tabs, trace mode/depth, and inspected targets round-trip through URL state with keyboard and narrow-layout semantics.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-016
+    title: Bounded detail context
+    description: The detail workspace keeps its disclosed trace, evidence, and existing Workbench context within an explicit measured serialization budget.
+    priority: high
+    status: implemented
+    criteria:
+      - id: bounded-detail-context
+        kind: quality
+        statement: The detail workspace context pack remains bounded by the measured 120,000-byte Work slicing limit, and the limit is covered by an executable configuration contract.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: detail-context-budget-check
+        role: verification
+        facet: verification
+        responsibility: Verify that the measured detail context serialization budget remains explicit and bounded.
+        targets:
+          - id: detail-context-budget-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_detail_context_budget_is_explicitly_bounded }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-016#criterion.bounded-detail-context
+                covers:
+                  - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_detail_context_budget_is_explicitly_bounded } }
