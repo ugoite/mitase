@@ -75,6 +75,10 @@ mod tests {
         }
         assert!(WORKBENCH_MAIN_JS.contains("renderWork"));
         assert!(WORKBENCH_MAIN_JS.contains("renderSpecifications"));
+        assert!(
+            include_str!("../assets/js/pages/specifications.js").contains("readSpecificationTrace")
+        );
+        assert!(WORKBENCH_CSS.contains(".trace-lanes"));
     }
 
     #[test]

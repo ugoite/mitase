@@ -61,6 +61,8 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
         - **id**: keyboard-navigation
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/router.js
@@ -289,6 +291,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
     - id: keyboard-navigation
       adapter: javascript
       path: crates/syu-app-ui/assets/js/router.js
