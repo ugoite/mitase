@@ -85,7 +85,12 @@ jobs:
                 echo "could not resolve PR number from merge-group ref: $GITHUB_REF_NAME" >&2
                 exit 1
               fi
-              printf 'ref=%s\n' "$(gh pr view "$pr_number" --json headRefOid --jq .headRefOid)" >>"$GITHUB_OUTPUT"
+              source_sha="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+              if [[ ! "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "could not resolve PR head SHA for #$pr_number" >&2
+                exit 1
+              fi
+              printf 'ref=%s\n' "$source_sha" >>"$GITHUB_OUTPUT"
               ;;
             *)
               printf 'ref=%s\n' "$GITHUB_SHA" >>"$GITHUB_OUTPUT"
