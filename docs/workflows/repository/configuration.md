@@ -30,7 +30,7 @@ validation:
           level: work-ready
       public_entrypoints: { selection: all, level: seedable }
       changed_units: false
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
   changed:
     baseline: { strategy: merge-base, against: origin/main }
     require_owned_changes: true

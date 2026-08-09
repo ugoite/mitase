@@ -7,8 +7,10 @@ sidebar_position: 1
 # Plan and execute work
 
 `syu work` is the execution side of the model. It derives small, reviewable
-slices from exact targets, exports the context needed for one slice, and keeps
-completion evidence tied to the plan basis.
+slices from one exact Work origin, lets Workbench select a canonical slice
+when the origin expands into independent candidates, exports the context
+needed for one slice, and keeps completion evidence tied to the exact
+plan-and-slice identity.
 
 - [Workbench](./workbench.md) — the current product flow and projection.
 - [Implementation planning](./implementation-planning.md) — the canonical

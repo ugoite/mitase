@@ -27,13 +27,13 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
 
 - **id**: FEAT-PLANNER-001
   - **title**: Canonical planning
-  - **summary**: Generate deterministic bounded execution slices from exact work seeds, including approved Add and Remove target lifecycles.
+  - **summary**: Generate deterministic bounded execution slices from one exact Work origin, retaining a server-owned candidate plan until one slice is selected.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: planner
-      - **responsibility**: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
+      - **responsibility**: Generate deterministic bounded work slices with lifecycle-aware execution, origin closure, and explicit selection bases.
       - **owns**:
         - **id**: planner-declared-options
           - **adapter**: rust
@@ -644,13 +644,13 @@ category: Syu functional units
 features:
   - id: FEAT-PLANNER-001
     title: Canonical planning
-    summary: Generate deterministic bounded execution slices from exact work seeds, including approved Add and Remove target lifecycles.
+    summary: Generate deterministic bounded execution slices from one exact Work origin, retaining a server-owned candidate plan until one slice is selected.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: planner
-        responsibility: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
+        responsibility: Generate deterministic bounded work slices with lifecycle-aware execution, origin closure, and explicit selection bases.
         owns:
           - id: planner-declared-options
             adapter: rust

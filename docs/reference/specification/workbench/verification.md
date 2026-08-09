@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
 
 - **id**: FEAT-WORKBENCH-VERIFICATION-001
   - **title**: Workbench verification tests
-  - **summary**: Exercise the real Workbench HTTP server and exact verification targets.
+  - **summary**: Exercise the real Workbench HTTP server, exact origins, split recovery, and verification targets.
   - **status**: implemented
   - **bindings**:
     - **id**: verification-harness
@@ -232,7 +232,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-VERIFICATION-001
   title: Workbench verification tests
-  summary: Exercise the real Workbench HTTP server and exact verification targets.
+  summary: Exercise the real Workbench HTTP server, exact origins, split recovery, and verification targets.
   status: implemented
   bindings:
   - id: verification-harness

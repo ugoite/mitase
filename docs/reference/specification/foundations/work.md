@@ -27,13 +27,13 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
 
 - **id**: REQ-WORK-001
   - **title**: Plan exact executable work
-  - **description**: A caller can derive bounded slices from an exact criterion, binding, or contract.
+  - **description**: A caller can derive bounded slices from one exact Work origin and select one canonical execution boundary before delivery.
   - **priority**: critical
   - **status**: implemented
   - **criteria**:
     - **id**: exact-slice
       - **kind**: behavior
-      - **statement**: An exact criterion seed produces explicit editable, verification, and readonly targets.
+      - **statement**: An exact Requirement criterion or validated Feature implementation origin produces explicit editable, verification, and readonly targets with one typed semantic identity.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
     - **id**: completion-evidence
@@ -137,13 +137,13 @@ category: Work planning
 requirements:
   - id: REQ-WORK-001
     title: Plan exact executable work
-    description: A caller can derive bounded slices from an exact criterion, binding, or contract.
+    description: A caller can derive bounded slices from one exact Work origin and select one canonical execution boundary before delivery.
     priority: critical
     status: implemented
     criteria:
       - id: exact-slice
         kind: behavior
-        statement: An exact criterion seed produces explicit editable, verification, and readonly targets.
+        statement: An exact Requirement criterion or validated Feature implementation origin produces explicit editable, verification, and readonly targets with one typed semantic identity.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
       - id: completion-evidence
         kind: behavior
