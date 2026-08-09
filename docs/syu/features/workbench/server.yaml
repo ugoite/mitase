@@ -5,7 +5,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-SERVER-001
   title: Workbench server
-  summary: Expose canonical read, work, validation, edit, and security APIs.
+  summary: Expose canonical read, exact-origin Work creation and slice selection, validation, edit, and security APIs.
   status: implemented
   bindings:
   - id: server
@@ -173,18 +173,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::tests::journey_verify_returns_a_fresh_projection_after_editable_change' }
-    - id: server-add-suggestion-test
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::tests::planned_add_target_is_advisory_until_human_approval' }
-    - id: server-remove-suggestion-test
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::tests::planned_remove_target_flows_from_suggestion_to_finalization' }
-    - id: server-verification-add-test
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::tests::planned_verification_add_runs_its_exact_runner_before_finalization' }
     - id: server-fixture-post-state-test
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -201,14 +189,26 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::tests[cfg(test)]' }
-    - id: server-validate-create
+    - id: server-origin-capabilities
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::validate_create_work_criterion' }
-    - id: server-validate-anchor
+      selector: { kind: module, name: 'lib::origin_capabilities' }
+    - id: server-validate-origin
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::validate_work_criterion_anchor' }
+      selector: { kind: module, name: 'lib::validate_work_origin' }
+    - id: server-split-recovery
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::split_recovery_view' }
+    - id: server-select-slice
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::select_slice' }
+    - id: server-origin-validation-test
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: module, name: 'lib::tests::create_work_requires_an_exact_implemented_requirement_criterion' }
     - id: server-review-owned-001
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -497,10 +497,6 @@ features:
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::target_suggestions_view' }
-    - id: server-review-extra-005
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: module, name: 'lib::tests::create_work_requires_an_exact_implemented_requirement_criterion' }
     - id: server-review-extra-006
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs

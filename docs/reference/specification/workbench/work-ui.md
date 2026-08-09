@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/workbench/work-ui.yaml"
 
 - **id**: FEAT-WORKBENCH-WORK-UI-001
   - **title**: Workbench work UI
-  - **summary**: Drive the WorkRequest to result-validation journey from the Work page.
+  - **summary**: Drive the typed Work origin, split-slice selection, and result-validation journey from the Work page.
   - **status**: implemented
   - **bindings**:
     - **id**: work
@@ -55,7 +55,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-WORK-UI-001
   title: Workbench work UI
-  summary: Drive the WorkRequest to result-validation journey from the Work page.
+  summary: Drive the typed Work origin, split-slice selection, and result-validation journey from the Work page.
   status: implemented
   bindings:
   - id: work

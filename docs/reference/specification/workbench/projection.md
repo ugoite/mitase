@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/workbench/projection.yam
 
 - **id**: FEAT-WORKBENCH-PROJECTION-001
   - **title**: Workbench projection
-  - **summary**: Project canonical readiness, work, scope, specification, and diagnostics state.
+  - **summary**: Project canonical readiness, exact-origin Work state, split-recovery evidence, scope, specification, and diagnostics.
   - **status**: implemented
   - **bindings**:
     - **id**: projection
@@ -79,7 +79,7 @@ category: Workbench implementation
 features:
 - id: FEAT-WORKBENCH-PROJECTION-001
   title: Workbench projection
-  summary: Project canonical readiness, work, scope, specification, and diagnostics state.
+  summary: Project canonical readiness, exact-origin Work state, split-recovery evidence, scope, specification, and diagnostics.
   status: implemented
   bindings:
   - id: projection

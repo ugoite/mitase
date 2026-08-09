@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 
 - **id**: FEAT-PUBLIC-WORKBENCH-NAVIGATION-001
   - **title**: Workbench navigation
-  - **summary**: Govern Workbench routes, tabs, selected slices, and landing navigation.
+  - **summary**: Govern Workbench routes, origin entrypoints, split-slice selection, tabs, and landing navigation.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-019
@@ -139,7 +139,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-WORKBENCH-NAVIGATION-001
   title: Workbench navigation
-  summary: Govern Workbench routes, tabs, selected slices, and landing navigation.
+  summary: Govern Workbench routes, origin entrypoints, split-slice selection, tabs, and landing navigation.
   status: implemented
   bindings:
   - id: public-api-019

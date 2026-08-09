@@ -27,7 +27,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 
 - **id**: FEAT-PUBLIC-WORKBENCH-ACTIONS-001
   - **title**: Workbench client actions
-  - **summary**: Govern typed Workbench preview, approval, diagnostics, readiness, and search actions.
+  - **summary**: Govern typed Workbench origin creation, split-slice selection, preview, approval, diagnostics, readiness, and search actions.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-005
@@ -167,8 +167,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-WORKBENCH-ACTIONS-001
   title: Workbench client actions
-  summary: Govern typed Workbench preview, approval, diagnostics, readiness, and search
-    actions.
+  summary: Govern typed Workbench origin creation, split-slice selection, preview, approval, diagnostics, readiness, and search actions.
   status: implemented
   bindings:
   - id: public-api-005

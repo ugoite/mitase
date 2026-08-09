@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::process::Command;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -11,10 +11,9 @@ use syu_project_model::{ProjectConfig, ReadinessLevel};
 use syu_spec_model::{BoundTargetRef, ItemStatus, OwnershipSelector, SpecAnchor, format_sha256};
 use syu_work_model::{
     CompletionAttempt, CompletionStatus, FINALIZATION_RECEIPT_SCHEMA, FinalizationReceipt,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, TargetLifecycle,
-    TargetTransition, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptStatus, VerificationClaimRef,
-    VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation, WorkRequest, WorkSeed,
-    work_plan_digest,
+    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetLifecycle, TargetTransition,
+    VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptStatus, VerificationClaimRef,
+    VerificationReceipt, work_plan_digest,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -100,7 +99,16 @@ impl ReadinessReport {
                 .probes
                 .public_entrypoints
                 .as_ref()
-                .is_none_or(|probe| self.meets_scope(public_entrypoints_scope(), probe.level))
+                .is_none_or(|probe| {
+                    matches!(
+                        probe.level,
+                        ReadinessLevel::Off
+                            | ReadinessLevel::Seedable
+                            | ReadinessLevel::WorkReady
+                            | ReadinessLevel::Verifiable
+                            | ReadinessLevel::ClosedLoop
+                    ) && self.meets_scope(public_entrypoints_scope(), probe.level)
+                })
             && readiness
                 .probes
                 .contracts
@@ -571,7 +579,22 @@ pub fn evaluate(
     if let Some(required_level) = public_probe {
         let public_subjects =
             public_entrypoint_subjects(workspace, index, revision, required_level);
-        seed_subjects.extend(public_subjects);
+        // A public entrypoint probe is a scoped denominator for every axis it
+        // asks Workbench to enforce.  Keeping these subjects only in
+        // seedability made work-ready and above probes either impossible to
+        // satisfy or silently unrelated to the entrypoint they advertised.
+        if required_level >= ReadinessLevel::Seedable {
+            seed_subjects.extend(public_subjects.clone());
+        }
+        if required_level >= ReadinessLevel::WorkReady {
+            work_subjects.extend(public_subjects.clone());
+        }
+        if required_level >= ReadinessLevel::Verifiable {
+            verification_subjects.extend(public_subjects.clone());
+        }
+        if required_level >= ReadinessLevel::ClosedLoop {
+            closed_subjects.extend(public_subjects);
+        }
     }
 
     if let Some(required_level) = contracts_probe {
@@ -612,7 +635,7 @@ pub fn evaluate(
                                 .collect::<Vec<_>>();
                             if contract_slices.is_empty() {
                                 blockers.push(
-                                    "canonical contract seed produced no contract closure".into(),
+                                    "canonical contract origin produced no contract closure".into(),
                                 );
                             } else {
                                 for slice in contract_slices {
@@ -646,7 +669,7 @@ pub fn evaluate(
                             blockers.push(format!("canonical contract plan is {:?}", plan.status))
                         }
                         Err(error) => {
-                            blockers.push(format!("canonical contract seed failed: {error}"))
+                            blockers.push(format!("canonical contract origin failed: {error}"))
                         }
                     }
                 }
@@ -818,25 +841,53 @@ fn canonical_contract_plan(
     contract: &SpecAnchor,
     revision: &str,
 ) -> Result<syu_work_model::WorkPlan> {
-    syu_planner::plan(
-        &WorkRequest {
-            schema: WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-contract-{}", contract.local_id),
-            summary: "canonical contract closure plan probe".into(),
-            operation: WorkOperation::Modify,
-            seeds: vec![WorkSeed::Anchor(contract.clone())],
-            constraints: syu_work_model::WorkConstraints {
-                max_slices: Some(
-                    workspace
-                        .config
-                        .validation
-                        .readiness
-                        .limits
-                        .max_slices_per_seed,
-                ),
-                ..Default::default()
-            },
-            requested_targets: vec![],
+    let criterion = index
+        .contracts
+        .get(contract)
+        .and_then(|value| value.guarantees.first())
+        .cloned()
+        .with_context(|| format!("contract {contract} has no criterion guarantee"))?;
+    let requested_targets = index
+        .contracts
+        .get(contract)
+        .map(|value| {
+            // A contract source is readonly context, not an editable origin.
+            // Probe the active implementation participants; the planner then
+            // derives the source and the other contract participants through
+            // the exact dependency closure.
+            value
+                .participants
+                .iter()
+                .filter(|participant| {
+                    index
+                        .bindings
+                        .get(&participant.target.binding)
+                        .is_some_and(|binding| {
+                            binding.role == syu_spec_model::BindingRole::Implementation
+                        })
+                })
+                .filter(|participant| {
+                    index.target(&participant.target).is_some_and(|target| {
+                        target.lifecycle != syu_spec_model::ArtifactTargetLifecycle::Absent
+                    })
+                })
+                .map(|participant| participant.target.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if requested_targets.is_empty() {
+        bail!("contract {contract} has no active implementation participant");
+    }
+    syu_planner::plan_probe(
+        &syu_planner::PlanProbe {
+            criterion,
+            requested_targets,
+            max_slices: workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_slices_per_origin,
         },
         workspace,
         index,
@@ -986,8 +1037,9 @@ fn durable_attempt_digest(attempt: &CompletionAttempt) -> Option<String> {
     let mut copy = attempt.clone();
     let expected = copy.attempt_digest.clone();
     copy.attempt_digest.clear();
-    let bytes = serde_json::to_vec(&copy).ok()?;
+    let bytes = syu_work_model::canonical_json_bytes(serde_json::to_value(&copy).ok()?);
     let mut hash = Sha256::new();
+    hash.update(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
     hash.update(bytes);
     (expected == format_sha256(hash.finalize())).then_some(expected)
 }
@@ -1035,6 +1087,19 @@ fn finalized_absent_targets(
         {
             continue;
         }
+        let mut finalization_without_digest = receipt.clone();
+        let finalization_digest = finalization_without_digest.finalization_digest.clone();
+        finalization_without_digest.finalization_digest.clear();
+        let Ok(finalization_value) = serde_json::to_value(&finalization_without_digest) else {
+            continue;
+        };
+        let finalization_bytes = syu_work_model::canonical_json_bytes(finalization_value);
+        let mut finalization_hash = Sha256::new();
+        finalization_hash.update(syu_work_model::FINALIZATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
+        finalization_hash.update(finalization_bytes);
+        if finalization_digest != format_sha256(finalization_hash.finalize()) {
+            continue;
+        }
         let Some(attempt) = attempts.iter().find_map(|path| {
             let bytes = fs::read(path).ok()?;
             let attempt = serde_json::from_slice::<CompletionAttempt>(&bytes).ok()?;
@@ -1048,6 +1113,9 @@ fn finalized_absent_targets(
             || attempt.plan_digest != receipt.plan_digest
             || attempt.slice_id != receipt.slice_id
             || attempt.approved_plan_digest != attempt.plan_digest
+            || attempt.report.attempt_id != attempt.attempt_id
+            || attempt.report.plan_digest != attempt.plan_digest
+            || attempt.report.slice_id != attempt.slice_id
             || attempt.report.status != CompletionStatus::Complete
             || attempt.verification.status != VerificationAttemptStatus::Complete
         {
@@ -1056,6 +1124,19 @@ fn finalized_absent_targets(
         let Some(verification) = attempt.receipt.as_ref() else {
             continue;
         };
+        let Ok(verification_value) = serde_json::to_value(verification) else {
+            continue;
+        };
+        let expected_receipt_digest = {
+            let bytes = syu_work_model::canonical_json_bytes(verification_value);
+            let mut hash = Sha256::new();
+            hash.update(syu_work_model::VERIFICATION_RECEIPT_DIGEST_DOMAIN.as_bytes());
+            hash.update(bytes);
+            format_sha256(hash.finalize())
+        };
+        if attempt.report.receipt_digest.as_deref() != Some(expected_receipt_digest.as_str()) {
+            continue;
+        }
         if verification.schema != VERIFICATION_RECEIPT_SCHEMA
             || verification.plan_digest != receipt.plan_digest
             || verification.slice_id != receipt.slice_id
@@ -1064,7 +1145,7 @@ fn finalized_absent_targets(
             || verification
                 .executions
                 .iter()
-                .any(|execution| execution.exit_code != 0 || execution.proof.matched_count == 0)
+                .any(|execution| execution.exit_code != 0 || execution.proof.matched_count != 1)
         {
             continue;
         }
@@ -1079,6 +1160,10 @@ fn finalized_absent_targets(
             || approval.plan_digest != approval.plan.canonical_digest
             || approval.plan_digest != work_plan_digest(&approval.plan)
             || approval.revision != approval.plan.basis.revision
+            || approval.workspace_fingerprint != approval.plan.basis.workspace_fingerprint
+            || approval.slice_id != receipt.slice_id
+            || approval.plan.slices.len() != 1
+            || approval.plan.slices[0].id != receipt.slice_id
             || verification.revision != approval.revision
             || !revision_is_ancestor(&workspace.root, &approval.revision, revision)
         {
@@ -1105,8 +1190,33 @@ fn finalized_absent_targets(
         if expected_claims.is_empty() || expected_claims != actual_claims {
             continue;
         }
+        let Some(baseline) = crate::load_workspace_at_revision(&workspace.root, &approval.revision)
+        else {
+            continue;
+        };
+        if validate_durable_receipt_closure(
+            &baseline.workspace,
+            &baseline.index,
+            &approval.plan,
+            slice,
+            &attempt,
+            verification,
+        )
+        .is_err()
+        {
+            continue;
+        }
         let mut valid = true;
         let mut finalized_targets = BTreeSet::new();
+        let expected_remove_targets = slice
+            .editable_targets
+            .iter()
+            .filter(|target| {
+                target.transition == TargetTransition::Remove
+                    && target.lifecycle == TargetLifecycle::EnsureAbsent
+            })
+            .map(|target| target.reference.clone())
+            .collect::<BTreeSet<_>>();
         for proof in &receipt.lifecycle_proofs {
             let Some(target) = slice
                 .editable_targets
@@ -1129,11 +1239,256 @@ fn finalized_absent_targets(
             }
             finalized_targets.insert(proof.reference.clone());
         }
+        if finalized_targets.len() != receipt.lifecycle_proofs.len()
+            || finalized_targets != expected_remove_targets
+        {
+            valid = false;
+        }
         if valid && !receipt.lifecycle_proofs.is_empty() {
             targets.extend(finalized_targets);
         }
     }
     targets
+}
+
+fn validate_durable_receipt_closure(
+    baseline_workspace: &SpecWorkspace,
+    baseline_index: &SpecIndex,
+    plan: &syu_work_model::WorkPlan,
+    slice: &syu_work_model::ExecutionSlice,
+    attempt: &CompletionAttempt,
+    receipt: &VerificationReceipt,
+) -> Result<()> {
+    if receipt.schema != VERIFICATION_RECEIPT_SCHEMA
+        || receipt.plan_digest != plan.canonical_digest
+        || receipt.slice_id != slice.id
+        || attempt.verification.status != VerificationAttemptStatus::Complete
+        || attempt.verification.failure.is_some()
+    {
+        bail!("durable verification receipt identity is invalid");
+    }
+
+    let expected_claims = slice
+        .verification_targets
+        .iter()
+        .map(|target| {
+            target
+                .verification_claim
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("verification target has no exact claim"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    let actual_claims = receipt
+        .executions
+        .iter()
+        .map(|execution| {
+            execution
+                .claim
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("receipt execution has no exact claim"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if actual_claims.len() != expected_claims.len()
+        || actual_claims.into_iter().collect::<BTreeSet<_>>() != expected_claims
+        || attempt.verification.executions.len() != receipt.executions.len()
+    {
+        bail!("durable verification receipt execution set is not exact");
+    }
+
+    for execution in &receipt.executions {
+        let claim = execution
+            .claim
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("receipt execution has no exact claim"))?;
+        if execution.target != claim.target
+            || execution.exit_code != 0
+            || execution.command.is_empty()
+            || execution.proof.matched_count != 1
+        {
+            bail!("durable verification receipt execution is invalid");
+        }
+        let (_verification_target, runner_ref, covers) =
+            crate::resolve_verification_claim(baseline_index, claim)?;
+        let configured = baseline_workspace
+            .config
+            .verification
+            .runners
+            .get(&runner_ref.runner)
+            .ok_or_else(|| anyhow::anyhow!("durable verification runner is not configured"))?;
+        let arguments = configured
+            .arguments
+            .iter()
+            .map(|argument| crate::expand_runner_argument(argument, &runner_ref.arguments))
+            .collect::<Vec<_>>();
+        let arguments = crate::canonical_runner_arguments(&configured.executable, arguments);
+        let expected_command = std::iter::once(configured.executable.clone())
+            .chain(arguments)
+            .collect::<Vec<_>>();
+        if execution.runner != runner_ref.runner || execution.command != expected_command {
+            bail!("durable verification receipt command is stale");
+        }
+        let planned_verification = slice
+            .verification_targets
+            .iter()
+            .find(|target| target.reference == execution.target)
+            .ok_or_else(|| anyhow::anyhow!("receipt target is outside the selected slice"))?;
+        let resolved_verification = crate::resolve_planned_target_for_workspace(
+            baseline_workspace,
+            baseline_index,
+            planned_verification,
+        )
+        .ok_or_else(|| anyhow::anyhow!("durable verification target cannot be resolved"))?;
+        if execution.verification_digest != resolved_verification.content_hash {
+            bail!("durable verification target digest is stale");
+        }
+
+        let expected_implementation_digests = covers
+            .iter()
+            .map(|covered| {
+                let digest = receipt
+                    .lifecycle_proofs
+                    .iter()
+                    .find(|proof| proof.reference == *covered)
+                    .map(|proof| proof.after_content_hash.clone())
+                    .or_else(|| {
+                        slice
+                            .editable_targets
+                            .iter()
+                            .chain(slice.verification_targets.iter())
+                            .chain(slice.readonly_context.iter())
+                            .find(|target| target.reference == *covered)
+                            .and_then(|target| {
+                                crate::resolve_planned_target_for_workspace(
+                                    baseline_workspace,
+                                    baseline_index,
+                                    target,
+                                )
+                                .map(|resolved| resolved.content_hash)
+                            })
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("durable implementation target cannot be resolved")
+                    })?;
+                Ok((covered.clone(), digest))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        if execution.implementation_digests != expected_implementation_digests {
+            bail!("durable implementation digest closure is stale");
+        }
+        if execution.proof.identity
+            != runner_ref
+                .arguments
+                .get("test")
+                .cloned()
+                .unwrap_or_default()
+            || execution.proof.identity.is_empty()
+        {
+            bail!("durable exact-test proof is stale");
+        }
+    }
+
+    for execution in &receipt.executions {
+        let mirrored = attempt.verification.executions.iter().find(|candidate| {
+            candidate.target.as_ref() == Some(&execution.target)
+                && candidate.claim == execution.claim
+        });
+        let Some(mirrored) = mirrored else {
+            bail!("durable attempt does not mirror receipt executions");
+        };
+        if mirrored.runner != execution.runner
+            || mirrored.command != execution.command
+            || mirrored.exit_code != Some(execution.exit_code)
+            || mirrored.stdout_digest.as_deref() != Some(execution.stdout_digest.as_str())
+            || mirrored.stderr_digest.as_deref() != Some(execution.stderr_digest.as_str())
+            || mirrored.proof.as_ref() != Some(&execution.proof)
+            || mirrored.error.is_some()
+        {
+            bail!("durable attempt execution evidence is inconsistent");
+        }
+    }
+    validate_durable_completion_report(attempt, slice, receipt)
+}
+
+fn validate_durable_completion_report(
+    attempt: &CompletionAttempt,
+    slice: &syu_work_model::ExecutionSlice,
+    receipt: &VerificationReceipt,
+) -> Result<()> {
+    if attempt.report.status != CompletionStatus::Complete || !attempt.report.blockers.is_empty() {
+        bail!("durable completion report is not complete");
+    }
+    let expected_checks = slice
+        .completion
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let actual_checks = attempt
+        .report
+        .checks
+        .iter()
+        .map(|check| serde_json::to_string(&check.check))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    if attempt.report.checks.len() != expected_checks.len()
+        || actual_checks != expected_checks
+        || attempt
+            .report
+            .checks
+            .iter()
+            .any(|check| !check.passed || check.evidence.is_empty())
+    {
+        bail!("durable completion checks are not exact");
+    }
+    let executed_claims = receipt
+        .executions
+        .iter()
+        .filter_map(|execution| execution.claim.clone())
+        .collect::<BTreeSet<_>>();
+    let mut expected = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for acceptance in &slice.acceptance {
+        let targets = slice
+            .verification_targets
+            .iter()
+            .filter(|target| {
+                target.verification_claim.as_ref().is_some_and(|claim| {
+                    claim.criterion == acceptance.anchor && executed_claims.contains(claim)
+                })
+            })
+            .map(|target| target.reference.to_string())
+            .collect::<BTreeSet<_>>();
+        if targets.is_empty()
+            || expected
+                .insert(
+                    acceptance.anchor.to_string(),
+                    (acceptance.statement.clone(), targets),
+                )
+                .is_some()
+        {
+            bail!("durable completion acceptance evidence is incomplete");
+        }
+    }
+    let mut actual = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for evidence in &attempt.report.demonstrated {
+        if actual
+            .insert(
+                evidence.anchor.to_string(),
+                (
+                    evidence.statement.clone(),
+                    evidence
+                        .verification_targets
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                ),
+            )
+            .is_some()
+        {
+            bail!("durable completion acceptance evidence is duplicated");
+        }
+    }
+    if actual != expected {
+        bail!("durable completion acceptance evidence is not exact");
+    }
+    Ok(())
 }
 
 /// A durable absence proof remains useful across commits and unrelated
@@ -1287,25 +1642,16 @@ fn canonical_criterion_plan(
     criterion: &SpecAnchor,
     revision: &str,
 ) -> Result<syu_work_model::WorkPlan> {
-    syu_planner::plan(
-        &WorkRequest {
-            schema: WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-{}", criterion.local_id),
-            summary: "canonical readiness plan probe".into(),
-            operation: WorkOperation::Modify,
-            seeds: vec![WorkSeed::Anchor(criterion.clone())],
-            constraints: syu_work_model::WorkConstraints {
-                max_slices: Some(
-                    workspace
-                        .config
-                        .validation
-                        .readiness
-                        .limits
-                        .max_slices_per_seed,
-                ),
-                ..Default::default()
-            },
+    syu_planner::plan_probe(
+        &syu_planner::PlanProbe {
+            criterion: criterion.clone(),
             requested_targets: vec![],
+            max_slices: workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_slices_per_origin,
         },
         workspace,
         index,
@@ -1406,11 +1752,18 @@ fn public_entrypoint_subjects(
     // product contract. The readiness denominator must remain the explicit
     // `exposes` declarations: each one names an exact public entrypoint and
     // binds it to a capability target that can supply acceptance evidence.
+    let unsupported_level = required_level > ReadinessLevel::WorkReady;
     index
         .exposes_by_target
         .iter()
         .map(|(target_ref, exposed_target)| {
             let mut blockers = Vec::new();
+            if unsupported_level {
+                blockers.push(
+                    "public entrypoint probes above work-ready require explicit execution evidence"
+                        .into(),
+                );
+            }
             let Some(identity) = index.target_to_artifact.get(target_ref) else {
                 return subject(
                     format!("public:{target_ref}"),
@@ -1469,7 +1822,7 @@ fn public_entrypoint_subjects(
                 match canonical_public_target_plan(
                     workspace,
                     index,
-                    target_ref,
+                    exposed_target,
                     &criterion,
                     revision,
                 ) {
@@ -1533,29 +1886,16 @@ fn canonical_public_target_plan(
     criterion: &SpecAnchor,
     revision: &str,
 ) -> Result<syu_work_model::WorkPlan> {
-    syu_planner::plan(
-        &WorkRequest {
-            schema: WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-public-{}", target.target_id),
-            summary: "canonical public entrypoint plan probe".into(),
-            operation: WorkOperation::Modify,
-            seeds: vec![],
-            constraints: syu_work_model::WorkConstraints {
-                max_slices: Some(
-                    workspace
-                        .config
-                        .validation
-                        .readiness
-                        .limits
-                        .max_slices_per_seed,
-                ),
-                ..Default::default()
-            },
-            requested_targets: vec![RequestedTarget {
-                reference: target.clone(),
-                criterion: Some(criterion.clone()),
-                transition: TargetTransition::Modify,
-            }],
+    syu_planner::plan_probe(
+        &syu_planner::PlanProbe {
+            criterion: criterion.clone(),
+            requested_targets: vec![target.clone()],
+            max_slices: workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_slices_per_origin,
         },
         workspace,
         index,
