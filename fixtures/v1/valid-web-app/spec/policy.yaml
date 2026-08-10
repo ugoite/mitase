@@ -1,4 +1,4 @@
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: policies
 namespace: auth
 category: Authentication

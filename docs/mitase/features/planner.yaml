@@ -1,0 +1,5 @@
+schema: mitase/spec/v1
+kind: features
+namespace: work
+category: Work planning
+features: []

@@ -1,0 +1,31 @@
+schema: mitase/spec/v1
+kind: features
+namespace: csharp-fallback
+category: C# fallback example
+features:
+- id: FEAT-CSHARPFALLBACK-001
+  title: Fallback file ownership
+  summary: Show file-level ownership for a language without symbol-level parsing in
+    the active v1 toolchain.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: src/OrderSummary.cs
+      selector:
+        kind: marker
+        value: "public sealed class OrderSummary"
+      claims:
+      - kind: satisfies
+        criterion: REQ-CSHARPFALLBACK-001#criterion.owned-delivery
+    - id: target-2
+      adapter: shell
+      path: scripts/check-workspace.sh
+      selector:
+        kind: marker
+        value: "#!/usr/bin/env bash"

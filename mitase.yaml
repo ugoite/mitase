@@ -1,0 +1,276 @@
+schema: mitase/config/v1
+workspace:
+  spec_roots: [docs/mitase]
+  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, fixtures/v1/valid-web-app/work.yaml, website/package-lock.json, website/package.json, .github/workflows/maintenance.yml]
+inventory:
+  active_profile: default
+  profiles:
+    - id: default
+      providers:
+        rust:
+          mode: test
+          include_tests: true
+        javascript:
+          roots:
+            - crates/mitase-app-ui/assets
+            - editors/vscode/src/model.js
+            - editors/vscode/test/model.test.js
+            - website/src/pages/index.js
+        markdown: { roots: [docs/mitase] }
+        html: { roots: [crates/mitase-app-ui/assets] }
+        declared:
+          roots:
+            - .github/ISSUE_TEMPLATE/bug_report.yml
+            - .github/pull_request_template.md
+            - .github/workflows/branch-push.yml
+            - .github/workflows/ci.yml
+            - .github/workflows/quality.yml
+            - .github/workflows/release-artifacts.yml
+            - .pre-commit-config.yaml
+            - .pre-commit-ci.yaml
+            - build.rs
+            - CONTRIBUTING.md
+            - Cargo.lock
+            - Cargo.toml
+            - README.md
+            - editors/vscode/README.md
+            - release-please-config.json
+            - docs
+            - scripts
+            - website/docusaurus.config.js
+            - website/sidebars.js
+            - crates/mitase-app-ui/assets/js/api.js
+            - crates/mitase-app-ui/assets/js/components/action.js
+            - crates/mitase-app-ui/assets/js/components/diagnostic.js
+            - crates/mitase-app-ui/assets/js/components/diff.js
+            - crates/mitase-app-ui/assets/js/components/editor.js
+            - crates/mitase-app-ui/assets/js/components/readiness.js
+            - crates/mitase-app-ui/assets/js/components/target.js
+            - crates/mitase-app-ui/assets/js/i18n.js
+            - crates/mitase-app-ui/assets/js/main.js
+            - crates/mitase-app-ui/assets/js/pages/diagnostics.js
+            - crates/mitase-app-ui/assets/js/pages/readiness.js
+            - crates/mitase-app-ui/assets/js/pages/scope.js
+            - crates/mitase-app-ui/assets/js/pages/settings.js
+            - crates/mitase-app-ui/assets/js/pages/specifications.js
+            - crates/mitase-app-ui/assets/js/pages/work.js
+            - crates/mitase-app-ui/assets/js/router.js
+            - crates/mitase-app-ui/assets/js/state.js
+            - crates/mitase-app-ui/assets/workbench.css
+            - crates/mitase-app-ui/assets/locales/en.json
+            - crates/mitase-app-ui/assets/locales/ja.json
+            - crates/mitase-app-ui/assets/workbench.html
+            - crates/mitase-app-ui/src/lib.rs
+            - crates/mitase-app-ui/src/pages.rs
+            - crates/mitase-app-ui/src/shell.rs
+            - crates/mitase-code-intel/Cargo.toml
+            - crates/mitase-code-intel/src/lib.rs
+            - crates/mitase-diagnostics/Cargo.toml
+            - crates/mitase-delivery/Cargo.toml
+            - crates/mitase-agent/Cargo.toml
+            - crates/mitase-diagnostics/src/lib.rs
+            - crates/mitase-inventory/Cargo.toml
+            - crates/mitase-inventory/src/lib.rs
+            - crates/mitase-planner/Cargo.toml
+            - crates/mitase-planner/src/lib.rs
+            - crates/mitase-project-model/Cargo.toml
+            - crates/mitase-project-model/src/lib.rs
+            - crates/mitase-spec-model/src/lib.rs
+            - crates/mitase-validation/Cargo.toml
+            - crates/mitase-validation/src/lib.rs
+            - crates/mitase-validation/src/readiness.rs
+            - crates/mitase-work-model/src/lib.rs
+            - crates/mitase-workbench-server/Cargo.toml
+            - crates/mitase-workbench-server/src/lib.rs
+            - crates/mitase-workspace/Cargo.toml
+            - crates/mitase-workspace/src/lib.rs
+            - docs/reference/specification/index.md
+            - docs/reference/specification/capabilities/core.md
+            - docs/reference/specification/capabilities/delivery.md
+            - docs/reference/specification/capabilities/planning.md
+            - docs/reference/specification/capabilities/planner.md
+            - docs/reference/specification/contracts/agent-delivery.md
+            - docs/reference/specification/contracts/code-diagnostics.md
+            - docs/reference/specification/contracts/inventory.md
+            - docs/reference/specification/contracts/spec-model.md
+            - docs/reference/specification/contracts/validation.md
+            - docs/reference/specification/contracts/work-planning.md
+            - docs/reference/specification/contracts/workbench-actions.md
+            - docs/reference/specification/contracts/workbench-components.md
+            - docs/reference/specification/contracts/workbench-navigation.md
+            - docs/reference/specification/contracts/workbench-pages.md
+            - docs/reference/specification/contracts/workbench-rendering.md
+            - docs/reference/specification/contracts/workbench-server.md
+            - docs/reference/specification/contracts/workbench-transport.md
+            - docs/reference/specification/contracts/workbench-validation.md
+            - docs/reference/specification/contracts/workspace-loading.md
+            - docs/reference/specification/contracts/workspace-resolution.md
+            - docs/reference/specification/workbench/completion-history.md
+            - docs/reference/specification/workbench/guided-journey.md
+            - docs/reference/specification/workbench/navigation.md
+            - docs/reference/specification/workbench/projection.md
+            - docs/reference/specification/workbench/quality-gates.md
+            - docs/reference/specification/workbench/scoped-agent.md
+            - docs/reference/specification/workbench/server.md
+            - docs/reference/specification/workbench/specification-editor.md
+            - docs/reference/specification/workbench/target-suggestions.md
+            - docs/reference/specification/workbench/verification.md
+            - docs/reference/specification/workbench/work-ui.md
+            - docs/reference/specification/foundations/foundation.md
+            - docs/reference/specification/foundations/delivery.md
+            - docs/reference/specification/foundations/capability-contracts.md
+            - docs/reference/specification/foundations/work.md
+            - docs/reference/specification/foundations/workbench.md
+            - docs/workflows/work/command-card.md
+            - docs/workflows/repository/configuration.md
+            - docs/start-here/adopt/examples-and-templates.md
+            - docs/start-here/adopt/existing-repository.md
+            - docs/workflows/repository/migration.md
+            - docs/understand/quality/spec-antipatterns.md
+            - docs/workflows/integrations/vscode-extension.md
+            - docs/workflows/work/workbench.md
+            - docs/mitase/features/capabilities/core.yaml
+            - docs/mitase/features/capabilities/delivery.yaml
+            - docs/mitase/features/capabilities/planning.yaml
+            - docs/mitase/features/planner.yaml
+            - docs/mitase/features/public-entrypoints/agent-delivery.yaml
+            - docs/mitase/features/public-entrypoints/code-diagnostics.yaml
+            - docs/mitase/features/public-entrypoints/inventory.yaml
+            - docs/mitase/features/public-entrypoints/spec-model.yaml
+            - docs/mitase/features/public-entrypoints/validation.yaml
+            - docs/mitase/features/public-entrypoints/work-planning.yaml
+            - docs/mitase/features/public-entrypoints/workbench-actions.yaml
+            - docs/mitase/features/public-entrypoints/workbench-components.yaml
+            - docs/mitase/features/public-entrypoints/workbench-navigation.yaml
+            - docs/mitase/features/public-entrypoints/workbench-pages.yaml
+            - docs/mitase/features/public-entrypoints/workbench-rendering.yaml
+            - docs/mitase/features/public-entrypoints/workbench-server.yaml
+            - docs/mitase/features/public-entrypoints/workbench-transport.yaml
+            - docs/mitase/features/public-entrypoints/workbench-validation.yaml
+            - docs/mitase/features/public-entrypoints/workspace-loading.yaml
+            - docs/mitase/features/public-entrypoints/workspace-resolution.yaml
+            - docs/mitase/features/workbench/completion-history.yaml
+            - docs/mitase/features/workbench/guided-journey.yaml
+            - docs/mitase/features/workbench/navigation.yaml
+            - docs/mitase/features/workbench/projection.yaml
+            - docs/mitase/features/workbench/quality-gates.yaml
+            - docs/mitase/features/workbench/scoped-agent.yaml
+            - docs/mitase/features/workbench/server.yaml
+            - docs/mitase/features/workbench/specification-editor.yaml
+            - docs/mitase/features/workbench/target-suggestions.yaml
+            - docs/mitase/features/workbench/verification.yaml
+            - docs/mitase/features/workbench/work-ui.yaml
+            - docs/mitase/philosophies/foundation.yaml
+            - docs/mitase/policies/delivery.yaml
+            - docs/mitase/requirements/capability-contracts.yaml
+            - docs/mitase/requirements/work.yaml
+            - docs/mitase/requirements/workbench.yaml
+            - editors/vscode/README.md
+            - editors/vscode/src/model.js
+            - editors/vscode/test/model.test.js
+            - examples/browser-ui/docs/mitase/features/core/core.yaml
+            - examples/browser-ui/docs/mitase/policies/policies.yaml
+            - examples/browser-ui/docs/mitase/requirements/core/core.yaml
+            - examples/browser-ui/mitase.yaml
+            - examples/csharp-fallback/docs/mitase/features/core/core.yaml
+            - examples/csharp-fallback/docs/mitase/policies/policies.yaml
+            - examples/csharp-fallback/docs/mitase/requirements/core/core.yaml
+            - examples/csharp-fallback/mitase.yaml
+            - examples/docs-first/docs/mitase/features/core/core.yaml
+            - examples/docs-first/docs/mitase/policies/policies.yaml
+            - examples/docs-first/docs/mitase/requirements/core/core.yaml
+            - examples/docs-first/mitase.yaml
+            - examples/generic/docs/mitase/features/core/core.yaml
+            - examples/generic/docs/mitase/policies/policies.yaml
+            - examples/generic/docs/mitase/requirements/core/core.yaml
+            - examples/generic/mitase.yaml
+            - examples/go-only/docs/mitase/features/core/core.yaml
+            - examples/go-only/docs/mitase/policies/policies.yaml
+            - examples/go-only/docs/mitase/requirements/core/core.yaml
+            - examples/go-only/mitase.yaml
+            - examples/java-only/docs/mitase/features/core/core.yaml
+            - examples/java-only/docs/mitase/policies/policies.yaml
+            - examples/java-only/docs/mitase/requirements/core/core.yaml
+            - examples/java-only/mitase.yaml
+            - examples/polyglot/docs/mitase/features/core/core.yaml
+            - examples/polyglot/docs/mitase/policies/policies.yaml
+            - examples/polyglot/docs/mitase/requirements/core/core.yaml
+            - examples/polyglot/mitase.yaml
+            - examples/python-only/docs/mitase/features/core/core.yaml
+            - examples/python-only/docs/mitase/policies/policies.yaml
+            - examples/python-only/docs/mitase/requirements/core/core.yaml
+            - examples/python-only/mitase.yaml
+            - examples/ruby-only/docs/mitase/features/core/core.yaml
+            - examples/ruby-only/docs/mitase/policies/policies.yaml
+            - examples/ruby-only/docs/mitase/requirements/core/core.yaml
+            - examples/ruby-only/mitase.yaml
+            - examples/rust-only/docs/mitase/features/core/core.yaml
+            - examples/rust-only/docs/mitase/policies/policies.yaml
+            - examples/rust-only/docs/mitase/requirements/core/core.yaml
+            - examples/rust-only/mitase.yaml
+            - examples/team-scale/docs/mitase/features/core/core.yaml
+            - examples/team-scale/docs/mitase/policies/policies.yaml
+            - examples/team-scale/docs/mitase/requirements/core/core.yaml
+            - examples/team-scale/mitase.yaml
+            - examples/typescript-only/docs/mitase/features/core/core.yaml
+            - examples/typescript-only/docs/mitase/policies/policies.yaml
+            - examples/typescript-only/docs/mitase/requirements/core/core.yaml
+            - examples/typescript-only/mitase.yaml
+            - fixtures/rejected/obsolete-pre-release-v1/spec.yaml
+            - fixtures/rejected/obsolete-pre-release-v1/mitase.yaml
+            - fixtures/v1/invalid-unknown-field/mitase.yaml
+            - fixtures/v1/valid-web-app/Cargo.toml
+            - fixtures/v1/valid-web-app/spec/feature.yaml
+            - fixtures/v1/valid-web-app/spec/requirement.yaml
+            - fixtures/v1/valid-web-app/mitase.yaml
+            - scripts/ci/check-workbench-contract.py
+            - scripts/ci/check-workbench-i18n.mjs
+            - scripts/ci/installed-binary-smoke.sh
+            - scripts/ci/quality-gates.sh
+            - scripts/ci/workbench-visual.sh
+            - scripts/dev/validate-changed.sh
+            - skills/mitase-maintainer/SKILL.md
+            - src/lib.rs
+            - tests/v1_cli.rs
+            - tests/support/mod.rs
+            - tests/workbench_smoke.rs
+            - tests/workbench_visual.rs
+            - website/src/pages/index.js
+            - mitase.yaml
+validation:
+  preset: agent-ready
+  readiness:
+    target: traceable
+    probes:
+      implemented_criteria:
+        - criterion: REQ-WORK-001#criterion.exact-slice
+          level: work-ready
+        - criterion: REQ-WORKBENCH-002#criterion.work-session
+          level: work-ready
+      public_entrypoints: { selection: all, level: seedable }
+      changed_units: false
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
+  changed:
+    baseline: { strategy: parent }
+    require_owned_changes: true
+    require_plan: true
+verification:
+  runners:
+    cargo-test:
+      executable: cargo
+      arguments: [test, -p, "{package}", "{test}", --, --exact]
+    cargo-test-integration:
+      executable: cargo
+      arguments: [test, -p, "{package}", --test, "{harness}", "{test}", --, --exact]
+    shell:
+      executable: bash
+      arguments: ["{script}"]
+work:
+  slicing:
+    max_editable_files: 4
+    max_editable_symbols: 8
+    max_verification_targets: 8
+    max_readonly_targets: 12
+    # Measured envelope for the detail workspace context pack, including
+    # declared trace/evidence and the existing public Workbench context.
+    max_total_bytes: 160000

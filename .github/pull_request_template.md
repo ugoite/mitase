@@ -14,5 +14,5 @@ This PR intentionally makes the v1 readiness and Workbench contracts stricter an
 - [ ] `cargo fmt --check`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
 - [ ] `cargo test --workspace`
-- [ ] `syu validate workspace .`
-- [ ] `syu readiness report . --format json`
+- [ ] `mitase validate workspace .`
+- [ ] `mitase readiness report . --format json`

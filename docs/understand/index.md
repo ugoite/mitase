@@ -1,12 +1,12 @@
 ---
 title: "Understand the model"
-description: "Learn how syu connects stable intent to executable, verifiable work."
+description: "Learn how mitase connects stable intent to executable, verifiable work."
 sidebar_position: 1
 ---
 
 # Understand the model
 
-The `syu` model is intentionally strict: four persistent specification layers
+The `mitase` model is intentionally strict: four persistent specification layers
 explain why a repository should behave a certain way, and temporary work
 artifacts turn that explanation into bounded execution. Read the model before
 you tune configuration or plan work so the commands have the right context.

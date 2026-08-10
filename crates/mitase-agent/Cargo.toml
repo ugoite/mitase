@@ -1,0 +1,18 @@
+[package]
+name = "mitase-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+sha2.workspace = true
+mitase-delivery = { path = "../mitase-delivery" }
+mitase-inventory = { path = "../mitase-inventory" }
+mitase-planner = { path = "../mitase-planner" }
+mitase-spec-model = { path = "../mitase-spec-model" }
+mitase-validation = { path = "../mitase-validation" }
+mitase-work-model = { path = "../mitase-work-model" }
+mitase-workspace = { path = "../mitase-workspace" }
+tempfile.workspace = true

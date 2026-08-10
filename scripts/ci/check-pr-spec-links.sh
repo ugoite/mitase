@@ -35,9 +35,9 @@ with open(sys.argv[1], encoding="utf-8") as pr_file:
 with open(sys.argv[2], encoding="utf-8") as files_file:
     files = json.load(files_file)
 
-touches_self_spec = any(file["filename"].startswith("docs/syu/") for file in files)
+touches_self_spec = any(file["filename"].startswith("docs/mitase/") for file in files)
 if not touches_self_spec:
-    print("No docs/syu/ files changed; skipping spec linkage check.")
+    print("No docs/mitase/ files changed; skipping spec linkage check.")
     raise SystemExit(0)
 
 content = "\n".join(
@@ -48,11 +48,11 @@ has_issue_ref = re.search(r"(^|\s)#\d+\b", content)
 has_spec_id = re.search(r"\b(?:REQ|FEAT|POL|PHIL)-[A-Z0-9-]+\b", content)
 
 if has_issue_ref or has_spec_id:
-    print("Found linked issue/spec reference for docs/syu/ changes.")
+    print("Found linked issue/spec reference for docs/mitase/ changes.")
     raise SystemExit(0)
 
 print(
-    "::error title=Missing issue or spec linkage::This pull request changes docs/syu/ "
+    "::error title=Missing issue or spec linkage::This pull request changes docs/mitase/ "
     "but the PR title/body does not mention an issue reference like #123 or a "
     "specification ID like REQ-CORE-001 / FEAT-CHECK-001. Update the "
     "'Linked issue or specification' section in the PR template."

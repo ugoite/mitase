@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Server"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-server.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-server.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-server.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-server.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-052-rust-crates-syu-workbench-server-src-lib-rs-branchscope
+        - **id**: entrypoint-052-rust-crates-mitase-workbench-server-src-lib-rs-branchscope
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: BranchScopeView::not_applicable
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-053-rust-crates-syu-workbench-server-src-lib-rs-validationr
+        - **id**: entrypoint-053-rust-crates-mitase-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ValidationRunView::completed
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-054-rust-crates-syu-workbench-server-src-lib-rs-validationr
+        - **id**: entrypoint-054-rust-crates-mitase-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ValidationRunView::failed
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-055-rust-crates-syu-workbench-server-src-lib-rs-validationr
+        - **id**: entrypoint-055-rust-crates-mitase-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ValidationRunView::not_applicable
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-056-rust-crates-syu-workbench-server-src-lib-rs-validationr
+        - **id**: entrypoint-056-rust-crates-mitase-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ValidationRunView::not_run
@@ -105,9 +105,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-057-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+        - **id**: entrypoint-057-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchServer::new
@@ -119,9 +119,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-058-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+        - **id**: entrypoint-058-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchServer::projection
@@ -133,9 +133,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-059-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+        - **id**: entrypoint-059-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchServer::router
@@ -147,9 +147,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-060-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+        - **id**: entrypoint-060-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchServer::run
@@ -161,9 +161,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-061-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+        - **id**: entrypoint-061-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchServer::with_launch
@@ -175,9 +175,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-062-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+        - **id**: entrypoint-062-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchServer::with_request
@@ -188,7 +188,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-052-rust-crates-syu-workbench-server-src-lib-rs-branchscope
+    - id: entrypoint-052-rust-crates-mitase-workbench-server-src-lib-rs-branchscope
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: BranchScopeView::not_applicable
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-053-rust-crates-syu-workbench-server-src-lib-rs-validationr
+    - id: entrypoint-053-rust-crates-mitase-workbench-server-src-lib-rs-validationr
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: ValidationRunView::completed
@@ -231,9 +231,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-054-rust-crates-syu-workbench-server-src-lib-rs-validationr
+    - id: entrypoint-054-rust-crates-mitase-workbench-server-src-lib-rs-validationr
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: ValidationRunView::failed
@@ -245,9 +245,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-055-rust-crates-syu-workbench-server-src-lib-rs-validationr
+    - id: entrypoint-055-rust-crates-mitase-workbench-server-src-lib-rs-validationr
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: ValidationRunView::not_applicable
@@ -259,9 +259,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-056-rust-crates-syu-workbench-server-src-lib-rs-validationr
+    - id: entrypoint-056-rust-crates-mitase-workbench-server-src-lib-rs-validationr
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: ValidationRunView::not_run
@@ -273,9 +273,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-057-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+    - id: entrypoint-057-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchServer::new
@@ -287,9 +287,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-058-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+    - id: entrypoint-058-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchServer::projection
@@ -301,9 +301,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-059-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+    - id: entrypoint-059-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchServer::router
@@ -315,9 +315,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-060-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+    - id: entrypoint-060-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchServer::run
@@ -329,9 +329,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-061-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+    - id: entrypoint-061-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchServer::with_launch
@@ -343,9 +343,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-062-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
+    - id: entrypoint-062-rust-crates-mitase-workbench-server-src-lib-rs-workbenchse
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchServer::with_request

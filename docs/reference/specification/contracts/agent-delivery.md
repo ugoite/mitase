@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Agent Delivery"
-description: "Generated reference for docs/syu/features/public-entrypoints/agent-delivery.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/agent-delivery.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/agent-delivery.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/agent-delivery.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-agent-current-run
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: current_run
@@ -51,7 +51,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-agent-events
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: events
@@ -65,7 +65,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-agent-record-blocker
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: record_blocker
@@ -79,7 +79,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-agent-record-verification
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: record_verification
@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-delivery-agent-events
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: agent_events
@@ -107,7 +107,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-delivery-agent-run
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: agent_run
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
       - **targets**:
         - **id**: entrypoint-delivery-latest-agent-run
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: latest_agent_run
@@ -132,7 +132,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -149,7 +149,7 @@ features:
     targets:
     - id: entrypoint-agent-current-run
       adapter: rust
-      path: crates/syu-agent/src/lib.rs
+      path: crates/mitase-agent/src/lib.rs
       selector:
         kind: symbol
         name: current_run
@@ -163,7 +163,7 @@ features:
     targets:
     - id: entrypoint-agent-events
       adapter: rust
-      path: crates/syu-agent/src/lib.rs
+      path: crates/mitase-agent/src/lib.rs
       selector:
         kind: symbol
         name: events
@@ -177,7 +177,7 @@ features:
     targets:
     - id: entrypoint-agent-record-blocker
       adapter: rust
-      path: crates/syu-agent/src/lib.rs
+      path: crates/mitase-agent/src/lib.rs
       selector:
         kind: symbol
         name: record_blocker
@@ -191,7 +191,7 @@ features:
     targets:
     - id: entrypoint-agent-record-verification
       adapter: rust
-      path: crates/syu-agent/src/lib.rs
+      path: crates/mitase-agent/src/lib.rs
       selector:
         kind: symbol
         name: record_verification
@@ -205,7 +205,7 @@ features:
     targets:
     - id: entrypoint-delivery-agent-events
       adapter: rust
-      path: crates/syu-delivery/src/lib.rs
+      path: crates/mitase-delivery/src/lib.rs
       selector:
         kind: symbol
         name: agent_events
@@ -219,7 +219,7 @@ features:
     targets:
     - id: entrypoint-delivery-agent-run
       adapter: rust
-      path: crates/syu-delivery/src/lib.rs
+      path: crates/mitase-delivery/src/lib.rs
       selector:
         kind: symbol
         name: agent_run
@@ -233,7 +233,7 @@ features:
     targets:
     - id: entrypoint-delivery-latest-agent-run
       adapter: rust
-      path: crates/syu-delivery/src/lib.rs
+      path: crates/mitase-delivery/src/lib.rs
       selector:
         kind: symbol
         name: latest_agent_run

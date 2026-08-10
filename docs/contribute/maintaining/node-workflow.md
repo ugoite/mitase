@@ -2,7 +2,7 @@
 
 <!-- FEAT-DOCS-001 -->
 
-Use this guide when you are contributing to `syu` itself and need one place that
+Use this guide when you are contributing to `mitase` itself and need one place that
 answers a practical question fast: **which Node major should I use for this
 task right now?**
 
@@ -79,6 +79,6 @@ stay on Node 20 for both.
    then confirm with that surface's `.nvmrc` and `package.json#engines`.
 
 If you want the full contributor gate matrix after switching runtimes, return to
-[`CONTRIBUTING.md`](https://github.com/ugoite/syu/blob/main/CONTRIBUTING.md).
+[`CONTRIBUTING.md`](https://github.com/ugoite/mitase/blob/main/CONTRIBUTING.md).
 If you only need the extension setup, jump to the
 [VS Code extension guide](../../workflows/integrations/vscode-extension.md).

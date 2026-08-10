@@ -7,7 +7,7 @@ is_relevant_path() {
   local path="$1"
 
   case "$path" in
-    syu.yaml|docs/syu/*)
+    mitase.yaml|docs/mitase/*)
       return 0
       ;;
     *)
@@ -42,7 +42,7 @@ validate_changed() {
     fi
   done
 
-  echo "No repository-relevant files changed; skipping syu validation."
+  echo "No repository-relevant files changed; skipping mitase validation."
 }
 
 validate_changed "$@"

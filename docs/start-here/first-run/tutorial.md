@@ -2,17 +2,17 @@
 
 This tutorial creates a minimal v1 workspace by hand.
 
-1. Add `syu.yaml` with `schema: syu/config/v1`.
-2. Create `docs/syu/philosophy/foundation.yaml`.
-3. Create `docs/syu/policies/policies.yaml`.
-4. Create `docs/syu/requirements/core/core.yaml`.
-5. Create `docs/syu/features/core/core.yaml`.
+1. Add `mitase.yaml` with `schema: mitase/config/v1`.
+2. Create `docs/mitase/philosophy/foundation.yaml`.
+3. Create `docs/mitase/policies/policies.yaml`.
+4. Create `docs/mitase/requirements/core/core.yaml`.
+5. Create `docs/mitase/features/core/core.yaml`.
 6. Run `cargo run --quiet -- validate .`.
 
 A minimal requirement/feature connection looks like this:
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: requirements
 namespace: demo
 category: Demo
@@ -41,7 +41,7 @@ requirements:
 ```
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: demo
 category: Demo

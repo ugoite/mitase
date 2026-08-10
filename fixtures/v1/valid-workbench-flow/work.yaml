@@ -1,4 +1,4 @@
-schema: syu/work-request/v1
+schema: mitase/work-request/v1
 id: WORK-FIXTURE-CLI
 title: Modify the fixture behavior through the CLI work flow.
 operation: modify

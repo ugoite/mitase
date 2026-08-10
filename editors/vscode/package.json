@@ -1,7 +1,7 @@
 {
-  "name": "syu-vscode",
-  "displayName": "syu",
-  "description": "FEAT-VSCODE-001 Surface syu validation diagnostics and trace navigation inside VS Code.",
+  "name": "mitase-vscode",
+  "displayName": "mitase",
+  "description": "FEAT-VSCODE-001 Surface mitase validation diagnostics and trace navigation inside VS Code.",
   "version": "0.0.1-alpha.8",
   "publisher": "ugoite",
   "license": "MIT",
@@ -14,20 +14,20 @@
     "Other"
   ],
   "keywords": [
-    "syu",
+    "mitase",
     "specification",
     "traceability",
     "requirements"
   ],
   "activationEvents": [
-    "workspaceContains:syu.yaml",
-    "workspaceContains:docs/syu/features/features.yaml",
+    "workspaceContains:mitase.yaml",
+    "workspaceContains:docs/mitase/features/features.yaml",
     "workspaceContains:features/features.yaml",
-    "onCommand:syu.refreshDiagnostics",
-    "onCommand:syu.showTraceForActiveFile",
-    "onCommand:syu.openSpecItemById",
-    "onCommand:syu.showRelatedFilesForSpecId",
-    "onView:syuContext"
+    "onCommand:mitase.refreshDiagnostics",
+    "onCommand:mitase.showTraceForActiveFile",
+    "onCommand:mitase.openSpecItemById",
+    "onCommand:mitase.showRelatedFilesForSpecId",
+    "onView:mitaseContext"
   ],
   "main": "./src/extension.js",
   "scripts": {
@@ -40,42 +40,42 @@
   "contributes": {
     "commands": [
       {
-        "command": "syu.refreshDiagnostics",
-        "title": "syu: Refresh diagnostics"
+        "command": "mitase.refreshDiagnostics",
+        "title": "mitase: Refresh diagnostics"
       },
       {
-        "command": "syu.showTraceForActiveFile",
-        "title": "syu: Trace active file"
+        "command": "mitase.showTraceForActiveFile",
+        "title": "mitase: Trace active file"
       },
       {
-        "command": "syu.openSpecItemById",
-        "title": "syu: Open spec item by ID"
+        "command": "mitase.openSpecItemById",
+        "title": "mitase: Open spec item by ID"
       },
       {
-        "command": "syu.showRelatedFilesForSpecId",
-        "title": "syu: Show related files for spec ID"
+        "command": "mitase.showRelatedFilesForSpecId",
+        "title": "mitase: Show related files for spec ID"
       }
     ],
     "views": {
       "explorer": [
         {
-          "id": "syuContext",
-          "name": "syu Context"
+          "id": "mitaseContext",
+          "name": "mitase Context"
         }
       ]
     },
     "configuration": {
-      "title": "syu",
+      "title": "mitase",
       "properties": {
-        "syu.binaryPath": {
+        "mitase.binaryPath": {
           "type": "string",
-          "default": "syu",
-          "markdownDescription": "Path to the `syu` CLI binary that powers validation diagnostics."
+          "default": "mitase",
+          "markdownDescription": "Path to the `mitase` CLI binary that powers validation diagnostics."
         },
-        "syu.autoRefreshDiagnostics": {
+        "mitase.autoRefreshDiagnostics": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Refresh `syu` diagnostics after saving a file inside a syu workspace."
+          "markdownDescription": "Refresh `mitase` diagnostics after saving a file inside a mitase workspace."
         }
       }
     }

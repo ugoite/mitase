@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Spec Model"
-description: "Generated reference for docs/syu/features/public-entrypoints/spec-model.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/spec-model.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/spec-model.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/spec-model.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-036-rust-crates-syu-spec-model-src-lib-rs-localanchorkind-l
+        - **id**: entrypoint-036-rust-crates-mitase-spec-model-src-lib-rs-localanchorkind-l
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: LocalAnchorKind::label
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-037-rust-crates-syu-spec-model-src-lib-rs-repopath-as-path
+        - **id**: entrypoint-037-rust-crates-mitase-spec-model-src-lib-rs-repopath-as-path
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RepoPath::as_path
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-038-rust-crates-syu-spec-model-src-lib-rs-repopath-display
+        - **id**: entrypoint-038-rust-crates-mitase-spec-model-src-lib-rs-repopath-display
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RepoPath::display
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-039-rust-crates-syu-spec-model-src-lib-rs-repopath-new
+        - **id**: entrypoint-039-rust-crates-mitase-spec-model-src-lib-rs-repopath-new
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RepoPath::new
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-040-rust-crates-syu-spec-model-src-lib-rs-repopath-to-strin
+        - **id**: entrypoint-040-rust-crates-mitase-spec-model-src-lib-rs-repopath-to-strin
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RepoPath::to_string_lossy
@@ -105,9 +105,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-041-rust-crates-syu-spec-model-src-lib-rs-specdocument-sche
+        - **id**: entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-specdocument-sche
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecDocument::schema
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **targets**:
         - **id**: entrypoint-repo-path-from-path
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RepoPath::from_path
@@ -135,7 +135,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
       - **targets**:
         - **id**: entrypoint-lowercase-hex
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: lowercase_hex
@@ -146,7 +146,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/spec-
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -161,9 +161,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-036-rust-crates-syu-spec-model-src-lib-rs-localanchorkind-l
+    - id: entrypoint-036-rust-crates-mitase-spec-model-src-lib-rs-localanchorkind-l
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: LocalAnchorKind::label
@@ -175,9 +175,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-037-rust-crates-syu-spec-model-src-lib-rs-repopath-as-path
+    - id: entrypoint-037-rust-crates-mitase-spec-model-src-lib-rs-repopath-as-path
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: RepoPath::as_path
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-038-rust-crates-syu-spec-model-src-lib-rs-repopath-display
+    - id: entrypoint-038-rust-crates-mitase-spec-model-src-lib-rs-repopath-display
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: RepoPath::display
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-039-rust-crates-syu-spec-model-src-lib-rs-repopath-new
+    - id: entrypoint-039-rust-crates-mitase-spec-model-src-lib-rs-repopath-new
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: RepoPath::new
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-040-rust-crates-syu-spec-model-src-lib-rs-repopath-to-strin
+    - id: entrypoint-040-rust-crates-mitase-spec-model-src-lib-rs-repopath-to-strin
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: RepoPath::to_string_lossy
@@ -231,9 +231,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-041-rust-crates-syu-spec-model-src-lib-rs-specdocument-sche
+    - id: entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-specdocument-sche
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: SpecDocument::schema
@@ -247,7 +247,7 @@ features:
     targets:
     - id: entrypoint-repo-path-from-path
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
         name: RepoPath::from_path
@@ -261,7 +261,7 @@ features:
     targets:
     - id: entrypoint-lowercase-hex
       adapter: rust
-      path: crates/syu-spec-model/src/lib.rs
+      path: crates/mitase-spec-model/src/lib.rs
       selector: { kind: symbol, name: lowercase_hex }
       claims:
       - kind: exposes

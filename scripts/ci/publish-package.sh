@@ -17,7 +17,7 @@ publish_package_artifact() {
   local package_tag="$3"
   local archive_path="$4"
   local checksum_path="${archive_path}.sha256"
-  local source_url="https://github.com/${GITHUB_REPOSITORY:-ugoite/syu}"
+  local source_url="https://github.com/${GITHUB_REPOSITORY:-ugoite/mitase}"
 
   require_command oras
 
@@ -32,11 +32,11 @@ publish_package_artifact() {
   fi
 
   oras push \
-    --artifact-type application/vnd.syu.release.v1 \
+    --artifact-type application/vnd.mitase.release.v1 \
     --annotation "org.opencontainers.image.source=${source_url}" \
     --annotation "org.opencontainers.image.version=${package_tag%%__*}" \
     "${registry}/${package_repository}:${package_tag}" \
-    "${archive_path}:application/vnd.syu.archive.layer.v1" \
+    "${archive_path}:application/vnd.mitase.archive.layer.v1" \
     "${checksum_path}:text/plain"
 }
 

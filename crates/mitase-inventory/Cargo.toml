@@ -1,0 +1,24 @@
+[package]
+name = "mitase-inventory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+mitase-spec-model = { path = "../mitase-spec-model" }
+mitase-project-model = { path = "../mitase-project-model" }
+syn = { version = "3.0.1", features = ["full", "visit"] }
+proc-macro2 = { version = "1.0.103", features = ["span-locations"] }
+quote.workspace = true
+tree-sitter.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-typescript.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+serde_yaml.workspace = true

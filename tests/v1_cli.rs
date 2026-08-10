@@ -1,20 +1,20 @@
 use assert_cmd::Command;
+use mitase_work_model::{CompletionAttempt, WorkPlan};
 use std::{
     fs,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
 };
-use syu_work_model::{CompletionAttempt, WorkPlan};
 use tempfile::tempdir;
 
 #[test]
 fn current_workspace_validates_and_reports_configured_readiness() {
-    Command::cargo_bin("syu")
+    Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "workspace", ".", "--range", "HEAD...HEAD"])
         .assert()
         .success();
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["readiness", "report", ".", "--format", "json"])
         .output()
@@ -29,9 +29,11 @@ fn generated_spec_reference_covers_every_source_document() {
     let index =
         fs::read_to_string("docs/reference/specification/index.md").expect("generated index");
     let mut sources = Vec::new();
-    collect_spec_yaml_files(Path::new("docs/syu"), &mut sources);
+    collect_spec_yaml_files(Path::new("docs/mitase"), &mut sources);
     for source in sources {
-        let relative = source.strip_prefix("docs/syu").expect("spec source path");
+        let relative = source
+            .strip_prefix("docs/mitase")
+            .expect("spec source path");
         let generated =
             Path::new("docs/reference/specification").join(generated_spec_path(relative));
         let page = fs::read_to_string(&generated)
@@ -96,13 +98,33 @@ fn collect_spec_yaml_files(directory: &Path, files: &mut Vec<std::path::PathBuf>
 #[test]
 fn obsolete_config_shape_is_rejected() {
     let temp = tempdir().unwrap();
-    fs::create_dir_all(temp.path().join("docs/syu")).unwrap();
+    fs::create_dir_all(temp.path().join("docs/mitase")).unwrap();
     fs::write(
-        temp.path().join("syu.yaml"),
-        "schema: syu/config/v1\nversion: 1\nspec: { root: docs/syu }\n",
+        temp.path().join("mitase.yaml"),
+        "schema: mitase/config/v1\nversion: 1\nspec: { root: docs/mitase }\n",
     )
     .unwrap();
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["validate", "workspace"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("obsolete pre-release"));
+}
+
+#[test]
+fn obsolete_pre_release_fixture_is_rejected_under_canonical_mitase_identity() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/rejected/obsolete-pre-release-v1");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+
+    let config = fs::read_to_string(temp.path().join("mitase.yaml")).unwrap();
+    assert!(config.contains("schema: mitase/config/v1"));
+
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "workspace"])
         .arg(temp.path())
@@ -114,7 +136,7 @@ fn obsolete_config_shape_is_rejected() {
 
 #[test]
 fn workbench_projection_does_not_implicitly_plan() {
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args([
             "workbench",
@@ -150,8 +172,8 @@ fn copy_fixture_tree(source: &Path, destination: &Path) {
 fn initialize_fixture_git(root: &Path) {
     for args in [
         vec!["init", "-q"],
-        vec!["config", "user.email", "syu-tests@example.invalid"],
-        vec!["config", "user.name", "Syu Tests"],
+        vec!["config", "user.email", "mitase-tests@example.invalid"],
+        vec!["config", "user.name", "Mitase Tests"],
         vec!["add", "."],
         vec!["commit", "-qm", "fixture baseline"],
     ] {
@@ -170,7 +192,7 @@ fn staged_validation_fixture() -> tempfile::TempDir {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-web-app");
     let temp = tempdir().unwrap();
     copy_fixture_tree(&fixture, temp.path());
-    let config_path = temp.path().join("syu.yaml");
+    let config_path = temp.path().join("mitase.yaml");
     let config = fs::read_to_string(&config_path)
         .unwrap()
         .replace(
@@ -201,8 +223,8 @@ fn staged_change_validation_uses_the_index_snapshot() {
             .success()
     );
 
-    fs::write(temp.path().join("syu.yaml"), "not: [valid\n").unwrap();
-    Command::cargo_bin("syu")
+    fs::write(temp.path().join("mitase.yaml"), "not: [valid\n").unwrap();
+    Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "change"])
         .arg(temp.path())
@@ -214,12 +236,12 @@ fn staged_change_validation_uses_the_index_snapshot() {
 #[test]
 fn staged_change_validation_rejects_invalid_index_content_and_invalid_options() {
     let temp = staged_validation_fixture();
-    let config_path = temp.path().join("syu.yaml");
+    let config_path = temp.path().join("mitase.yaml");
     let original = fs::read_to_string(&config_path).unwrap();
     fs::write(&config_path, "not: [valid\n").unwrap();
     assert!(
         ProcessCommand::new("git")
-            .args(["add", "syu.yaml"])
+            .args(["add", "mitase.yaml"])
             .current_dir(temp.path())
             .status()
             .unwrap()
@@ -227,21 +249,21 @@ fn staged_change_validation_rejects_invalid_index_content_and_invalid_options() 
     );
     fs::write(&config_path, original).unwrap();
 
-    Command::cargo_bin("syu")
+    Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "change"])
         .arg(temp.path())
         .arg("--staged")
         .assert()
         .failure();
-    Command::cargo_bin("syu")
+    Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "workspace"])
         .arg(temp.path())
         .arg("--staged")
         .assert()
         .failure();
-    Command::cargo_bin("syu")
+    Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "change"])
         .arg(temp.path())
@@ -258,7 +280,7 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
     initialize_fixture_git(temp.path());
 
     let plan_path = artifacts.path().join("plan.yaml");
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["work", "plan", "--request"])
         .arg(temp.path().join("work.yaml"))
@@ -283,7 +305,7 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         .clone();
 
     let context_path = artifacts.path().join("context.yaml");
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["work", "export-context", "--plan"])
         .arg(&plan_path)
@@ -303,7 +325,7 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["task", "approve", "--plan"])
         .arg(&plan_path)
@@ -338,7 +360,7 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
 
     let receipt_path = artifacts.path().join("receipt.yaml");
 
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["task", "verify", "--plan"])
         .arg(&plan_path)
@@ -367,7 +389,7 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         );
         assert_eq!(
             attempt.report.status,
-            syu_work_model::CompletionStatus::Blocked
+            mitase_work_model::CompletionStatus::Blocked
         );
         assert!(!attempt.report.blockers.is_empty());
         return false;
@@ -380,13 +402,13 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
         );
         assert_eq!(
             attempt.report.status,
-            syu_work_model::CompletionStatus::Complete
+            mitase_work_model::CompletionStatus::Complete
         );
         let receipt = attempt.receipt.as_ref().expect("complete attempt receipt");
         fs::write(&receipt_path, serde_yaml::to_string(receipt).unwrap()).unwrap();
     }
 
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["validate", "result"])
         .arg(temp.path())

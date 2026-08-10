@@ -1,15 +1,15 @@
 ---
 title: "Workbench behavior / Workbench"
-description: "Generated reference for docs/syu/requirements/workbench.yaml"
+description: "Generated reference for docs/mitase/requirements/workbench.yaml"
 ---
 
-> Generated from `docs/syu/requirements/workbench.yaml`.
+> Generated from `docs/mitase/requirements/workbench.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -55,7 +55,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: work-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_work_session_flow
@@ -67,7 +67,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_work_session_flow
 - **id**: REQ-WORKBENCH-003
   - **title**: Transactional specification edit
@@ -88,7 +88,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: spec-edit-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_spec_edit_transaction
@@ -100,7 +100,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_spec_edit_transaction
 - **id**: REQ-WORKBENCH-007
   - **title**: Guided specification selection
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: guided-specification-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_specification_candidates_support_search_edit_and_create
@@ -134,7 +134,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_specification_candidates_support_search_edit_and_create
 - **id**: REQ-WORKBENCH-004
   - **title**: Transactional configuration edit
@@ -155,7 +155,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: config-edit-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_config_edit_transaction
@@ -167,7 +167,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_config_edit_transaction
 - **id**: REQ-WORKBENCH-008
   - **title**: Reviewed target suggestions
@@ -188,7 +188,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: target-suggestion-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::target_suggestions_remain_advisory_until_create_work
@@ -202,7 +202,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::target_suggestions_remain_advisory_until_create_work
 - **id**: REQ-WORKBENCH-005
   - **title**: Secure local server
@@ -223,7 +223,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: security-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_security_flow
@@ -235,7 +235,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_security_flow
 - **id**: REQ-WORKBENCH-006
   - **title**: Accessible navigation
@@ -256,7 +256,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: navigation-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_accessible_navigation
@@ -272,7 +272,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_accessible_navigation
 - **id**: REQ-WORKBENCH-009
   - **title**: Durable completion history
@@ -309,7 +309,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: responsiveness-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes
@@ -321,7 +321,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
@@ -333,7 +333,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes
 - **id**: REQ-WORKBENCH-010
   - **title**: Layered quality gates
@@ -402,7 +402,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: discovery-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope
@@ -414,7 +414,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-014#criterion.recovery-authoring
@@ -423,7 +423,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_specification_candidates_support_search_edit_and_create
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
@@ -435,7 +435,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope
 - **id**: REQ-WORKBENCH-015
   - **title**: Canonical specification detail workspace
@@ -482,7 +482,7 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
       - **targets**:
         - **id**: detail-context-budget-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_detail_context_budget_is_explicitly_bounded
@@ -494,13 +494,13 @@ description: "Generated reference for docs/syu/requirements/workbench.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_detail_context_budget_is_explicitly_bounded
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: requirements
 namespace: workbench
 category: Workbench behavior
@@ -533,13 +533,13 @@ requirements:
         targets:
           - id: work-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_work_session_flow }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-002#criterion.work-session
                 covers: [FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_work_session_flow } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_work_session_flow } }
   - id: REQ-WORKBENCH-003
     title: Transactional specification edit
     description: Structured specification edits are previewed and atomically applied only after canonical validation.
@@ -558,13 +558,13 @@ requirements:
         targets:
           - id: spec-edit-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_spec_edit_transaction }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
                 covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_spec_edit_transaction } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_spec_edit_transaction } }
   - id: REQ-WORKBENCH-007
     title: Guided specification selection
     description: The Workbench searches typed specification candidates and previews safe human-facing edits with graph and work impact.
@@ -583,7 +583,7 @@ requirements:
         targets:
           - id: guided-specification-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_specification_candidates_support_search_edit_and_create }
             claims:
               - kind: verifies
@@ -591,7 +591,7 @@ requirements:
                 covers:
                   - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidates
                   - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidate-preview
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_specification_candidates_support_search_edit_and_create } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_specification_candidates_support_search_edit_and_create } }
   - id: REQ-WORKBENCH-004
     title: Transactional configuration edit
     description: Structured configuration edits use the same preview, basis, and atomic apply flow.
@@ -610,13 +610,13 @@ requirements:
         targets:
           - id: config-edit-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_config_edit_transaction }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
                 covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.config-apply]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_config_edit_transaction } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_config_edit_transaction } }
   - id: REQ-WORKBENCH-008
     title: Reviewed target suggestions
     description: The Workbench ranks exact implementation and verification candidates with human-readable evidence before any executable scope is created.
@@ -635,7 +635,7 @@ requirements:
         targets:
           - id: target-suggestion-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::target_suggestions_remain_advisory_until_create_work }
             claims:
               - kind: verifies
@@ -644,7 +644,7 @@ requirements:
                   - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.rank-candidates
                   - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.approve-candidates
                   - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.suggestion-review-ui
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::target_suggestions_remain_advisory_until_create_work } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::target_suggestions_remain_advisory_until_create_work } }
   - id: REQ-WORKBENCH-005
     title: Secure local server
     description: The Workbench server is loopback-first and protects mutation endpoints.
@@ -663,13 +663,13 @@ requirements:
         targets:
           - id: security-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_security_flow }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-005#criterion.secure-local-server
                 covers: [FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_security_flow } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_security_flow } }
   - id: REQ-WORKBENCH-006
     title: Accessible navigation
     description: Workbench primary pages and actions are keyboard navigable and localized.
@@ -688,7 +688,7 @@ requirements:
         targets:
           - id: navigation-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_accessible_navigation }
             claims:
               - kind: verifies
@@ -699,7 +699,7 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_accessible_navigation } }
   - id: REQ-WORKBENCH-009
     title: Durable completion history
     description: Workbench renders the shared completion attempt history and finalization state from the server-owned store.
@@ -732,14 +732,14 @@ requirements:
         targets:
           - id: responsiveness-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
                 covers:
                   - FEAT-WORKBENCH-SERVER-001#binding.server/target.workspace-snapshot
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes } }
               - kind: verifies
                 criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
                 covers:
@@ -747,7 +747,7 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.active-page-render
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.local-specification-filter
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.busy-status
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes } }
   - id: REQ-WORKBENCH-010
     title: Layered quality gates
     description: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
@@ -808,19 +808,19 @@ requirements:
         targets:
           - id: discovery-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
                 covers:
                   - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidates
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
               - kind: verifies
                 criterion: REQ-WORKBENCH-014#criterion.recovery-authoring
                 covers:
                   - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.criterion-authoring
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_specification_candidates_support_search_edit_and_create } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_specification_candidates_support_search_edit_and_create } }
               - kind: verifies
                 criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
                 covers:
@@ -828,7 +828,7 @@ requirements:
                   - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
                   - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-discovery
                   - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-target-suggestions
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::advisory_specification_discovery_is_multilingual_and_never_creates_scope } }
 
   - id: REQ-WORKBENCH-015
     title: Canonical specification detail workspace
@@ -870,12 +870,12 @@ requirements:
         targets:
           - id: detail-context-budget-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_detail_context_budget_is_explicitly_bounded }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-016#criterion.bounded-detail-context
                 covers:
                   - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_detail_context_budget_is_explicitly_bounded } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_detail_context_budget_is_explicitly_bounded } }
 ```

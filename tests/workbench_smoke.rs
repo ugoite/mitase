@@ -1,13 +1,13 @@
 use assert_cmd::Command;
-use syu_app_ui::{WORKBENCH_CSS, WORKBENCH_MAIN_JS, WorkbenchView};
-use syu_workbench_server::project;
-use syu_workspace::SpecWorkspace;
+use mitase_app_ui::{WORKBENCH_CSS, WORKBENCH_MAIN_JS, WorkbenchView};
+use mitase_workbench_server::project;
+use mitase_workspace::SpecWorkspace;
 
 mod support;
 
 #[test]
 fn workbench_projection_is_server_owned_and_starts_not_run() {
-    let output = Command::cargo_bin("syu")
+    let output = Command::cargo_bin("mitase")
         .expect("binary should build")
         .args([
             "workbench",
@@ -63,7 +63,7 @@ fn browser_modules_render_dtos_without_model_inference() {
         "selector.names",
         "rawProjection",
         "binding-level",
-        "syu/config",
+        "mitase/config",
     ] {
         assert!(
             !WORKBENCH_MAIN_JS.contains(banned),
@@ -90,7 +90,7 @@ fn browser_modules_render_dtos_without_model_inference() {
 fn workbench_tabs_are_keyboard_navigable() {
     assert!(WORKBENCH_CSS.contains("overflow-y: hidden"));
     assert!(WORKBENCH_CSS.contains("max-height: 51px"));
-    let html = include_str!("../crates/syu-app-ui/assets/workbench.html");
+    let html = include_str!("../crates/mitase-app-ui/assets/workbench.html");
     assert!(html.contains("data-tab-group=\"specifications\""));
     assert!(!html.contains("data-tab-group=\"items\""));
 }
