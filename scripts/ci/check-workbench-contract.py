@@ -9,10 +9,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HTML = (ROOT / "crates/syu-app-ui/assets/workbench.html").read_text()
-CSS = (ROOT / "crates/syu-app-ui/assets/workbench.css").read_text()
-EN = json.loads((ROOT / "crates/syu-app-ui/assets/locales/en.json").read_text())
-JA = json.loads((ROOT / "crates/syu-app-ui/assets/locales/ja.json").read_text())
+HTML = (ROOT / "crates/mitase-app-ui/assets/workbench.html").read_text()
+CSS = (ROOT / "crates/mitase-app-ui/assets/workbench.css").read_text()
+EN = json.loads((ROOT / "crates/mitase-app-ui/assets/locales/en.json").read_text())
+JA = json.loads((ROOT / "crates/mitase-app-ui/assets/locales/ja.json").read_text())
 
 
 class ContractParser(HTMLParser):
@@ -85,14 +85,14 @@ for module in (
     "./pages/readiness.js", "./pages/scope.js", "./pages/specifications.js",
     "./pages/diagnostics.js", "./pages/settings.js",
 ):
-    assert module in (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text(), module
-MAIN_JS = (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text()
-WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
-SCOPE_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/scope.js").read_text()
-API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
-SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
-I18N_MODULE = (ROOT / "crates/syu-app-ui/assets/js/i18n.js").read_text()
-SERVER_RS = (ROOT / "crates/syu-workbench-server/src/lib.rs").read_text()
+    assert module in (ROOT / "crates/mitase-app-ui/assets/js/main.js").read_text(), module
+MAIN_JS = (ROOT / "crates/mitase-app-ui/assets/js/main.js").read_text()
+WORK_JS = (ROOT / "crates/mitase-app-ui/assets/js/pages/work.js").read_text()
+SCOPE_JS = (ROOT / "crates/mitase-app-ui/assets/js/pages/scope.js").read_text()
+API_JS = (ROOT / "crates/mitase-app-ui/assets/js/api.js").read_text()
+SPECIFICATIONS_JS = (ROOT / "crates/mitase-app-ui/assets/js/pages/specifications.js").read_text()
+I18N_MODULE = (ROOT / "crates/mitase-app-ui/assets/js/i18n.js").read_text()
+SERVER_RS = (ROOT / "crates/mitase-workbench-server/src/lib.rs").read_text()
 assert "readInlineProjection" in MAIN_JS
 assert "data-workspace-branch" not in MAIN_JS
 assert "translate('workspace.revision')" in MAIN_JS
@@ -117,7 +117,7 @@ assert "approved_ids" in SPECIFICATIONS_JS
 assert "data-review-target-suggestions" in SPECIFICATIONS_JS
 assert "data-approve-target-suggestions" in SPECIFICATIONS_JS
 assert "result.request" not in SPECIFICATIONS_JS
-assert "schema: 'syu/work-origin-capability/v1'" in SPECIFICATIONS_JS
+assert "schema: 'mitase/work-origin-capability/v1'" in SPECIFICATIONS_JS
 assert "origin_capabilities" in SPECIFICATIONS_JS
 assert "work.request.summary_from_anchor" not in SPECIFICATIONS_JS
 assert SPECIFICATIONS_JS.count("openWorkFromSpecification") >= 4
@@ -135,7 +135,7 @@ assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
 assert "localizeEnum" in I18N_MODULE
-assert "SyuPreferences?.lookup" in I18N_MODULE
+assert "MitasePreferences?.lookup" in I18N_MODULE
 assert "localizeSpecificationTitle" in I18N_MODULE
 assert "presentation_title_key" in I18N_MODULE or "presentation_title_key" in SERVER_RS
 assert "localizedOptions('criterion.kind'" in SPECIFICATIONS_JS

@@ -34,8 +34,8 @@ PY
 resolve_target_triple() {
   local os_name arch_name
 
-  if [[ -n "${SYU_INSTALL_SMOKE_TARGET:-}" ]]; then
-    printf '%s\n' "$SYU_INSTALL_SMOKE_TARGET"
+  if [[ -n "${MITASE_INSTALL_SMOKE_TARGET:-}" ]]; then
+    printf '%s\n' "$MITASE_INSTALL_SMOKE_TARGET"
     return 0
   fi
 
@@ -71,9 +71,9 @@ resolve_target_triple() {
 resolve_binary_name() {
   local target="$1"
   if [[ "$target" == *windows* ]]; then
-    printf 'syu.exe\n'
+    printf 'mitase.exe\n'
   else
-    printf 'syu\n'
+    printf 'mitase\n'
   fi
 }
 
@@ -89,12 +89,12 @@ start_registry() {
     --port "$port" \
     --target "$target" \
     --default-version "$default_version" \
-    --package-repository "test/syu" \
+    --package-repository "test/mitase" \
     >"$server_log" 2>&1 &
   mock_server_pid="$!"
 
   for _ in $(seq 1 250); do
-    if curl --silent --show-error --fail "http://127.0.0.1:${port}/token?scope=repository:test/syu:pull&service=127.0.0.1" >/dev/null 2>&1; then
+    if curl --silent --show-error --fail "http://127.0.0.1:${port}/token?scope=repository:test/mitase:pull&service=127.0.0.1" >/dev/null 2>&1; then
       return 0
     fi
     if ! kill -0 "$mock_server_pid" >/dev/null 2>&1; then
@@ -117,7 +117,7 @@ run_install_case() {
   local target="$4"
   local binary_name="$5"
   local temp_root port install_dir installed_binary server_log
-  local selector_env=()
+  local selector_env=(MITASE_VERSION="")
 
   temp_root="$(mktemp -d)"
   server_log="${temp_root}/registry.log"
@@ -128,19 +128,19 @@ run_install_case() {
   installed_binary="${install_dir}/${binary_name}"
 
   if [[ -n "$selector" ]]; then
-    selector_env=(SYU_VERSION="$selector")
+    selector_env=(MITASE_VERSION="$selector")
   fi
 
   env \
-    SYU_PACKAGE_SCHEME="http" \
-    SYU_PACKAGE_HOST="127.0.0.1:${port}" \
-    SYU_PACKAGE_REPOSITORY="test/syu" \
-    SYU_INSTALL_DIR="$install_dir" \
-    SYU_TARGET_TRIPLE="$target" \
+    MITASE_PACKAGE_SCHEME="http" \
+    MITASE_PACKAGE_HOST="127.0.0.1:${port}" \
+    MITASE_PACKAGE_REPOSITORY="test/mitase" \
+    MITASE_INSTALL_DIR="$install_dir" \
+    MITASE_TARGET_TRIPLE="$target" \
     "${selector_env[@]}" \
-    bash "$repo_root/scripts/install-syu.sh"
+    bash "$repo_root/scripts/install-mitase.sh"
 
-  grep -F "mock syu ${expected_version} ${target}" "$installed_binary" >/dev/null
+  grep -F "mock mitase ${expected_version} ${target}" "$installed_binary" >/dev/null
 
   kill "$mock_server_pid" >/dev/null 2>&1 || true
   wait "$mock_server_pid" 2>/dev/null || true

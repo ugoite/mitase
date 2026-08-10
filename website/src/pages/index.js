@@ -30,13 +30,13 @@ const chooseYourPath = [
   {
     title: 'Getting started',
     description:
-      'Choose this if you are new to syu, want the guided first-run path, and do not already know the four-layer model.',
+      'Choose this if you are new to mitase, want the guided first-run path, and do not already know the four-layer model.',
     to: '/docs/start-here/first-run/getting-started'
   },
   {
     title: 'Quick start',
     description:
-      'Stay on the shortest site-local install-to-validate path when you want the fastest route into `syu validate workspace .`.',
+      'Stay on the shortest site-local install-to-validate path when you want the fastest route into `mitase validate workspace .`.',
     to: '/docs/start-here/first-run/getting-started#quick-start-commands'
   },
   {
@@ -54,7 +54,7 @@ const chooseYourPath = [
   {
     title: 'Migration / upgrade',
     description:
-      'Use the release-specific upgrade steps when you already have a syu workspace and need to move between alpha versions safely.',
+      'Use the release-specific upgrade steps when you already have a mitase workspace and need to move between alpha versions safely.',
     to: '/docs/workflows/repository/migration'
   },
   {
@@ -86,8 +86,8 @@ const chooseYourPath = [
 const journeys = [
   {
     title: 'Decide repository fit',
-    description: 'Read the repository-fit guide before installing when you are still deciding whether syu is the right adoption step.',
-    to: '/docs/start-here/first-run/getting-started#is-syu-right-for-this-repository'
+    description: 'Read the repository-fit guide before installing when you are still deciding whether mitase is the right adoption step.',
+    to: '/docs/start-here/first-run/getting-started#is-mitase-right-for-this-repository'
   },
   {
     title: 'Avoid spec anti-patterns',
@@ -98,7 +98,7 @@ const journeys = [
   {
     title: 'Adopt an existing repository',
     description:
-      'Phase syu into a repo that already has code, tests, and docs instead of translating the greenfield flow by hand.',
+      'Phase mitase into a repo that already has code, tests, and docs instead of translating the greenfield flow by hand.',
     to: '/docs/start-here/adopt/existing-repository'
   },
   {
@@ -146,7 +146,7 @@ const journeys = [
   },
   {
     title: 'Inspect the self-hosted spec',
-    description: 'Browse the generated reference pages that explain how this repository uses syu on itself.',
+    description: 'Browse the generated reference pages that explain how this repository uses mitase on itself.',
     to: '/docs/reference/specification'
   },
   {
@@ -159,8 +159,8 @@ const journeys = [
 export default function Home() {
   return (
     <Layout
-      title="syu documentation"
-      description="Browse the four-layer model, contributor workflows, and the self-hosted syu specification."
+      title="mitase documentation"
+      description="Browse the four-layer model, contributor workflows, and the self-hosted mitase specification."
     >
       <header className="hero hero--primary siteHero">
         <div className="container">
@@ -223,7 +223,7 @@ export default function Home() {
             <div className="siteSectionHeader">
               <h2>Four specification layers</h2>
               <p>
-                <code>syu</code> keeps philosophy, policy, requirements, and features separate
+                <code>mitase</code> keeps philosophy, policy, requirements, and features separate
                 so the repository can explain itself from intent down to code and tests.
               </p>
             </div>

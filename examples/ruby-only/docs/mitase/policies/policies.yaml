@@ -1,0 +1,38 @@
+schema: mitase/spec/v1
+kind: policies
+namespace: ruby-only
+category: Ruby example
+policies:
+- id: POL-RUBYONLY-001
+  title: Ruby example governance
+  summary: Ruby example files must still have explicit implementation and verification
+    bindings.
+  description: Keep a Ruby-first example represented in the v1 graph with file-level
+    ownership.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Ruby example files must still have explicit implementation and verification
+      bindings.
+    governed_by:
+    - PHIL-RUBYONLY-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: shell
+      path: lib/order_summary.rb
+      selector:
+        kind: marker
+        value: "class OrderSummary"
+      claims:
+      - kind: enforces
+        rule: POL-RUBYONLY-001#rule.traceable-delivery

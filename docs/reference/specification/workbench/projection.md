@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Projection"
-description: "Generated reference for docs/syu/features/workbench/projection.yaml"
+description: "Generated reference for docs/mitase/features/workbench/projection.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/projection.yaml`.
+> Generated from `docs/mitase/features/workbench/projection.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/projection.yam
       - **targets**:
         - **id**: project
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: project
@@ -51,7 +51,7 @@ description: "Generated reference for docs/syu/features/workbench/projection.yam
       - **targets**:
         - **id**: project-contract
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: project
@@ -72,7 +72,7 @@ description: "Generated reference for docs/syu/features/workbench/projection.yam
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -89,7 +89,7 @@ features:
     targets:
     - id: project
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: project
@@ -103,7 +103,7 @@ features:
     targets:
     - id: project-contract
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: project

@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Work Ui"
-description: "Generated reference for docs/syu/features/workbench/work-ui.yaml"
+description: "Generated reference for docs/mitase/features/workbench/work-ui.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/work-ui.yaml`.
+> Generated from `docs/mitase/features/workbench/work-ui.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/work-ui.yaml"
       - **targets**:
         - **id**: plan
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_plan
@@ -48,7 +48,7 @@ description: "Generated reference for docs/syu/features/workbench/work-ui.yaml"
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -65,7 +65,7 @@ features:
     targets:
     - id: plan
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_plan

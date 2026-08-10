@@ -1,15 +1,15 @@
 ---
-title: "Syu functional units / Core"
-description: "Generated reference for docs/syu/features/capabilities/core.yaml"
+title: "Mitase functional units / Core"
+description: "Generated reference for docs/mitase/features/capabilities/core.yaml"
 ---
 
-> Generated from `docs/syu/features/capabilities/core.yaml`.
+> Generated from `docs/mitase/features/capabilities/core.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -21,13 +21,13 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
 
 ### Category
 
-- Syu functional units
+- Mitase functional units
 
 ### Features
 
 - **id**: FEAT-SPEC-MODEL-001
   - **title**: Spec model
-  - **summary**: Parse and validate the canonical syu/spec/v1 model, including explicit present and absent target lifecycle declarations.
+  - **summary**: Parse and validate the canonical mitase/spec/v1 model, including explicit present and absent target lifecycle declarations.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
@@ -36,19 +36,19 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **owns**:
         - **id**: spec-model-artifact-target
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::ArtifactTarget
         - **id**: spec-model-present-lifecycle
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::is_present_target_lifecycle
         - **id**: spec-model-tests-module
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests[cfg(test)]
@@ -56,7 +56,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **targets**:
         - **id**: spec-document
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecDocument
@@ -65,7 +65,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
               - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
         - **id**: digest-format
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: format_sha256
@@ -74,7 +74,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
               - **criterion**: REQ-CAPABILITY-001#criterion.digest-format
         - **id**: target-lifecycle
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ArtifactTargetLifecycle
@@ -83,7 +83,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
               - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
 - **id**: FEAT-PROJECT-CONFIG-001
   - **title**: Project configuration
-  - **summary**: Load and validate syu/config/v1 project configuration.
+  - **summary**: Load and validate mitase/config/v1 project configuration.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **targets**:
         - **id**: project-config
           - **adapter**: rust
-          - **path**: crates/syu-project-model/src/lib.rs
+          - **path**: crates/mitase-project-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ProjectConfig
@@ -103,7 +103,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **owns**:
         - **id**: project-config-tests
           - **adapter**: rust
-          - **path**: crates/syu-project-model/src/lib.rs
+          - **path**: crates/mitase-project-model/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: tests[cfg(test)]
@@ -119,7 +119,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **targets**:
         - **id**: inventory-registry
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: InventoryRegistry
@@ -130,7 +130,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
               - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
         - **id**: semantic-diff
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: semantic_diff
@@ -142,7 +142,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **owns**:
         - **id**: inventory-manifest
           - **adapter**: declared
-          - **path**: crates/syu-inventory/Cargo.toml
+          - **path**: crates/mitase-inventory/Cargo.toml
           - **selector**:
             - **kind**: file
 - **id**: FEAT-IDENTITY-001
@@ -157,32 +157,32 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **owns**:
         - **id**: workspace-ownership-fingerprint
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::impl(SpecIndex)::ownership_fingerprint_excluding
         - **id**: workspace-resolve-artifact
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::resolve_artifact_unit
         - **id**: workspace-target-test
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::target
         - **id**: workspace-tests-module
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests[cfg(test)]
       - **targets**:
         - **id**: target-resolver
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: resolve_target_in_workspace
@@ -201,7 +201,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **targets**:
         - **id**: spec-index
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecIndex
@@ -220,7 +220,7 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **targets**:
         - **id**: ownership-ref
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: OwnershipRef
@@ -239,62 +239,62 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **owns**:
         - **id**: readiness-absence-obligation
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::current_absence_obligation_matches
         - **id**: readiness-attempt-digest
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::durable_attempt_digest
         - **id**: readiness-finalized-absent
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::finalized_absent_targets
         - **id**: readiness-implementation-obligations
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::implementation_obligations
         - **id**: readiness-implemented-subjects
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::implemented_feature_subjects
         - **id**: readiness-json-files
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::json_files_recursive
         - **id**: readiness-revision-ancestor
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::revision_is_ancestor
         - **id**: readiness-selector-match
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::selector_matches_resolved_target
         - **id**: readiness-target-absent
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
             - **name**: readiness::target_is_absent
       - **targets**:
         - **id**: readiness-evaluate
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: symbol
             - **name**: evaluate
@@ -313,176 +313,176 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
       - **owns**:
         - **id**: validation-readonly-fingerprint
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::current_readonly_fingerprint
         - **id**: validation-add-target-file
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::editable_add_target_matches_file
         - **id**: validation-implementation-digest
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::implementation_digest_for_receipt
         - **id**: validation-lifecycle-fingerprint
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::lifecycle_ownership_fingerprint
         - **id**: validation-lifecycle-shared-path
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::lifecycle_transition_shares_path
         - **id**: validation-plan-lifecycle
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::plan_has_lifecycle_transition
         - **id**: validation-readiness-regressions
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::readiness_regression_blockers
         - **id**: validation-runonly-post-state
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::run_only_target_is_post_state_add
         - **id**: validation-basis-inventory-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::canonical_execution_rejects_basis_with_unbuildable_inventory
         - **id**: validation-basis-config-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::canonical_execution_rejects_basis_with_unrestorable_config
         - **id**: validation-basis-revision-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::canonical_execution_rejects_missing_basis_revision
         - **id**: validation-deleted-anchor-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::changed_anchors_include_deleted_baseline_anchor_by_repo_path
         - **id**: validation-completion-close-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::completion_report_closes_verified_slice
         - **id**: validation-completion-missing-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::completion_report_explains_missing_receipt_execution
         - **id**: validation-self-verify-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::implemented_feature_target_cannot_self_verify
         - **id**: validation-acceptance-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::implemented_feature_target_requires_acceptance
         - **id**: validation-exact-verification-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::implemented_feature_target_requires_exact_verification
         - **id**: validation-public-symbol-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject
         - **id**: validation-planned-ownership-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::planned_feature_ownership_is_rejected
         - **id**: validation-ready-plan-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::ready_plan_does_not_mask_broken_capability_behavior
         - **id**: validation-sample-target-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::sample_target
         - **id**: validation-shared-verification-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::self_hosted_shared_verification_targets_execute_claim_by_claim
         - **id**: validation-tests-module
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests[cfg(test)]
         - **id**: validation-validate-changes
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_changes
         - **id**: validation-document-shapes
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_document_shapes
         - **id**: validation-plan
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_plan
         - **id**: validation-slice-scope
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_slice_scope
         - **id**: validation-targets
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_targets
       - **targets**:
         - **id**: change-validate
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate
@@ -495,14 +495,14 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: capabilities
-category: Syu functional units
+category: Mitase functional units
 features:
   - id: FEAT-SPEC-MODEL-001
     title: Spec model
-    summary: Parse and validate the canonical syu/spec/v1 model, including explicit present and absent target lifecycle declarations.
+    summary: Parse and validate the canonical mitase/spec/v1 model, including explicit present and absent target lifecycle declarations.
     status: implemented
     bindings:
       - id: implementation
@@ -511,37 +511,37 @@ features:
         owns:
           - id: spec-model-artifact-target
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: module, name: 'lib::ArtifactTarget' }
           - id: spec-model-present-lifecycle
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: module, name: 'lib::is_present_target_lifecycle' }
           - id: spec-model-tests-module
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: module, name: 'lib::tests[cfg(test)]' }
         responsibility: Provide the typed specification model.
         targets:
           - id: spec-document
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: SpecDocument }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
           - id: digest-format
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: format_sha256 }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.digest-format }]
           - id: target-lifecycle
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: ArtifactTargetLifecycle }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
 
   - id: FEAT-PROJECT-CONFIG-001
     title: Project configuration
-    summary: Load and validate syu/config/v1 project configuration.
+    summary: Load and validate mitase/config/v1 project configuration.
     status: implemented
     bindings:
       - id: implementation
@@ -551,13 +551,13 @@ features:
         targets:
           - id: project-config
             adapter: rust
-            path: crates/syu-project-model/src/lib.rs
+            path: crates/mitase-project-model/src/lib.rs
             selector: { kind: symbol, name: ProjectConfig }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.project-config }]
         owns:
           - id: project-config-tests
             adapter: rust
-            path: crates/syu-project-model/src/lib.rs
+            path: crates/mitase-project-model/src/lib.rs
             selector: { kind: module, name: 'tests[cfg(test)]' }
 
   - id: FEAT-INVENTORY-001
@@ -572,14 +572,14 @@ features:
         targets:
           - id: inventory-registry
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: InventoryRegistry }
             claims:
               - { kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.inventory-discovery }
               - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory }
           - id: semantic-diff
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: semantic_diff }
             claims:
               - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.stable-identity }
@@ -587,7 +587,7 @@ features:
         owns:
           - id: inventory-manifest
             adapter: declared
-            path: crates/syu-inventory/Cargo.toml
+            path: crates/mitase-inventory/Cargo.toml
             selector: { kind: file }
 
   - id: FEAT-IDENTITY-001
@@ -602,24 +602,24 @@ features:
         owns:
           - id: workspace-ownership-fingerprint
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: module, name: 'lib::impl(SpecIndex)::ownership_fingerprint_excluding' }
           - id: workspace-resolve-artifact
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: module, name: 'lib::resolve_artifact_unit' }
           - id: workspace-target-test
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: module, name: 'lib::tests::target' }
           - id: workspace-tests-module
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: module, name: 'lib::tests[cfg(test)]' }
         targets:
           - id: target-resolver
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: resolve_target_in_workspace }
             claims:
               - kind: satisfies
@@ -637,7 +637,7 @@ features:
         targets:
           - id: spec-index
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: SpecIndex }
             claims:
               - { kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.graph-index }
@@ -654,7 +654,7 @@ features:
         targets:
           - id: ownership-ref
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: OwnershipRef }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.ownership-resolution }]
 
@@ -670,44 +670,44 @@ features:
         owns:
           - id: readiness-absence-obligation
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::current_absence_obligation_matches' }
           - id: readiness-attempt-digest
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::durable_attempt_digest' }
           - id: readiness-finalized-absent
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::finalized_absent_targets' }
           - id: readiness-implementation-obligations
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::implementation_obligations' }
           - id: readiness-implemented-subjects
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::implemented_feature_subjects' }
           - id: readiness-json-files
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::json_files_recursive' }
           - id: readiness-revision-ancestor
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::revision_is_ancestor' }
           - id: readiness-selector-match
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::selector_matches_resolved_target' }
           - id: readiness-target-absent
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::target_is_absent' }
         targets:
           - id: readiness-evaluate
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: symbol, name: evaluate }
             claims:
               - kind: satisfies
@@ -725,120 +725,120 @@ features:
         owns:
           - id: validation-readonly-fingerprint
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::current_readonly_fingerprint' }
           - id: validation-add-target-file
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::editable_add_target_matches_file' }
           - id: validation-implementation-digest
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::implementation_digest_for_receipt' }
           - id: validation-lifecycle-fingerprint
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::lifecycle_ownership_fingerprint' }
           - id: validation-lifecycle-shared-path
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::lifecycle_transition_shares_path' }
           - id: validation-plan-lifecycle
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::plan_has_lifecycle_transition' }
           - id: validation-readiness-regressions
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::readiness_regression_blockers' }
           - id: validation-runonly-post-state
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::run_only_target_is_post_state_add' }
           - id: validation-basis-inventory-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::canonical_execution_rejects_basis_with_unbuildable_inventory' }
           - id: validation-basis-config-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::canonical_execution_rejects_basis_with_unrestorable_config' }
           - id: validation-basis-revision-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::canonical_execution_rejects_missing_basis_revision' }
           - id: validation-deleted-anchor-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::changed_anchors_include_deleted_baseline_anchor_by_repo_path' }
           - id: validation-completion-close-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::completion_report_closes_verified_slice' }
           - id: validation-completion-missing-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::completion_report_explains_missing_receipt_execution' }
           - id: validation-self-verify-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::implemented_feature_target_cannot_self_verify' }
           - id: validation-acceptance-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::implemented_feature_target_requires_acceptance' }
           - id: validation-exact-verification-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::implemented_feature_target_requires_exact_verification' }
           - id: validation-public-symbol-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject' }
           - id: validation-planned-ownership-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::planned_feature_ownership_is_rejected' }
           - id: validation-ready-plan-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::ready_plan_does_not_mask_broken_capability_behavior' }
           - id: validation-sample-target-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::sample_target' }
           - id: validation-shared-verification-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::self_hosted_shared_verification_targets_execute_claim_by_claim' }
           - id: validation-tests-module
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests[cfg(test)]' }
           - id: validation-validate-changes
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_changes' }
           - id: validation-document-shapes
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_document_shapes' }
           - id: validation-plan
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_plan' }
           - id: validation-slice-scope
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_slice_scope' }
           - id: validation-targets
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_targets' }
         targets:
           - id: change-validate
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: validate }
             claims:
               - kind: satisfies

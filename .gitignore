@@ -10,7 +10,7 @@ website/build
 website/node_modules
 editors/vscode/node_modules
 editors/vscode/.vscode-test
-/crates/syu-desktop/gen/
+/crates/mitase-desktop/gen/
 __pycache__/
 .apt/
 .tmp/

@@ -1,8 +1,8 @@
-# syu skills
+# mitase skills
 
 <!-- FEAT-SKILLS-001 -->
 
-This directory contains checked-in skills for agents working in `syu`-managed
+This directory contains checked-in skills for agents working in `mitase`-managed
 repositories.
 
 The structure is inspired by [Anthropics Skills](https://github.com/anthropics/skills):
@@ -11,6 +11,6 @@ each skill lives in its own folder and is activated from a self-contained
 
 Available skills:
 
-- [`skills/syu-maintainer/SKILL.md`](syu-maintainer/SKILL.md): maintain the
+- [`skills/mitase-maintainer/SKILL.md`](mitase-maintainer/SKILL.md): maintain the
   layered specification, run validation, refresh reports, and keep links
   between philosophy, policy, requirement, and feature definitions intact.

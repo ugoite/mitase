@@ -1,12 +1,12 @@
 // FEAT-LSP-001
 // REQ-CORE-001
 
+use mitase_spec_model::SpecDocument;
+use mitase_workspace::SpecWorkspace;
 use regex::Regex;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use syu_spec_model::SpecDocument;
-use syu_workspace::SpecWorkspace;
 use url::Url;
 
 use super::protocol::{

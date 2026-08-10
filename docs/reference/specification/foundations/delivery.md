@@ -1,15 +1,15 @@
 ---
 title: "Delivery governance / Delivery"
-description: "Generated reference for docs/syu/policies/delivery.yaml"
+description: "Generated reference for docs/mitase/policies/delivery.yaml"
 ---
 
-> Generated from `docs/syu/policies/delivery.yaml`.
+> Generated from `docs/mitase/policies/delivery.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -47,7 +47,7 @@ description: "Generated reference for docs/syu/policies/delivery.yaml"
       - **targets**:
         - **id**: validation-entry
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate
@@ -95,7 +95,7 @@ description: "Generated reference for docs/syu/policies/delivery.yaml"
       - **targets**:
         - **id**: feature-shape-validation
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate_document_shapes
@@ -111,7 +111,7 @@ description: "Generated reference for docs/syu/policies/delivery.yaml"
       - **targets**:
         - **id**: public-readiness
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: symbol
             - **name**: public_entrypoint_subjects
@@ -122,7 +122,7 @@ description: "Generated reference for docs/syu/policies/delivery.yaml"
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: policies
 namespace: delivery
 category: Delivery governance
@@ -145,7 +145,7 @@ policies:
         targets:
           - id: validation-entry
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: validate }
             claims:
               - kind: enforces
@@ -179,7 +179,7 @@ policies:
         targets:
           - id: feature-shape-validation
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: validate_document_shapes }
             claims:
               - kind: enforces
@@ -193,7 +193,7 @@ policies:
         targets:
           - id: public-readiness
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: symbol, name: public_entrypoint_subjects }
             claims:
               - kind: enforces

@@ -43,7 +43,7 @@ package_release_artifact() {
   fi
 
   mkdir -p "$output_dir"
-  asset_base="syu-${target}"
+  asset_base="mitase-${target}"
 
   if [[ "$target" == *windows* ]]; then
     archive_path="${output_dir}/${asset_base}.zip"

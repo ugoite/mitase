@@ -19,8 +19,8 @@ cleanup() {
 
 resolve_binary_name() {
   case "$(uname -s)" in
-    MINGW* | MSYS* | CYGWIN*) printf 'syu.exe\n' ;;
-    *) printf 'syu\n' ;;
+    MINGW* | MSYS* | CYGWIN*) printf 'mitase.exe\n' ;;
+    *) printf 'mitase\n' ;;
   esac
 }
 
@@ -61,7 +61,7 @@ main() {
   cargo install --path "$repo_root" --root "$install_root" --force --locked
 
   actual_version="$("${installed_binary}" --version)"
-  test "${actual_version}" = "syu ${expected_version}"
+  test "${actual_version}" = "mitase ${expected_version}"
   cp -R "$fixture" "$workspace"
   git -C "$workspace" init >/dev/null
   git -C "$workspace" config user.email "ci@example.invalid"

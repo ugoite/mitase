@@ -1,13 +1,13 @@
-# syu VS Code extension
+# mitase VS Code extension
 
 <!-- FEAT-VSCODE-001 -->
 
-This extension keeps `syu` close to the editor instead of forcing every lookup
+This extension keeps `mitase` close to the editor instead of forcing every lookup
 through a terminal:
 
-- refresh `syu validate --format json` diagnostics into the Problems panel
+- refresh `mitase validate --format json` diagnostics into the Problems panel
 - show the current file's linked requirements, features, policies, and
-  philosophies in the **syu Context** explorer view
+  philosophies in the **mitase Context** explorer view
 - jump from a spec ID to its YAML document
 - open the traced files that belong to a requirement or feature
 - use inline CodeLens actions on YAML spec IDs, traced files, and traced symbols
@@ -17,8 +17,8 @@ through a terminal:
 
 The first cut keeps the integration intentionally small:
 
-- diagnostics come from the checked-in `syu` CLI via `syu validate workspace . --format json`
-- navigation reads the same `docs/syu` workspace files directly so the extension
+- diagnostics come from the checked-in `mitase` CLI via `mitase validate workspace . --format json`
+- navigation reads the same `docs/mitase` workspace files directly so the extension
   can link source files back to requirements and features without requiring a
   second server process
 
@@ -42,17 +42,17 @@ npm --prefix editors/vscode ci
 
 1. Open `editors/vscode/` in VS Code.
 2. Press `F5` to start an Extension Development Host.
-3. Open a repository that contains `syu.yaml` or `docs/syu/features/features.yaml`.
-4. If the `syu` binary is not on your `PATH`, set **syu › Binary Path**.
+3. Open a repository that contains `mitase.yaml` or `docs/mitase/features/features.yaml`.
+4. If the `mitase` binary is not on your `PATH`, set **mitase › Binary Path**.
 
 ## Commands
 
-- `syu: Refresh diagnostics`
-- `syu: Trace active file`
-- `syu: Open spec item by ID`
-- `syu: Show related files for spec ID`
+- `mitase: Refresh diagnostics`
+- `mitase: Trace active file`
+- `mitase: Open spec item by ID`
+- `mitase: Show related files for spec ID`
 
 ## Settings
 
-- `syu.binaryPath`: path to the `syu` CLI binary
-- `syu.autoRefreshDiagnostics`: rerun diagnostics after saves
+- `mitase.binaryPath`: path to the `mitase` CLI binary
+- `mitase.autoRefreshDiagnostics`: rerun diagnostics after saves

@@ -1,9 +1,9 @@
 ---
 title: "Specification Reference"
-description: "Generated site pages for docs/syu YAML definitions."
+description: "Generated site pages for docs/mitase YAML definitions."
 ---
 
-This section is generated from the YAML source under `docs/syu/`.
+This section is generated from the YAML source under `docs/mitase/`.
 
 ## Browse by purpose
 
@@ -19,9 +19,9 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Capability acceptance contracts / Capability Contracts](foundations/capability-contracts.md)
 - [Work planning / Work](foundations/work.md)
 - [Workbench behavior / Workbench](foundations/workbench.md)
-- [Syu functional units / Core](capabilities/core.md)
-- [Syu functional units / Delivery](capabilities/delivery.md)
-- [Syu functional units / Planning](capabilities/planning.md)
+- [Mitase functional units / Core](capabilities/core.md)
+- [Mitase functional units / Delivery](capabilities/delivery.md)
+- [Mitase functional units / Planning](capabilities/planning.md)
 - [Work planning / Planner](capabilities/planner.md)
 - [Public entrypoint contracts / Agent Delivery](contracts/agent-delivery.md)
 - [Public entrypoint contracts / Code Diagnostics](contracts/code-diagnostics.md)

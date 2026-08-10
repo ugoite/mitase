@@ -7,7 +7,7 @@ sidebar_position: 1
 # Reference
 
 Reference pages are for readers who already know the workflow and want the
-canonical details. The specification pages are generated from `docs/syu`; the
+canonical details. The specification pages are generated from `docs/mitase`; the
 status page is the repository's checked-in validation snapshot.
 
 - [Specification reference](./specification/index.md) — see how this repository

@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const catalogs = {
-  en: JSON.parse(fs.readFileSync(path.join(root, 'crates/syu-app-ui/assets/locales/en.json'))),
-  ja: JSON.parse(fs.readFileSync(path.join(root, 'crates/syu-app-ui/assets/locales/ja.json'))),
+  en: JSON.parse(fs.readFileSync(path.join(root, 'crates/mitase-app-ui/assets/locales/en.json'))),
+  ja: JSON.parse(fs.readFileSync(path.join(root, 'crates/mitase-app-ui/assets/locales/ja.json'))),
 };
 let locale = 'en';
 const required = key => {
@@ -16,13 +16,13 @@ const required = key => {
 };
 
 globalThis.window = {
-  SyuPreferences: {
+  MitasePreferences: {
     t: required,
     lookup: key => catalogs[locale][key],
   },
 };
 
-const source = fs.readFileSync(path.join(root, 'crates/syu-app-ui/assets/js/i18n.js'));
+const source = fs.readFileSync(path.join(root, 'crates/mitase-app-ui/assets/js/i18n.js'));
 const module = await import(`data:text/javascript;base64,${source.toString('base64')}`);
 const { localizeEnum, localizeSpecificationTitle, translate } = module;
 

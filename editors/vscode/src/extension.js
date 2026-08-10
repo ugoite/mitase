@@ -15,11 +15,11 @@ const {
   specIdFromText
 } = require('./model');
 
-class SyuContextTreeProvider {
+class MitaseContextTreeProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
-    this.rootItems = [createMessageNode('Open a file in a syu workspace to inspect trace links.')]
+    this.rootItems = [createMessageNode('Open a file in a mitase workspace to inspect trace links.')]
   }
 
   setMessage(message) {
@@ -135,7 +135,7 @@ function createOwnerNode(workspaceRoot, owner) {
     description: `${owner.language} ${owner.traceRole} (${matchedBy})`,
     tooltip: owner.title,
     command: {
-      command: 'syu.openResolvedTarget',
+      command: 'mitase.openResolvedTarget',
       title: 'Open spec item',
       arguments: [
         {
@@ -153,7 +153,7 @@ function createSpecItemNode(workspaceRoot, item) {
     description: item.title,
     tooltip: item.documentPath,
     command: {
-      command: 'syu.openResolvedTarget',
+      command: 'mitase.openResolvedTarget',
       title: 'Open spec item',
       arguments: [
         {
@@ -176,32 +176,32 @@ async function resolveFolderWorkspace(folder) {
   return resolveWorkspaceContext(folder.uri.fsPath);
 }
 
-async function isSyuWorkspace(folder) {
+async function isMitaseWorkspace(folder) {
   return (await resolveFolderWorkspace(folder)) != null;
 }
 
-async function syuWorkspaceFolders() {
+async function mitaseWorkspaceFolders() {
   const folders = vscode.workspace.workspaceFolders || [];
   const resolved = await Promise.all(
-    folders.map(async (folder) => ((await isSyuWorkspace(folder)) ? folder : null))
+    folders.map(async (folder) => ((await isMitaseWorkspace(folder)) ? folder : null))
   );
   return resolved.filter(Boolean);
 }
 
 function getBinaryPath(folder) {
-  return vscode.workspace.getConfiguration('syu', folder.uri).get('binaryPath', 'syu');
+  return vscode.workspace.getConfiguration('mitase', folder.uri).get('binaryPath', 'mitase');
 }
 
 function getAutoRefreshDiagnostics(folder) {
   return vscode.workspace
-    .getConfiguration('syu', folder.uri)
+    .getConfiguration('mitase', folder.uri)
     .get('autoRefreshDiagnostics', true);
 }
 
 async function ensureModel(folder, modelCache) {
   const workspace = await resolveFolderWorkspace(folder);
   if (!workspace) {
-    throw new Error('The selected folder is not inside a syu workspace.');
+    throw new Error('The selected folder is not inside a mitase workspace.');
   }
 
   const cached = modelCache.get(workspace.workspaceRoot);
@@ -227,7 +227,7 @@ async function invalidateModel(folder, modelCache) {
 }
 
 async function refreshDiagnostics(modelCache, collection) {
-  const folders = await syuWorkspaceFolders();
+  const folders = await mitaseWorkspaceFolders();
   const diagnosticMap = new Map();
 
   for (const folder of folders) {
@@ -272,7 +272,7 @@ function toDiagnostic(record) {
       : vscode.DiagnosticSeverity.Error
   );
   diagnostic.code = record.code;
-  diagnostic.source = 'syu';
+  diagnostic.source = 'mitase';
   return diagnostic;
 }
 
@@ -331,7 +331,7 @@ function createInlineNavigationProvider(modelCache, treeProvider) {
   return {
     async provideCodeLenses(document) {
       const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-      if (!folder || !(await isSyuWorkspace(folder))) {
+      if (!folder || !(await isMitaseWorkspace(folder))) {
         return [];
       }
 
@@ -346,8 +346,8 @@ function createInlineNavigationProvider(modelCache, treeProvider) {
           }
 
           lenses.push(
-            createCodeLens(range, 'syu.openSpecItemById', 'syu: Open spec item', [target.id]),
-            createCodeLens(range, 'syu.showRelatedFilesForSpecId', 'syu: Show related files', [
+            createCodeLens(range, 'mitase.openSpecItemById', 'mitase: Open spec item', [target.id]),
+            createCodeLens(range, 'mitase.showRelatedFilesForSpecId', 'mitase: Show related files', [
               target.id
             ])
           );
@@ -361,16 +361,16 @@ function createInlineNavigationProvider(modelCache, treeProvider) {
 
         if (target.kind === 'traceFile') {
           lenses.push(
-            createCodeLens(range, 'syu.openResolvedTarget', 'syu: Open traced file', [
+            createCodeLens(range, 'mitase.openResolvedTarget', 'mitase: Open traced file', [
               { path: traceTarget.path, searchText: null }
             ]),
-            createCodeLens(range, 'syu.showTraceForActiveFile', 'syu: Trace file', [traceTarget])
+            createCodeLens(range, 'mitase.showTraceForActiveFile', 'mitase: Trace file', [traceTarget])
           );
           continue;
         }
 
         lenses.push(
-          createCodeLens(range, 'syu.showTraceForActiveFile', 'syu: Trace symbol', [traceTarget])
+          createCodeLens(range, 'mitase.showTraceForActiveFile', 'mitase: Trace symbol', [traceTarget])
         );
       }
 
@@ -424,13 +424,13 @@ async function openResolvedTarget(target) {
 async function refreshContextForActiveEditor(modelCache, treeProvider) {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.isUntitled) {
-    treeProvider.setMessage('Open a saved file inside a syu workspace to inspect trace links.');
+    treeProvider.setMessage('Open a saved file inside a mitase workspace to inspect trace links.');
     return;
   }
 
   const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-  if (!folder || !(await isSyuWorkspace(folder))) {
-    treeProvider.setMessage('The active file is not inside a syu workspace.');
+  if (!folder || !(await isMitaseWorkspace(folder))) {
+    treeProvider.setMessage('The active file is not inside a mitase workspace.');
     return;
   }
 
@@ -447,18 +447,18 @@ async function refreshContextForActiveEditor(modelCache, treeProvider) {
 
 function registerCommands(context, modelCache, treeProvider, collection) {
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.openResolvedTarget', openResolvedTarget)
+    vscode.commands.registerCommand('mitase.openResolvedTarget', openResolvedTarget)
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.refreshDiagnostics', async () => {
+    vscode.commands.registerCommand('mitase.refreshDiagnostics', async () => {
       await refreshDiagnostics(modelCache, collection);
       await refreshContextForActiveEditor(modelCache, treeProvider);
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.showTraceForActiveFile', async (traceTarget) => {
+    vscode.commands.registerCommand('mitase.showTraceForActiveFile', async (traceTarget) => {
       let editor = vscode.window.activeTextEditor;
       if (traceTarget?.path) {
         await openResolvedTarget({
@@ -469,13 +469,13 @@ function registerCommands(context, modelCache, treeProvider, collection) {
       }
 
       if (!editor) {
-        await vscode.window.showInformationMessage('Open a file before tracing it with syu.');
+        await vscode.window.showInformationMessage('Open a file before tracing it with mitase.');
         return;
       }
 
       const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-      if (!folder || !(await isSyuWorkspace(folder))) {
-        await vscode.window.showInformationMessage('The active file is not inside a syu workspace.');
+      if (!folder || !(await isMitaseWorkspace(folder))) {
+        await vscode.window.showInformationMessage('The active file is not inside a mitase workspace.');
         return;
       }
 
@@ -487,17 +487,17 @@ function registerCommands(context, modelCache, treeProvider, collection) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.openSpecItemById', async (preferredId) => {
+    vscode.commands.registerCommand('mitase.openSpecItemById', async (preferredId) => {
       const folder =
         vscode.window.activeTextEditor &&
         vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
       const workspaceFolder =
-        folder && (await isSyuWorkspace(folder))
+        folder && (await isMitaseWorkspace(folder))
           ? folder
-          : (await syuWorkspaceFolders())[0];
+          : (await mitaseWorkspaceFolders())[0];
 
       if (!workspaceFolder) {
-        await vscode.window.showInformationMessage('No syu workspace is open.');
+        await vscode.window.showInformationMessage('No mitase workspace is open.');
         return;
       }
 
@@ -518,17 +518,17 @@ function registerCommands(context, modelCache, treeProvider, collection) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.showRelatedFilesForSpecId', async (preferredId) => {
+    vscode.commands.registerCommand('mitase.showRelatedFilesForSpecId', async (preferredId) => {
       const folder =
         vscode.window.activeTextEditor &&
         vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
       const workspaceFolder =
-        folder && (await isSyuWorkspace(folder))
+        folder && (await isMitaseWorkspace(folder))
           ? folder
-          : (await syuWorkspaceFolders())[0];
+          : (await mitaseWorkspaceFolders())[0];
 
       if (!workspaceFolder) {
-        await vscode.window.showInformationMessage('No syu workspace is open.');
+        await vscode.window.showInformationMessage('No mitase workspace is open.');
         return;
       }
 
@@ -559,10 +559,10 @@ function registerCommands(context, modelCache, treeProvider, collection) {
 
 function activate(context) {
   const modelCache = new Map();
-  const diagnostics = vscode.languages.createDiagnosticCollection('syu');
-  const treeProvider = new SyuContextTreeProvider();
+  const diagnostics = vscode.languages.createDiagnosticCollection('mitase');
+  const treeProvider = new MitaseContextTreeProvider();
   const inlineNavigationProvider = createInlineNavigationProvider(modelCache, treeProvider);
-  const treeView = vscode.window.createTreeView('syuContext', {
+  const treeView = vscode.window.createTreeView('mitaseContext', {
     treeDataProvider: treeProvider
   });
 
@@ -577,7 +577,7 @@ function activate(context) {
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (document) => {
       const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-      if (!folder || !(await isSyuWorkspace(folder))) {
+      if (!folder || !(await isMitaseWorkspace(folder))) {
         return;
       }
 

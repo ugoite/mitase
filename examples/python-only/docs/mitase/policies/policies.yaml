@@ -1,0 +1,35 @@
+schema: mitase/spec/v1
+kind: policies
+namespace: python-only
+category: Python example
+policies:
+- id: POL-PYTHONONLY-001
+  title: Python example governance
+  summary: Python delivery uses explicit implementation and verification targets.
+  description: Keep a Python-first example aligned with the active v1 graph.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Python delivery uses explicit implementation and verification targets.
+    governed_by:
+    - PHIL-PYTHONONLY-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: shell
+      path: python/app.py
+      selector:
+        kind: marker
+        value: "def python_feature_impl():"
+      claims:
+      - kind: enforces
+        rule: POL-PYTHONONLY-001#rule.traceable-delivery

@@ -1,10 +1,10 @@
 // FEAT-LSP-001
 // REQ-CORE-001
 //
-// LSP Server for syu editor integrations
+// LSP Server for mitase editor integrations
 //
 // This module provides a Language Server Protocol (LSP) compatible server
-// that exposes syu's specification validation and navigation capabilities
+// that exposes mitase's specification validation and navigation capabilities
 // to editor clients (VS Code, Neovim, Emacs, etc.).
 //
 // **Current Scope:**

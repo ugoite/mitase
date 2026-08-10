@@ -1,6 +1,6 @@
 ---
 title: "Project decisions"
-description: "Read the durable architectural decisions that shape syu before v1."
+description: "Read the durable architectural decisions that shape mitase before v1."
 sidebar_position: 1
 ---
 

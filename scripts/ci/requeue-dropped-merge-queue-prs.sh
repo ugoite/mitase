@@ -189,7 +189,7 @@ PY
 requeue_dropped_merge_queue_prs() {
   local repo_slug owner repo dry_run queue_json candidates_json
 
-  repo_slug="${1:-${GITHUB_REPOSITORY:-ugoite/syu}}"
+  repo_slug="${1:-${GITHUB_REPOSITORY:-ugoite/mitase}}"
   dry_run="${MERGE_QUEUE_REQUEUE_DRY_RUN:-false}"
   owner="${repo_slug%%/*}"
   repo="${repo_slug#*/}"

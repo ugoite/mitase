@@ -1,4 +1,4 @@
-schema: syu/work-request/v1
+schema: mitase/work-request/v1
 id: WORK-AUTH-FAILURE
 title: Keep login failures generic.
 operation: modify
