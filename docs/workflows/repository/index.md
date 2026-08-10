@@ -1,16 +1,16 @@
 ---
 title: "Repository workflows"
-description: "Configure, migrate, and repair a syu workspace."
+description: "Configure, migrate, and repair a mitase workspace."
 sidebar_position: 1
 ---
 
 # Repository workflows
 
 These pages answer the operational questions that come after the first
-validation: which fields belong in `syu.yaml`, how to introduce `syu` into a
+validation: which fields belong in `mitase.yaml`, how to introduce `mitase` into a
 real repository, and where to look when the graph is blocked.
 
-- [Configuration](./configuration.md) — the strict `syu/config/v1` workspace
+- [Configuration](./configuration.md) — the strict `mitase/config/v1` workspace
   contract.
 - [Existing repository](../../start-here/adopt/existing-repository.md) — the
   incremental adoption path.

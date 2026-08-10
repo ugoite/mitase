@@ -8,7 +8,7 @@ sidebar_position: 3
 
 The public entrypoints and typed contracts exposed by the self-hosted system.
 
-These pages are generated from the canonical YAML under `docs/syu/`.
+These pages are generated from the canonical YAML under `docs/mitase/`.
 
 - [Public entrypoint contracts / Agent Delivery](./agent-delivery.md)
 - [Public entrypoint contracts / Code Diagnostics](./code-diagnostics.md)

@@ -11,7 +11,7 @@ import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SPEC_ROOT = Path("docs/syu")
+DEFAULT_SPEC_ROOT = Path("docs/mitase")
 OUTPUT_ROOT = REPO_ROOT / "docs" / "reference" / "specification"
 
 CATEGORY_METADATA = {
@@ -135,7 +135,7 @@ def output_relative_path(relative_path: Path) -> Path:
 
 
 def resolve_spec_root() -> Path:
-    config_path = REPO_ROOT / "syu.yaml"
+    config_path = REPO_ROOT / "mitase.yaml"
     default_root = REPO_ROOT / DEFAULT_SPEC_ROOT
     if not config_path.is_file():
         return default_root
@@ -250,7 +250,7 @@ def write_category_index(category: str, entries: list[tuple[str, str]]) -> None:
         "",
         metadata["description"],
         "",
-        "These pages are generated from the canonical YAML under `docs/syu/`.",
+        "These pages are generated from the canonical YAML under `docs/mitase/`.",
         "",
     ]
     for title, doc_link in entries:

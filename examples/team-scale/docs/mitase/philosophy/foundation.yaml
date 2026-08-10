@@ -1,0 +1,17 @@
+schema: mitase/spec/v1
+kind: philosophies
+namespace: team-scale
+category: Team-scale example
+philosophies:
+- id: PHIL-TEAMSCALE-001
+  title: Team-scale example
+  summary: Show a larger example with several owned Rust implementation and verification
+    files.
+  principles:
+  - id: exact-ownership
+    statement: Larger workspaces still keep bounded implementation and verification
+      ownership.
+    applies_to:
+    - code
+    - work
+  bindings: []

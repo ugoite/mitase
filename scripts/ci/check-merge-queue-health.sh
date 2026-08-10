@@ -205,7 +205,7 @@ check_merge_queue_health() {
   local queue_json runs_json workflows_txt
 
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  repo_slug="${1:-${GITHUB_REPOSITORY:-ugoite/syu}}"
+  repo_slug="${1:-${GITHUB_REPOSITORY:-ugoite/mitase}}"
   run_limit="${MERGE_QUEUE_RUN_LIMIT:-100}"
   owner="${repo_slug%%/*}"
   repo="${repo_slug#*/}"

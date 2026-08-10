@@ -2,7 +2,7 @@ use assert_cmd::Command;
 
 #[test]
 fn workbench_help_lists_browser_launch_options() {
-    let assert = Command::cargo_bin("syu")
+    let assert = Command::cargo_bin("mitase")
         .expect("binary should build")
         .args(["workbench", "--help"])
         .assert()

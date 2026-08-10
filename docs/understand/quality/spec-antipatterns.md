@@ -2,7 +2,7 @@
 
 <!-- FEAT-DOCS-001 -->
 
-Passing `syu validate workspace .` is the floor, not the finish line. A workspace can
+Passing `mitase validate workspace .` is the floor, not the finish line. A workspace can
 stay green while the four-layer design still drifts toward churn,
 duplication, or vague ownership. This guide calls out common
 **bad-but-valid** shapes and the refactors that usually help.
@@ -22,7 +22,7 @@ philosophy entry changes whenever the current delivery plan changes, it is
 usually living in the wrong layer.
 
 **Bad smell:** this conceptual sketch shows the problem title only; it is **not**
-a full copy-pasteable `syu` document.
+a full copy-pasteable `mitase` document.
 
 ```text
 - id: PHIL-CHECKOUT-001
@@ -58,7 +58,7 @@ Policy should turn philosophy into repository-wide rules. It is the wrong
 layer when it only restates a philosophy in stricter prose, or when it
 duplicates one requirement or feature almost word for word.
 
-**Bad smell:** this is a title-level sketch, not a full `syu` YAML document.
+**Bad smell:** this is a title-level sketch, not a full `mitase` YAML document.
 
 ```text
 - id: POL-AUTH-001
@@ -204,7 +204,7 @@ change easier to reason about.
 
 ## Continue with these pages
 
-- [syu concepts](../model/concepts.md) for the layer definitions and authoring basics
+- [mitase concepts](../model/concepts.md) for the layer definitions and authoring basics
 - [Getting started](../../start-here/first-run/getting-started.md) to scaffold a workspace and practice
   the four-layer flow
 - [Troubleshooting](../../workflows/repository/troubleshooting.md) when validation is failing, not just

@@ -1,17 +1,17 @@
 # Workbench
 
-Syu Workbench is the browser projection of the canonical v1 flow:
+Mitase Workbench is the browser projection of the canonical v1 flow:
 
 `WorkRequest -> WorkPlan -> PlanApproval -> CompletionAttempt -> FinalizationReceipt`
 
 Start it with a request:
 
 ```sh
-syu workbench serve --workspace . --request request.yaml
+mitase workbench serve --workspace . --request request.yaml
 ```
 
 The default address is `http://127.0.0.1:7737`. Use `--bind` and `--port` to
-change the listener. `syu workbench project` remains available for JSON/YAML
+change the listener. `mitase workbench project` remains available for JSON/YAML
 projection debugging.
 
 The server keeps one canonical workspace, inventory index, and static projection snapshot while repository content is unchanged. Warm reads and planning actions reuse that snapshot; tracked, staged, deleted, renamed, and untracked content changes invalidate it before the next operation. The server returns the browser shell immediately, the browser fetches the canonical projection once while showing startup progress, renders only the visible page, and shows an accessible busy state while actions are running.
@@ -41,13 +41,13 @@ details. Settings remains a utility page.
   context. Generated outputs can change only when their exact source target is
   editable and changed in the same slice.
 - Items projects typed anchors, bindings, targets, and contracts from
-  `syu/spec/v1`.
+  `mitase/spec/v1`.
 - Diagnostics projects canonical diagnostics by validation context and phase.
-- Settings projects `syu/config/v1`; parsing and validation remain server-side.
+- Settings projects `mitase/config/v1`; parsing and validation remain server-side.
 
 The UI never parses YAML or infers ownership, contracts, target scope, or
 validation meaning. Those decisions belong to the workspace, planner, and
-validation crates and arrive through `syu-workbench-server`.
+validation crates and arrive through `mitase-workbench-server`.
 
 Interactive Work operations use the typed `/api/work/action` journey endpoint.
 The browser and native WebView submit the same action and mutation basis; the
@@ -94,5 +94,5 @@ Supporting operations are backed by local server endpoints:
 For automation or debugging, use the projection without starting the server:
 
 ```sh
-syu workbench project --workspace . --request request.yaml --format json
+mitase workbench project --workspace . --request request.yaml --format json
 ```

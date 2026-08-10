@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Specification Editor"
-description: "Generated reference for docs/syu/features/workbench/specification-editor.yaml"
+description: "Generated reference for docs/mitase/features/workbench/specification-editor.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/specification-editor.yaml`.
+> Generated from `docs/mitase/features/workbench/specification-editor.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
       - **targets**:
         - **id**: specification-apply
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_specification_apply
@@ -46,7 +46,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-003#criterion.transactional-spec-edit
         - **id**: config-apply
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_config_apply
@@ -55,7 +55,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-004#criterion.transactional-config-edit
         - **id**: specification-candidates
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_specification_candidates
@@ -66,7 +66,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
         - **id**: specification-candidate-preview
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_specification_candidate_preview
@@ -75,7 +75,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
         - **id**: criterion-authoring
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: specification_patch_content
@@ -85,178 +85,178 @@ description: "Generated reference for docs/syu/features/workbench/specification-
       - **owns**:
         - **id**: server-candidate-evidence
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::CandidateEvidence
         - **id**: server-discovery-concepts
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::DISCOVERY_CONCEPTS
         - **id**: server-discovery-concept
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::DiscoveryConcept
         - **id**: server-edit-patch
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::EditPatch
         - **id**: server-feature-target-draft
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::FeatureTargetDraft
         - **id**: server-specification-candidate-query
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::SpecificationCandidateQuery
         - **id**: server-specification-candidate-view
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::SpecificationCandidateView
         - **id**: server-api-specification
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::api_specification
         - **id**: server-api-specification-candidate-apply
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::api_specification_candidate_apply
         - **id**: server-ascii-tokens
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::ascii_tokens
         - **id**: server-candidate-field-weight
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::candidate_field_weight
         - **id**: server-changed-specification-anchors
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::changed_specification_anchors
         - **id**: server-discovery-history
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::discovery_history
         - **id**: server-discovery-query-exact-matches
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::discovery_query_exact_matches
         - **id**: server-discovery-query-matches
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::discovery_query_matches
         - **id**: server-discovery-term-matches
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::discovery_term_matches
         - **id**: server-edit-content
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::edit_content
         - **id**: server-matching-discovery-concepts
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::matching_discovery_concepts
         - **id**: server-patch-path
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::patch_path
         - **id**: server-specification-impact
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::specification_impact
         - **id**: server-validate-feature-criterion-link
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_feature_criterion_link
         - **id**: app-ui-components-module
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/components.rs
+          - **path**: crates/mitase-app-ui/src/components.rs
           - **selector**:
             - **kind**: module
             - **name**: components
         - **id**: app-ui-components-file
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/components.rs
+          - **path**: crates/mitase-app-ui/src/components.rs
           - **selector**:
             - **kind**: file
         - **id**: app-ui-document-module
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/document.rs
+          - **path**: crates/mitase-app-ui/src/document.rs
           - **selector**:
             - **kind**: module
             - **name**: document
         - **id**: app-ui-document-file
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/document.rs
+          - **path**: crates/mitase-app-ui/src/document.rs
           - **selector**:
             - **kind**: file
         - **id**: app-ui-lib-module
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/lib.rs
+          - **path**: crates/mitase-app-ui/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib
         - **id**: app-ui-pages-module
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/pages.rs
+          - **path**: crates/mitase-app-ui/src/pages.rs
           - **selector**:
             - **kind**: module
             - **name**: pages
         - **id**: app-ui-pages-file
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/pages.rs
+          - **path**: crates/mitase-app-ui/src/pages.rs
           - **selector**:
             - **kind**: file
         - **id**: app-ui-shell-module
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/shell.rs
+          - **path**: crates/mitase-app-ui/src/shell.rs
           - **selector**:
             - **kind**: module
             - **name**: shell
         - **id**: app-ui-shell-file
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/shell.rs
+          - **path**: crates/mitase-app-ui/src/shell.rs
           - **selector**:
             - **kind**: file
 - **id**: FEAT-WORKBENCH-SPEC-DETAIL-001
@@ -271,7 +271,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
       - **targets**:
         - **id**: detail-trace
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: specification_trace_view
@@ -284,7 +284,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-016#criterion.bounded-detail-context
         - **id**: detail-nested-edit
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: nested_patch_content
@@ -293,7 +293,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
         - **id**: detail-browser-workspace
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/specifications.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderSpecificationWorkspace
@@ -306,7 +306,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
         - **id**: detail-specification-location-sync
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: symbol
             - **name**: syncSpecificationLocation
@@ -315,7 +315,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
         - **id**: detail-work-route-state
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: symbol
             - **name**: syncWorkSpecificationLocation
@@ -324,7 +324,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
         - **id**: detail-work-workspace-adapter
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: symbol
             - **name**: workSpecificationWorkspaceAdapter
@@ -338,7 +338,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
       - **targets**:
         - **id**: detail-trace-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
@@ -350,11 +350,11 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::specification_trace_reaches_external_workbench_targets_from_spec_index
         - **id**: detail-nested-edit-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::typed_nested_edit_round_trip_covers_all_entity_variants
@@ -366,7 +366,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::typed_nested_edit_round_trip_covers_all_entity_variants
         - **id**: detail-browser-test
           - **adapter**: declared
@@ -404,7 +404,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
                   - **script**: scripts/ci/workbench-visual.sh
         - **id**: detail-evidence-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::specification_trace_is_deterministic_and_preserves_canonical_claims
@@ -416,7 +416,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::specification_trace_is_deterministic_and_preserves_canonical_claims
     - **id**: detail-contract-source
       - **role**: contract-source
@@ -425,7 +425,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
       - **targets**:
         - **id**: detail-route-coordination-source
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: symbol
             - **name**: workSpecificationWorkspaceAdapter
@@ -450,7 +450,7 @@ description: "Generated reference for docs/syu/features/workbench/specification-
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -467,7 +467,7 @@ features:
     targets:
     - id: specification-apply
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_specification_apply
@@ -476,7 +476,7 @@ features:
         criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
     - id: config-apply
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_config_apply
@@ -485,7 +485,7 @@ features:
         criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
     - id: specification-candidates
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_specification_candidates
@@ -496,7 +496,7 @@ features:
         criterion: REQ-WORKBENCH-014#criterion.advisory-multilingual-discovery
     - id: specification-candidate-preview
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_specification_candidate_preview
@@ -505,7 +505,7 @@ features:
         criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
     - id: criterion-authoring
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: specification_patch_content
@@ -515,136 +515,136 @@ features:
     owns:
     - id: server-candidate-evidence
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::CandidateEvidence' }
     - id: server-discovery-concepts
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::DISCOVERY_CONCEPTS' }
     - id: server-discovery-concept
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::DiscoveryConcept' }
     - id: server-edit-patch
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::EditPatch' }
     - id: server-feature-target-draft
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::FeatureTargetDraft' }
     - id: server-specification-candidate-query
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::SpecificationCandidateQuery' }
     - id: server-specification-candidate-view
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::SpecificationCandidateView' }
     - id: server-api-specification
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::api_specification' }
     - id: server-api-specification-candidate-apply
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::api_specification_candidate_apply' }
     - id: server-ascii-tokens
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::ascii_tokens' }
     - id: server-candidate-field-weight
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::candidate_field_weight' }
     - id: server-changed-specification-anchors
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::changed_specification_anchors' }
     - id: server-discovery-history
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::discovery_history' }
     - id: server-discovery-query-exact-matches
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::discovery_query_exact_matches' }
     - id: server-discovery-query-matches
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::discovery_query_matches' }
     - id: server-discovery-term-matches
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::discovery_term_matches' }
     - id: server-edit-content
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::edit_content' }
     - id: server-matching-discovery-concepts
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::matching_discovery_concepts' }
     - id: server-patch-path
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::patch_path' }
     - id: server-specification-impact
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::specification_impact' }
     - id: server-validate-feature-criterion-link
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::validate_feature_criterion_link' }
     - id: app-ui-components-module
       adapter: rust
-      path: crates/syu-app-ui/src/components.rs
+      path: crates/mitase-app-ui/src/components.rs
       selector:
         kind: module
         name: components
     - id: app-ui-components-file
       adapter: rust
-      path: crates/syu-app-ui/src/components.rs
+      path: crates/mitase-app-ui/src/components.rs
       selector:
         kind: file
     - id: app-ui-document-module
       adapter: rust
-      path: crates/syu-app-ui/src/document.rs
+      path: crates/mitase-app-ui/src/document.rs
       selector:
         kind: module
         name: document
     - id: app-ui-document-file
       adapter: rust
-      path: crates/syu-app-ui/src/document.rs
+      path: crates/mitase-app-ui/src/document.rs
       selector:
         kind: file
     - id: app-ui-lib-module
       adapter: rust
-      path: crates/syu-app-ui/src/lib.rs
+      path: crates/mitase-app-ui/src/lib.rs
       selector:
         kind: module
         name: lib
     - id: app-ui-pages-module
       adapter: rust
-      path: crates/syu-app-ui/src/pages.rs
+      path: crates/mitase-app-ui/src/pages.rs
       selector:
         kind: module
         name: pages
     - id: app-ui-pages-file
       adapter: rust
-      path: crates/syu-app-ui/src/pages.rs
+      path: crates/mitase-app-ui/src/pages.rs
       selector:
         kind: file
     - id: app-ui-shell-module
       adapter: rust
-      path: crates/syu-app-ui/src/shell.rs
+      path: crates/mitase-app-ui/src/shell.rs
       selector:
         kind: module
         name: shell
     - id: app-ui-shell-file
       adapter: rust
-      path: crates/syu-app-ui/src/shell.rs
+      path: crates/mitase-app-ui/src/shell.rs
       selector:
         kind: file
 
@@ -660,7 +660,7 @@ features:
     targets:
     - id: detail-trace
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: specification_trace_view }
       claims:
       - kind: satisfies
@@ -671,14 +671,14 @@ features:
         criterion: REQ-WORKBENCH-016#criterion.bounded-detail-context
     - id: detail-nested-edit
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: nested_patch_content }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
     - id: detail-browser-workspace
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      path: crates/mitase-app-ui/assets/js/pages/specifications.js
       selector: { kind: symbol, name: renderSpecificationWorkspace }
       claims:
       - kind: satisfies
@@ -689,21 +689,21 @@ features:
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
     - id: detail-specification-location-sync
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector: { kind: symbol, name: syncSpecificationLocation }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
     - id: detail-work-route-state
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: symbol, name: syncWorkSpecificationLocation }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
     - id: detail-work-workspace-adapter
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: symbol, name: workSpecificationWorkspaceAdapter }
       claims:
       - kind: satisfies
@@ -715,24 +715,24 @@ features:
     targets:
     - id: detail-trace-test
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: tests::specification_trace_reaches_external_workbench_targets_from_spec_index }
       claims:
       - kind: verifies
         criterion: REQ-WORKBENCH-015#criterion.canonical-detail-trace
         covers:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
+        runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::specification_trace_reaches_external_workbench_targets_from_spec_index } }
     - id: detail-nested-edit-test
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: tests::typed_nested_edit_round_trip_covers_all_entity_variants }
       claims:
       - kind: verifies
         criterion: REQ-WORKBENCH-015#criterion.typed-nested-specification-edit
         covers:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-nested-edit
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::typed_nested_edit_round_trip_covers_all_entity_variants } }
+        runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::typed_nested_edit_round_trip_covers_all_entity_variants } }
     - id: detail-browser-test
       adapter: declared
       path: scripts/ci/workbench-visual.sh
@@ -759,14 +759,14 @@ features:
         runner: { runner: shell, arguments: { script: scripts/ci/workbench-visual.sh } }
     - id: detail-evidence-test
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: tests::specification_trace_is_deterministic_and_preserves_canonical_claims }
       claims:
       - kind: verifies
         criterion: REQ-WORKBENCH-015#criterion.declaration-runtime-evidence
         covers:
         - FEAT-WORKBENCH-SPEC-DETAIL-001#binding.detail-workspace/target.detail-trace
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::specification_trace_is_deterministic_and_preserves_canonical_claims } }
+        runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::specification_trace_is_deterministic_and_preserves_canonical_claims } }
   - id: detail-contract-source
     role: contract-source
     facet: specification-detail
@@ -774,7 +774,7 @@ features:
     targets:
     - id: detail-route-coordination-source
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: symbol, name: workSpecificationWorkspaceAdapter }
   contracts:
   - id: detail-route-coordination

@@ -1,0 +1,105 @@
+schema: mitase/spec/v1
+kind: features
+namespace: workbench
+category: Workbench implementation
+features:
+- id: FEAT-WORKBENCH-COMPLETION-HISTORY-001
+  title: Durable completion history
+  summary: Render server-owned attempts and finalization state in Workbench.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: completion-history
+    responsibility: Build the completion history projection from the append-only delivery store.
+    targets:
+    - id: completion-history
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: completion_history
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+    - id: completion-history-view
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: CompletionHistoryView
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+    - id: completion-attempt-view
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: CompletionAttemptView
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+    - id: finalize-command
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: FinalizeCommand
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+    - id: approve-endpoint
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_approve
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+    - id: finalize-preview-endpoint
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_finalize_preview
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+    - id: finalize-apply-endpoint
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_finalize_apply
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+  - id: verification
+    role: verification
+    facet: completion-history
+    responsibility: Verify durable completion history projection.
+    targets:
+    - id: completion-history-test
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: tests::completion_history_projection_is_store_backed
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-009#criterion.completion-history
+        covers:
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.completion-history
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.completion-history-view
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.completion-attempt-view
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.finalize-command
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.approve-endpoint
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.finalize-preview-endpoint
+        - FEAT-WORKBENCH-COMPLETION-HISTORY-001#binding.implementation/target.finalize-apply-endpoint
+        runner:
+          runner: cargo-test
+          arguments:
+            package: mitase-workbench-server
+            test: tests::completion_history_projection_is_store_backed

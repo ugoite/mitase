@@ -44,7 +44,7 @@ query($owner:String!,$repo:String!,$num:Int!) {
       }
     }
   }
-}' -F owner=ugoite -F repo=syu -F num=123
+}' -F owner=ugoite -F repo=mitase -F num=123
 ```
 
 - `autoMergeRequest != null` means auto-merge is enabled
@@ -99,7 +99,7 @@ query($owner:String!,$repo:String!,$num:Int!) {
       }
     }
   }
-}' -F owner=ugoite -F repo=syu -F num=123
+}' -F owner=ugoite -F repo=mitase -F num=123
 ```
 
 That is the fastest way to distinguish three different states that look similar

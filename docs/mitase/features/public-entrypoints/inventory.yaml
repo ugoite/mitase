@@ -1,0 +1,52 @@
+schema: mitase/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-INVENTORY-001
+  title: Inventory discovery
+  summary: Govern artifact discovery and adapter-output combination entrypoints.
+  status: implemented
+  bindings:
+  - id: public-api-032
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-032-rust-crates-mitase-inventory-src-lib-rs-inventoryregistry
+      adapter: rust
+      path: crates/mitase-inventory/src/lib.rs
+      selector:
+        kind: symbol
+        name: InventoryRegistry::discover
+      claims:
+      - kind: exposes
+        target: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
+  - id: public-api-033
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-033-rust-crates-mitase-inventory-src-lib-rs-read-bytes
+      adapter: rust
+      path: crates/mitase-inventory/src/lib.rs
+      selector:
+        kind: symbol
+        name: read_bytes
+      claims:
+      - kind: exposes
+        target: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
+  - id: public-api-034
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-034-rust-crates-mitase-inventory-src-lib-rs-union
+      adapter: rust
+      path: crates/mitase-inventory/src/lib.rs
+      selector:
+        kind: symbol
+        name: union
+      claims:
+      - kind: exposes
+        target: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry

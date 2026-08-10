@@ -1,6 +1,6 @@
 ---
 title: "Workflows"
-description: "Use syu day to day: configure a repository, plan bounded work, and connect an editor."
+description: "Use mitase day to day: configure a repository, plan bounded work, and connect an editor."
 sidebar_position: 1
 ---
 

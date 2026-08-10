@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Validation"
-description: "Generated reference for docs/syu/features/public-entrypoints/validation.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/validation.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/validation.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/validation.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
+        - **id**: entrypoint-044-rust-crates-mitase-validation-src-lib-rs-phase-for-rule
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: phase_for_rule
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
+        - **id**: entrypoint-047-rust-crates-mitase-validation-src-lib-rs-validate-without
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate_without_readiness
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
+        - **id**: entrypoint-078-rust-crates-mitase-validation-src-lib-rs-readinessaxis
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ReadinessAxis
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
+        - **id**: entrypoint-079-rust-crates-mitase-validation-src-lib-rs-readinessaxisid
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ReadinessAxisId
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
+        - **id**: entrypoint-080-rust-crates-mitase-validation-src-lib-rs-readinessreport
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ReadinessReport
@@ -105,9 +105,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
+        - **id**: entrypoint-081-rust-crates-mitase-validation-src-lib-rs-evaluate-readiness
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: evaluate_readiness
@@ -119,9 +119,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
+        - **id**: entrypoint-082-rust-crates-mitase-validation-src-lib-rs-required-axes
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: required_axes
@@ -135,7 +135,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **targets**:
         - **id**: entrypoint-changed-files-against-revision
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: changed_files_against_revision
@@ -149,7 +149,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **targets**:
         - **id**: entrypoint-execute-verification-attempt
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: execute_verification_attempt
@@ -163,7 +163,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
       - **targets**:
         - **id**: entrypoint-validate-workspace
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate_workspace
@@ -174,7 +174,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
+    - id: entrypoint-044-rust-crates-mitase-validation-src-lib-rs-phase-for-rule
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: phase_for_rule
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
+    - id: entrypoint-047-rust-crates-mitase-validation-src-lib-rs-validate-without
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: validate_without_readiness
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
+    - id: entrypoint-078-rust-crates-mitase-validation-src-lib-rs-readinessaxis
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: ReadinessAxis
@@ -231,9 +231,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
+    - id: entrypoint-079-rust-crates-mitase-validation-src-lib-rs-readinessaxisid
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: ReadinessAxisId
@@ -245,9 +245,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
+    - id: entrypoint-080-rust-crates-mitase-validation-src-lib-rs-readinessreport
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: ReadinessReport
@@ -259,9 +259,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
+    - id: entrypoint-081-rust-crates-mitase-validation-src-lib-rs-evaluate-readiness
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: evaluate_readiness
@@ -273,9 +273,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
+    - id: entrypoint-082-rust-crates-mitase-validation-src-lib-rs-required-axes
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: required_axes
@@ -289,7 +289,7 @@ features:
     targets:
     - id: entrypoint-changed-files-against-revision
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: changed_files_against_revision
@@ -303,7 +303,7 @@ features:
     targets:
     - id: entrypoint-execute-verification-attempt
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: execute_verification_attempt
@@ -317,7 +317,7 @@ features:
     targets:
     - id: entrypoint-validate-workspace
       adapter: rust
-      path: crates/syu-validation/src/lib.rs
+      path: crates/mitase-validation/src/lib.rs
       selector:
         kind: symbol
         name: validate_workspace

@@ -1,15 +1,15 @@
 ---
 title: "Capability acceptance contracts / Capability Contracts"
-description: "Generated reference for docs/syu/requirements/capability-contracts.yaml"
+description: "Generated reference for docs/mitase/requirements/capability-contracts.yaml"
 ---
 
-> Generated from `docs/syu/requirements/capability-contracts.yaml`.
+> Generated from `docs/mitase/requirements/capability-contracts.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -125,7 +125,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
       - **targets**:
         - **id**: spec-model-test
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::old_shape_is_rejected
@@ -137,11 +137,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-spec-model
+                  - **package**: mitase-spec-model
                   - **test**: tests::old_shape_is_rejected
         - **id**: target-lifecycle-test
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent
@@ -153,11 +153,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-spec-model
+                  - **package**: mitase-spec-model
                   - **test**: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent
         - **id**: digest-format-test
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::sha256_digests_use_the_canonical_lowercase_representation
@@ -169,11 +169,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-spec-model
+                  - **package**: mitase-spec-model
                   - **test**: tests::sha256_digests_use_the_canonical_lowercase_representation
         - **id**: project-config-test
           - **adapter**: rust
-          - **path**: crates/syu-project-model/src/lib.rs
+          - **path**: crates/mitase-project-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::project_config_preserves_readiness_configuration
@@ -185,11 +185,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-project-model
+                  - **package**: mitase-project-model
                   - **test**: tests::project_config_preserves_readiness_configuration
         - **id**: inventory-test
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::active_profile_unions_rust_and_javascript_providers
@@ -201,11 +201,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-inventory
+                  - **package**: mitase-inventory
                   - **test**: tests::active_profile_unions_rust_and_javascript_providers
         - **id**: identity-test
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::heading_selectors_reject_ambiguity
@@ -217,11 +217,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workspace
+                  - **package**: mitase-workspace
                   - **test**: tests::heading_selectors_reject_ambiguity
         - **id**: index-test
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::nested_spec_directories_load_from_noncanonical_workspace_roots
@@ -233,11 +233,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workspace
+                  - **package**: mitase-workspace
                   - **test**: tests::nested_spec_directories_load_from_noncanonical_workspace_roots
         - **id**: ownership-test
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::planned_features_do_not_own_active_artifacts
@@ -249,11 +249,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workspace
+                  - **package**: mitase-workspace
                   - **test**: tests::planned_features_do_not_own_active_artifacts
         - **id**: readiness-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
+          - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::readiness_levels_add_axes_monotonically
@@ -265,11 +265,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: readiness::tests::readiness_levels_add_axes_monotonically
         - **id**: change-validation-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::hunkless_changes_require_file_scope_for_editable_targets
@@ -281,11 +281,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::hunkless_changes_require_file_scope_for_editable_targets
         - **id**: context-test
           - **adapter**: rust
-          - **path**: crates/syu-planner/src/lib.rs
+          - **path**: crates/mitase-planner/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets
@@ -297,11 +297,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-planner
+                  - **package**: mitase-planner
                   - **test**: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets
         - **id**: contract-test
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::binding_level_relations_and_non_target_contract_refs_are_rejected
@@ -313,7 +313,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-spec-model
+                  - **package**: mitase-spec-model
                   - **test**: tests::binding_level_relations_and_non_target_contract_refs_are_rejected
     - **id**: delivery-verification
       - **role**: verification
@@ -322,7 +322,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
       - **targets**:
         - **id**: verification-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::exact_test_execution_requires_match
@@ -334,7 +334,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::exact_test_execution_requires_match
             - **kind**: verifies
               - **criterion**: REQ-WORK-001#criterion.completion-evidence
@@ -343,11 +343,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::exact_test_execution_requires_match
         - **id**: plan-validation-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::canonical_execution_reconstructs_basis_after_editable_change
@@ -359,11 +359,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::canonical_execution_reconstructs_basis_after_editable_change
         - **id**: receipt-validation-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::completion_report_rejects_unchanged_modify_target
@@ -375,7 +375,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::completion_report_rejects_unchanged_modify_target
         - **id**: cli-test
           - **adapter**: rust
@@ -391,7 +391,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: v1_cli
                   - **test**: current_workspace_validates_and_reports_configured_readiness
         - **id**: lsp-test
@@ -408,7 +408,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **test**: lsp::handlers::tests::handle_hover_renders_each_spec_layer
         - **id**: docs-test
           - **adapter**: rust
@@ -424,7 +424,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: v1_cli
                   - **test**: generated_spec_reference_covers_every_source_document
 - **id**: REQ-CAPABILITY-002
@@ -476,7 +476,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
       - **targets**:
         - **id**: language-inventory-test
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::language_aware_profile_discovers_each_supported_semantic_boundary
@@ -488,11 +488,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-inventory
+                  - **package**: mitase-inventory
                   - **test**: tests::language_aware_profile_discovers_each_supported_semantic_boundary
         - **id**: javascript-export-test
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly
@@ -504,11 +504,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-inventory
+                  - **package**: mitase-inventory
                   - **test**: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly
         - **id**: json-openapi-resolution-test
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span
@@ -520,11 +520,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workspace
+                  - **package**: mitase-workspace
                   - **test**: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span
         - **id**: json-openapi-scope-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change
@@ -536,11 +536,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change
         - **id**: stable-identity-test
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames
@@ -552,11 +552,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-inventory
+                  - **package**: mitase-inventory
                   - **test**: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames
         - **id**: build-profile-test
           - **adapter**: rust
-          - **path**: crates/syu-planner/src/lib.rs
+          - **path**: crates/mitase-planner/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::inactive_build_profile_target_never_enters_executable_scope
@@ -568,11 +568,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-planner
+                  - **package**: mitase-planner
                   - **test**: tests::inactive_build_profile_target_never_enters_executable_scope
         - **id**: cross-language-test
           - **adapter**: rust
-          - **path**: crates/syu-planner/src/lib.rs
+          - **path**: crates/mitase-planner/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::cross_language_provider_and_consumer_share_one_contract_slice
@@ -584,11 +584,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-planner
+                  - **package**: mitase-planner
                   - **test**: tests::cross_language_provider_and_consumer_share_one_contract_slice
         - **id**: generated-source-test
           - **adapter**: rust
-          - **path**: crates/syu-planner/src/lib.rs
+          - **path**: crates/mitase-planner/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::generated_outputs_are_derived_context_and_never_directly_editable
@@ -600,11 +600,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-planner
+                  - **package**: mitase-planner
                   - **test**: tests::generated_outputs_are_derived_context_and_never_directly_editable
         - **id**: generated-change-scope-test
           - **adapter**: rust
-          - **path**: crates/syu-validation/src/lib.rs
+          - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::generated_scope_requires_a_changed_exact_source
@@ -616,11 +616,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-validation
+                  - **package**: mitase-validation
                   - **test**: tests::generated_scope_requires_a_changed_exact_source
         - **id**: semantic-diff-test
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::semantic_diff_distinguishes_public_private_rename_and_deletion
@@ -632,11 +632,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-inventory
+                  - **package**: mitase-inventory
                   - **test**: tests::semantic_diff_distinguishes_public_private_rename_and_deletion
         - **id**: visibility-transition-test
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal
@@ -648,13 +648,13 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-inventory
+                  - **package**: mitase-inventory
                   - **test**: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: requirements
 namespace: capabilities
 category: Capability acceptance contracts
@@ -741,112 +741,112 @@ requirements:
         targets:
           - id: spec-model-test
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: tests::old_shape_is_rejected }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.spec-model
                 covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document]
-                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::old_shape_is_rejected } }
+                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::old_shape_is_rejected } }
           - id: target-lifecycle-test
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.spec-model
                 covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.target-lifecycle]
-                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent } }
+                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent } }
           - id: digest-format-test
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: tests::sha256_digests_use_the_canonical_lowercase_representation }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.digest-format
                 covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format]
-                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::sha256_digests_use_the_canonical_lowercase_representation } }
+                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::sha256_digests_use_the_canonical_lowercase_representation } }
           - id: project-config-test
             adapter: rust
-            path: crates/syu-project-model/src/lib.rs
+            path: crates/mitase-project-model/src/lib.rs
             selector: { kind: symbol, name: tests::project_config_preserves_readiness_configuration }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.project-config
                 covers: [FEAT-PROJECT-CONFIG-001#binding.implementation/target.project-config]
-                runner: { runner: cargo-test, arguments: { package: syu-project-model, test: tests::project_config_preserves_readiness_configuration } }
+                runner: { runner: cargo-test, arguments: { package: mitase-project-model, test: tests::project_config_preserves_readiness_configuration } }
           - id: inventory-test
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: tests::active_profile_unions_rust_and_javascript_providers }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.inventory-discovery
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::active_profile_unions_rust_and_javascript_providers } }
+                runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::active_profile_unions_rust_and_javascript_providers } }
           - id: identity-test
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: tests::heading_selectors_reject_ambiguity }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.exact-identity
                 covers: [FEAT-IDENTITY-001#binding.implementation/target.target-resolver]
-                runner: { runner: cargo-test, arguments: { package: syu-workspace, test: tests::heading_selectors_reject_ambiguity } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workspace, test: tests::heading_selectors_reject_ambiguity } }
           - id: index-test
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: tests::nested_spec_directories_load_from_noncanonical_workspace_roots }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.graph-index
                 covers: [FEAT-INDEX-001#binding.implementation/target.spec-index]
-                runner: { runner: cargo-test, arguments: { package: syu-workspace, test: tests::nested_spec_directories_load_from_noncanonical_workspace_roots } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workspace, test: tests::nested_spec_directories_load_from_noncanonical_workspace_roots } }
           - id: ownership-test
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: tests::planned_features_do_not_own_active_artifacts }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.ownership-resolution
                 covers: [FEAT-OWNERSHIP-001#binding.implementation/target.ownership-ref]
-                runner: { runner: cargo-test, arguments: { package: syu-workspace, test: tests::planned_features_do_not_own_active_artifacts } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workspace, test: tests::planned_features_do_not_own_active_artifacts } }
           - id: readiness-test
             adapter: rust
-            path: crates/syu-validation/src/readiness.rs
+            path: crates/mitase-validation/src/readiness.rs
             selector: { kind: symbol, name: tests::readiness_levels_add_axes_monotonically }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.readiness-ladder
                 covers: [FEAT-READINESS-001#binding.implementation/target.readiness-evaluate]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: readiness::tests::readiness_levels_add_axes_monotonically } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: readiness::tests::readiness_levels_add_axes_monotonically } }
           - id: change-validation-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: tests::hunkless_changes_require_file_scope_for_editable_targets }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.change-validation
                 covers: [FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::hunkless_changes_require_file_scope_for_editable_targets } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::hunkless_changes_require_file_scope_for_editable_targets } }
           - id: context-test
             adapter: rust
-            path: crates/syu-planner/src/lib.rs
+            path: crates/mitase-planner/src/lib.rs
             selector: { kind: symbol, name: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.context-export
                 covers: [FEAT-CONTEXT-001#binding.implementation/target.context-export]
-                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets } }
+                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets } }
           - id: contract-test
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: tests::binding_level_relations_and_non_target_contract_refs_are_rejected }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.contract-closure
                 covers: [FEAT-CONTRACT-001#binding.implementation/target.contract-model]
-                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::binding_level_relations_and_non_target_contract_refs_are_rejected } }
+                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::binding_level_relations_and_non_target_contract_refs_are_rejected } }
       - id: delivery-verification
         role: verification
         facet: capability-verification
@@ -854,35 +854,35 @@ requirements:
         targets:
           - id: verification-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: tests::exact_test_execution_requires_match }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.verification-execution
                 covers: [FEAT-VERIFICATION-001#binding.implementation/target.execute-verification]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::exact_test_execution_requires_match } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::exact_test_execution_requires_match } }
               - kind: verifies
                 criterion: REQ-WORK-001#criterion.completion-evidence
                 covers: [FEAT-RESULT-VALIDATION-001#binding.implementation/target.completion-evaluation]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::exact_test_execution_requires_match } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::exact_test_execution_requires_match } }
           - id: plan-validation-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: tests::canonical_execution_reconstructs_basis_after_editable_change }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.plan-validation
                 covers: [FEAT-PLAN-VALIDATION-001#binding.implementation/target.canonical-plan-validation]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::canonical_execution_reconstructs_basis_after_editable_change } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::canonical_execution_reconstructs_basis_after_editable_change } }
           - id: receipt-validation-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: tests::completion_report_rejects_unchanged_modify_target }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.receipt-validation
                 covers: [FEAT-RESULT-VALIDATION-001#binding.implementation/target.receipt-validation]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::completion_report_rejects_unchanged_modify_target } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::completion_report_rejects_unchanged_modify_target } }
           - id: cli-test
             adapter: rust
             path: tests/v1_cli.rs
@@ -891,7 +891,7 @@ requirements:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
                 covers: [FEAT-CLI-001#binding.implementation/target.cli-run]
-                runner: { runner: cargo-test-integration, arguments: { package: syu, harness: v1_cli, test: current_workspace_validates_and_reports_configured_readiness } }
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: current_workspace_validates_and_reports_configured_readiness } }
           - id: lsp-test
             adapter: rust
             path: src/lsp/handlers.rs
@@ -900,7 +900,7 @@ requirements:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.lsp-navigation
                 covers: [FEAT-LSP-001#binding.implementation/target.lsp-server]
-                runner: { runner: cargo-test, arguments: { package: syu, test: lsp::handlers::tests::handle_hover_renders_each_spec_layer } }
+                runner: { runner: cargo-test, arguments: { package: mitase, test: lsp::handlers::tests::handle_hover_renders_each_spec_layer } }
           - id: docs-test
             adapter: rust
             path: tests/v1_cli.rs
@@ -909,7 +909,7 @@ requirements:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.docs-generation
                 covers: [FEAT-DOCS-001#binding.implementation/target.generated-index]
-                runner: { runner: cargo-test-integration, arguments: { package: syu, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
 
   - id: REQ-CAPABILITY-002
     title: Multi-language dependency planning
@@ -953,101 +953,101 @@ requirements:
         targets:
           - id: language-inventory-test
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: tests::language_aware_profile_discovers_each_supported_semantic_boundary }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::language_aware_profile_discovers_each_supported_semantic_boundary } }
+                runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::language_aware_profile_discovers_each_supported_semantic_boundary } }
           - id: javascript-export-test
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly } }
+                runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly } }
           - id: json-openapi-resolution-test
             adapter: rust
-            path: crates/syu-workspace/src/lib.rs
+            path: crates/mitase-workspace/src/lib.rs
             selector: { kind: symbol, name: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: syu-workspace, test: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workspace, test: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span } }
           - id: json-openapi-scope-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change } }
           - id: stable-identity-test
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.stable-identity
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames } }
+                runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames } }
           - id: build-profile-test
             adapter: rust
-            path: crates/syu-planner/src/lib.rs
+            path: crates/mitase-planner/src/lib.rs
             selector: { kind: symbol, name: tests::inactive_build_profile_target_never_enters_executable_scope }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.build-profile-scope
                 covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::inactive_build_profile_target_never_enters_executable_scope } }
+                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::inactive_build_profile_target_never_enters_executable_scope } }
           - id: cross-language-test
             adapter: rust
-            path: crates/syu-planner/src/lib.rs
+            path: crates/mitase-planner/src/lib.rs
             selector: { kind: symbol, name: tests::cross_language_provider_and_consumer_share_one_contract_slice }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
                 covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::cross_language_provider_and_consumer_share_one_contract_slice } }
+                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::cross_language_provider_and_consumer_share_one_contract_slice } }
           - id: generated-source-test
             adapter: rust
-            path: crates/syu-planner/src/lib.rs
+            path: crates/mitase-planner/src/lib.rs
             selector: { kind: symbol, name: tests::generated_outputs_are_derived_context_and_never_directly_editable }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.generated-source
                 covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::generated_outputs_are_derived_context_and_never_directly_editable } }
+                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::generated_outputs_are_derived_context_and_never_directly_editable } }
           - id: generated-change-scope-test
             adapter: rust
-            path: crates/syu-validation/src/lib.rs
+            path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: tests::generated_scope_requires_a_changed_exact_source }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.generated-change-scope
                 covers: [FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate]
-                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::generated_scope_requires_a_changed_exact_source } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::generated_scope_requires_a_changed_exact_source } }
           - id: semantic-diff-test
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: tests::semantic_diff_distinguishes_public_private_rename_and_deletion }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.semantic-diff
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_distinguishes_public_private_rename_and_deletion } }
+                runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::semantic_diff_distinguishes_public_private_rename_and_deletion } }
           - id: visibility-transition-test
             adapter: rust
-            path: crates/syu-inventory/src/lib.rs
+            path: crates/mitase-inventory/src/lib.rs
             selector: { kind: symbol, name: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.semantic-diff
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal } }
+                runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal } }
 ```

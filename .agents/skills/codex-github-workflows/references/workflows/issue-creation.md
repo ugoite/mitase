@@ -30,7 +30,7 @@ Choose exactly one audit area from quick evidence:
 - Repository philosophy mismatch.
 - Developer experience.
 - Docs/docsite consistency.
-- `syu` / `ugoite-syu` philosophy alignment.
+- `mitase` / `ugoite/mitase` philosophy alignment.
 
 Then:
 

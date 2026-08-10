@@ -1,6 +1,6 @@
 ---
 title: "Adopt an existing repository"
-description: "Introduce syu incrementally into a repository that already has code, tests, and documentation."
+description: "Introduce mitase incrementally into a repository that already has code, tests, and documentation."
 sidebar_position: 1
 ---
 

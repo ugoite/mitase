@@ -8,7 +8,7 @@ sidebar_position: 4
 
 The Workbench behaviors that support guided, bounded repository changes.
 
-These pages are generated from the canonical YAML under `docs/syu/`.
+These pages are generated from the canonical YAML under `docs/mitase/`.
 
 - [Workbench implementation / Completion History](./completion-history.md)
 - [Workbench implementation / Guided Journey](./guided-journey.md)

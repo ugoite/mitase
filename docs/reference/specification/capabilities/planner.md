@@ -1,15 +1,15 @@
 ---
 title: "Work planning / Planner"
-description: "Generated reference for docs/syu/features/planner.yaml"
+description: "Generated reference for docs/mitase/features/planner.yaml"
 ---
 
-> Generated from `docs/syu/features/planner.yaml`.
+> Generated from `docs/mitase/features/planner.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -30,7 +30,7 @@ description: "Generated reference for docs/syu/features/planner.yaml"
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: work
 category: Work planning

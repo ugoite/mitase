@@ -27,8 +27,8 @@ fn copy_fixture_tree(source: &Path, destination: &Path) {
 fn initialize_fixture_git(root: &Path) {
     for args in [
         ["init", "-q"].as_slice(),
-        ["config", "user.email", "syu-tests@example.invalid"].as_slice(),
-        ["config", "user.name", "Syu Tests"].as_slice(),
+        ["config", "user.email", "mitase-tests@example.invalid"].as_slice(),
+        ["config", "user.name", "Mitase Tests"].as_slice(),
         ["add", "."].as_slice(),
         ["commit", "-qm", "fixture baseline"].as_slice(),
     ] {

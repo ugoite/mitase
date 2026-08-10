@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Validation"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-validation.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-validation.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-validation.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-validation.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
+        - **id**: entrypoint-063-rust-crates-mitase-workbench-server-src-lib-rs-branch-scop
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: branch_scope_view
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
+        - **id**: entrypoint-064-rust-crates-mitase-workbench-server-src-lib-rs-execute-ver
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: execute_verification
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
+        - **id**: entrypoint-065-rust-crates-mitase-workbench-server-src-lib-rs-validate-ve
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate_verification_receipt
@@ -76,7 +76,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -91,9 +91,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
+    - id: entrypoint-063-rust-crates-mitase-workbench-server-src-lib-rs-branch-scop
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: branch_scope_view
@@ -105,9 +105,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
+    - id: entrypoint-064-rust-crates-mitase-workbench-server-src-lib-rs-execute-ver
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: execute_verification
@@ -119,9 +119,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
+    - id: entrypoint-065-rust-crates-mitase-workbench-server-src-lib-rs-validate-ve
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: validate_verification_receipt

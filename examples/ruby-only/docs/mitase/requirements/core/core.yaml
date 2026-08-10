@@ -1,0 +1,35 @@
+schema: mitase/spec/v1
+kind: requirements
+namespace: ruby-only
+category: Ruby example
+requirements:
+- id: REQ-RUBYONLY-001
+  title: Ruby starter behavior
+  description: The Ruby sample keeps library and test ownership visible in review.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: The Ruby sample keeps library and test ownership visible in review.
+    governed_by:
+    - POL-RUBYONLY-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: test/order_summary_test.rb
+      selector:
+        kind: marker
+        value: "class OrderSummaryTest < Minitest::Test"
+      claims:
+      - kind: verifies
+        criterion: REQ-RUBYONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-RUBYONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

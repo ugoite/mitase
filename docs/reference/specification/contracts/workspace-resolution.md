@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workspace Resolution"
-description: "Generated reference for docs/syu/features/public-entrypoints/workspace-resolution.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workspace-resolution.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workspace-resolution.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workspace-resolution.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-074-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
+        - **id**: entrypoint-074-rust-crates-mitase-workspace-src-lib-rs-specworkspace-path
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_artifact
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-075-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
+        - **id**: entrypoint-075-rust-crates-mitase-workspace-src-lib-rs-specworkspace-path
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_excluded
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-076-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
+        - **id**: entrypoint-076-rust-crates-mitase-workspace-src-lib-rs-specworkspace-path
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_spec
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-079-rust-crates-syu-workspace-src-lib-rs-specworkspace-try
+        - **id**: entrypoint-079-rust-crates-mitase-workspace-src-lib-rs-specworkspace-try
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: SpecWorkspace::try_fingerprint
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-080-rust-crates-syu-workspace-src-lib-rs-resolve-target
+        - **id**: entrypoint-080-rust-crates-mitase-workspace-src-lib-rs-resolve-target
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: resolve_target
@@ -105,9 +105,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-082-rust-crates-syu-workspace-src-lib-rs-resolve-target-wit
+        - **id**: entrypoint-082-rust-crates-mitase-workspace-src-lib-rs-resolve-target-wit
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: resolve_target_with_adapters
@@ -119,9 +119,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-083-rust-crates-syu-workspace-src-lib-rs-selector-supports
+        - **id**: entrypoint-083-rust-crates-mitase-workspace-src-lib-rs-selector-supports
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: selector_supports_editable
@@ -135,7 +135,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **targets**:
         - **id**: entrypoint-resolve-indexed-target
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: resolve_indexed_target
@@ -149,7 +149,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **targets**:
         - **id**: entrypoint-ownership-fingerprint
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ownership_fingerprint
@@ -163,7 +163,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
       - **targets**:
         - **id**: entrypoint-spec-fingerprint
           - **adapter**: rust
-          - **path**: crates/syu-workspace/src/lib.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: spec_fingerprint
@@ -174,7 +174,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-074-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
+    - id: entrypoint-074-rust-crates-mitase-workspace-src-lib-rs-specworkspace-path
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: SpecWorkspace::path_is_artifact
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-075-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
+    - id: entrypoint-075-rust-crates-mitase-workspace-src-lib-rs-specworkspace-path
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: SpecWorkspace::path_is_excluded
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-076-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
+    - id: entrypoint-076-rust-crates-mitase-workspace-src-lib-rs-specworkspace-path
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: SpecWorkspace::path_is_spec
@@ -231,9 +231,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-079-rust-crates-syu-workspace-src-lib-rs-specworkspace-try
+    - id: entrypoint-079-rust-crates-mitase-workspace-src-lib-rs-specworkspace-try
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: SpecWorkspace::try_fingerprint
@@ -245,9 +245,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-080-rust-crates-syu-workspace-src-lib-rs-resolve-target
+    - id: entrypoint-080-rust-crates-mitase-workspace-src-lib-rs-resolve-target
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: resolve_target
@@ -259,9 +259,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-082-rust-crates-syu-workspace-src-lib-rs-resolve-target-wit
+    - id: entrypoint-082-rust-crates-mitase-workspace-src-lib-rs-resolve-target-wit
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: resolve_target_with_adapters
@@ -273,9 +273,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-083-rust-crates-syu-workspace-src-lib-rs-selector-supports
+    - id: entrypoint-083-rust-crates-mitase-workspace-src-lib-rs-selector-supports
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: selector_supports_editable
@@ -289,7 +289,7 @@ features:
     targets:
     - id: entrypoint-resolve-indexed-target
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: resolve_indexed_target
@@ -303,7 +303,7 @@ features:
     targets:
     - id: entrypoint-ownership-fingerprint
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: ownership_fingerprint
@@ -317,7 +317,7 @@ features:
     targets:
     - id: entrypoint-spec-fingerprint
       adapter: rust
-      path: crates/syu-workspace/src/lib.rs
+      path: crates/mitase-workspace/src/lib.rs
       selector:
         kind: symbol
         name: spec_fingerprint

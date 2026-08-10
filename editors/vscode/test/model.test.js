@@ -22,14 +22,14 @@ function v1FixtureRoot(name) {
 }
 
 async function createCustomSpecRootWorkspace() {
-  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'syu-vscode-spec-root-'));
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mitase-vscode-spec-root-'));
   const specRoot = path.join(workspaceRoot, 'spec', 'contracts');
 
   await fs.mkdir(specRoot, { recursive: true });
   await fs.writeFile(
-    path.join(workspaceRoot, 'syu.yaml'),
+    path.join(workspaceRoot, 'mitase.yaml'),
     [
-      'schema: syu/config/v1',
+      'schema: mitase/config/v1',
       'workspace:',
       '  spec_roots: [spec/contracts]',
       '  excludes: []',
@@ -56,7 +56,7 @@ async function createCustomSpecRootWorkspace() {
   await fs.writeFile(
     path.join(specRoot, 'foundation.yaml'),
     [
-      'schema: syu/spec/v1',
+      'schema: mitase/spec/v1',
       'kind: philosophies',
       'namespace: custom',
       'category: Custom',
@@ -73,7 +73,7 @@ async function createCustomSpecRootWorkspace() {
   await fs.writeFile(
     path.join(specRoot, 'policy.yaml'),
     [
-      'schema: syu/spec/v1',
+      'schema: mitase/spec/v1',
       'kind: policies',
       'namespace: custom',
       'category: Custom',
@@ -94,7 +94,7 @@ async function createCustomSpecRootWorkspace() {
   await fs.writeFile(
     path.join(specRoot, 'requirement.yaml'),
     [
-      'schema: syu/spec/v1',
+      'schema: mitase/spec/v1',
       'kind: requirements',
       'namespace: custom',
       'category: Custom',
@@ -123,7 +123,7 @@ async function createCustomSpecRootWorkspace() {
   await fs.writeFile(
     path.join(specRoot, 'feature.yaml'),
     [
-      'schema: syu/spec/v1',
+      'schema: mitase/spec/v1',
       'kind: features',
       'namespace: custom',
       'category: Custom',

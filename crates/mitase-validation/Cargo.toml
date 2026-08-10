@@ -1,0 +1,20 @@
+[package]
+name = "mitase-validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+mitase-diagnostics = { path = "../mitase-diagnostics" }
+mitase-inventory = { path = "../mitase-inventory" }
+mitase-planner = { path = "../mitase-planner" }
+mitase-project-model = { path = "../mitase-project-model" }
+mitase-spec-model = { path = "../mitase-spec-model" }
+mitase-work-model = { path = "../mitase-work-model" }
+mitase-workspace = { path = "../mitase-workspace" }
+serde_yaml = "0.9"
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true

@@ -1,6 +1,6 @@
 # Implementation planning
 
-Current implementation planning uses `syu work` artifacts.
+Current implementation planning uses `mitase work` artifacts.
 
 Minimal flow:
 
@@ -16,7 +16,7 @@ Guidelines:
   criterion is the semantic “behavior” identity; Feature implementation
   origins are server-resolved exact target sets.
 - Treat a ready work plan as executable only after `validate plan` passes for the exact digest and slice.
-- `syu/work-plan/v1` uses `execution: isolated-slices`.
+- `mitase/work-plan/v1` uses `execution: isolated-slices`.
 - Execute each slice from the plan basis revision in its own worktree or branch.
 - Validate post-state with the exact `--plan-digest <digest> --slice-id <slice-id>` pair against only that isolated slice workspace.
 - Sequential same-branch execution for multiple slices from one plan is not supported in v1.

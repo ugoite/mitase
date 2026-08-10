@@ -1,0 +1,35 @@
+schema: mitase/spec/v1
+kind: policies
+namespace: rust-only
+category: Rust example
+policies:
+- id: POL-RUSTONLY-001
+  title: Rust example governance
+  summary: Rust delivery uses explicit implementation and verification evidence.
+  description: Keep a Rust-first example aligned with the v1 work graph.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Rust delivery uses explicit implementation and verification evidence.
+    governed_by:
+    - PHIL-RUSTONLY-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: shell
+      path: src/trace.rs
+      selector:
+        kind: marker
+        value: "pub fn rust_requirement_test() {}"
+      claims:
+      - kind: enforces
+        rule: POL-RUSTONLY-001#rule.traceable-delivery

@@ -51,25 +51,25 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary: syu
+            binary: mitase
           - os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
-            binary: syu
+            binary: mitase
             cross_compile: true
             linker: aarch64-linux-gnu-gcc
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            binary: syu
+            binary: mitase
           - os: macos-14
             target: aarch64-apple-darwin
-            binary: syu
+            binary: mitase
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            binary: syu.exe
+            binary: mitase.exe
     runs-on: ${{ matrix.os }}
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
-      SYU_BUILD_VERSION: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      MITASE_BUILD_VERSION: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
       PACKAGE_REGISTRY: ghcr.io
       PACKAGE_REPOSITORY: ${{ github.repository }}
     steps:
@@ -136,7 +136,7 @@ jobs:
           ORAS_USER: ${{ github.actor }}
           ORAS_PASSWORD: ${{ github.token }}
         run: |
-          archive_name="syu-${{ matrix.target }}"
+          archive_name="mitase-${{ matrix.target }}"
           case "${{ matrix.target }}" in
             *windows*) archive_name="${archive_name}.zip" ;;
             *) archive_name="${archive_name}.tar.gz" ;;
@@ -155,9 +155,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          source = Path('scripts/install-syu.sh').read_text(encoding='utf-8')
-          rendered = source.replace('__SYU_RELEASE_TAG__', '${{ env.RELEASE_TAG }}')
-          Path('release-artifacts/install-syu.sh').write_text(rendered, encoding='utf-8')
+          source = Path('scripts/install-mitase.sh').read_text(encoding='utf-8')
+          rendered = source.replace('__MITASE_RELEASE_TAG__', '${{ env.RELEASE_TAG }}')
+          Path('release-artifacts/install-mitase.sh').write_text(rendered, encoding='utf-8')
           PY
 
       - name: Generate SHA-256 checksums

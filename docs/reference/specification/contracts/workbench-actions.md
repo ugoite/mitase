@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Actions"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-actions.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-actions.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-actions.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-actions.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
+        - **id**: entrypoint-005-javascript-crates-mitase-app-ui-assets-js-api-js-runjourn
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: runJourneyAction
@@ -51,7 +51,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-apply-specification-candidate
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: applySpecificationCandidate
@@ -65,7 +65,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-approve-target-suggestions
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: approveTargetSuggestions
@@ -79,7 +79,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-preview-specification-candidate
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: previewSpecificationCandidate
@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-read-target-suggestions
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: readTargetSuggestions
@@ -107,7 +107,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-reject-target-suggestion
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: rejectTargetSuggestion
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-run-diagnostics
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: runDiagnostics
@@ -135,7 +135,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-run-readiness
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: runReadiness
@@ -149,7 +149,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-search-specification-candidates
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: searchSpecificationCandidates
@@ -160,7 +160,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -175,9 +175,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
+    - id: entrypoint-005-javascript-crates-mitase-app-ui-assets-js-api-js-runjourn
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: runJourneyAction
@@ -191,7 +191,7 @@ features:
     targets:
     - id: entrypoint-apply-specification-candidate
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: applySpecificationCandidate
@@ -205,7 +205,7 @@ features:
     targets:
     - id: entrypoint-approve-target-suggestions
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: approveTargetSuggestions
@@ -219,7 +219,7 @@ features:
     targets:
     - id: entrypoint-preview-specification-candidate
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: previewSpecificationCandidate
@@ -233,7 +233,7 @@ features:
     targets:
     - id: entrypoint-read-target-suggestions
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: readTargetSuggestions
@@ -247,7 +247,7 @@ features:
     targets:
     - id: entrypoint-reject-target-suggestion
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: rejectTargetSuggestion
@@ -261,7 +261,7 @@ features:
     targets:
     - id: entrypoint-run-diagnostics
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: runDiagnostics
@@ -275,7 +275,7 @@ features:
     targets:
     - id: entrypoint-run-readiness
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: runReadiness
@@ -289,7 +289,7 @@ features:
     targets:
     - id: entrypoint-search-specification-candidates
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: searchSpecificationCandidates

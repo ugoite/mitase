@@ -1,0 +1,16 @@
+schema: mitase/config/v1
+version: 0.0.1-alpha.1
+workspace:
+  spec_roots: [spec]
+  excludes: []
+  legacy_root: spec
+profiles: { active: [], custom: {} }
+validation:
+  preset: standard
+  deny_warnings: false
+  rules: {}
+  changed: { require_owned_changes: false }
+work:
+  slicing: { max_editable_files: 1, max_editable_symbols: 1, max_verification_targets: 1, max_readonly_targets: 1, max_total_bytes: 1024 }
+  context: { include_parent_principles: false, include_parent_rules: false }
+adapters: { enabled: [] }

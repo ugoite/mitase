@@ -1,19 +1,19 @@
 [workspace]
 members = [
   ".",
-  "crates/syu-spec-model",
-  "crates/syu-project-model",
-  "crates/syu-work-model",
-  "crates/syu-diagnostics",
-  "crates/syu-workspace",
-  "crates/syu-inventory",
-  "crates/syu-validation",
-  "crates/syu-delivery",
-  "crates/syu-agent",
-  "crates/syu-planner",
-  "crates/syu-workbench-server",
-  "crates/syu-app-ui",
-  "crates/syu-code-intel",
+  "crates/mitase-spec-model",
+  "crates/mitase-project-model",
+  "crates/mitase-work-model",
+  "crates/mitase-diagnostics",
+  "crates/mitase-workspace",
+  "crates/mitase-inventory",
+  "crates/mitase-validation",
+  "crates/mitase-delivery",
+  "crates/mitase-agent",
+  "crates/mitase-planner",
+  "crates/mitase-workbench-server",
+  "crates/mitase-app-ui",
+  "crates/mitase-code-intel",
 ]
 resolver = "3"
 
@@ -40,7 +40,7 @@ tree-sitter-javascript = "0.25.0"
 tree-sitter-typescript = "0.23.2"
 
 [package]
-name = "syu"
+name = "mitase"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -59,18 +59,18 @@ serde_yaml.workspace = true
 sha2.workspace = true
 uuid.workspace = true
 url = "2.5.7"
-syu-diagnostics = { path = "crates/syu-diagnostics" }
-syu-delivery = { path = "crates/syu-delivery" }
-syu-inventory = { path = "crates/syu-inventory" }
-syu-app-ui = { path = "crates/syu-app-ui" }
-syu-code-intel = { path = "crates/syu-code-intel" }
-syu-planner = { path = "crates/syu-planner" }
-syu-project-model = { path = "crates/syu-project-model" }
-syu-spec-model = { path = "crates/syu-spec-model" }
-syu-validation = { path = "crates/syu-validation" }
-syu-work-model = { path = "crates/syu-work-model" }
-syu-workbench-server = { path = "crates/syu-workbench-server" }
-syu-workspace = { path = "crates/syu-workspace" }
+mitase-diagnostics = { path = "crates/mitase-diagnostics" }
+mitase-delivery = { path = "crates/mitase-delivery" }
+mitase-inventory = { path = "crates/mitase-inventory" }
+mitase-app-ui = { path = "crates/mitase-app-ui" }
+mitase-code-intel = { path = "crates/mitase-code-intel" }
+mitase-planner = { path = "crates/mitase-planner" }
+mitase-project-model = { path = "crates/mitase-project-model" }
+mitase-spec-model = { path = "crates/mitase-spec-model" }
+mitase-validation = { path = "crates/mitase-validation" }
+mitase-work-model = { path = "crates/mitase-work-model" }
+mitase-workbench-server = { path = "crates/mitase-workbench-server" }
+mitase-workspace = { path = "crates/mitase-workspace" }
 tempfile.workspace = true
 tokio = { version = "1.52.3", features = ["io-util", "net", "rt-multi-thread", "signal", "sync"] }
 

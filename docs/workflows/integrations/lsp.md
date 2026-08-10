@@ -1,12 +1,12 @@
-# syu LSP guide
+# mitase LSP guide
 
 <!-- FEAT-VSCODE-002 -->
 
-Use this guide when you want to run `syu lsp` directly from an installed binary,
+Use this guide when you want to run `mitase lsp` directly from an installed binary,
 from `cargo run`, or from another editor client that speaks the Language Server
 Protocol.
 
-Today `syu lsp` is intentionally small and explicit:
+Today `mitase lsp` is intentionally small and explicit:
 
 - transport is **JSON-RPC 2.0 over stdio**
 - the server supports the standard lifecycle requests and notifications
@@ -22,7 +22,7 @@ surface for diagnostics and richer repository workflows.
 From an installed binary:
 
 ```bash
-syu lsp
+mitase lsp
 ```
 
 From a source checkout:
@@ -36,7 +36,7 @@ not open a TCP port or a socket on its own.
 
 ## Transport and initialization
 
-`syu lsp` follows the standard LSP framing:
+`mitase lsp` follows the standard LSP framing:
 
 - `Content-Length: <bytes>`
 - blank line
@@ -50,7 +50,7 @@ The expected startup flow is:
 4. send `shutdown`
 5. send `exit`
 
-If `initialize` includes `rootUri`, `syu` loads the workspace from that path.
+If `initialize` includes `rootUri`, `mitase` loads the workspace from that path.
 If `rootUri` is omitted, it falls back to the current working directory of the
 server process.
 
@@ -69,7 +69,7 @@ The current request / notification surface is:
 
 | Method | Support | Notes |
 | --- | --- | --- |
-| `initialize` | yes | loads the `syu` workspace from `rootUri` or the current directory |
+| `initialize` | yes | loads the `mitase` workspace from `rootUri` or the current directory |
 | `initialized` | yes | marks the session ready for later requests |
 | `textDocument/hover` | yes | returns Markdown hover content for spec IDs under the cursor |
 | `shutdown` | yes | resets server state and returns `null` |
@@ -92,7 +92,7 @@ this:
 
 ```json
 {
-  "command": ["syu", "lsp"]
+  "command": ["mitase", "lsp"]
 }
 ```
 
@@ -106,7 +106,7 @@ the equivalent command is:
 ```
 
 Use the repository root as the workspace folder so `rootUri` points at the
-directory that contains `syu.yaml`. If your client only exposes
+directory that contains `mitase.yaml`. If your client only exposes
 `workspaceFolders`, add an explicit `rootUri` override until the server learns
 that alternate shape too.
 
@@ -122,7 +122,7 @@ For the current extension story and contributor workflow, read the
 
 ## Troubleshooting
 
-### `syu lsp` starts but the client cannot initialize
+### `mitase lsp` starts but the client cannot initialize
 
 Check that the client is speaking stdio LSP with `Content-Length` framing. A raw
 JSON stream without LSP headers will not work.
@@ -130,7 +130,7 @@ JSON stream without LSP headers will not work.
 ### The server says the workspace is not initialized
 
 The client tried to call hover before completing `initialize`. Make sure the
-normal LSP lifecycle runs in order and that `rootUri` points at a `syu`
+normal LSP lifecycle runs in order and that `rootUri` points at a `mitase`
 workspace.
 
 ### Hover returns nothing
@@ -141,7 +141,7 @@ does not yet provide symbol hover for arbitrary source-language identifiers.
 ### Initialization fails on one machine but not another
 
 Verify that the process is starting from the intended repository and that the
-workspace root actually contains `syu.yaml`. If you are using `cargo run -- lsp`
+workspace root actually contains `mitase.yaml`. If you are using `cargo run -- lsp`
 from a checkout, also confirm the repository builds locally before wiring it
 into an editor client.
 

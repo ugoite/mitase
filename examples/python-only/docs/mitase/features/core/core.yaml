@@ -1,0 +1,24 @@
+schema: mitase/spec/v1
+kind: features
+namespace: python-only
+category: Python example
+features:
+- id: FEAT-PYTHONONLY-001
+  title: Python starter behavior
+  summary: Keep a Python-first example aligned with the active v1 graph.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: python/app.py
+      selector:
+        kind: marker
+        value: "def python_feature_impl():"
+      claims:
+      - kind: satisfies
+        criterion: REQ-PYTHONONLY-001#criterion.owned-delivery

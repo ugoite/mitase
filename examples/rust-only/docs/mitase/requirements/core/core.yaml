@@ -1,0 +1,35 @@
+schema: mitase/spec/v1
+kind: requirements
+namespace: rust-only
+category: Rust example
+requirements:
+- id: REQ-RUSTONLY-001
+  title: Rust starter behavior
+  description: The Rust sample keeps source ownership and review evidence visible.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: The Rust sample keeps source ownership and review evidence visible.
+    governed_by:
+    - POL-RUSTONLY-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: src/trace.rs
+      selector:
+        kind: marker
+        value: "pub fn rust_requirement_test() {}"
+      claims:
+      - kind: verifies
+        criterion: REQ-RUSTONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-RUSTONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test
