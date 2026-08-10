@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Code Diagnostics"
-description: "Generated reference for docs/syu/features/public-entrypoints/code-diagnostics.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/code-diagnostics.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/code-diagnostics.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/code-diagnostics.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/code-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-029-rust-crates-syu-code-intel-src-lib-rs-resolve-symbol
+        - **id**: entrypoint-029-rust-crates-mitase-code-intel-src-lib-rs-resolve-symbol
           - **adapter**: rust
-          - **path**: crates/syu-code-intel/src/lib.rs
+          - **path**: crates/mitase-code-intel/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: resolve_symbol
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/code-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-030-rust-crates-syu-diagnostics-src-lib-rs-diagnostic-error
+        - **id**: entrypoint-030-rust-crates-mitase-diagnostics-src-lib-rs-diagnostic-error
           - **adapter**: rust
-          - **path**: crates/syu-diagnostics/src/lib.rs
+          - **path**: crates/mitase-diagnostics/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: Diagnostic::error
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/code-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-031-rust-crates-syu-diagnostics-src-lib-rs-validationresult
+        - **id**: entrypoint-031-rust-crates-mitase-diagnostics-src-lib-rs-validationresult
           - **adapter**: rust
-          - **path**: crates/syu-diagnostics/src/lib.rs
+          - **path**: crates/mitase-diagnostics/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ValidationResult::is_valid
@@ -76,7 +76,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/code-
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -91,9 +91,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-029-rust-crates-syu-code-intel-src-lib-rs-resolve-symbol
+    - id: entrypoint-029-rust-crates-mitase-code-intel-src-lib-rs-resolve-symbol
       adapter: rust
-      path: crates/syu-code-intel/src/lib.rs
+      path: crates/mitase-code-intel/src/lib.rs
       selector:
         kind: symbol
         name: resolve_symbol
@@ -105,9 +105,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-030-rust-crates-syu-diagnostics-src-lib-rs-diagnostic-error
+    - id: entrypoint-030-rust-crates-mitase-diagnostics-src-lib-rs-diagnostic-error
       adapter: rust
-      path: crates/syu-diagnostics/src/lib.rs
+      path: crates/mitase-diagnostics/src/lib.rs
       selector:
         kind: symbol
         name: Diagnostic::error
@@ -119,9 +119,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-031-rust-crates-syu-diagnostics-src-lib-rs-validationresult
+    - id: entrypoint-031-rust-crates-mitase-diagnostics-src-lib-rs-validationresult
       adapter: rust
-      path: crates/syu-diagnostics/src/lib.rs
+      path: crates/mitase-diagnostics/src/lib.rs
       selector:
         kind: symbol
         name: ValidationResult::is_valid

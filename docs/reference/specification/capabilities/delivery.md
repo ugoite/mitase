@@ -1,15 +1,15 @@
 ---
-title: "Syu functional units / Delivery"
-description: "Generated reference for docs/syu/features/capabilities/delivery.yaml"
+title: "Mitase functional units / Delivery"
+description: "Generated reference for docs/mitase/features/capabilities/delivery.yaml"
 ---
 
-> Generated from `docs/syu/features/capabilities/delivery.yaml`.
+> Generated from `docs/mitase/features/capabilities/delivery.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -21,7 +21,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
 
 ### Category
 
-- Syu functional units
+- Mitase functional units
 
 ### Features
 
@@ -37,49 +37,49 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
       - **owns**:
         - **id**: delivery-manifest-file
           - **adapter**: declared
-          - **path**: crates/syu-delivery/Cargo.toml
+          - **path**: crates/mitase-delivery/Cargo.toml
           - **selector**:
             - **kind**: file
         - **id**: delivery-agent-events-all
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::impl(DeliveryStore)::agent_events_all
         - **id**: delivery-finalization-preview-locked
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::impl(DeliveryStore)::finalization_preview_while_locked
         - **id**: delivery-apply-finalization-locked
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::impl(DeliveryStore)::apply_finalization_while_locked
         - **id**: delivery-fixture-attempt
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::fixture_attempt
         - **id**: delivery-tests-module
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests[cfg(test)]
         - **id**: delivery-validate-event-digest
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_agent_event_digest
       - **targets**:
         - **id**: delivery-store
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: DeliveryStore
@@ -88,7 +88,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-source
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: file
           - **claims**:
@@ -96,7 +96,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-apply-status
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: apply_status_overlay
@@ -105,7 +105,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-atomic-write
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: atomic_write
@@ -114,7 +114,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-attempt-plan
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: attempt_plan
@@ -123,7 +123,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-changed-paths
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: changed_document_paths
@@ -132,7 +132,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-component
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: component
@@ -141,7 +141,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-json-files
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: json_files
@@ -150,7 +150,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-now-nanos
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: now_nanos
@@ -159,7 +159,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-preview-token
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: preview_without_token
@@ -168,7 +168,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-read-json
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: read_json
@@ -177,7 +177,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-restore-files
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: restore_files
@@ -186,7 +186,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-validate-digest
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: validate_attempt_digest
@@ -195,7 +195,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-write-json
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: write_immutable_json
@@ -204,7 +204,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-append-attempt
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: append_attempt
@@ -213,7 +213,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-append-finalization
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: append_finalization
@@ -222,7 +222,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
         - **id**: delivery-apply-finalization
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: apply_finalization
@@ -231,7 +231,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
         - **id**: delivery-approval
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: approval
@@ -240,7 +240,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-approve
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: approve
@@ -249,7 +249,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-attempt
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: attempt
@@ -258,7 +258,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-attempts
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: attempts
@@ -267,7 +267,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-digest
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: digest
@@ -276,7 +276,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-ensure
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: ensure
@@ -285,7 +285,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-finalization
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: finalization
@@ -294,7 +294,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
         - **id**: delivery-finalization-preview
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: finalization_preview
@@ -303,7 +303,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
         - **id**: delivery-for-workspace
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: for_workspace
@@ -312,7 +312,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-new-id
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: new_id
@@ -321,7 +321,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-root
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: root
@@ -330,7 +330,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-approval-path
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: approval_path
@@ -339,7 +339,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-approvals-dir
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: approvals_dir
@@ -348,7 +348,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-attempt-path
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: attempt_path
@@ -357,7 +357,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-attempts-dir
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: attempts_dir
@@ -366,7 +366,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-finalization-path
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: finalization_path
@@ -375,7 +375,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
         - **id**: delivery-finalizations-dir
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: finalizations_dir
@@ -398,7 +398,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
       - **targets**:
         - **id**: delivery-store-test
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: store_boundary_is_repository_local_and_explicit
@@ -418,11 +418,11 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-delivery
+                  - **package**: mitase-delivery
                   - **test**: tests::store_boundary_is_repository_local_and_explicit
         - **id**: immutable-attempt-test
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: immutable_attempts_validate_digests_and_preserve_history
@@ -444,11 +444,11 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-delivery
+                  - **package**: mitase-delivery
                   - **test**: tests::immutable_attempts_validate_digests_and_preserve_history
         - **id**: approval-scope-test
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: approvals_require_canonical_scope_and_are_idempotent
@@ -467,11 +467,11 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-delivery
+                  - **package**: mitase-delivery
                   - **test**: tests::approvals_require_canonical_scope_and_are_idempotent
         - **id**: finalization-gate-test
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: finalization_preview_requires_complete_attempt
@@ -489,7 +489,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-delivery
+                  - **package**: mitase-delivery
                   - **test**: tests::finalization_preview_requires_complete_attempt
 - **id**: FEAT-AGENT-001
   - **title**: Scoped implementation agent
@@ -503,19 +503,19 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
       - **owns**:
         - **id**: agent-module
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib
         - **id**: agent-manifest
           - **adapter**: declared
-          - **path**: crates/syu-agent/Cargo.toml
+          - **path**: crates/mitase-agent/Cargo.toml
           - **selector**:
             - **kind**: file
       - **targets**:
         - **id**: agent-start
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: start_run
@@ -524,7 +524,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-003#criterion.scoped-write
         - **id**: agent-patch
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: apply_scoped_patch
@@ -533,7 +533,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-003#criterion.scoped-write
         - **id**: agent-expansion
           - **adapter**: rust
-          - **path**: crates/syu-agent/src/lib.rs
+          - **path**: crates/mitase-agent/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: request_scope_expansion
@@ -542,7 +542,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **criterion**: REQ-WORK-003#criterion.expansion-request
         - **id**: agent-events
           - **adapter**: rust
-          - **path**: crates/syu-delivery/src/lib.rs
+          - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: append_agent_event
@@ -556,7 +556,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
       - **targets**:
         - **id**: agent-http-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_agent_rejects_unrelated_write_before_application
@@ -569,7 +569,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
             - **kind**: verifies
               - **criterion**: REQ-WORK-003#criterion.expansion-request
@@ -578,7 +578,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
             - **kind**: verifies
               - **criterion**: REQ-WORK-003#criterion.agent-evidence
@@ -587,7 +587,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-011#criterion.scoped-agent
@@ -599,11 +599,11 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
         - **id**: agent-lifecycle-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_agent_applies_all_approved_lifecycle_writes
@@ -616,7 +616,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_applies_all_approved_lifecycle_writes
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-011#criterion.scoped-agent
@@ -627,7 +627,7 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_applies_all_approved_lifecycle_writes
             - **kind**: verifies
               - **criterion**: REQ-CAPABILITY-001#criterion.receipt-validation
@@ -636,11 +636,11 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_applies_all_approved_lifecycle_writes
         - **id**: agent-lifecycle-precondition-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets
@@ -653,16 +653,16 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: capabilities
-category: Syu functional units
+category: Mitase functional units
 features:
   - id: FEAT-DELIVERY-001
     title: Durable completion delivery
@@ -676,205 +676,205 @@ features:
         owns:
           - id: delivery-manifest-file
             adapter: declared
-            path: crates/syu-delivery/Cargo.toml
+            path: crates/mitase-delivery/Cargo.toml
             selector: { kind: file }
           - id: delivery-agent-events-all
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::impl(DeliveryStore)::agent_events_all' }
           - id: delivery-finalization-preview-locked
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::impl(DeliveryStore)::finalization_preview_while_locked' }
           - id: delivery-apply-finalization-locked
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::impl(DeliveryStore)::apply_finalization_while_locked' }
           - id: delivery-fixture-attempt
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::tests::fixture_attempt' }
           - id: delivery-tests-module
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::tests[cfg(test)]' }
           - id: delivery-validate-event-digest
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::validate_agent_event_digest' }
         targets:
           - id: delivery-store
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: DeliveryStore }
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-002#criterion.store-boundary
           - id: delivery-source
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: file }
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-002#criterion.store-boundary
           - id: delivery-apply-status
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: apply_status_overlay }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-atomic-write
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: atomic_write }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-attempt-plan
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: attempt_plan }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-changed-paths
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: changed_document_paths }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-component
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: component }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-json-files
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: json_files }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-now-nanos
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: now_nanos }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-preview-token
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: preview_without_token }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-read-json
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: read_json }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-restore-files
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: restore_files }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-validate-digest
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: validate_attempt_digest }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-write-json
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: write_immutable_json }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-append-attempt
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: append_attempt }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-append-finalization
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: append_finalization }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
           - id: delivery-apply-finalization
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: apply_finalization }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
           - id: delivery-approval
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: approval }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-approve
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: approve }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-attempt
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: attempt }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-attempts
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: attempts }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-digest
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: digest }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-ensure
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: ensure }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-finalization
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalization }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
           - id: delivery-finalization-preview
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalization_preview }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
           - id: delivery-for-workspace
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: for_workspace }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-new-id
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: new_id }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-root
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: root }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-approval-path
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: approval_path }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-approvals-dir
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: approvals_dir }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-attempt-path
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: attempt_path }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-attempts-dir
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: attempts_dir }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-finalization-path
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalization_path }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
           - id: delivery-finalizations-dir
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalizations_dir }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
           - id: task-run
@@ -891,7 +891,7 @@ features:
         targets:
           - id: delivery-store-test
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: store_boundary_is_repository_local_and_explicit }
             claims:
               - kind: verifies
@@ -906,10 +906,10 @@ features:
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-approvals-dir
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-path
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts-dir
-                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::store_boundary_is_repository_local_and_explicit } }
+                runner: { runner: cargo-test, arguments: { package: mitase-delivery, test: tests::store_boundary_is_repository_local_and_explicit } }
           - id: immutable-attempt-test
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: immutable_attempts_validate_digests_and_preserve_history }
             claims:
               - kind: verifies
@@ -926,10 +926,10 @@ features:
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
-                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::immutable_attempts_validate_digests_and_preserve_history } }
+                runner: { runner: cargo-test, arguments: { package: mitase-delivery, test: tests::immutable_attempts_validate_digests_and_preserve_history } }
           - id: approval-scope-test
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: approvals_require_canonical_scope_and_are_idempotent }
             claims:
               - kind: verifies
@@ -943,10 +943,10 @@ features:
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
-                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::approvals_require_canonical_scope_and_are_idempotent } }
+                runner: { runner: cargo-test, arguments: { package: mitase-delivery, test: tests::approvals_require_canonical_scope_and_are_idempotent } }
           - id: finalization-gate-test
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalization_preview_requires_complete_attempt }
             claims:
               - kind: verifies
@@ -959,7 +959,7 @@ features:
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-preview
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-path
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalizations-dir
-                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::finalization_preview_requires_complete_attempt } }
+                runner: { runner: cargo-test, arguments: { package: mitase-delivery, test: tests::finalization_preview_requires_complete_attempt } }
 
   - id: FEAT-AGENT-001
     title: Scoped implementation agent
@@ -973,37 +973,37 @@ features:
         owns:
           - id: agent-module
             adapter: rust
-            path: crates/syu-agent/src/lib.rs
+            path: crates/mitase-agent/src/lib.rs
             selector: { kind: module, name: lib }
           - id: agent-manifest
             adapter: declared
-            path: crates/syu-agent/Cargo.toml
+            path: crates/mitase-agent/Cargo.toml
             selector: { kind: file }
         targets:
           - id: agent-start
             adapter: rust
-            path: crates/syu-agent/src/lib.rs
+            path: crates/mitase-agent/src/lib.rs
             selector: { kind: symbol, name: start_run }
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-003#criterion.scoped-write
           - id: agent-patch
             adapter: rust
-            path: crates/syu-agent/src/lib.rs
+            path: crates/mitase-agent/src/lib.rs
             selector: { kind: symbol, name: apply_scoped_patch }
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-003#criterion.scoped-write
           - id: agent-expansion
             adapter: rust
-            path: crates/syu-agent/src/lib.rs
+            path: crates/mitase-agent/src/lib.rs
             selector: { kind: symbol, name: request_scope_expansion }
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-003#criterion.expansion-request
           - id: agent-events
             adapter: rust
-            path: crates/syu-delivery/src/lib.rs
+            path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: append_agent_event }
             claims:
               - kind: satisfies
@@ -1015,7 +1015,7 @@ features:
         targets:
           - id: agent-http-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_agent_rejects_unrelated_write_before_application }
             claims:
               - kind: verifies
@@ -1023,17 +1023,17 @@ features:
                 covers:
                   - FEAT-AGENT-001#binding.implementation/target.agent-start
                   - FEAT-AGENT-001#binding.implementation/target.agent-patch
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
               - kind: verifies
                 criterion: REQ-WORK-003#criterion.expansion-request
                 covers:
                   - FEAT-AGENT-001#binding.implementation/target.agent-expansion
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
               - kind: verifies
                 criterion: REQ-WORK-003#criterion.agent-evidence
                 covers:
                   - FEAT-AGENT-001#binding.implementation/target.agent-events
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
               - kind: verifies
                 criterion: REQ-WORKBENCH-011#criterion.scoped-agent
                 covers:
@@ -1041,10 +1041,10 @@ features:
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-patch
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-ui
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
           - id: agent-lifecycle-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_agent_applies_all_approved_lifecycle_writes }
             claims:
               - kind: verifies
@@ -1052,22 +1052,22 @@ features:
                 covers:
                   - FEAT-AGENT-001#binding.implementation/target.agent-start
                   - FEAT-AGENT-001#binding.implementation/target.agent-patch
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
               - kind: verifies
                 criterion: REQ-WORKBENCH-011#criterion.scoped-agent
                 covers:
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-start
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-patch
                   - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.receipt-validation
                 covers:
                   - FEAT-RESULT-VALIDATION-001#binding.implementation/target.lifecycle-proofs
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_applies_all_approved_lifecycle_writes } }
           - id: agent-lifecycle-precondition-test
             adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
+            path: crates/mitase-workbench-server/src/lib.rs
             selector: { kind: symbol, name: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets }
             claims:
               - kind: verifies
@@ -1075,5 +1075,5 @@ features:
                 covers:
                   - FEAT-AGENT-001#binding.implementation/target.agent-start
                   - FEAT-AGENT-001#binding.implementation/target.agent-patch
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets } }
+                runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets } }
 ```

@@ -1,6 +1,6 @@
-use syu_app_ui::WorkbenchView;
-use syu_workbench_server::project;
-use syu_workspace::SpecWorkspace;
+use mitase_app_ui::WorkbenchView;
+use mitase_workbench_server::project;
+use mitase_workspace::SpecWorkspace;
 
 mod support;
 

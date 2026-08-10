@@ -6,11 +6,11 @@
   --ifm-color-primary-darker: #235ad0;
   --ifm-color-primary-light: #437cf0;
   --ifm-color-primary-lighter: #5487f2;
-  --syu-hero-background: linear-gradient(135deg, #14315f 0%, #1d4d94 55%, #2f6feb 100%);
+  --mitase-hero-background: linear-gradient(135deg, #14315f 0%, #1d4d94 55%, #2f6feb 100%);
 }
 
 .siteHero {
-  background: var(--syu-hero-background);
+  background: var(--mitase-hero-background);
   padding: 5rem 0 4.5rem;
 }
 

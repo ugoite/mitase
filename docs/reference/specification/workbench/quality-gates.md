@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Quality Gates"
-description: "Generated reference for docs/syu/features/workbench/quality-gates.yaml"
+description: "Generated reference for docs/mitase/features/workbench/quality-gates.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/quality-gates.yaml`.
+> Generated from `docs/mitase/features/workbench/quality-gates.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -141,7 +141,7 @@ description: "Generated reference for docs/syu/features/workbench/quality-gates.
             - **kind**: file
         - **id**: repository-configuration
           - **adapter**: declared
-          - **path**: syu.yaml
+          - **path**: mitase.yaml
           - **selector**:
             - **kind**: file
         - **id**: workbench-contract-check
@@ -186,14 +186,14 @@ description: "Generated reference for docs/syu/features/workbench/quality-gates.
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: v1_cli
                   - **test**: staged_change_validation_uses_the_index_snapshot
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -296,7 +296,7 @@ features:
       selector: { kind: file }
     - id: repository-configuration
       adapter: declared
-      path: syu.yaml
+      path: mitase.yaml
       selector: { kind: file }
     - id: workbench-contract-check
       adapter: declared
@@ -336,7 +336,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: v1_cli
             test: staged_change_validation_uses_the_index_snapshot
 ```

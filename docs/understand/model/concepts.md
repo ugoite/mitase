@@ -11,9 +11,9 @@ Persistent layers:
 
 Temporary work artifacts:
 
-- work requests (`syu/work-request/v1`)
-- work plans (`syu/work-plan/v1`)
-- exported context packs (`syu/context-pack/v1`)
+- work requests (`mitase/work-request/v1`)
+- work plans (`mitase/work-plan/v1`)
+- exported context packs (`mitase/context-pack/v1`)
 
 Core ideas:
 

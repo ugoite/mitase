@@ -1,0 +1,17 @@
+schema: mitase/spec/v1
+kind: philosophies
+namespace: docs-first
+category: Docs-first example
+philosophies:
+- id: PHIL-DOCSFIRST-001
+  title: Docs-first example
+  summary: Keep documentation-led delivery traceable with markdown, shell, and YAML
+    artifacts.
+  principles:
+  - id: exact-ownership
+    statement: Documentation-first work still needs exact file ownership and verification
+      evidence.
+    applies_to:
+    - code
+    - work
+  bindings: []

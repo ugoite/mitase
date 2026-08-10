@@ -102,7 +102,7 @@ def main() -> int:
     lcov_path = Path(sys.argv[1]).resolve()
     output_path = Path(sys.argv[2]).resolve()
     repo_root = Path(__file__).resolve().parents[2]
-    spec_root = repo_root / "docs" / "syu"
+    spec_root = repo_root / "docs" / "mitase"
     lcov = load_lcov(lcov_path)
 
     requirements = load_spec_items(repo_root, spec_root, "requirements", "requirements")
@@ -221,7 +221,7 @@ def main() -> int:
             "# Coverage by requirement and feature",
             "",
             "This report combines Rust line coverage from `cargo llvm-cov` with the current",
-            "`syu` requirement/feature trace graph so reviewers can inspect coverage in spec terms.",
+            "`mitase` requirement/feature trace graph so reviewers can inspect coverage in spec terms.",
             "",
             "## Requirements",
             "",

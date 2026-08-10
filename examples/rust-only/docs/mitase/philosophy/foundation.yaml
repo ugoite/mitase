@@ -1,0 +1,15 @@
+schema: mitase/spec/v1
+kind: philosophies
+namespace: rust-only
+category: Rust example
+philosophies:
+- id: PHIL-RUSTONLY-001
+  title: Rust example
+  summary: Keep a Rust-first example aligned with the v1 work graph.
+  principles:
+  - id: exact-ownership
+    statement: Rust delivery uses explicit implementation and verification evidence.
+    applies_to:
+    - code
+    - work
+  bindings: []

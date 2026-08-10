@@ -1,0 +1,43 @@
+schema: mitase/spec/v1
+kind: features
+namespace: team-scale
+category: Team-scale example
+features:
+- id: FEAT-TEAMSCALE-001
+  title: Team-scale delivery surface
+  summary: Show a larger example with several owned Rust implementation and verification
+    files.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: src/auth/login.rs
+      selector:
+        kind: marker
+        value: "pub fn legacy_login_flow() {}"
+      claims:
+      - kind: satisfies
+        criterion: REQ-TEAMSCALE-001#criterion.owned-delivery
+    - id: target-2
+      adapter: shell
+      path: src/auth/session.rs
+      selector:
+        kind: marker
+        value: "pub fn session_rollout_guard() {}"
+    - id: target-3
+      adapter: shell
+      path: src/operations/audit.rs
+      selector:
+        kind: marker
+        value: "pub fn emit_audit_event() {}"
+    - id: target-4
+      adapter: shell
+      path: src/operations/reporting.rs
+      selector:
+        kind: marker
+        value: "pub fn export_review_report() {}"

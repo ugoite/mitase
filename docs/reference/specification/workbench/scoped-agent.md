@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Scoped Agent"
-description: "Generated reference for docs/syu/features/workbench/scoped-agent.yaml"
+description: "Generated reference for docs/mitase/features/workbench/scoped-agent.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/scoped-agent.yaml`.
+> Generated from `docs/mitase/features/workbench/scoped-agent.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
       - **targets**:
         - **id**: agent-start
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_agent_start
@@ -46,7 +46,7 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
               - **criterion**: REQ-WORKBENCH-011#criterion.scoped-agent
         - **id**: agent-patch
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_agent_patch
@@ -55,7 +55,7 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
               - **criterion**: REQ-WORKBENCH-011#criterion.scoped-agent
         - **id**: agent-projection
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: project_session
@@ -64,7 +64,7 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
               - **criterion**: REQ-WORKBENCH-011#criterion.scoped-agent
         - **id**: agent-ui
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderWork
@@ -75,7 +75,7 @@ description: "Generated reference for docs/syu/features/workbench/scoped-agent.y
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -92,28 +92,28 @@ features:
     targets:
     - id: agent-start
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: api_agent_start }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-011#criterion.scoped-agent
     - id: agent-patch
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: api_agent_patch }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-011#criterion.scoped-agent
     - id: agent-projection
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: project_session }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-011#criterion.scoped-agent
     - id: agent-ui
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: symbol, name: renderWork }
       claims:
       - kind: satisfies

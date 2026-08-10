@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Inventory"
-description: "Generated reference for docs/syu/features/public-entrypoints/inventory.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/inventory.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/inventory.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/inventory.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-032-rust-crates-syu-inventory-src-lib-rs-inventoryregistry
+        - **id**: entrypoint-032-rust-crates-mitase-inventory-src-lib-rs-inventoryregistry
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: InventoryRegistry::discover
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-033-rust-crates-syu-inventory-src-lib-rs-read-bytes
+        - **id**: entrypoint-033-rust-crates-mitase-inventory-src-lib-rs-read-bytes
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: read_bytes
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-034-rust-crates-syu-inventory-src-lib-rs-union
+        - **id**: entrypoint-034-rust-crates-mitase-inventory-src-lib-rs-union
           - **adapter**: rust
-          - **path**: crates/syu-inventory/src/lib.rs
+          - **path**: crates/mitase-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: union
@@ -76,7 +76,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -91,9 +91,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-032-rust-crates-syu-inventory-src-lib-rs-inventoryregistry
+    - id: entrypoint-032-rust-crates-mitase-inventory-src-lib-rs-inventoryregistry
       adapter: rust
-      path: crates/syu-inventory/src/lib.rs
+      path: crates/mitase-inventory/src/lib.rs
       selector:
         kind: symbol
         name: InventoryRegistry::discover
@@ -105,9 +105,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-033-rust-crates-syu-inventory-src-lib-rs-read-bytes
+    - id: entrypoint-033-rust-crates-mitase-inventory-src-lib-rs-read-bytes
       adapter: rust
-      path: crates/syu-inventory/src/lib.rs
+      path: crates/mitase-inventory/src/lib.rs
       selector:
         kind: symbol
         name: read_bytes
@@ -119,9 +119,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-034-rust-crates-syu-inventory-src-lib-rs-union
+    - id: entrypoint-034-rust-crates-mitase-inventory-src-lib-rs-union
       adapter: rust
-      path: crates/syu-inventory/src/lib.rs
+      path: crates/mitase-inventory/src/lib.rs
       selector:
         kind: symbol
         name: union

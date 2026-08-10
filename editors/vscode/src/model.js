@@ -66,7 +66,7 @@ async function looksLikeSpecRoot(root) {
 }
 
 async function readWorkspaceConfig(workspaceRoot) {
-  const configPath = path.join(workspaceRoot, 'syu.yaml')
+  const configPath = path.join(workspaceRoot, 'mitase.yaml')
   if (!(await pathExists(configPath))) {
     return null
   }
@@ -91,7 +91,7 @@ async function resolveWorkspaceContext(startPath) {
   let current = searchRoot
 
   while (true) {
-    const configPath = path.join(current, 'syu.yaml')
+    const configPath = path.join(current, 'mitase.yaml')
     if (await pathExists(configPath)) {
       const workspaceConfig = await readWorkspaceConfig(current)
       if (!workspaceConfig) {
@@ -327,7 +327,7 @@ async function loadSpecModel(workspaceRoot) {
   const context = await resolveWorkspaceContext(workspaceRoot)
   const resolvedWorkspaceRoot = context?.workspaceRoot || workspaceRoot
   if (!context) {
-    throw new Error('The selected folder is not inside a syu v1 workspace.')
+    throw new Error('The selected folder is not inside a mitase v1 workspace.')
   }
   const absoluteSpecRoot = context.specRoot
   const yamlFiles = await walkYamlFiles(absoluteSpecRoot)
@@ -739,7 +739,7 @@ function looksLikeWorkspaceRelativeFile(value) {
   }
 
   return (
-    value === 'syu.yaml' ||
+    value === 'mitase.yaml' ||
     value.includes('/') ||
     value.includes('\\') ||
     /\.(?:ya?ml|rs|py|tsx?|jsx?|sh|bash|zsh|json|md)$/i.test(value)
@@ -751,7 +751,7 @@ function isFieldName(value) {
 }
 
 function formatDiagnosticMessage(issue) {
-  const message = issue?.message || 'syu reported an issue'
+  const message = issue?.message || 'mitase reported an issue'
   return issue?.suggestion ? `${message}\nSuggestion: ${issue.suggestion}` : message
 }
 
@@ -764,7 +764,7 @@ async function resolveIssueTarget(issue, model, workspaceRoot) {
       ? issue.location
       : null) ||
     subjectItem?.documentPath ||
-    'syu.yaml'
+    'mitase.yaml'
   const normalizedLocation = toSystemPath(locationPath)
   const targetPath = path.isAbsolute(normalizedLocation)
     ? path.normalize(normalizedLocation)
@@ -880,7 +880,7 @@ function findItemBlockEnd(lines, itemStartLine) {
   return lines.length
 }
 
-function runSyuJson({ workspaceRoot, binaryPath, args }) {
+function runMitaseJson({ workspaceRoot, binaryPath, args }) {
   return new Promise((resolve, reject) => {
     execFile(
       binaryPath,
@@ -912,20 +912,20 @@ function runSyuJson({ workspaceRoot, binaryPath, args }) {
         if (error?.code === 'ENOENT') {
           reject(
             new Error(
-              `Could not execute \`${binaryPath}\`. Set \`syu.binaryPath\` to the installed syu CLI.`
+              `Could not execute \`${binaryPath}\`. Set \`mitase.binaryPath\` to the installed mitase CLI.`
             )
           )
           return
         }
 
-        reject(new Error(stderr.trim() || error?.message || 'syu command failed'))
+        reject(new Error(stderr.trim() || error?.message || 'mitase command failed'))
       }
     )
   })
 }
 
 async function loadDiagnostics({ workspaceRoot, binaryPath, model }) {
-  const result = await runSyuJson({
+  const result = await runMitaseJson({
     workspaceRoot,
     binaryPath,
     args: ['validate', '.', '--format', 'json']
@@ -1004,6 +1004,6 @@ module.exports = {
   readWorkspaceConfig,
   resolveWorkspaceContext,
   resolveIssueTarget,
-  runSyuJson,
+  runMitaseJson,
   specIdFromText
 }

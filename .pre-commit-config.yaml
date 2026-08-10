@@ -28,22 +28,22 @@ repos:
 
   - repo: local
     hooks:
-      - id: syu-validate-changed
-        name: syu-validate-changed
+      - id: mitase-validate-changed
+        name: mitase-validate-changed
         entry: scripts/dev/validate-changed.sh
         language: system
         pass_filenames: true
-        files: ^(syu\.yaml|docs/syu/)
+        files: ^(mitase\.yaml|docs/mitase/)
         stages: [pre-commit]
-      - id: syu-rustfmt
-        name: syu-rustfmt
+      - id: mitase-rustfmt
+        name: mitase-rustfmt
         entry: cargo fmt --check
         language: system
         pass_filenames: false
         files: \.rs$
         stages: [pre-commit]
-      - id: syu-quality-gates
-        name: syu-quality-gates
+      - id: mitase-quality-gates
+        name: mitase-quality-gates
         entry: scripts/ci/quality-gates.sh fast
         language: system
         pass_filenames: false

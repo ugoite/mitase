@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Transport"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-transport.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-transport.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-transport.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-transport.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
+        - **id**: entrypoint-001-javascript-crates-mitase-app-ui-assets-js-api-js-mutationb
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: mutationBasis
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
+        - **id**: entrypoint-002-javascript-crates-mitase-app-ui-assets-js-api-js-post
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: post
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
+        - **id**: entrypoint-003-javascript-crates-mitase-app-ui-assets-js-api-js-readproje
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: readProjection
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
+        - **id**: entrypoint-004-javascript-crates-mitase-app-ui-assets-js-api-js-request
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: request
@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-establish-session
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: establishSession
@@ -107,7 +107,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-read-branch-scope
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: readBranchScope
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-read-scope-diff
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: readScopeDiff
@@ -135,7 +135,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-read-source
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: readSource
@@ -149,7 +149,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-read-target-source
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
             - **name**: readTargetSource
@@ -160,7 +160,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -175,9 +175,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
+    - id: entrypoint-001-javascript-crates-mitase-app-ui-assets-js-api-js-mutationb
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: mutationBasis
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
+    - id: entrypoint-002-javascript-crates-mitase-app-ui-assets-js-api-js-post
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: post
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
+    - id: entrypoint-003-javascript-crates-mitase-app-ui-assets-js-api-js-readproje
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: readProjection
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
+    - id: entrypoint-004-javascript-crates-mitase-app-ui-assets-js-api-js-request
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: request
@@ -233,7 +233,7 @@ features:
     targets:
     - id: entrypoint-establish-session
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: establishSession
@@ -247,7 +247,7 @@ features:
     targets:
     - id: entrypoint-read-branch-scope
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: readBranchScope
@@ -261,7 +261,7 @@ features:
     targets:
     - id: entrypoint-read-scope-diff
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: readScopeDiff
@@ -275,7 +275,7 @@ features:
     targets:
     - id: entrypoint-read-source
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: readSource
@@ -289,7 +289,7 @@ features:
     targets:
     - id: entrypoint-read-target-source
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: symbol
         name: readTargetSource

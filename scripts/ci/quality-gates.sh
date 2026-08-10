@@ -80,7 +80,7 @@ case "$mode" in
           ;;
       esac
       case "$path" in
-        syu.yaml|docs/syu/*)
+        mitase.yaml|docs/mitase/*)
           spec_changed=true
           ;;
       esac
@@ -98,7 +98,7 @@ case "$mode" in
       fi
     fi
     if [[ "$rust_changed" == false && "$spec_changed" == false ]]; then
-      echo "No Rust or syu specification files changed; skipping fast quality gates."
+      echo "No Rust or mitase specification files changed; skipping fast quality gates."
     fi
     ;;
   *)

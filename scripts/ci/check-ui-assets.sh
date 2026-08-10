@@ -7,7 +7,7 @@ check_ui_assets() {
   local repo_root ui_root source_css built_css
 
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  ui_root="${repo_root}/crates/syu-app-ui"
+  ui_root="${repo_root}/crates/mitase-app-ui"
   source_css="${ui_root}/tailwind.css"
   built_css="${ui_root}/assets/tailwind.css"
 
@@ -44,7 +44,7 @@ check_ui_assets() {
     grep -F "@layer theme" "${built_css}.check" >/dev/null
     rm -f "${built_css}.check"
   else
-    echo "Tailwind CLI not configured; validated checked-in syu-app-ui Tailwind source and asset."
+    echo "Tailwind CLI not configured; validated checked-in mitase-app-ui Tailwind source and asset."
   fi
 }
 

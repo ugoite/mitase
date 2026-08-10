@@ -1,5 +1,5 @@
 fn main() {
-    match syu::run() {
+    match mitase::run() {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("error: {error:#}");

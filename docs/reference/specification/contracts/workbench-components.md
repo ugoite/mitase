@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Components"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-components.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-components.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-components.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-components.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
+        - **id**: entrypoint-006-javascript-crates-mitase-app-ui-assets-js-components-actio
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/action.js
+          - **path**: crates/mitase-app-ui/assets/js/components/action.js
           - **selector**:
             - **kind**: symbol
             - **name**: actionCapability
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
+        - **id**: entrypoint-007-javascript-crates-mitase-app-ui-assets-js-components-diagn
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/diagnostic.js
+          - **path**: crates/mitase-app-ui/assets/js/components/diagnostic.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderDiagnostic
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
+        - **id**: entrypoint-008-javascript-crates-mitase-app-ui-assets-js-components-edito
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/editor.js
+          - **path**: crates/mitase-app-ui/assets/js/components/editor.js
           - **selector**:
             - **kind**: symbol
             - **name**: structuredEditor
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
+        - **id**: entrypoint-009-javascript-crates-mitase-app-ui-assets-js-components-readi
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/readiness.js
+          - **path**: crates/mitase-app-ui/assets/js/components/readiness.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderReadiness
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
+        - **id**: entrypoint-010-javascript-crates-mitase-app-ui-assets-js-components-targe
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/target.js
+          - **path**: crates/mitase-app-ui/assets/js/components/target.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderTarget
@@ -105,9 +105,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
+        - **id**: entrypoint-011-javascript-crates-mitase-app-ui-assets-js-i18n-js-translat
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/i18n.js
+          - **path**: crates/mitase-app-ui/assets/js/i18n.js
           - **selector**:
             - **kind**: symbol
             - **name**: translate
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-render-diff
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/diff.js
+          - **path**: crates/mitase-app-ui/assets/js/components/diff.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderDiff
@@ -132,7 +132,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -147,9 +147,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
+    - id: entrypoint-006-javascript-crates-mitase-app-ui-assets-js-components-actio
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/action.js
+      path: crates/mitase-app-ui/assets/js/components/action.js
       selector:
         kind: symbol
         name: actionCapability
@@ -161,9 +161,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
+    - id: entrypoint-007-javascript-crates-mitase-app-ui-assets-js-components-diagn
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      path: crates/mitase-app-ui/assets/js/components/diagnostic.js
       selector:
         kind: symbol
         name: renderDiagnostic
@@ -175,9 +175,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
+    - id: entrypoint-008-javascript-crates-mitase-app-ui-assets-js-components-edito
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/editor.js
+      path: crates/mitase-app-ui/assets/js/components/editor.js
       selector:
         kind: symbol
         name: structuredEditor
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
+    - id: entrypoint-009-javascript-crates-mitase-app-ui-assets-js-components-readi
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/readiness.js
+      path: crates/mitase-app-ui/assets/js/components/readiness.js
       selector:
         kind: symbol
         name: renderReadiness
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
+    - id: entrypoint-010-javascript-crates-mitase-app-ui-assets-js-components-targe
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/target.js
+      path: crates/mitase-app-ui/assets/js/components/target.js
       selector:
         kind: symbol
         name: renderTarget
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
+    - id: entrypoint-011-javascript-crates-mitase-app-ui-assets-js-i18n-js-translat
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/i18n.js
+      path: crates/mitase-app-ui/assets/js/i18n.js
       selector:
         kind: symbol
         name: translate
@@ -233,7 +233,7 @@ features:
     targets:
     - id: entrypoint-render-diff
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/diff.js
+      path: crates/mitase-app-ui/assets/js/components/diff.js
       selector:
         kind: symbol
         name: renderDiff

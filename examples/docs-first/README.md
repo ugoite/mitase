@@ -1,6 +1,6 @@
 # Docs-first example
 
-This example is maintained against the active `syu` v1 model.
+This example is maintained against the active `mitase` v1 model.
 
 It demonstrates one requirement and one feature connected through explicit bindings.
 

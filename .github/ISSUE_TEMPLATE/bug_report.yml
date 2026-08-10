@@ -1,6 +1,6 @@
 # FEAT-CONTRIB-002
 name: Bug report
-description: Report a defect in syu, its documentation, or its repository automation.
+description: Report a defect in mitase, its documentation, or its repository automation.
 title: "[Bug]: "
 labels:
   - bug
@@ -8,9 +8,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to improve `syu`.
+        Thanks for taking the time to improve `mitase`.
         Please include a minimal reproduction.
-        Pick the affected area below so CLI/runtime bugs can still require an exact `syu` version without forcing docs-only and repository-automation reports into the same input convention.
+        Pick the affected area below so CLI/runtime bugs can still require an exact `mitase` version without forcing docs-only and repository-automation reports into the same input convention.
 
   - type: dropdown
     id: area
@@ -42,7 +42,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: syu version
+      label: mitase version
       description: "Required for CLI or runtime bugs. Example: a release tag like `v0.0.1-alpha.4` or a branch like `main`"
       placeholder: v0.0.0
     validations:
@@ -63,9 +63,9 @@ body:
       label: Steps to reproduce
       description: Share the exact commands, files, or repo layout needed to reproduce the issue.
       placeholder: |
-        1. Edit `docs/syu/requirements/core/core.yaml`
-        2. Run `syu validate workspace .`
-        3. If relevant, run `syu validate change . --range origin/main...HEAD`
+        1. Edit `docs/mitase/requirements/core/core.yaml`
+        2. Run `mitase validate workspace .`
+        3. If relevant, run `mitase validate change . --range origin/main...HEAD`
     validations:
       required: true
 

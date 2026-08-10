@@ -1,12 +1,12 @@
 ---
 title: "The specification model"
-description: "Move from stable intent to exact implementation and verification through syu's four layers."
+description: "Move from stable intent to exact implementation and verification through mitase's four layers."
 sidebar_position: 1
 ---
 
 # The specification model
 
-`syu` keeps four persistent layers distinct so a repository can change its
+`mitase` keeps four persistent layers distinct so a repository can change its
 implementation without losing its intent:
 
 1. Philosophy records the durable ideal.
