@@ -29,7 +29,7 @@ jobs:
         uses: ./.github/actions/setup-rust
 
       - name: Install cargo-audit
-        uses: taiki-e/cache-cargo-install-action@v3.0.7
+        uses: taiki-e/cache-cargo-install-action@v3.0.8
         with:
           tool: cargo-audit
 
