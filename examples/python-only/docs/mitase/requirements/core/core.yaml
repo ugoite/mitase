@@ -1,0 +1,35 @@
+schema: mitase/spec/v1
+kind: requirements
+namespace: python-only
+category: Python example
+requirements:
+- id: REQ-PYTHONONLY-001
+  title: Python starter behavior
+  description: The Python sample keeps application and test ownership visible.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: The Python sample keeps application and test ownership visible.
+    governed_by:
+    - POL-PYTHONONLY-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: python/test_traceability.py
+      selector:
+        kind: marker
+        value: "def test_python_requirement():"
+      claims:
+      - kind: verifies
+        criterion: REQ-PYTHONONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-PYTHONONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

@@ -2,13 +2,13 @@
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'syu',
+  title: 'mitase',
   tagline: 'Specification-driven development that stays close to the repository',
   favicon: 'img/favicon.svg',
   url: 'https://ugoite.github.io',
-  baseUrl: '/syu/',
+  baseUrl: '/mitase/',
   organizationName: 'ugoite',
-  projectName: 'syu',
+  projectName: 'mitase',
   onBrokenLinks: 'throw',
   markdown: {
     hooks: {
@@ -38,13 +38,13 @@ const config = {
   ],
   themeConfig: {
     navbar: {
-      title: 'syu',
+      title: 'mitase',
       items: [
         { to: '/docs/start-here', label: 'Start here', position: 'left' },
         { to: '/docs/understand', label: 'Understand', position: 'left' },
         { to: '/docs/reference/specification', label: 'Specification reference', position: 'left' },
         { to: '/docs/reference/status', label: 'Repository status', position: 'left' },
-        { href: 'https://github.com/ugoite/syu', label: 'GitHub', position: 'right' }
+        { href: 'https://github.com/ugoite/mitase', label: 'GitHub', position: 'right' }
       ]
     },
     docs: {
@@ -77,7 +77,7 @@ const config = {
           items: [
             { label: 'Specification reference', to: '/docs/reference/specification' },
             { label: 'Validation report', to: '/docs/reference/status/validation-report' },
-            { label: 'Contributing', href: 'https://github.com/ugoite/syu/blob/main/CONTRIBUTING.md' }
+            { label: 'Contributing', href: 'https://github.com/ugoite/mitase/blob/main/CONTRIBUTING.md' }
           ]
         }
       ]

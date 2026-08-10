@@ -3,26 +3,26 @@ mod lsp;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use mitase_delivery::DeliveryStore;
+use mitase_inventory::{InventoryContext, InventoryRegistry};
+use mitase_planner::{export_context, plan, validate_work_origin, validate_work_request};
+use mitase_project_model::{ChangeBaseline, GitRef};
+use mitase_spec_model::RepoPath;
+use mitase_validation::{
+    ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
+};
+use mitase_work_model::{
+    CompletionStatus, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
+    VerificationAttemptStatus, WorkPlan, WorkRequest,
+};
+use mitase_workbench_server::project as project_workbench;
+use mitase_workspace::SpecWorkspace;
 use std::{
     fs,
     net::IpAddr,
     path::{Path, PathBuf},
     process::Command,
 };
-use syu_delivery::DeliveryStore;
-use syu_inventory::{InventoryContext, InventoryRegistry};
-use syu_planner::{export_context, plan, validate_work_origin, validate_work_request};
-use syu_project_model::{ChangeBaseline, GitRef};
-use syu_spec_model::RepoPath;
-use syu_validation::{
-    ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
-};
-use syu_work_model::{
-    CompletionStatus, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
-    VerificationAttemptStatus, WorkPlan, WorkRequest,
-};
-use syu_workbench_server::project as project_workbench;
-use syu_workspace::SpecWorkspace;
 
 struct ValidationInputs {
     changed_files: Option<Vec<ChangedFile>>,
@@ -32,7 +32,7 @@ struct ValidationInputs {
 }
 
 #[derive(Debug, Parser)]
-#[command(name="syu", version=env!("SYU_GIT_VERSION"), about="Exact specification work planning and validation")]
+#[command(name="mitase", version=env!("MITASE_GIT_VERSION"), about="Exact specification work planning and validation")]
 struct Cli {
     #[command(subcommand)]
     command: CommandKind,
@@ -332,8 +332,12 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     if let Err(error) = inventory_result {
         bail!("inventory readiness failed: {error}");
     }
-    let report =
-        syu_validation::evaluate_readiness(&workspace, &index, &revision(&workspace.root)?, true)?;
+    let report = mitase_validation::evaluate_readiness(
+        &workspace,
+        &index,
+        &revision(&workspace.root)?,
+        true,
+    )?;
     match format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => println!(
@@ -449,7 +453,7 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         change_base_revision: validation_inputs.change_base_revision.as_deref(),
     };
     let result = if enforce_readiness {
-        syu_validation::validate_workspace(&context)
+        mitase_validation::validate_workspace(&context)
     } else {
         validate(&context)
     };
@@ -505,7 +509,7 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
     if approval.plan != submitted_plan {
         bail!("submitted plan differs from the approved durable plan");
     }
-    let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
+    let receipt: mitase_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
     let canonical = attempt
         .receipt
         .as_ref()
@@ -519,7 +523,8 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
         bail!("receipt does not match the exact durable verification attempt");
     }
     let index = workspace.index()?;
-    let report = syu_validation::evaluate_completion(&workspace, &index, &approval.plan, &receipt)?;
+    let report =
+        mitase_validation::evaluate_completion(&workspace, &index, &approval.plan, &receipt)?;
     match args.validate.format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => {
@@ -566,7 +571,7 @@ fn run_task(args: TaskArgs) -> Result<i32> {
             let index = workspace.index()?;
             let revision = revision(&workspace.root)?;
             let submitted: WorkPlan = read_yaml(&plan_path)?;
-            let canonical = syu_validation::canonical_plan_for_execution(
+            let canonical = mitase_validation::canonical_plan_for_execution(
                 &workspace, &index, &submitted, &revision,
             )?;
             if !matches!(canonical.status, PlanStatus::Ready) {
@@ -610,7 +615,7 @@ fn run_task(args: TaskArgs) -> Result<i32> {
                     plan_digest: plan.canonical_digest.clone(),
                     slice_id: slice_id.clone(),
                 })
-                .context("plan has not been explicitly approved; run syu task approve first")?;
+                .context("plan has not been explicitly approved; run mitase task approve first")?;
             if approval.plan != plan {
                 bail!(
                     "submitted plan differs from the approved plan; approve the exact plan again"
@@ -770,7 +775,7 @@ fn run_work(args: WorkArgs) -> Result<i32> {
             write_yaml(&out, &plan)?;
             println!("wrote {} ({:?})", out.display(), plan.status);
             Ok(
-                if matches!(plan.status, syu_work_model::PlanStatus::Ready) {
+                if matches!(plan.status, mitase_work_model::PlanStatus::Ready) {
                     0
                 } else {
                     1
@@ -875,8 +880,8 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
             if show_log {
                 println!("Workbench request logging is handled by the server runtime");
             }
-            let server = syu_workbench_server::WorkbenchServer::new(workspace.root.clone())
-                .with_launch(syu_workbench_server::WorkbenchLaunchConfig {
+            let server = mitase_workbench_server::WorkbenchServer::new(workspace.root.clone())
+                .with_launch(mitase_workbench_server::WorkbenchLaunchConfig {
                     workspace_root: workspace.root,
                     bind,
                     port,
@@ -1009,7 +1014,7 @@ fn governed_change(workspace: &SpecWorkspace, file: &ChangedFile) -> bool {
         .iter()
         .chain(file.new_path.iter())
         .any(|path| {
-            path.as_path() == Path::new("syu.yaml")
+            path.as_path() == Path::new("mitase.yaml")
                 || workspace.path_is_spec(path.as_path())
                 || (workspace.path_is_artifact(path.as_path())
                     && !workspace.path_is_excluded(path.as_path()))
@@ -1231,7 +1236,7 @@ fn ensure_clean_plan_workspace(workspace: &SpecWorkspace) -> Result<()> {
         "-z".to_string(),
         "--untracked-files=all".to_string(),
         "--".to_string(),
-        "syu.yaml".to_string(),
+        "mitase.yaml".to_string(),
     ];
     for root in &workspace.config.workspace.spec_roots {
         args.push(root.to_string_lossy().into_owned());

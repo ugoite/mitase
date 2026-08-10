@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Contribute
 
-`syu` is self-hosted: the repository uses the same specification and evidence
+`mitase` is self-hosted: the repository uses the same specification and evidence
 discipline it asks adopters to use. These pages separate the contributor loop
 from the newcomer path.
 

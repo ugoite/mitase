@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Completion History"
-description: "Generated reference for docs/syu/features/workbench/completion-history.yaml"
+description: "Generated reference for docs/mitase/features/workbench/completion-history.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/completion-history.yaml`.
+> Generated from `docs/mitase/features/workbench/completion-history.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
       - **targets**:
         - **id**: completion-history
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: completion_history
@@ -46,7 +46,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **criterion**: REQ-WORKBENCH-009#criterion.completion-history
         - **id**: completion-history-view
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: CompletionHistoryView
@@ -55,7 +55,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **criterion**: REQ-WORKBENCH-009#criterion.completion-history
         - **id**: completion-attempt-view
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: CompletionAttemptView
@@ -64,7 +64,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **criterion**: REQ-WORKBENCH-009#criterion.completion-history
         - **id**: finalize-command
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: FinalizeCommand
@@ -73,7 +73,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **criterion**: REQ-WORKBENCH-009#criterion.completion-history
         - **id**: approve-endpoint
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_approve
@@ -82,7 +82,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **criterion**: REQ-WORKBENCH-009#criterion.completion-history
         - **id**: finalize-preview-endpoint
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_finalize_preview
@@ -91,7 +91,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **criterion**: REQ-WORKBENCH-009#criterion.completion-history
         - **id**: finalize-apply-endpoint
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_finalize_apply
@@ -105,7 +105,7 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
       - **targets**:
         - **id**: completion-history-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::completion_history_projection_is_store_backed
@@ -123,13 +123,13 @@ description: "Generated reference for docs/syu/features/workbench/completion-his
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::completion_history_projection_is_store_backed
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -146,7 +146,7 @@ features:
     targets:
     - id: completion-history
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: completion_history
@@ -155,7 +155,7 @@ features:
         criterion: REQ-WORKBENCH-009#criterion.completion-history
     - id: completion-history-view
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: CompletionHistoryView
@@ -164,7 +164,7 @@ features:
         criterion: REQ-WORKBENCH-009#criterion.completion-history
     - id: completion-attempt-view
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: CompletionAttemptView
@@ -173,7 +173,7 @@ features:
         criterion: REQ-WORKBENCH-009#criterion.completion-history
     - id: finalize-command
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: FinalizeCommand
@@ -182,7 +182,7 @@ features:
         criterion: REQ-WORKBENCH-009#criterion.completion-history
     - id: approve-endpoint
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_approve
@@ -191,7 +191,7 @@ features:
         criterion: REQ-WORKBENCH-009#criterion.completion-history
     - id: finalize-preview-endpoint
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_finalize_preview
@@ -200,7 +200,7 @@ features:
         criterion: REQ-WORKBENCH-009#criterion.completion-history
     - id: finalize-apply-endpoint
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_finalize_apply
@@ -214,7 +214,7 @@ features:
     targets:
     - id: completion-history-test
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: tests::completion_history_projection_is_store_backed
@@ -232,6 +232,6 @@ features:
         runner:
           runner: cargo-test
           arguments:
-            package: syu-workbench-server
+            package: mitase-workbench-server
             test: tests::completion_history_projection_is_store_backed
 ```

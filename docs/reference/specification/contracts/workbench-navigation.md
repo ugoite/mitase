@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Navigation"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-navigation.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-navigation.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-navigation.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-navigation.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-019-javascript-crates-syu-app-ui-assets-js-router-js-pages
+        - **id**: entrypoint-019-javascript-crates-mitase-app-ui-assets-js-router-js-pages
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: symbol
             - **name**: PAGES
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-020-javascript-crates-syu-app-ui-assets-js-router-js-tab-gr
+        - **id**: entrypoint-020-javascript-crates-mitase-app-ui-assets-js-router-js-tab-gr
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: symbol
             - **name**: TAB_GROUPS
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-021-javascript-crates-syu-app-ui-assets-js-router-js-naviga
+        - **id**: entrypoint-021-javascript-crates-mitase-app-ui-assets-js-router-js-naviga
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: symbol
             - **name**: navigate
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-022-javascript-crates-syu-app-ui-assets-js-state-js-creates
+        - **id**: entrypoint-022-javascript-crates-mitase-app-ui-assets-js-state-js-creates
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/state.js
+          - **path**: crates/mitase-app-ui/assets/js/state.js
           - **selector**:
             - **kind**: symbol
             - **name**: createState
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-023-javascript-crates-syu-app-ui-assets-js-state-js-replace
+        - **id**: entrypoint-023-javascript-crates-mitase-app-ui-assets-js-state-js-replace
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/state.js
+          - **path**: crates/mitase-app-ui/assets/js/state.js
           - **selector**:
             - **kind**: symbol
             - **name**: replaceProjection
@@ -105,9 +105,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-024-javascript-crates-syu-app-ui-assets-js-state-js-selects
+        - **id**: entrypoint-024-javascript-crates-mitase-app-ui-assets-js-state-js-selects
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/state.js
+          - **path**: crates/mitase-app-ui/assets/js/state.js
           - **selector**:
             - **kind**: symbol
             - **name**: selectSlice
@@ -132,7 +132,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -147,9 +147,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-019-javascript-crates-syu-app-ui-assets-js-router-js-pages
+    - id: entrypoint-019-javascript-crates-mitase-app-ui-assets-js-router-js-pages
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector:
         kind: symbol
         name: PAGES
@@ -161,9 +161,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-020-javascript-crates-syu-app-ui-assets-js-router-js-tab-gr
+    - id: entrypoint-020-javascript-crates-mitase-app-ui-assets-js-router-js-tab-gr
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector:
         kind: symbol
         name: TAB_GROUPS
@@ -175,9 +175,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-021-javascript-crates-syu-app-ui-assets-js-router-js-naviga
+    - id: entrypoint-021-javascript-crates-mitase-app-ui-assets-js-router-js-naviga
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector:
         kind: symbol
         name: navigate
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-022-javascript-crates-syu-app-ui-assets-js-state-js-creates
+    - id: entrypoint-022-javascript-crates-mitase-app-ui-assets-js-state-js-creates
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/state.js
+      path: crates/mitase-app-ui/assets/js/state.js
       selector:
         kind: symbol
         name: createState
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-023-javascript-crates-syu-app-ui-assets-js-state-js-replace
+    - id: entrypoint-023-javascript-crates-mitase-app-ui-assets-js-state-js-replace
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/state.js
+      path: crates/mitase-app-ui/assets/js/state.js
       selector:
         kind: symbol
         name: replaceProjection
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-024-javascript-crates-syu-app-ui-assets-js-state-js-selects
+    - id: entrypoint-024-javascript-crates-mitase-app-ui-assets-js-state-js-selects
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/state.js
+      path: crates/mitase-app-ui/assets/js/state.js
       selector:
         kind: symbol
         name: selectSlice

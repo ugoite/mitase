@@ -1,0 +1,15 @@
+schema: mitase/spec/v1
+kind: philosophies
+namespace: python-only
+category: Python example
+philosophies:
+- id: PHIL-PYTHONONLY-001
+  title: Python example
+  summary: Keep a Python-first example aligned with the active v1 graph.
+  principles:
+  - id: exact-ownership
+    statement: Python delivery uses explicit implementation and verification targets.
+    applies_to:
+    - code
+    - work
+  bindings: []

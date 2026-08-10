@@ -699,6 +699,231 @@ dependencies = [
 ]
 
 [[package]]
+name = "mitase"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "axum",
+ "clap",
+ "mitase-app-ui",
+ "mitase-code-intel",
+ "mitase-delivery",
+ "mitase-diagnostics",
+ "mitase-inventory",
+ "mitase-planner",
+ "mitase-project-model",
+ "mitase-spec-model",
+ "mitase-validation",
+ "mitase-work-model",
+ "mitase-workbench-server",
+ "mitase-workspace",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "mitase-agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mitase-delivery",
+ "mitase-inventory",
+ "mitase-planner",
+ "mitase-spec-model",
+ "mitase-validation",
+ "mitase-work-model",
+ "mitase-workspace",
+ "serde",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "mitase-app-ui"
+version = "0.1.0"
+dependencies = [
+ "mitase-diagnostics",
+ "mitase-work-model",
+ "mitase-workbench-server",
+ "serde_json",
+]
+
+[[package]]
+name = "mitase-code-intel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mitase-spec-model",
+ "proc-macro2",
+ "sha2",
+ "syn 3.0.3",
+]
+
+[[package]]
+name = "mitase-delivery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "mitase-planner",
+ "mitase-spec-model",
+ "mitase-validation",
+ "mitase-work-model",
+ "mitase-workspace",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "mitase-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "mitase-spec-model",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "mitase-inventory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mitase-project-model",
+ "mitase-spec-model",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "syn 3.0.3",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-typescript",
+]
+
+[[package]]
+name = "mitase-planner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "globset",
+ "mitase-diagnostics",
+ "mitase-inventory",
+ "mitase-project-model",
+ "mitase-spec-model",
+ "mitase-work-model",
+ "mitase-workspace",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "mitase-project-model"
+version = "0.1.0"
+dependencies = [
+ "mitase-spec-model",
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
+name = "mitase-spec-model"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
+name = "mitase-validation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mitase-diagnostics",
+ "mitase-inventory",
+ "mitase-planner",
+ "mitase-project-model",
+ "mitase-spec-model",
+ "mitase-work-model",
+ "mitase-workspace",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "mitase-work-model"
+version = "0.1.0"
+dependencies = [
+ "mitase-diagnostics",
+ "mitase-spec-model",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "mitase-workbench-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "http",
+ "http-body-util",
+ "mitase-agent",
+ "mitase-delivery",
+ "mitase-diagnostics",
+ "mitase-planner",
+ "mitase-project-model",
+ "mitase-spec-model",
+ "mitase-validation",
+ "mitase-work-model",
+ "mitase-workspace",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tower",
+]
+
+[[package]]
+name = "mitase-workspace"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "globset",
+ "mitase-code-intel",
+ "mitase-inventory",
+ "mitase-project-model",
+ "mitase-spec-model",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1020,231 +1245,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "syu"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "axum",
- "clap",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syu-app-ui",
- "syu-code-intel",
- "syu-delivery",
- "syu-diagnostics",
- "syu-inventory",
- "syu-planner",
- "syu-project-model",
- "syu-spec-model",
- "syu-validation",
- "syu-work-model",
- "syu-workbench-server",
- "syu-workspace",
- "tempfile",
- "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "syu-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde",
- "sha2",
- "syu-delivery",
- "syu-inventory",
- "syu-planner",
- "syu-spec-model",
- "syu-validation",
- "syu-work-model",
- "syu-workspace",
- "tempfile",
-]
-
-[[package]]
-name = "syu-app-ui"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "syu-diagnostics",
- "syu-work-model",
- "syu-workbench-server",
-]
-
-[[package]]
-name = "syu-code-intel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "proc-macro2",
- "sha2",
- "syn 3.0.3",
- "syu-spec-model",
-]
-
-[[package]]
-name = "syu-delivery"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fs2",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syu-planner",
- "syu-spec-model",
- "syu-validation",
- "syu-work-model",
- "syu-workspace",
- "tempfile",
- "uuid",
-]
-
-[[package]]
-name = "syu-diagnostics"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "syu-spec-model",
-]
-
-[[package]]
-name = "syu-inventory"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syn 3.0.3",
- "syu-project-model",
- "syu-spec-model",
- "tempfile",
- "tree-sitter",
- "tree-sitter-javascript",
- "tree-sitter-typescript",
-]
-
-[[package]]
-name = "syu-planner"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "globset",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syu-diagnostics",
- "syu-inventory",
- "syu-project-model",
- "syu-spec-model",
- "syu-work-model",
- "syu-workspace",
- "tempfile",
-]
-
-[[package]]
-name = "syu-project-model"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_yaml",
- "syu-spec-model",
-]
-
-[[package]]
-name = "syu-spec-model"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_yaml",
-]
-
-[[package]]
-name = "syu-validation"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syu-diagnostics",
- "syu-inventory",
- "syu-planner",
- "syu-project-model",
- "syu-spec-model",
- "syu-work-model",
- "syu-workspace",
- "tempfile",
-]
-
-[[package]]
-name = "syu-work-model"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sha2",
- "syu-diagnostics",
- "syu-spec-model",
-]
-
-[[package]]
-name = "syu-workbench-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "http",
- "http-body-util",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syu-agent",
- "syu-delivery",
- "syu-diagnostics",
- "syu-planner",
- "syu-project-model",
- "syu-spec-model",
- "syu-validation",
- "syu-work-model",
- "syu-workspace",
- "tempfile",
- "tokio",
- "tower",
-]
-
-[[package]]
-name = "syu-workspace"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "globset",
- "serde_json",
- "serde_yaml",
- "sha2",
- "syu-code-intel",
- "syu-inventory",
- "syu-project-model",
- "syu-spec-model",
- "tempfile",
 ]
 
 [[package]]

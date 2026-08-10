@@ -1,0 +1,48 @@
+schema: mitase/spec/v1
+kind: features
+namespace: workbench
+category: Workbench implementation
+features:
+- id: FEAT-WORKBENCH-PROJECTION-001
+  title: Workbench projection
+  summary: Project canonical readiness, exact-origin Work state, split-recovery evidence, scope, specification, and diagnostics.
+  status: implemented
+  bindings:
+  - id: projection
+    role: implementation
+    facet: projection
+    responsibility: Build the canonical Workbench projection from indexed server data.
+    targets:
+    - id: project
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: project
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-001#criterion.canonical-projection
+  - id: projection-contract
+    role: contract-source
+    facet: projection
+    responsibility: Define the canonical projection boundary consumed by verification.
+    targets:
+    - id: project-contract
+      adapter: rust
+      path: crates/mitase-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: project
+  contracts:
+  - id: projection-verification
+    kind: function
+    source: FEAT-WORKBENCH-PROJECTION-001#binding.projection-contract/target.project-contract
+    participants:
+    - target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+      role: producer
+    - target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+      role: verifier
+    - target: FEAT-WORKBENCH-VERIFICATION-001#binding.test-exposure/target.server-e2e
+      role: verifier
+    guarantees:
+    - REQ-WORKBENCH-001#criterion.canonical-projection

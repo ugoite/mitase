@@ -8,7 +8,7 @@ sidebar_position: 1
 
 The principles, policies, and requirements that make the repository's intent explicit.
 
-These pages are generated from the canonical YAML under `docs/syu/`.
+These pages are generated from the canonical YAML under `docs/mitase/`.
 
 - [Foundation / Foundation](./foundation.md)
 - [Delivery governance / Delivery](./delivery.md)

@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Navigation"
-description: "Generated reference for docs/syu/features/workbench/navigation.yaml"
+description: "Generated reference for docs/mitase/features/workbench/navigation.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/navigation.yaml`.
+> Generated from `docs/mitase/features/workbench/navigation.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
       - **targets**:
         - **id**: html-navigation
           - **adapter**: html
-          - **path**: crates/syu-app-ui/assets/workbench.html
+          - **path**: crates/mitase-app-ui/assets/workbench.html
           - **selector**:
             - **kind**: marker
             - **value**: data-page="work"
@@ -46,7 +46,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
         - **id**: workbench-css
           - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/workbench.css
+          - **path**: crates/mitase-app-ui/assets/workbench.css
           - **selector**:
             - **kind**: file
           - **claims**:
@@ -54,7 +54,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
         - **id**: javascript-navigation
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: symbol
             - **name**: bindRouter
@@ -65,7 +65,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-015#criterion.detail-deep-link
         - **id**: keyboard-navigation
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: symbol
             - **name**: bindKeyboardTabs
@@ -74,7 +74,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
         - **id**: accessibility-attributes
           - **adapter**: html
-          - **path**: crates/syu-app-ui/assets/workbench.html
+          - **path**: crates/mitase-app-ui/assets/workbench.html
           - **selector**:
             - **kind**: marker
             - **value**: data-i18n-aria="a11y.main_pages"
@@ -83,7 +83,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
         - **id**: projection-bootstrap
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/main.js
+          - **path**: crates/mitase-app-ui/assets/js/main.js
           - **selector**:
             - **kind**: symbol
             - **name**: startWorkbench
@@ -92,7 +92,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
         - **id**: active-page-render
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/main.js
+          - **path**: crates/mitase-app-ui/assets/js/main.js
           - **selector**:
             - **kind**: symbol
             - **name**: render
@@ -101,7 +101,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
         - **id**: local-specification-filter
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/specifications.js
           - **selector**:
             - **kind**: symbol
             - **name**: candidatesFor
@@ -110,7 +110,7 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
               - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
         - **id**: busy-status
           - **adapter**: html
-          - **path**: crates/syu-app-ui/assets/workbench.html
+          - **path**: crates/mitase-app-ui/assets/workbench.html
           - **selector**:
             - **kind**: marker
             - **value**: data-workbench-status="busy"
@@ -120,137 +120,137 @@ description: "Generated reference for docs/syu/features/workbench/navigation.yam
       - **owns**:
         - **id**: assets-api-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **path**: crates/mitase-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-action-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/action.js
+          - **path**: crates/mitase-app-ui/assets/js/components/action.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-diagnostic-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/diagnostic.js
+          - **path**: crates/mitase-app-ui/assets/js/components/diagnostic.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-diff-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/diff.js
+          - **path**: crates/mitase-app-ui/assets/js/components/diff.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-editor-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/editor.js
+          - **path**: crates/mitase-app-ui/assets/js/components/editor.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-readiness-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/readiness.js
+          - **path**: crates/mitase-app-ui/assets/js/components/readiness.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-target-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/components/target.js
+          - **path**: crates/mitase-app-ui/assets/js/components/target.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-js-i18n-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/i18n.js
+          - **path**: crates/mitase-app-ui/assets/js/i18n.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-i18n-script
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/i18n.js
+          - **path**: crates/mitase-app-ui/assets/i18n.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-main-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/main.js
+          - **path**: crates/mitase-app-ui/assets/js/main.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-router-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/router.js
+          - **path**: crates/mitase-app-ui/assets/js/router.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-state-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/state.js
+          - **path**: crates/mitase-app-ui/assets/js/state.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-page-diagnostics-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/diagnostics.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/diagnostics.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-page-readiness-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/readiness.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/readiness.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-page-scope-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/scope.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/scope.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-page-settings-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/settings.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/settings.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-page-specifications-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/specifications.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: assets-page-work-module
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: module
             - **name**: *
         - **id**: html-file
           - **adapter**: html
-          - **path**: crates/syu-app-ui/assets/workbench.html
+          - **path**: crates/mitase-app-ui/assets/workbench.html
           - **selector**:
             - **kind**: file
         - **id**: declared-html-file
           - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/workbench.html
+          - **path**: crates/mitase-app-ui/assets/workbench.html
           - **selector**:
             - **kind**: file
         - **id**: locale-en-file
           - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/locales/en.json
+          - **path**: crates/mitase-app-ui/assets/locales/en.json
           - **selector**:
             - **kind**: file
         - **id**: locale-ja-file
           - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/locales/ja.json
+          - **path**: crates/mitase-app-ui/assets/locales/ja.json
           - **selector**:
             - **kind**: file
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -267,7 +267,7 @@ features:
     targets:
     - id: html-navigation
       adapter: html
-      path: crates/syu-app-ui/assets/workbench.html
+      path: crates/mitase-app-ui/assets/workbench.html
       selector:
         kind: marker
         value: data-page="work"
@@ -276,7 +276,7 @@ features:
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
     - id: workbench-css
       adapter: declared
-      path: crates/syu-app-ui/assets/workbench.css
+      path: crates/mitase-app-ui/assets/workbench.css
       selector:
         kind: file
       claims:
@@ -284,7 +284,7 @@ features:
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
     - id: javascript-navigation
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector:
         kind: symbol
         name: bindRouter
@@ -295,7 +295,7 @@ features:
         criterion: REQ-WORKBENCH-015#criterion.detail-deep-link
     - id: keyboard-navigation
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector:
         kind: symbol
         name: bindKeyboardTabs
@@ -304,7 +304,7 @@ features:
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
     - id: accessibility-attributes
       adapter: html
-      path: crates/syu-app-ui/assets/workbench.html
+      path: crates/mitase-app-ui/assets/workbench.html
       selector:
         kind: marker
         value: data-i18n-aria="a11y.main_pages"
@@ -313,7 +313,7 @@ features:
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
     - id: projection-bootstrap
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/main.js
+      path: crates/mitase-app-ui/assets/js/main.js
       selector:
         kind: symbol
         name: startWorkbench
@@ -322,7 +322,7 @@ features:
         criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
     - id: active-page-render
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/main.js
+      path: crates/mitase-app-ui/assets/js/main.js
       selector:
         kind: symbol
         name: render
@@ -331,7 +331,7 @@ features:
         criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
     - id: local-specification-filter
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      path: crates/mitase-app-ui/assets/js/pages/specifications.js
       selector:
         kind: symbol
         name: candidatesFor
@@ -340,7 +340,7 @@ features:
         criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
     - id: busy-status
       adapter: html
-      path: crates/syu-app-ui/assets/workbench.html
+      path: crates/mitase-app-ui/assets/workbench.html
       selector:
         kind: marker
         value: data-workbench-status="busy"
@@ -350,130 +350,130 @@ features:
     owns:
     - id: assets-api-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/api.js
+      path: crates/mitase-app-ui/assets/js/api.js
       selector:
         kind: module
         name: '*'
     - id: assets-action-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/action.js
+      path: crates/mitase-app-ui/assets/js/components/action.js
       selector:
         kind: module
         name: '*'
     - id: assets-diagnostic-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      path: crates/mitase-app-ui/assets/js/components/diagnostic.js
       selector:
         kind: module
         name: '*'
     - id: assets-diff-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/diff.js
+      path: crates/mitase-app-ui/assets/js/components/diff.js
       selector:
         kind: module
         name: '*'
     - id: assets-editor-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/editor.js
+      path: crates/mitase-app-ui/assets/js/components/editor.js
       selector:
         kind: module
         name: '*'
     - id: assets-readiness-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/readiness.js
+      path: crates/mitase-app-ui/assets/js/components/readiness.js
       selector:
         kind: module
         name: '*'
     - id: assets-target-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/components/target.js
+      path: crates/mitase-app-ui/assets/js/components/target.js
       selector:
         kind: module
         name: '*'
     - id: assets-js-i18n-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/i18n.js
+      path: crates/mitase-app-ui/assets/js/i18n.js
       selector:
         kind: module
         name: '*'
     - id: assets-i18n-script
       adapter: javascript
-      path: crates/syu-app-ui/assets/i18n.js
+      path: crates/mitase-app-ui/assets/i18n.js
       selector:
         kind: module
         name: '*'
     - id: assets-main-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/main.js
+      path: crates/mitase-app-ui/assets/js/main.js
       selector:
         kind: module
         name: '*'
     - id: assets-router-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/router.js
+      path: crates/mitase-app-ui/assets/js/router.js
       selector:
         kind: module
         name: '*'
     - id: assets-state-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/state.js
+      path: crates/mitase-app-ui/assets/js/state.js
       selector:
         kind: module
         name: '*'
     - id: assets-page-diagnostics-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/diagnostics.js
+      path: crates/mitase-app-ui/assets/js/pages/diagnostics.js
       selector:
         kind: module
         name: '*'
     - id: assets-page-readiness-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/readiness.js
+      path: crates/mitase-app-ui/assets/js/pages/readiness.js
       selector:
         kind: module
         name: '*'
     - id: assets-page-scope-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/scope.js
+      path: crates/mitase-app-ui/assets/js/pages/scope.js
       selector:
         kind: module
         name: '*'
     - id: assets-page-settings-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/settings.js
+      path: crates/mitase-app-ui/assets/js/pages/settings.js
       selector:
         kind: module
         name: '*'
     - id: assets-page-specifications-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      path: crates/mitase-app-ui/assets/js/pages/specifications.js
       selector:
         kind: module
         name: '*'
     - id: assets-page-work-module
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector:
         kind: module
         name: '*'
     - id: html-file
       adapter: html
-      path: crates/syu-app-ui/assets/workbench.html
+      path: crates/mitase-app-ui/assets/workbench.html
       selector:
         kind: file
     - id: declared-html-file
       adapter: declared
-      path: crates/syu-app-ui/assets/workbench.html
+      path: crates/mitase-app-ui/assets/workbench.html
       selector:
         kind: file
     - id: locale-en-file
       adapter: declared
-      path: crates/syu-app-ui/assets/locales/en.json
+      path: crates/mitase-app-ui/assets/locales/en.json
       selector:
         kind: file
     - id: locale-ja-file
       adapter: declared
-      path: crates/syu-app-ui/assets/locales/ja.json
+      path: crates/mitase-app-ui/assets/locales/ja.json
       selector:
         kind: file
 ```

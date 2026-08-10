@@ -1,6 +1,6 @@
 # Work request format
 
-The active planning input artifact is `syu/work-request/v1`. It represents one
+The active planning input artifact is `mitase/work-request/v1`. It represents one
 typed Work origin; it is not a generic goal, seed, file, or behavior picker.
 
 Required fields:
@@ -52,7 +52,7 @@ are also valid Work origins when the server projects them as enabled origin
 capabilities. The browser copies only the projected `origin` and never invents
 targets, criteria, or contracts.
 
-Use `syu/work-request/v1` as the current request wire format. Old `summary`,
+Use `mitase/work-request/v1` as the current request wire format. Old `summary`,
 `seeds`, and generic identity payloads are intentionally rejected before v1.
 
 Workbench split recovery may add the internal `exact_scope` closure fields to

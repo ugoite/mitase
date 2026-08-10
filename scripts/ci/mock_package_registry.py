@@ -17,11 +17,11 @@ from typing import Dict
 
 
 TARGETS = {
-    "x86_64-unknown-linux-gnu": "syu",
-    "aarch64-unknown-linux-gnu": "syu",
-    "x86_64-apple-darwin": "syu",
-    "aarch64-apple-darwin": "syu",
-    "x86_64-pc-windows-msvc": "syu.exe",
+    "x86_64-unknown-linux-gnu": "mitase",
+    "aarch64-unknown-linux-gnu": "mitase",
+    "x86_64-apple-darwin": "mitase",
+    "aarch64-apple-darwin": "mitase",
+    "x86_64-pc-windows-msvc": "mitase.exe",
 }
 
 TAG_SETS = {
@@ -42,7 +42,7 @@ class Artifact:
 
 
 def build_archive(version: str, target: str, binary_name: str) -> bytes:
-    payload = f"mock syu {version} {target}\n".encode()
+    payload = f"mock mitase {version} {target}\n".encode()
     buffer = io.BytesIO()
     if binary_name.endswith(".exe"):
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -76,7 +76,7 @@ def build_artifacts(
             if target_filter is not None and target != target_filter:
                 continue
             archive_name = (
-                f"syu-{target}.zip" if target.endswith("windows-msvc") else f"syu-{target}.tar.gz"
+                f"mitase-{target}.zip" if target.endswith("windows-msvc") else f"mitase-{target}.tar.gz"
             )
             archive_bytes = build_archive(version, target, binary_name)
             archive_digest = sha256_digest(archive_bytes)
@@ -86,13 +86,13 @@ def build_artifacts(
                 "schemaVersion": 2,
                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
                 "config": {
-                    "mediaType": "application/vnd.syu.config.v1+json",
+                    "mediaType": "application/vnd.mitase.config.v1+json",
                     "digest": sha256_digest(b"{}"),
                     "size": 2,
                 },
                 "layers": [
                     {
-                        "mediaType": "application/vnd.syu.archive.layer.v1",
+                        "mediaType": "application/vnd.mitase.archive.layer.v1",
                         "digest": archive_digest,
                         "size": len(archive_bytes),
                         "annotations": {"org.opencontainers.image.title": archive_name},
@@ -107,7 +107,7 @@ def build_artifacts(
                     },
                 ],
                 "annotations": {
-                    "org.opencontainers.image.source": "https://github.com/ugoite/syu",
+                    "org.opencontainers.image.source": "https://github.com/ugoite/mitase",
                     "org.opencontainers.image.version": version,
                     "org.opencontainers.image.title": package_repository,
                 },
@@ -200,7 +200,7 @@ def build_handler(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--package-repository", default="test/syu")
+    parser.add_argument("--package-repository", default="test/mitase")
     parser.add_argument("--mode", choices=sorted(TAG_SETS), default="mixed")
     parser.add_argument("--port", type=int)
     parser.add_argument("--target")

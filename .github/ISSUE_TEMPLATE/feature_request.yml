@@ -1,6 +1,6 @@
 # FEAT-CONTRIB-002
 name: Feature request
-description: Propose an improvement to syu, its workflow, or its documentation.
+description: Propose an improvement to mitase, its workflow, or its documentation.
 title: "[Feature]: "
 labels:
   - enhancement
@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        `syu` is intentionally small and specification-driven.
+        `mitase` is intentionally small and specification-driven.
         Please describe the user problem first, then the feature you want.
 
   - type: textarea

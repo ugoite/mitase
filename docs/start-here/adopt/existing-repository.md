@@ -1,15 +1,15 @@
 # Existing repository
 
-Adopt Syu one connected capability at a time. The first goal is not repository-wide coverage; it is one implemented criterion with exact implementation ownership, an exact verification target, and a ready canonical plan.
+Adopt Mitase one connected capability at a time. The first goal is not repository-wide coverage; it is one implemented criterion with exact implementation ownership, an exact verification target, and a ready canonical plan.
 
 ## 1. Inventory without claiming ownership
 
-Create `syu.yaml` with the real specification root and only the providers needed for the first capability. Keep readiness off while inspecting inventory:
+Create `mitase.yaml` with the real specification root and only the providers needed for the first capability. Keep readiness off while inspecting inventory:
 
 ```yaml
-schema: syu/config/v1
+schema: mitase/config/v1
 workspace:
-  spec_roots: [docs/syu]
+  spec_roots: [docs/mitase]
   excludes: [target/**, node_modules/**]
 inventory:
   active_profile: adoption
@@ -32,7 +32,7 @@ work:
   slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 4, max_readonly_targets: 8, max_total_bytes: 16384 }
 ```
 
-Run `syu readiness report . --format json` and use the inventory subjects as discovery evidence only. Do not create a planned Feature that owns the repository, a source tree, or every discovered file.
+Run `mitase readiness report . --format json` and use the inventory subjects as discovery evidence only. Do not create a planned Feature that owns the repository, a source tree, or every discovered file.
 
 ## 2. Connect one implemented slice
 
@@ -69,8 +69,8 @@ validation:
 Run:
 
 ```bash
-syu validate workspace .
-syu readiness report . --format json
+mitase validate workspace .
+mitase readiness report . --format json
 ```
 
 Treat the selected criterion, its exact targets, and its verification as the readiness denominator. Unselected planned work is not evidence and does not become an owner.

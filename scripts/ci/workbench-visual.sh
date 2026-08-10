@@ -33,10 +33,10 @@ cleanup_tmp() {
 trap cleanup_tmp EXIT
 
 {
-  printf 'window.SYU_I18N={en:'
-  cat crates/syu-app-ui/assets/locales/en.json
+  printf 'window.MITASE_I18N={en:'
+  cat crates/mitase-app-ui/assets/locales/en.json
   printf ',ja:'
-  cat crates/syu-app-ui/assets/locales/ja.json
+  cat crates/mitase-app-ui/assets/locales/ja.json
   printf '};\n'
 } >"$tmp/catalog.js"
 
@@ -51,7 +51,7 @@ import json
 projection_data = json.loads(pathlib.Path(sys.argv[1]).read_text())
 def requirement_capability(anchor):
     return {
-        'schema': 'syu/work-origin-capability/v1',
+        'schema': 'mitase/work-origin-capability/v1',
         'origin': {
             'kind': 'requirement-criterion',
             'criterion': anchor,
@@ -123,37 +123,37 @@ for candidate in projection_data['specifications']['specifications']:
             ownership['selector'] = {'kind': 'module', 'name': '*'}
 projection = json.dumps(projection_data).replace('<', '\\u003c')
 pathlib.Path(sys.argv[2]).write_text(
-    f'<script type="application/json" id="syu-projection">{projection}</script>'
+    f'<script type="application/json" id="mitase-projection">{projection}</script>'
 )
 pathlib.Path(sys.argv[3]).write_text(
-    """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
+    """let projection=JSON.parse(document.querySelector('#mitase-projection').textContent);\n"""
     """const visualRequirement=projection.specifications.specifications.find(item=>item.kind==='requirement'&&item.criteria?.length);\n"""
-    """if(visualRequirement) { const visualAnchor=visualRequirement.criteria[0].anchor; const visualCapability={schema:'syu/work-origin-capability/v1',origin:{kind:'requirement-criterion',criterion:visualAnchor},label:'Requirement criterion',enabled:true,disabled_code:null,disabled_message:null,nearest:[]}; const same=value=>value.origin?.criterion===visualAnchor||value.nearest?.some(origin=>origin.kind==='requirement-criterion'&&origin.criterion===visualAnchor); visualRequirement.origin_capabilities=[visualCapability,...(visualRequirement.origin_capabilities||[]).filter(value=>!same(value))]; projection.specifications.origin_capabilities=[visualCapability,...(projection.specifications.origin_capabilities||[]).filter(value=>!same(value))]; const visualFeature=projection.specifications.specifications.find(item=>item.kind==='feature'); const visualTarget=visualFeature?.bindings?.[0]?.targets?.[0]; if(visualTarget) { visualTarget.claims=visualTarget.claims||[]; if(!visualTarget.claims.some(claim=>claim.criterion===visualAnchor)) visualTarget.claims.push({kind:'satisfies',criterion:visualAnchor}); } document.querySelector('#syu-projection').textContent=JSON.stringify(projection); }\n"""
+    """if(visualRequirement) { const visualAnchor=visualRequirement.criteria[0].anchor; const visualCapability={schema:'mitase/work-origin-capability/v1',origin:{kind:'requirement-criterion',criterion:visualAnchor},label:'Requirement criterion',enabled:true,disabled_code:null,disabled_message:null,nearest:[]}; const same=value=>value.origin?.criterion===visualAnchor||value.nearest?.some(origin=>origin.kind==='requirement-criterion'&&origin.criterion===visualAnchor); visualRequirement.origin_capabilities=[visualCapability,...(visualRequirement.origin_capabilities||[]).filter(value=>!same(value))]; projection.specifications.origin_capabilities=[visualCapability,...(projection.specifications.origin_capabilities||[]).filter(value=>!same(value))]; const visualFeature=projection.specifications.specifications.find(item=>item.kind==='feature'); const visualTarget=visualFeature?.bindings?.[0]?.targets?.[0]; if(visualTarget) { visualTarget.claims=visualTarget.claims||[]; if(!visualTarget.claims.some(claim=>claim.criterion===visualAnchor)) visualTarget.claims.push({kind:'satisfies',criterion:visualAnchor}); } document.querySelector('#mitase-projection').textContent=JSON.stringify(projection); }\n"""
     """let receipt=null;\n"""
     """let approvedTargetSuggestions=[];\n"""
-    """let nestedPatches=[]; window.__SYU_NESTED_PATCHES__=nestedPatches;\n"""
+    """let nestedPatches=[]; window.__MITASE_NESTED_PATCHES__=nestedPatches;\n"""
     """const csrfToken='visual-csrf-token';\n"""
-    """window.__SYU_FLOW__=[];\n"""
+    """window.__MITASE_FLOW__=[];\n"""
     """const body=(value,status=200,headers={})=>Promise.resolve({ok:status>=200&&status<300,status,headers:{get:name=>headers[name.toLowerCase()]||null},text:async()=>value==null?'':typeof value==='string'?value:JSON.stringify(value)});\n"""
     """window.fetch=async(url,options={})=>{\n"""
     """  const path=String(url);\n"""
     """  const payload=options.body?JSON.parse(options.body):{};\n"""
     """  const method=(options.method||'GET').toUpperCase();\n"""
-    """  const suppliedCsrf=Object.entries(options.headers||{}).find(([key])=>key.toLowerCase()==='x-syu-csrf-token')?.[1];\n"""
+    """  const suppliedCsrf=Object.entries(options.headers||{}).find(([key])=>key.toLowerCase()==='x-mitase-csrf-token')?.[1];\n"""
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
-    """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
-    """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
-    """  if(path.includes('/api/specifications/candidates/preview')) { nestedPatches.push(payload.patch); return body({preview_token:'visual-preview-token',old_hash:'visual-old-hash',new_hash:'visual-new-hash',workspace_fingerprint:'visual-fingerprint',impact:{readiness_before:{status:'ready'},readiness_after:{status:'ready'},changed_anchors:[],affected_ownership:[],implementation_targets:[],verification_targets:[],target_suggestions:[]}},200,{'x-syu-csrf-token':csrfToken}); }\n"""
+    """  if(path.includes('/api/projection')) return body(projection,200,{'x-mitase-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-mitase-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/specifications/candidates/preview')) { nestedPatches.push(payload.patch); return body({preview_token:'visual-preview-token',old_hash:'visual-old-hash',new_hash:'visual-new-hash',workspace_fingerprint:'visual-fingerprint',impact:{readiness_before:{status:'ready'},readiness_after:{status:'ready'},changed_anchors:[],affected_ownership:[],implementation_targets:[],verification_targets:[],target_suggestions:[]}},200,{'x-mitase-csrf-token':csrfToken}); }\n"""
     """  if(path.includes('/api/specifications/') && path.includes('/trace')) { const itemId=decodeURIComponent(path.split('/api/specifications/')[1].split('/')[0]); const criterion=projection.specifications.specifications.find(item=>item.id===itemId)?.criteria?.[0]?.anchor||`${itemId}#criterion.behavior`; const runtimeTarget='FEAT-AUTH-001#binding.backend/target.handler'; const related={specification:itemId==='REQ-AUTH-001'?[{item_id:'FEAT-AUTH-001',kind:'feature',title:'Authentication feature',presentation_title_key:null}]:[],implementation:[{item_id:'FEAT-AUTH-001',target:{reference:runtimeTarget,path:'src/handlers.rs',selector:{kind:'symbol',name:'handler'},adapter:'rust',lifecycle:'present',claims:[]}}],verification:[]}; return body({root_item_id:itemId,revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',source_hash:'visual-source-hash',mode:path.includes('mode=exact')?'exact':'readable',nodes:[],edges:[],related,closures:[{criterion,implementation_targets:[runtimeTarget],verification_targets:[runtimeTarget,'FEAT-AUTH-001#binding.backend/target.test'],state:'declaration-only',reasons:[],runtime_status:'partial',runtime_timestamp:'2026-08-02T00:00:00Z',runtime_revision:'visual-revision',runtime_receipt:'slice-visual@visual-revision@2026-08-02T00:00:00Z',runtime_executions:[{identity:'slice-visual#execution-0',target:runtimeTarget,claim:{target:runtimeTarget,criterion},status:'passed'}],readiness_blockers:[],diagnostics:[],hidden_target_count:0,hidden_reason_count:0,hidden_readiness_count:0,hidden_diagnostic_count:0}],truncated:false,hidden_node_count:0,hidden_edge_count:0}); }\n"""
     """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
-    """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
+    """  if(path.includes('/api/source?path=mitase.yaml')) return body({content:'schema: mitase/config/v1\\nworkspace:\\n  spec_roots: [docs/mitase]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
     """  if(path.includes('/api/scope/branch')) return body({branch:{range:'origin/main...HEAD',state:'ready',reason:null,changed:[{path:'src/lib.rs',status:'modified',owners:['FEAT-VISUAL'],anchors:['REQ-VISUAL#criterion.behavior'],artifact_identities:['rust:src/lib.rs']}],owned:[],unowned:[],affected_items:[]}});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/target-suggestions/approve')) { approvedTargetSuggestions.push('target-visual'); return body({approved_ids:['target-visual'],split_recommendation:null}); }\n"""
     """  if(path.includes('/target-suggestions')) return body({criterion:'REQ-VISUAL#criterion.behavior',suggestion_token:'visual-suggestion-token',suggestions:[{id:'target-visual',rank:1,ref:'rust:src/lib.rs#behavior',confidence:'high',role:'implementation',evidence:['visual smoke evidence'],evidence_fingerprint:'visual-evidence'}],approved_ids:approvedTargetSuggestions,split_recommendation:null});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
-    """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
+    """    const action=payload.action; window.__MITASE_FLOW__.push(action);\n"""
     """    const journey=(step,primary,status)=>projection.journey={title:payload.title||projection.work.request?.title||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
     """    if(action==='create') { const criterionAnchor=payload.anchor||payload.origin?.criterion; const item=projection.specifications.specifications.find(candidate=>candidate.criteria?.some(criterion=>criterion.anchor===criterionAnchor)); const criterion=item?.criteria.find(candidate=>candidate.anchor===criterionAnchor); projection.journey.related_specification=item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null; projection.journey.advanced={specification_anchor:criterion?.anchor||null}; projection.work.request={title:payload.title,operation:'modify',origin:payload.origin,constraints:{},requested_targets:[]}; journey('review','prepare','draft'); }\n"""
     """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'run-only',transition:'run-only',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
@@ -175,11 +175,11 @@ import sys
 repo_root = pathlib.Path(sys.argv[1])
 tmp = pathlib.Path(sys.argv[2])
 
-html = (repo_root / "crates/syu-app-ui/assets/workbench.html").read_text()
+html = (repo_root / "crates/mitase-app-ui/assets/workbench.html").read_text()
 
 html = html.replace(
     "/assets/workbench.css",
-    f"file://{repo_root}/crates/syu-app-ui/assets/workbench.css",
+    f"file://{repo_root}/crates/mitase-app-ui/assets/workbench.css",
 )
 html = html.replace(
     "/assets/catalog.js",
@@ -187,14 +187,14 @@ html = html.replace(
 )
 html = html.replace(
     "/assets/i18n.js",
-    f"file://{repo_root}/crates/syu-app-ui/assets/i18n.js",
+    f"file://{repo_root}/crates/mitase-app-ui/assets/i18n.js",
 )
 html = html.replace(
     "/assets/js/main.js",
-    f"file://{repo_root}/crates/syu-app-ui/assets/js/main.js",
+    f"file://{repo_root}/crates/mitase-app-ui/assets/js/main.js",
 )
 html = html.replace(
-    '<script type="application/json" id="syu-projection"></script>',
+    '<script type="application/json" id="mitase-projection"></script>',
     (tmp / "state.html").read_text()
     + f'<script src="file://{tmp}/api-mock.js"></script>',
 )
@@ -204,9 +204,9 @@ PY
 
 cat >>"$tmp/workbench.html" <<'HTML'
 <script>
-window.__SYU_VISUAL_ERRORS__=[];
-window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(`${event.error?.stack||event.message||'error'} at ${event.filename}:${event.lineno}:${event.colno}`));
-window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(event.reason?.stack||String(event.reason||'rejection')));
+window.__MITASE_VISUAL_ERRORS__=[];
+window.addEventListener('error',event=>window.__MITASE_VISUAL_ERRORS__.push(`${event.error?.stack||event.message||'error'} at ${event.filename}:${event.lineno}:${event.colno}`));
+window.addEventListener('unhandledrejection',event=>window.__MITASE_VISUAL_ERRORS__.push(event.reason?.stack||String(event.reason||'rejection')));
 setTimeout(()=>{
   const failures=[];
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -223,11 +223,11 @@ setTimeout(()=>{
     if(workStart?.querySelector('.journey-action-label')?.textContent!=='仕様一覧を開く') failures.push('Japanese initial Work CTA is not localized');
     if(!workStart?.querySelector('p')?.textContent.includes('仕様一覧から対象を選びます')) failures.push('Japanese initial Work explanation is not localized');
   }
-  window.SyuPreferences.translate('ja');
+  window.MitasePreferences.translate('ja');
   await wait(40);
   if(document.documentElement.lang!=='ja') failures.push('Japanese locale did not apply');
   if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='作業') failures.push('already-rendered Work page did not rerender in Japanese');
-  window.SyuPreferences.translate('en');
+  window.MitasePreferences.translate('en');
   await wait(40);
   if(document.querySelector('[data-page="work"] h1')?.textContent.trim()!=='Work') failures.push('already-rendered Work page did not rerender in English');
   await click('[data-page="work"] .work-start .journey-action');
@@ -271,7 +271,7 @@ setTimeout(()=>{
         facet.dispatchEvent(new Event('input',{bubbles:true}));
         document.querySelector('[data-page="specifications"] .specification-editor').requestSubmit();
         await wait(100);
-        const patch=window.__SYU_NESTED_PATCHES__?.[0];
+        const patch=window.__MITASE_NESTED_PATCHES__?.[0];
         if(!patch || patch.edit?.entity!=='binding' || patch.edit?.binding?.anchor) failures.push('browser did not send the typed binding payload');
       }
       document.querySelector('[data-page="specifications"] .specification-editor .canvas-head button')?.click();
@@ -296,7 +296,7 @@ setTimeout(()=>{
           selectorName.value='*';
           editor.requestSubmit();
           await wait(100);
-          const patches=window.__SYU_NESTED_PATCHES__||[];
+          const patches=window.__MITASE_NESTED_PATCHES__||[];
           const patch=patches[patches.length-1];
           if(patch?.edit?.entity!=='ownership' || patch.edit.ownership.selector?.kind!=='module' || patch.edit.ownership.selector?.name!=='*') failures.push('module ownership selector did not round-trip losslessly');
         }
@@ -385,10 +385,10 @@ setTimeout(()=>{
   }
   window.confirm=()=>true;
   await click('[data-page="work"] .journey-action.primary');
-  window.SyuPreferences.translate('ja');
+  window.MitasePreferences.translate('ja');
   await wait(40);
   if(!document.querySelector('[data-page="work"]')?.textContent.includes('実行のみ')) failures.push('run-only target metadata did not localize');
-  window.SyuPreferences.translate('en');
+  window.MitasePreferences.translate('en');
   await wait(40);
   await click('[data-page="work"] .journey-count.interactive');
   if(!document.querySelector('[data-work-specification] [data-journey-panel="scope"]')) failures.push('scope count did not open the scope panel');
@@ -404,7 +404,7 @@ setTimeout(()=>{
   if(!document.querySelector('[data-work-specification] [data-journey-panel="diff"] .diff-file')) failures.push('implementation did not open the diff panel');
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
-  if(JSON.stringify(window.__SYU_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  if(JSON.stringify(window.__MITASE_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__MITASE_FLOW__)}`);
   if(!document.querySelector('[data-page="work"] .journey-advanced')) failures.push('advanced completion evidence missing');
   await click('[data-page="work"] [data-tab="slices"]');
   if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('Work slices tab did not open');
@@ -429,9 +429,9 @@ setTimeout(()=>{
   click('[data-page="specifications"] [data-tab="policy"]');
   if(!document.querySelector('[data-specifications-detail]')) failures.push('specifications detail missing');
 
-  if(window.__SYU_VISUAL_ERRORS__.length) failures.push(`js errors: ${window.__SYU_VISUAL_ERRORS__.join(', ')}`);
+  if(window.__MITASE_VISUAL_ERRORS__.length) failures.push(`js errors: ${window.__MITASE_VISUAL_ERRORS__.join(', ')}`);
   const result = document.createElement('div');
-  result.id = 'syu-visual-behavior-result';
+  result.id = 'mitase-visual-behavior-result';
   result.dataset.status = failures.length ? 'fail' : 'pass';
   result.textContent = failures.join('; ');
   document.body.append(result);
@@ -443,8 +443,8 @@ HTML
 for viewport in 1280,900 760,900; do
   for locale in en ja; do
     behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=12000 --dump-dom "file://$tmp/workbench.html?page=work&lang=$locale&theme=light")"
-    if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
-      echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
+    if ! echo "$behavior" | grep -q 'id="mitase-visual-behavior-result" data-status="pass"'; then
+      echo "$behavior" | grep 'id="mitase-visual-behavior-result"' >&2 || true
       exit 1
     fi
   done
@@ -589,10 +589,10 @@ async function main() {
   });
   await devtools.send('Page.addScriptToEvaluateOnNewDocument', {
     source: `
-      window.__SYU_BROWSER_ERRORS__ = [];
-      window.addEventListener('error', event => window.__SYU_BROWSER_ERRORS__.push(event.message || 'error'));
-      window.addEventListener('unhandledrejection', event => window.__SYU_BROWSER_ERRORS__.push(String(event.reason || 'rejection')));
-      window.addEventListener('syu-workbench-error', event => window.__SYU_BROWSER_ERRORS__.push(String(event.detail || 'Workbench startup failed')));
+      window.__MITASE_BROWSER_ERRORS__ = [];
+      window.addEventListener('error', event => window.__MITASE_BROWSER_ERRORS__.push(event.message || 'error'));
+      window.addEventListener('unhandledrejection', event => window.__MITASE_BROWSER_ERRORS__.push(String(event.reason || 'rejection')));
+      window.addEventListener('mitase-workbench-error', event => window.__MITASE_BROWSER_ERRORS__.push(String(event.detail || 'Workbench startup failed')));
     `,
   });
   const load = new Promise(resolve => devtools.on('Page.loadEventFired', resolve));
@@ -687,7 +687,7 @@ async function main() {
           workTitle: document.querySelector('[data-page="work"] .journey-header h2')?.textContent || '',
           workPaneSpecificationCount: document.querySelectorAll('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]').length,
           layoutColumns: getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length,
-          errors: window.__SYU_BROWSER_ERRORS__ || [],
+          errors: window.__MITASE_BROWSER_ERRORS__ || [],
         };
       })()
     `,

@@ -81,7 +81,7 @@ main() {
   require_command python3
 
   local tag="${1:-${RELEASE_TAG:-}}"
-  local repository="${GITHUB_REPOSITORY:-ugoite/syu}"
+  local repository="${GITHUB_REPOSITORY:-ugoite/mitase}"
 
   if [[ -z "$tag" ]]; then
     echo "release tag is required" >&2

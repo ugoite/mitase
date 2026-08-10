@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Pages"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-pages.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-pages.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-pages.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-pages.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
+        - **id**: entrypoint-013-javascript-crates-mitase-app-ui-assets-js-pages-diagnostic
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/diagnostics.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/diagnostics.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderDiagnostics
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
+        - **id**: entrypoint-014-javascript-crates-mitase-app-ui-assets-js-pages-readiness
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/readiness.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/readiness.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderReadinessPage
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
+        - **id**: entrypoint-015-javascript-crates-mitase-app-ui-assets-js-pages-scope-js-r
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/scope.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/scope.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderScope
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
+        - **id**: entrypoint-016-javascript-crates-mitase-app-ui-assets-js-pages-settings-j
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/settings.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/settings.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderSettings
@@ -91,9 +91,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
+        - **id**: entrypoint-017-javascript-crates-mitase-app-ui-assets-js-pages-specificat
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/specifications.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderSpecifications
@@ -107,7 +107,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-init-diagnostics
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/diagnostics.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/diagnostics.js
           - **selector**:
             - **kind**: symbol
             - **name**: initDiagnostics
@@ -121,7 +121,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-init-readiness
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/readiness.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/readiness.js
           - **selector**:
             - **kind**: symbol
             - **name**: initReadiness
@@ -135,7 +135,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-init-scope
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/scope.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/scope.js
           - **selector**:
             - **kind**: symbol
             - **name**: initScope
@@ -149,7 +149,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-init-specifications
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/specifications.js
           - **selector**:
             - **kind**: symbol
             - **name**: initSpecifications
@@ -163,7 +163,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **targets**:
         - **id**: entrypoint-render-specification-detail
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/specifications.js
           - **selector**:
             - **kind**: symbol
             - **name**: renderSpecificationDetail
@@ -174,7 +174,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -189,9 +189,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
+    - id: entrypoint-013-javascript-crates-mitase-app-ui-assets-js-pages-diagnostic
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/diagnostics.js
+      path: crates/mitase-app-ui/assets/js/pages/diagnostics.js
       selector:
         kind: symbol
         name: renderDiagnostics
@@ -203,9 +203,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
+    - id: entrypoint-014-javascript-crates-mitase-app-ui-assets-js-pages-readiness
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/readiness.js
+      path: crates/mitase-app-ui/assets/js/pages/readiness.js
       selector:
         kind: symbol
         name: renderReadinessPage
@@ -217,9 +217,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
+    - id: entrypoint-015-javascript-crates-mitase-app-ui-assets-js-pages-scope-js-r
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/scope.js
+      path: crates/mitase-app-ui/assets/js/pages/scope.js
       selector:
         kind: symbol
         name: renderScope
@@ -231,9 +231,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
+    - id: entrypoint-016-javascript-crates-mitase-app-ui-assets-js-pages-settings-j
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/settings.js
+      path: crates/mitase-app-ui/assets/js/pages/settings.js
       selector:
         kind: symbol
         name: renderSettings
@@ -245,9 +245,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
+    - id: entrypoint-017-javascript-crates-mitase-app-ui-assets-js-pages-specificat
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      path: crates/mitase-app-ui/assets/js/pages/specifications.js
       selector:
         kind: symbol
         name: renderSpecifications
@@ -261,7 +261,7 @@ features:
     targets:
     - id: entrypoint-init-diagnostics
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/diagnostics.js
+      path: crates/mitase-app-ui/assets/js/pages/diagnostics.js
       selector:
         kind: symbol
         name: initDiagnostics
@@ -275,7 +275,7 @@ features:
     targets:
     - id: entrypoint-init-readiness
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/readiness.js
+      path: crates/mitase-app-ui/assets/js/pages/readiness.js
       selector:
         kind: symbol
         name: initReadiness
@@ -289,7 +289,7 @@ features:
     targets:
     - id: entrypoint-init-scope
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/scope.js
+      path: crates/mitase-app-ui/assets/js/pages/scope.js
       selector:
         kind: symbol
         name: initScope
@@ -303,7 +303,7 @@ features:
     targets:
     - id: entrypoint-init-specifications
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      path: crates/mitase-app-ui/assets/js/pages/specifications.js
       selector:
         kind: symbol
         name: initSpecifications
@@ -317,7 +317,7 @@ features:
     targets:
     - id: entrypoint-render-specification-detail
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      path: crates/mitase-app-ui/assets/js/pages/specifications.js
       selector:
         kind: symbol
         name: renderSpecificationDetail

@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Verification"
-description: "Generated reference for docs/syu/features/workbench/verification.yaml"
+description: "Generated reference for docs/mitase/features/workbench/verification.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/verification.yaml`.
+> Generated from `docs/mitase/features/workbench/verification.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,7 +37,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
       - **targets**:
         - **id**: verification-endpoint
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_verify
@@ -82,7 +82,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
       - **targets**:
         - **id**: server-e2e
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_http_closed_loop_flow
@@ -95,11 +95,11 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_http_closed_loop_flow
         - **id**: server-transport
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::workbench_http_server_transport_flow
@@ -112,7 +112,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::workbench_http_server_transport_flow
         - **id**: command-help
           - **adapter**: rust
@@ -128,7 +128,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: workbench_command
                   - **test**: workbench_help_lists_browser_launch_options
         - **id**: smoke-projection
@@ -145,7 +145,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: workbench_smoke
                   - **test**: workbench_projection_is_server_owned_and_starts_not_run
         - **id**: smoke-module-contract
@@ -165,7 +165,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: workbench_smoke
                   - **test**: rendered_workbench_uses_external_module_assets_and_specifications_route
         - **id**: smoke-dto-contract
@@ -182,7 +182,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: workbench_smoke
                   - **test**: browser_modules_render_dtos_without_model_inference
         - **id**: smoke-keyboard
@@ -200,7 +200,7 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: workbench_smoke
                   - **test**: workbench_tabs_are_keyboard_navigable
         - **id**: visual-dom
@@ -218,14 +218,14 @@ description: "Generated reference for docs/syu/features/workbench/verification.y
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
-                  - **package**: syu
+                  - **package**: mitase
                   - **harness**: workbench_visual
                   - **test**: workbench_rendered_dom_uses_projection_driven_placeholders
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -242,7 +242,7 @@ features:
     targets:
     - id: verification-endpoint
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: api_verify
@@ -287,7 +287,7 @@ features:
     targets:
     - id: server-e2e
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: tests::workbench_http_closed_loop_flow
@@ -300,11 +300,11 @@ features:
         runner:
           runner: cargo-test
           arguments:
-            package: syu-workbench-server
+            package: mitase-workbench-server
             test: tests::workbench_http_closed_loop_flow
     - id: server-transport
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector:
         kind: symbol
         name: tests::workbench_http_server_transport_flow
@@ -317,7 +317,7 @@ features:
         runner:
           runner: cargo-test
           arguments:
-            package: syu-workbench-server
+            package: mitase-workbench-server
             test: tests::workbench_http_server_transport_flow
     - id: command-help
       adapter: rust
@@ -333,7 +333,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: workbench_command
             test: workbench_help_lists_browser_launch_options
     - id: smoke-projection
@@ -350,7 +350,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: workbench_smoke
             test: workbench_projection_is_server_owned_and_starts_not_run
     - id: smoke-module-contract
@@ -370,7 +370,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: workbench_smoke
             test: rendered_workbench_uses_external_module_assets_and_specifications_route
     - id: smoke-dto-contract
@@ -387,7 +387,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: workbench_smoke
             test: browser_modules_render_dtos_without_model_inference
     - id: smoke-keyboard
@@ -405,7 +405,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: workbench_smoke
             test: workbench_tabs_are_keyboard_navigable
     - id: visual-dom
@@ -423,7 +423,7 @@ features:
         runner:
           runner: cargo-test-integration
           arguments:
-            package: syu
+            package: mitase
             harness: workbench_visual
             test: workbench_rendered_dom_uses_projection_driven_placeholders
 ```

@@ -122,7 +122,7 @@ jobs:
         shell: bash
         run: |
           npm install --prefix "$RUNNER_TEMP/tailwind" tailwindcss @tailwindcss/cli
-          ln -s "$RUNNER_TEMP/tailwind/node_modules" "$GITHUB_WORKSPACE/crates/syu-app-ui/node_modules"
+          ln -s "$RUNNER_TEMP/tailwind/node_modules" "$GITHUB_WORKSPACE/crates/mitase-app-ui/node_modules"
           echo "$RUNNER_TEMP/tailwind/node_modules/.bin" >>"$GITHUB_PATH"
 
       - name: Expose Tailwind CLI to Workbench checks
@@ -130,7 +130,7 @@ jobs:
 
       - name: Run Workbench contract and browser smoke
         run: |
-          cargo check -p syu-workbench-server -p syu-app-ui
+          cargo check -p mitase-workbench-server -p mitase-app-ui
           bash scripts/ci/workbench-visual.sh
 
   actionlint:

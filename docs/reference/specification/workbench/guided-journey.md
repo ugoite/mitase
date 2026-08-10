@@ -1,15 +1,15 @@
 ---
 title: "Workbench implementation / Guided Journey"
-description: "Generated reference for docs/syu/features/workbench/guided-journey.yaml"
+description: "Generated reference for docs/mitase/features/workbench/guided-journey.yaml"
 ---
 
-> Generated from `docs/syu/features/workbench/guided-journey.yaml`.
+> Generated from `docs/mitase/features/workbench/guided-journey.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -37,14 +37,14 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
       - **owns**:
         - **id**: server-planned-requirement-add-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::planned_requirement_with_approved_add_target_can_create_ready_plan
       - **targets**:
         - **id**: journey-projection
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkJourneyView
@@ -55,7 +55,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
         - **id**: journey-action
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_journey_action
@@ -68,7 +68,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
         - **id**: journey-source
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: api_source
@@ -77,7 +77,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
         - **id**: journey-browser
           - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: file
           - **claims**:
@@ -89,7 +89,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
         - **id**: journey-discovery
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: symbol
             - **name**: discoverJourneyCandidates
@@ -98,7 +98,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **criterion**: REQ-WORKBENCH-014#criterion.exact-anchor-approval
         - **id**: journey-target-suggestions
           - **adapter**: javascript
-          - **path**: crates/syu-app-ui/assets/js/pages/work.js
+          - **path**: crates/mitase-app-ui/assets/js/pages/work.js
           - **selector**:
             - **kind**: symbol
             - **name**: reviewJourneyTargetSuggestions
@@ -112,7 +112,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
       - **targets**:
         - **id**: journey-test
           - **adapter**: rust
-          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel
@@ -126,7 +126,7 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
@@ -138,13 +138,13 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-workbench-server
+                  - **package**: mitase-workbench-server
                   - **test**: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel
 
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: workbench
 category: Workbench implementation
@@ -161,12 +161,12 @@ features:
     owns:
     - id: server-planned-requirement-add-test
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: module, name: 'lib::tests::planned_requirement_with_approved_add_target_can_create_ready_plan' }
     targets:
     - id: journey-projection
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: WorkJourneyView }
       claims:
       - kind: satisfies
@@ -175,7 +175,7 @@ features:
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
     - id: journey-action
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: api_journey_action }
       claims:
       - kind: satisfies
@@ -186,14 +186,14 @@ features:
         criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
     - id: journey-source
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: api_source }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
     - id: journey-browser
       adapter: declared
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: file }
       claims:
       - kind: satisfies
@@ -204,14 +204,14 @@ features:
         criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
     - id: journey-discovery
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: symbol, name: discoverJourneyCandidates }
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-014#criterion.exact-anchor-approval
     - id: journey-target-suggestions
       adapter: javascript
-      path: crates/syu-app-ui/assets/js/pages/work.js
+      path: crates/mitase-app-ui/assets/js/pages/work.js
       selector: { kind: symbol, name: reviewJourneyTargetSuggestions }
       claims:
       - kind: satisfies
@@ -223,7 +223,7 @@ features:
     targets:
     - id: journey-test
       adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
+      path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: symbol, name: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel }
       claims:
       - kind: verifies
@@ -232,7 +232,7 @@ features:
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
+        runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
       - kind: verifies
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
         covers:
@@ -240,5 +240,5 @@ features:
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-source
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
+        runner: { runner: cargo-test, arguments: { package: mitase-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
 ```

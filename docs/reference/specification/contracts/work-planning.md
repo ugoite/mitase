@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Work Planning"
-description: "Generated reference for docs/syu/features/public-entrypoints/work-planning.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/work-planning.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/work-planning.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/work-planning.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-048-rust-crates-syu-work-model-src-lib-rs-requestedtarget-c
+        - **id**: entrypoint-048-rust-crates-mitase-work-model-src-lib-rs-requestedtarget-c
           - **adapter**: rust
-          - **path**: crates/syu-work-model/src/lib.rs
+          - **path**: crates/mitase-work-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RequestedTarget::criterion
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-049-rust-crates-syu-work-model-src-lib-rs-requestedtarget-r
+        - **id**: entrypoint-049-rust-crates-mitase-work-model-src-lib-rs-requestedtarget-r
           - **adapter**: rust
-          - **path**: crates/syu-work-model/src/lib.rs
+          - **path**: crates/mitase-work-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RequestedTarget::reference
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-050-rust-crates-syu-work-model-src-lib-rs-requestedtarget-t
+        - **id**: entrypoint-050-rust-crates-mitase-work-model-src-lib-rs-requestedtarget-t
           - **adapter**: rust
-          - **path**: crates/syu-work-model/src/lib.rs
+          - **path**: crates/mitase-work-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: RequestedTarget::transition
@@ -77,9 +77,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-051-rust-crates-syu-work-model-src-lib-rs-work-plan-digest
+        - **id**: entrypoint-051-rust-crates-mitase-work-model-src-lib-rs-work-plan-digest
           - **adapter**: rust
-          - **path**: crates/syu-work-model/src/lib.rs
+          - **path**: crates/mitase-work-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: work_plan_digest
@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
       - **targets**:
         - **id**: entrypoint-split-work-recommendation
           - **adapter**: rust
-          - **path**: crates/syu-planner/src/lib.rs
+          - **path**: crates/mitase-planner/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: split_work_recommendation
@@ -107,7 +107,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
       - **targets**:
         - **id**: entrypoint-readonly-targets-fingerprint
           - **adapter**: rust
-          - **path**: crates/syu-work-model/src/lib.rs
+          - **path**: crates/mitase-work-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: readonly_targets_fingerprint
@@ -118,7 +118,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/work-
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -133,9 +133,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-048-rust-crates-syu-work-model-src-lib-rs-requestedtarget-c
+    - id: entrypoint-048-rust-crates-mitase-work-model-src-lib-rs-requestedtarget-c
       adapter: rust
-      path: crates/syu-work-model/src/lib.rs
+      path: crates/mitase-work-model/src/lib.rs
       selector:
         kind: symbol
         name: RequestedTarget::criterion
@@ -147,9 +147,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-049-rust-crates-syu-work-model-src-lib-rs-requestedtarget-r
+    - id: entrypoint-049-rust-crates-mitase-work-model-src-lib-rs-requestedtarget-r
       adapter: rust
-      path: crates/syu-work-model/src/lib.rs
+      path: crates/mitase-work-model/src/lib.rs
       selector:
         kind: symbol
         name: RequestedTarget::reference
@@ -161,9 +161,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-050-rust-crates-syu-work-model-src-lib-rs-requestedtarget-t
+    - id: entrypoint-050-rust-crates-mitase-work-model-src-lib-rs-requestedtarget-t
       adapter: rust
-      path: crates/syu-work-model/src/lib.rs
+      path: crates/mitase-work-model/src/lib.rs
       selector:
         kind: symbol
         name: RequestedTarget::transition
@@ -175,9 +175,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-051-rust-crates-syu-work-model-src-lib-rs-work-plan-digest
+    - id: entrypoint-051-rust-crates-mitase-work-model-src-lib-rs-work-plan-digest
       adapter: rust
-      path: crates/syu-work-model/src/lib.rs
+      path: crates/mitase-work-model/src/lib.rs
       selector:
         kind: symbol
         name: work_plan_digest
@@ -191,7 +191,7 @@ features:
     targets:
     - id: entrypoint-split-work-recommendation
       adapter: rust
-      path: crates/syu-planner/src/lib.rs
+      path: crates/mitase-planner/src/lib.rs
       selector:
         kind: symbol
         name: split_work_recommendation
@@ -205,7 +205,7 @@ features:
     targets:
     - id: entrypoint-readonly-targets-fingerprint
       adapter: rust
-      path: crates/syu-work-model/src/lib.rs
+      path: crates/mitase-work-model/src/lib.rs
       selector:
         kind: symbol
         name: readonly_targets_fingerprint

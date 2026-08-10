@@ -10,7 +10,7 @@ run_workbench_smoke() {
   cd "$repo_root"
 
   cargo test --test workbench_smoke
-  cargo test -p syu-workbench-server workbench
+  cargo test -p mitase-workbench-server workbench
 }
 
 run_workbench_smoke "$@"

@@ -1,15 +1,15 @@
 ---
 title: "Foundation / Foundation"
-description: "Generated reference for docs/syu/philosophies/foundation.yaml"
+description: "Generated reference for docs/mitase/philosophies/foundation.yaml"
 ---
 
-> Generated from `docs/syu/philosophies/foundation.yaml`.
+> Generated from `docs/mitase/philosophies/foundation.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -46,7 +46,7 @@ description: "Generated reference for docs/syu/philosophies/foundation.yaml"
           - **path**: docs/understand/model/v1-architecture.md
           - **selector**:
             - **kind**: heading
-            - **value**: Syu v1 architecture
+            - **value**: Mitase v1 architecture
           - **claims**:
             - **kind**: documents
               - **anchor**: PHIL-001#principle.exact-intent
@@ -54,7 +54,7 @@ description: "Generated reference for docs/syu/philosophies/foundation.yaml"
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: philosophies
 namespace: foundation
 category: Foundation
@@ -75,7 +75,7 @@ philosophies:
           - id: architecture
             adapter: markdown
             path: docs/understand/model/v1-architecture.md
-            selector: { kind: heading, value: Syu v1 architecture }
+            selector: { kind: heading, value: Mitase v1 architecture }
             claims:
               - kind: documents
                 anchor: PHIL-001#principle.exact-intent

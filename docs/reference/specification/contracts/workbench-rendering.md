@@ -1,15 +1,15 @@
 ---
 title: "Public entrypoint contracts / Workbench Rendering"
-description: "Generated reference for docs/syu/features/public-entrypoints/workbench-rendering.yaml"
+description: "Generated reference for docs/mitase/features/public-entrypoints/workbench-rendering.yaml"
 ---
 
-> Generated from `docs/syu/features/public-entrypoints/workbench-rendering.yaml`.
+> Generated from `docs/mitase/features/public-entrypoints/workbench-rendering.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -35,9 +35,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-026-rust-crates-syu-app-ui-src-lib-rs-workbenchview-new
+        - **id**: entrypoint-026-rust-crates-mitase-app-ui-src-lib-rs-workbenchview-new
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/lib.rs
+          - **path**: crates/mitase-app-ui/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchView::new
@@ -49,9 +49,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-027-rust-crates-syu-app-ui-src-lib-rs-workbenchview-render
+        - **id**: entrypoint-027-rust-crates-mitase-app-ui-src-lib-rs-workbenchview-render
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/lib.rs
+          - **path**: crates/mitase-app-ui/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: WorkbenchView::render_html
@@ -63,9 +63,9 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-028-rust-crates-syu-app-ui-src-lib-rs-locale-catalog-script
+        - **id**: entrypoint-028-rust-crates-mitase-app-ui-src-lib-rs-locale-catalog-script
           - **adapter**: rust
-          - **path**: crates/syu-app-ui/src/lib.rs
+          - **path**: crates/mitase-app-ui/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: locale_catalog_script
@@ -76,7 +76,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: features
 namespace: public
 category: Public entrypoint contracts
@@ -91,9 +91,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-026-rust-crates-syu-app-ui-src-lib-rs-workbenchview-new
+    - id: entrypoint-026-rust-crates-mitase-app-ui-src-lib-rs-workbenchview-new
       adapter: rust
-      path: crates/syu-app-ui/src/lib.rs
+      path: crates/mitase-app-ui/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchView::new
@@ -105,9 +105,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-027-rust-crates-syu-app-ui-src-lib-rs-workbenchview-render
+    - id: entrypoint-027-rust-crates-mitase-app-ui-src-lib-rs-workbenchview-render
       adapter: rust
-      path: crates/syu-app-ui/src/lib.rs
+      path: crates/mitase-app-ui/src/lib.rs
       selector:
         kind: symbol
         name: WorkbenchView::render_html
@@ -119,9 +119,9 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-028-rust-crates-syu-app-ui-src-lib-rs-locale-catalog-script
+    - id: entrypoint-028-rust-crates-mitase-app-ui-src-lib-rs-locale-catalog-script
       adapter: rust
-      path: crates/syu-app-ui/src/lib.rs
+      path: crates/mitase-app-ui/src/lib.rs
       selector:
         kind: symbol
         name: locale_catalog_script

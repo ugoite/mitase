@@ -1,5 +1,5 @@
 {
-  "name": "syu FEAT-CONTRIB-001",
+  "name": "mitase FEAT-CONTRIB-001",
   "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/python:1": {

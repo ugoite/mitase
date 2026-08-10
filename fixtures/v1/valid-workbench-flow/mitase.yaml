@@ -1,0 +1,22 @@
+schema: mitase/config/v1
+workspace:
+  spec_roots: [spec]
+  excludes: []
+inventory:
+  active_profile: default
+  profiles: [{ id: default, providers: { rust: { mode: test, include_tests: true }, declared: { roots: [remove-file.txt] } } }]
+validation:
+  preset: standard
+  readiness:
+    target: off
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
+  changed:
+    require_owned_changes: false
+    require_plan: true
+verification:
+  runners:
+    cargo-test:
+      executable: cargo
+      arguments: [test, -p, "{package}", "{test}", --, --exact]
+work:
+  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }

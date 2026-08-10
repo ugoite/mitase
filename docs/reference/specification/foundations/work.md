@@ -1,15 +1,15 @@
 ---
 title: "Work planning / Work"
-description: "Generated reference for docs/syu/requirements/work.yaml"
+description: "Generated reference for docs/mitase/requirements/work.yaml"
 ---
 
-> Generated from `docs/syu/requirements/work.yaml`.
+> Generated from `docs/mitase/requirements/work.yaml`.
 
 ## Parsed content
 
 ### Schema
 
-- syu/spec/v1
+- mitase/spec/v1
 
 ### Kind
 
@@ -49,7 +49,7 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
       - **targets**:
         - **id**: anchor-test
           - **adapter**: rust
-          - **path**: crates/syu-spec-model/src/lib.rs
+          - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: anchors_roundtrip
@@ -61,11 +61,11 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-spec-model
+                  - **package**: mitase-spec-model
                   - **test**: tests::anchors_roundtrip
         - **id**: lifecycle-plan-test
           - **adapter**: rust
-          - **path**: crates/syu-planner/src/lib.rs
+          - **path**: crates/mitase-planner/src/lib.rs
           - **selector**:
             - **kind**: symbol
             - **name**: tests::explicit_add_transition_plans_missing_target_as_ensure_present
@@ -77,7 +77,7 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
-                  - **package**: syu-planner
+                  - **package**: mitase-planner
                   - **test**: tests::explicit_add_transition_plans_missing_target_as_ensure_present
 - **id**: REQ-WORK-002
   - **title**: Durable completion delivery
@@ -130,7 +130,7 @@ description: "Generated reference for docs/syu/requirements/work.yaml"
 ## Source YAML
 
 ```yaml
-schema: syu/spec/v1
+schema: mitase/spec/v1
 kind: requirements
 namespace: work
 category: Work planning
@@ -157,22 +157,22 @@ requirements:
         targets:
           - id: anchor-test
             adapter: rust
-            path: crates/syu-spec-model/src/lib.rs
+            path: crates/mitase-spec-model/src/lib.rs
             selector: { kind: symbol, name: anchors_roundtrip }
             claims:
               - kind: verifies
                 criterion: REQ-WORK-001#criterion.exact-slice
                 covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::anchors_roundtrip } }
+                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::anchors_roundtrip } }
           - id: lifecycle-plan-test
             adapter: rust
-            path: crates/syu-planner/src/lib.rs
+            path: crates/mitase-planner/src/lib.rs
             selector: { kind: symbol, name: tests::explicit_add_transition_plans_missing_target_as_ensure_present }
             claims:
               - kind: verifies
                 criterion: REQ-WORK-001#criterion.exact-slice
                 covers: [FEAT-PLANNER-001#binding.implementation/target.lifecycle-plan]
-                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::explicit_add_transition_plans_missing_target_as_ensure_present } }
+                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::explicit_add_transition_plans_missing_target_as_ensure_present } }
   - id: REQ-WORK-002
     title: Durable completion delivery
     description: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.

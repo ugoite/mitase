@@ -1,13 +1,13 @@
 # Configuration
 
-`syu` v1 uses one strict `syu/config/v1` repository configuration. Unknown fields are rejected.
+`mitase` v1 uses one strict `mitase/config/v1` repository configuration. Unknown fields are rejected.
 
-The repository root `syu.yaml` is Syu's mature self-hosting dogfood profile, not a starter configuration. New repositories should copy the closest checked-in example and adopt one connected capability at a time; the root profile deliberately applies the strictest current v1 slice boundary to itself.
+The repository root `mitase.yaml` is Mitase's mature self-hosting dogfood profile, not a starter configuration. New repositories should copy the closest checked-in example and adopt one connected capability at a time; the root profile deliberately applies the strictest current v1 slice boundary to itself.
 
 ```yaml
-schema: syu/config/v1
+schema: mitase/config/v1
 workspace:
-  spec_roots: [docs/syu]
+  spec_roots: [docs/mitase]
   excludes: [target/**, node_modules/**]
 inventory:
   active_profile: default

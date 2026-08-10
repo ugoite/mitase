@@ -2,11 +2,11 @@
 
 ## `missing field \`kind\`` when validating a spec document
 
-A v1 document must declare both `schema: syu/spec/v1` and a plural `kind` such as `philosophies`, `policies`, `requirements`, or `features`.
+A v1 document must declare both `schema: mitase/spec/v1` and a plural `kind` such as `philosophies`, `policies`, `requirements`, or `features`.
 
 ## `unknown adapter ...`
 
-Enable the adapter in `syu.yaml` and use a supported adapter name.
+Enable the adapter in `mitase.yaml` and use a supported adapter name.
 
 ## `changed implementation has no Criterion`
 

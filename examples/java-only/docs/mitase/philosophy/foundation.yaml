@@ -1,0 +1,16 @@
+schema: mitase/spec/v1
+kind: philosophies
+namespace: java-only
+category: Java example
+philosophies:
+- id: PHIL-JAVAONLY-001
+  title: Java example
+  summary: Keep a Java-first example represented in the v1 graph with file-level ownership.
+  principles:
+  - id: exact-ownership
+    statement: Java example files must still have explicit implementation and verification
+      bindings.
+    applies_to:
+    - code
+    - work
+  bindings: []

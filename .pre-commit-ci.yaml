@@ -2,6 +2,6 @@
 ci:
   autoupdate_schedule: monthly
   skip:
-    - syu-validate-changed
-    - syu-rustfmt
-    - syu-quality-gates
+    - mitase-validate-changed
+    - mitase-rustfmt
+    - mitase-quality-gates
