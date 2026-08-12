@@ -1,7 +1,7 @@
 schema: mitase/config/v1
 workspace:
   spec_roots: [docs/mitase]
-  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, fixtures/v1/valid-web-app/work.yaml, website/package-lock.json, website/package.json, .github/workflows/maintenance.yml]
+  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, fixtures/v1/valid-web-app/work.yaml, website/package-lock.json, website/package.json, examples/polyglot/package.json, .github/workflows/maintenance.yml]
 inventory:
   active_profile: default
   profiles:
@@ -257,12 +257,15 @@ validation:
 verification:
   runners:
     cargo-test:
+      adapter: cargo-libtest
       executable: cargo
       arguments: [test, -p, "{package}", "{test}", --, --exact]
     cargo-test-integration:
+      adapter: cargo-libtest
       executable: cargo
       arguments: [test, -p, "{package}", --test, "{harness}", "{test}", --, --exact]
     shell:
+      adapter: shell
       executable: bash
       arguments: ["{script}"]
 work:

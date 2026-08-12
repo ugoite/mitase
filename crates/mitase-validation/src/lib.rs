@@ -3,7 +3,9 @@ mod readiness;
 use anyhow::{Context, Result, bail};
 use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use mitase_planner::{plan as canonical_plan, validate_work_origin};
-use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
+use mitase_project_model::{
+    ProjectConfig, ReadinessLevel, ValidationPreset, VerificationRunnerAdapter,
+};
 use mitase_spec_model::format_sha256;
 use mitase_spec_model::{
     ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
@@ -12,12 +14,13 @@ use mitase_spec_model::{
 };
 use mitase_work_model::{
     COMPLETION_REPORT_SCHEMA, CompletionBlocker, CompletionCheck, CompletionCheckEvidence,
-    CompletionCriterionEvidence, CompletionReport, CompletionStatus, ExactTestEvidence,
-    ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
-    TargetTransition, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure,
+    CompletionCriterionEvidence, CompletionReport, CompletionStatus, ExecutionSlice,
+    PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle, TargetTransition,
+    VERIFICATION_PROOF_SCHEMA, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure,
     VerificationAttemptResult, VerificationAttemptStatus, VerificationClaimRef,
-    VerificationExecution, VerificationExecutionAttempt, VerificationReceipt, WORK_PLAN_SCHEMA,
-    WorkPlan, readonly_targets_fingerprint_for_execution, work_plan_digest,
+    VerificationExecution, VerificationExecutionAttempt, VerificationProof,
+    VerificationProofStatus, VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan,
+    readonly_targets_fingerprint_for_execution, work_plan_digest,
 };
 use mitase_workspace::{
     AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
@@ -794,11 +797,16 @@ pub fn execute_verification(
                 runner_ref.runner
             );
         }
-        let arguments = canonical_runner_arguments(&configured.executable, arguments);
-        let test_identity = runner_ref.arguments.get("test").ok_or_else(|| {
-            anyhow::anyhow!("cargo verification claim must name the exact test identity")
-        })?;
-        require_exact_runner_filter(&configured.executable, &arguments, test_identity)?;
+        let arguments = canonical_runner_arguments_for_adapter(configured.adapter, arguments);
+        if !runner_ref
+            .arguments
+            .get("test")
+            .is_some_and(|identity| !identity.is_empty())
+        {
+            bail!("verification claim must name the exact test identity");
+        }
+        validate_exact_claim_identity(configured.adapter, target, &runner_ref.arguments)?;
+        require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
         if configured.executable == "cargo" && arguments.iter().any(|argument| argument == "-Z") {
@@ -830,15 +838,13 @@ pub fn execute_verification(
             .with_context(|| format!("execute verification runner {}", runner_ref.runner))?;
         if !output.status.success() {
             bail!(
-                "verification runner {} failed with exit code {}\nstdout:\n{}\nstderr:\n{}",
+                "verification runner {} failed with exit code {}; exact-test proof unavailable",
                 runner_ref.runner,
                 output.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
             );
         }
         let proof = ensure_exact_test_executed(
-            &configured.executable,
+            configured.adapter,
             target,
             &runner_ref.arguments,
             &output.stdout,
@@ -1054,9 +1060,7 @@ pub fn validate_verification_receipt(
         if execution.exit_code != 0 {
             bail!("verification receipt contains failed executions");
         }
-        if execution.proof.matched_count != 1 {
-            bail!("verification receipt must prove exactly one exact test");
-        }
+        validate_verification_proof(&execution.proof)?;
         let claim = execution.claim.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
                 "verification receipt execution {} is missing its selected claim",
@@ -1083,11 +1087,16 @@ pub fn validate_verification_receipt(
             .iter()
             .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
             .collect::<Vec<_>>();
-        let arguments = canonical_runner_arguments(&configured.executable, arguments);
-        let test_identity = runner_ref.arguments.get("test").ok_or_else(|| {
-            anyhow::anyhow!("cargo verification claim must name the exact test identity")
-        })?;
-        require_exact_runner_filter(&configured.executable, &arguments, test_identity)?;
+        let arguments = canonical_runner_arguments_for_adapter(configured.adapter, arguments);
+        if !runner_ref
+            .arguments
+            .get("test")
+            .is_some_and(|identity| !identity.is_empty())
+        {
+            bail!("verification claim must name the exact test identity");
+        }
+        validate_exact_claim_identity(configured.adapter, target, &runner_ref.arguments)?;
+        require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         let expected_command = std::iter::once(configured.executable.clone())
             .chain(arguments)
             .collect::<Vec<_>>();
@@ -1584,95 +1593,309 @@ fn readiness_regression_blockers(
     Ok(blockers)
 }
 
-fn ensure_exact_test_executed(
-    executable: &str,
-    target: &mitase_spec_model::ArtifactTarget,
-    claim_arguments: &BTreeMap<String, String>,
-    stdout: &[u8],
-) -> Result<ExactTestEvidence> {
-    if executable != "cargo" {
-        bail!("cannot prove exact test execution for runner {executable}");
+/// Validate the runner-neutral proof contract shared by every receipt.
+pub fn validate_verification_proof(proof: &VerificationProof) -> Result<()> {
+    if proof.schema != VERIFICATION_PROOF_SCHEMA {
+        bail!("verification proof schema is unsupported");
     }
-    let Some(Selector::Symbol { name }) = Some(&target.selector) else {
-        bail!("cargo verification targets must use an exact symbol selector");
-    };
-    let Some(test_identity) = claim_arguments.get("test") else {
-        bail!("cargo verification claim must name the exact test identity");
-    };
-    if test_identity != name && !test_identity.ends_with(&format!("::{name}")) {
-        bail!("cargo verification argument {test_identity} does not identify selector {name}");
+    if proof.identity.trim().is_empty() {
+        bail!("verification proof identity is empty");
     }
-    let mut matched_count = 0;
-    for line in String::from_utf8_lossy(stdout).lines() {
-        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
-        if event.get("type").and_then(serde_json::Value::as_str) != Some("test") {
-            continue;
-        }
-        let event_name = event.get("name").and_then(serde_json::Value::as_str);
-        // `--exact` makes the runner's filter authoritative; the structured
-        // event must then carry that exact identity. A suffix match could
-        // accept the same test name from a different harness or module.
-        let exact_identity = event_name == Some(test_identity.as_str());
-        if !exact_identity {
-            continue;
-        }
-        match event.get("event").and_then(serde_json::Value::as_str) {
-            Some("ok") => matched_count += 1,
-            Some("ignored") | Some("failed") | Some("timeout") => {
-                bail!("configured verification command did not complete exact test {name}");
-            }
-            _ => {}
-        }
-    }
-    if matched_count != 1 {
-        bail!(
-            "configured verification command must emit exactly one successful structured event for {name}; found {matched_count}"
-        );
-    }
-    Ok(ExactTestEvidence {
-        identity: test_identity.clone(),
-        matched_count,
-    })
-}
-
-fn require_exact_runner_filter(
-    executable: &str,
-    arguments: &[String],
-    test_identity: &str,
-) -> Result<()> {
-    if executable != "cargo" {
-        return Ok(());
-    }
-    let separator = arguments
-        .iter()
-        .position(|argument| argument == "--")
-        .ok_or_else(|| {
-            anyhow::anyhow!("cargo verification runner must provide an exact harness filter")
-        })?;
-    if !arguments[..separator]
-        .iter()
-        .any(|argument| argument == test_identity)
-    {
-        bail!(
-            "cargo verification runner must pass the exact test identity {test_identity} before --"
-        );
-    }
-    if !arguments[separator + 1..]
-        .iter()
-        .any(|argument| argument == "--exact")
-    {
-        bail!("cargo verification runner must pass --exact to the test harness");
+    if proof.status != VerificationProofStatus::Passed || proof.matched_count != 1 {
+        bail!("verification proof must report one matched test with passed status");
     }
     Ok(())
 }
 
-/// Cargo's human test output is not an authority boundary: a test can print a
-/// line that looks like a harness result. Force libtest's structured stream
-/// and keep the injected arguments in the receipt's canonical command.
-pub fn canonical_runner_arguments(executable: &str, mut arguments: Vec<String>) -> Vec<String> {
-    if executable == "cargo" && arguments.iter().any(|argument| argument == "test") {
+fn ensure_exact_test_executed(
+    adapter: VerificationRunnerAdapter,
+    target: &mitase_spec_model::ArtifactTarget,
+    claim_arguments: &BTreeMap<String, String>,
+    stdout: &[u8],
+) -> Result<VerificationProof> {
+    let Some(test_identity) = claim_arguments.get("test") else {
+        bail!("verification claim must name the exact test identity");
+    };
+    validate_exact_claim_identity(adapter, target, claim_arguments)?;
+    let (matched_count, failed) = match adapter {
+        VerificationRunnerAdapter::CargoLibtest => {
+            parse_cargo_libtest_output(test_identity, stdout)?
+        }
+        VerificationRunnerAdapter::Pytest => parse_pytest_output(test_identity, stdout),
+        VerificationRunnerAdapter::NodeTest => {
+            let name = claim_arguments
+                .get("name")
+                .map(String::as_str)
+                .or_else(|| test_identity.rsplit("::").next())
+                .unwrap_or(test_identity);
+            parse_node_test_output(name, stdout)
+        }
+        VerificationRunnerAdapter::GoTest => parse_go_test_output(test_identity, stdout),
+        VerificationRunnerAdapter::Shell => {
+            bail!("shell runners cannot produce runner-neutral verification proof")
+        }
+    };
+    let proof = VerificationProof {
+        schema: VERIFICATION_PROOF_SCHEMA.into(),
+        identity: test_identity.clone(),
+        matched_count,
+        status: if failed || matched_count != 1 {
+            VerificationProofStatus::Failed
+        } else {
+            VerificationProofStatus::Passed
+        },
+    };
+    validate_verification_proof(&proof).map_err(|error| {
+        anyhow::anyhow!(
+            "configured verification command did not produce a valid proof for {test_identity}: {error}"
+        )
+    })?;
+    Ok(proof)
+}
+
+fn exact_selector_name(target: &mitase_spec_model::ArtifactTarget) -> Option<&str> {
+    match &target.selector {
+        Selector::Symbol { name } => Some(name),
+        Selector::File
+        | Selector::Operation { .. }
+        | Selector::Heading { .. }
+        | Selector::JsonPointer { .. }
+        | Selector::Marker { .. } => None,
+    }
+}
+
+fn test_identity_matches_selector(identity: &str, selector: &str) -> bool {
+    identity == selector
+        || identity.ends_with(&format!("::{selector}"))
+        || identity.ends_with(&format!("#{selector}"))
+        || identity.ends_with(&format!(".{selector}"))
+}
+
+fn validate_exact_claim_identity(
+    adapter: VerificationRunnerAdapter,
+    target: &mitase_spec_model::ArtifactTarget,
+    claim_arguments: &BTreeMap<String, String>,
+) -> Result<()> {
+    let test_identity = claim_arguments
+        .get("test")
+        .ok_or_else(|| anyhow::anyhow!("verification claim must name the exact test identity"))?;
+    if let Some(selector_name) = exact_selector_name(target)
+        && !test_identity_matches_selector(test_identity, selector_name)
+    {
+        bail!("verification argument {test_identity} does not identify selector {selector_name}");
+    }
+    if adapter == VerificationRunnerAdapter::NodeTest {
+        let path = claim_arguments.get("path").ok_or_else(|| {
+            anyhow::anyhow!("node-test verification claim must name the exact test file")
+        })?;
+        let name = claim_arguments.get("name").ok_or_else(|| {
+            anyhow::anyhow!("node-test verification claim must name the exact test title")
+        })?;
+        let expected_identity = format!("{path}::{name}");
+        if test_identity != &expected_identity {
+            bail!("node-test verification identity {test_identity} must match {expected_identity}");
+        }
+    }
+    Ok(())
+}
+
+fn require_exact_runner_filter(
+    adapter: VerificationRunnerAdapter,
+    arguments: &[String],
+    claim_arguments: &BTreeMap<String, String>,
+) -> Result<()> {
+    let test_identity = claim_arguments
+        .get("test")
+        .ok_or_else(|| anyhow::anyhow!("verification claim must name the exact test identity"))?;
+    match adapter {
+        VerificationRunnerAdapter::CargoLibtest => {
+            let separator = arguments
+                .iter()
+                .position(|argument| argument == "--")
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "cargo verification runner must provide an exact harness filter"
+                    )
+                })?;
+            if !arguments[..separator]
+                .iter()
+                .any(|argument| argument == test_identity)
+            {
+                bail!(
+                    "cargo verification runner must pass the exact test identity {test_identity} before --"
+                );
+            }
+            if !arguments[separator + 1..]
+                .iter()
+                .any(|argument| argument == "--exact")
+            {
+                bail!("cargo verification runner must pass --exact to the test harness");
+            }
+        }
+        VerificationRunnerAdapter::Pytest => {
+            if !arguments.iter().any(|argument| argument == test_identity) {
+                bail!(
+                    "pytest verification runner must pass the exact test identity {test_identity}"
+                );
+            }
+        }
+        VerificationRunnerAdapter::NodeTest => {
+            let name = claim_arguments.get("name").ok_or_else(|| {
+                anyhow::anyhow!("node-test verification claim must name the exact test title")
+            })?;
+            let path = claim_arguments.get("path").ok_or_else(|| {
+                anyhow::anyhow!("node-test verification claim must name the exact test file")
+            })?;
+            let expected_identity = format!("{path}::{name}");
+            if test_identity != &expected_identity {
+                bail!(
+                    "node-test verification identity {test_identity} must match {expected_identity}"
+                );
+            }
+            let pattern = format!("--test-name-pattern=^{name}$");
+            let pattern_pair = ["--test-name-pattern".to_string(), format!("^{name}$")];
+            if !arguments.iter().any(|argument| argument == &pattern)
+                && !arguments.windows(2).any(|window| window == pattern_pair)
+            {
+                bail!("node-test verification runner must pass an exact test-name pattern");
+            }
+            if !arguments.iter().any(|argument| argument == path) {
+                bail!("node-test verification runner must pass the exact test file {path}");
+            }
+        }
+        VerificationRunnerAdapter::GoTest => {
+            let exact_pattern = format!("^{test_identity}$");
+            let has_exact_run = arguments
+                .windows(2)
+                .any(|window| window[0] == "-run" && window[1] == exact_pattern)
+                || arguments
+                    .iter()
+                    .any(|argument| argument == &format!("-run={exact_pattern}"));
+            if !has_exact_run {
+                bail!("go-test verification runner must pass an exact -run filter");
+            }
+            if !arguments.iter().any(|argument| argument == "-json") {
+                bail!("go-test verification runner must request JSON output");
+            }
+            let package = claim_arguments.get("package").ok_or_else(|| {
+                anyhow::anyhow!("go-test verification claim must name the exact package")
+            })?;
+            if !arguments.iter().any(|argument| argument == package) {
+                bail!("go-test verification runner must pass the exact package {package}");
+            }
+        }
+        VerificationRunnerAdapter::Shell => {
+            bail!("shell runners cannot provide exact verification proof")
+        }
+    }
+    Ok(())
+}
+
+fn parse_cargo_libtest_output(identity: &str, stdout: &[u8]) -> Result<(usize, bool)> {
+    let mut matched_count = 0;
+    let mut failed = false;
+    for line in String::from_utf8_lossy(stdout).lines() {
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if event.get("type").and_then(serde_json::Value::as_str) != Some("test")
+            || event.get("name").and_then(serde_json::Value::as_str) != Some(identity)
+        {
+            continue;
+        }
+        match event.get("event").and_then(serde_json::Value::as_str) {
+            Some("ok") => matched_count += 1,
+            Some("ignored") | Some("failed") | Some("timeout") => failed = true,
+            _ => {}
+        }
+    }
+    Ok((matched_count, failed))
+}
+
+fn parse_pytest_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
+    let mut matched_count = 0;
+    let mut failed = false;
+    for line in String::from_utf8_lossy(stdout).lines() {
+        let mut fields = line.split_whitespace();
+        if fields.next() != Some(identity) {
+            continue;
+        }
+        match fields.next() {
+            Some("PASSED") => matched_count += 1,
+            Some("FAILED") | Some("SKIPPED") | Some("XFAIL") | Some("XPASS") => failed = true,
+            _ => {}
+        }
+    }
+    (matched_count, failed)
+}
+
+fn parse_node_test_output(name: &str, stdout: &[u8]) -> (usize, bool) {
+    let mut matched_count = 0;
+    let mut failed = false;
+    for line in String::from_utf8_lossy(stdout).lines() {
+        let trimmed = line.trim_start();
+        let (is_pass, remainder) = if let Some(remainder) = trimmed.strip_prefix("ok ") {
+            (true, remainder)
+        } else if let Some(remainder) = trimmed.strip_prefix("not ok ") {
+            (false, remainder)
+        } else {
+            continue;
+        };
+        let Some((title, directive)) = remainder
+            .split_once(" - ")
+            .map(|(_, title)| title.trim())
+            .map(|title| {
+                title
+                    .split_once(" # ")
+                    .map_or((title, None), |(title, directive)| {
+                        (title.trim(), Some(directive.trim()))
+                    })
+            })
+        else {
+            continue;
+        };
+        if title != name {
+            continue;
+        }
+        if is_pass
+            && !directive.is_some_and(|directive| {
+                directive.eq_ignore_ascii_case("skip") || directive.eq_ignore_ascii_case("todo")
+            })
+        {
+            matched_count += 1;
+        } else {
+            failed = true;
+        }
+    }
+    (matched_count, failed)
+}
+
+fn parse_go_test_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
+    let mut matched_count = 0;
+    let mut failed = false;
+    for line in String::from_utf8_lossy(stdout).lines() {
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if event.get("Test").and_then(serde_json::Value::as_str) != Some(identity) {
+            continue;
+        }
+        match event.get("Action").and_then(serde_json::Value::as_str) {
+            Some("pass") => matched_count += 1,
+            Some("fail") | Some("skip") => failed = true,
+            _ => {}
+        }
+    }
+    (matched_count, failed)
+}
+
+pub(crate) fn canonical_runner_arguments_for_adapter(
+    adapter: VerificationRunnerAdapter,
+    mut arguments: Vec<String>,
+) -> Vec<String> {
+    if adapter == VerificationRunnerAdapter::CargoLibtest
+        && arguments.iter().any(|argument| argument == "test")
+    {
         if let Some(index) = arguments.iter().position(|argument| argument == "--") {
             let harness_start = index + 1;
             if !arguments[harness_start..]
@@ -1707,6 +1930,18 @@ pub fn canonical_runner_arguments(executable: &str, mut arguments: Vec<String>) 
         }
     }
     arguments
+}
+
+/// Cargo's human test output is not an authority boundary: a test can print a
+/// line that looks like a harness result. Force libtest's structured stream
+/// and keep the injected arguments in the receipt's canonical command.
+pub fn canonical_runner_arguments(executable: &str, arguments: Vec<String>) -> Vec<String> {
+    let adapter = if executable == "cargo" {
+        VerificationRunnerAdapter::CargoLibtest
+    } else {
+        VerificationRunnerAdapter::Shell
+    };
+    canonical_runner_arguments_for_adapter(adapter, arguments)
 }
 
 pub(crate) fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
@@ -6036,7 +6271,7 @@ requirements:
             "tests::exact_test_execution_requires_match".to_string(),
         )]);
         let proof = ensure_exact_test_executed(
-            "cargo",
+            VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
@@ -6046,9 +6281,11 @@ requirements:
         .expect("exact test marker");
         assert_eq!(proof.identity, "tests::exact_test_execution_requires_match");
         assert_eq!(proof.matched_count, 1);
+        assert_eq!(proof.schema, VERIFICATION_PROOF_SCHEMA);
+        assert_eq!(proof.status, VerificationProofStatus::Passed);
         assert!(
             ensure_exact_test_executed(
-                "cargo",
+                VerificationRunnerAdapter::CargoLibtest,
                 &target,
                 &arguments,
                 br#"{"type":"test","name":"tests::other","event":"ok"}
@@ -6057,7 +6294,7 @@ requirements:
             .is_err()
         );
         assert!(ensure_exact_test_executed(
-            "cargo",
+            VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
             br#"{"type":"test","name":"other::tests::exact_test_execution_requires_match","event":"ok"}
@@ -6065,7 +6302,7 @@ requirements:
         )
         .is_err());
         assert!(ensure_exact_test_executed(
-            "cargo",
+            VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ignored"}
@@ -6073,7 +6310,7 @@ requirements:
         )
         .is_err());
         assert!(ensure_exact_test_executed(
-            "cargo",
+            VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
@@ -6081,7 +6318,76 @@ requirements:
 "#,
         )
         .is_err());
-        assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::Pytest,
+                &target,
+                &arguments,
+                b"ok"
+            )
+            .is_err()
+        );
+
+        let pytest_proof = ensure_exact_test_executed(
+            VerificationRunnerAdapter::Pytest,
+            &target,
+            &arguments,
+            b"tests::exact_test_execution_requires_match PASSED\n",
+        )
+        .expect("pytest proof");
+        assert_eq!(pytest_proof.status, VerificationProofStatus::Passed);
+
+        let node_arguments = BTreeMap::from([
+            (
+                "test".to_string(),
+                "src/app.test.ts::exact_test_execution_requires_match".to_string(),
+            ),
+            ("path".to_string(), "src/app.test.ts".to_string()),
+            (
+                "name".to_string(),
+                "exact_test_execution_requires_match".to_string(),
+            ),
+        ]);
+        let node_proof = ensure_exact_test_executed(
+            VerificationRunnerAdapter::NodeTest,
+            &target,
+            &node_arguments,
+            b"TAP version 13\nok 1 - exact_test_execution_requires_match\n",
+        )
+        .expect("node test proof");
+        assert_eq!(node_proof.matched_count, 1);
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::NodeTest,
+                &target,
+                &node_arguments,
+                b"TAP version 13\nok 1 - exact_test_execution_requires_match # SKIP\n",
+            )
+            .is_err()
+        );
+
+        let go_arguments = BTreeMap::from([
+            (
+                "test".to_string(),
+                "tests::exact_test_execution_requires_match".to_string(),
+            ),
+            ("package".to_string(), "./go".to_string()),
+        ]);
+        let go_proof = ensure_exact_test_executed(
+            VerificationRunnerAdapter::GoTest,
+            &target,
+            &go_arguments,
+            br#"{"Action":"run","Test":"tests::exact_test_execution_requires_match"}
+{"Action":"pass","Test":"tests::exact_test_execution_requires_match"}
+"#,
+        )
+        .expect("go test proof");
+        assert_eq!(go_proof.schema, VERIFICATION_PROOF_SCHEMA);
+
+        let mut zero_match = pytest_proof;
+        zero_match.matched_count = 0;
+        zero_match.status = VerificationProofStatus::Failed;
+        assert!(validate_verification_proof(&zero_match).is_err());
         let command = canonical_runner_arguments(
             "cargo",
             vec!["test".into(), "--package".into(), "sample".into()],

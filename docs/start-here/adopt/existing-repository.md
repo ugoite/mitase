@@ -26,6 +26,7 @@ validation:
 verification:
   runners:
     cargo-test:
+      adapter: cargo-libtest
       executable: cargo
       arguments: [test, -p, "{package}", "{test}", --, --exact]
 work:

@@ -21,15 +21,17 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: shell
+      adapter: typescript
       path: src/app.test.ts
-      selector:
-        kind: marker
-        value: "import assert from 'node:assert/strict'"
+      selector: { kind: file }
       claims:
       - kind: verifies
         criterion: REQ-TYPESCRIPTONLY-001#criterion.owned-delivery
         covers:
         - FEAT-TYPESCRIPTONLY-001#binding.implementation/target.target-1
         runner:
-          runner: cargo-test
+          runner: node-test
+          arguments:
+            path: src/app.test.ts
+            name: typescriptRequirementTest
+            test: src/app.test.ts::typescriptRequirementTest

@@ -38,6 +38,7 @@ validation:
 verification:
   runners:
     cargo-test:
+      adapter: cargo-libtest
       executable: cargo
       arguments: [test, -p, "{package}", "{test}", --, --exact]
 work:
@@ -54,8 +55,12 @@ Key fields:
 - `validation.readiness.probes.public_entrypoints`: set `selection: all` and the required `level` to govern every discovered public entrypoint with one exact owner, one capability exposure, and a ready target-specific plan.
 - `validation.readiness.probes.changed_units`: include changed artifact ownership in readiness when enabled.
 - `validation.changed.baseline`: optional Git baseline for change and readiness comparison.
-- `verification.runners`: executable templates used by exact verification claims. Readiness can prove exact execution only for supported runners.
+- `verification.runners`: adapter-backed executable templates used by exact verification claims. Supported proof adapters are `cargo-libtest`, `pytest`, `node-test`, and `go-test`; an exit code alone is never exact-test evidence.
 - `work.slicing.*`: hard limits used by planning and context export.
+
+Every successful runner emits the shared `mitase/verification-proof/v1` evidence shape:
+`{ schema, identity, matched_count, status }`. The receipt validator accepts only
+`status: passed` with exactly one match, regardless of which adapter produced it.
 
 Probe identity and required level are one typed configuration unit. Advance a capability only when its acceptance and behavioral verification are present; do not add catch-all ownership or planned targets to make a readiness count pass.
 

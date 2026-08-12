@@ -4,6 +4,8 @@ import test from 'node:test'
 import { typescriptFeature } from './app.ts'
 
 /** REQ-TS-001 keeps the first TypeScript test trace explicit. */
-test('typescriptRequirementTest', () => {
+function typescriptRequirementTest() {
   assert.notEqual(typescriptFeature(), '')
-})
+}
+
+test('typescriptRequirementTest', typescriptRequirementTest)

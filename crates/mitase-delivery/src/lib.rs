@@ -1752,7 +1752,7 @@ fn validate_completion_attempt_against_plan(
             for execution in &receipt.executions {
                 if execution.exit_code != 0
                     || execution.command.is_empty()
-                    || execution.proof.matched_count != 1
+                    || mitase_validation::validate_verification_proof(&execution.proof).is_err()
                     || execution
                         .claim
                         .as_ref()

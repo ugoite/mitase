@@ -1142,10 +1142,10 @@ fn finalized_absent_targets(
             || verification.slice_id != receipt.slice_id
             || verification.workspace_fingerprint != receipt.pre_workspace_fingerprint
             || verification.lifecycle_proofs != receipt.lifecycle_proofs
-            || verification
-                .executions
-                .iter()
-                .any(|execution| execution.exit_code != 0 || execution.proof.matched_count != 1)
+            || verification.executions.iter().any(|execution| {
+                execution.exit_code != 0
+                    || crate::validate_verification_proof(&execution.proof).is_err()
+            })
         {
             continue;
         }
@@ -1303,11 +1303,10 @@ fn validate_durable_receipt_closure(
         if execution.target != claim.target
             || execution.exit_code != 0
             || execution.command.is_empty()
-            || execution.proof.matched_count != 1
         {
             bail!("durable verification receipt execution is invalid");
         }
-        let (_verification_target, runner_ref, covers) =
+        let (verification_target, runner_ref, covers) =
             crate::resolve_verification_claim(baseline_index, claim)?;
         let configured = baseline_workspace
             .config
@@ -1320,7 +1319,15 @@ fn validate_durable_receipt_closure(
             .iter()
             .map(|argument| crate::expand_runner_argument(argument, &runner_ref.arguments))
             .collect::<Vec<_>>();
-        let arguments = crate::canonical_runner_arguments(&configured.executable, arguments);
+        let arguments =
+            crate::canonical_runner_arguments_for_adapter(configured.adapter, arguments);
+        crate::validate_exact_claim_identity(
+            configured.adapter,
+            verification_target,
+            &runner_ref.arguments,
+        )?;
+        crate::require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
+        crate::validate_verification_proof(&execution.proof)?;
         let expected_command = std::iter::once(configured.executable.clone())
             .chain(arguments)
             .collect::<Vec<_>>();
