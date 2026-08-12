@@ -820,10 +820,12 @@ pub fn execute_verification(
         require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
-        if configured.executable == "cargo" && arguments.iter().any(|argument| argument == "-Z") {
+        if configured.adapter == VerificationRunnerAdapter::CargoLibtest
+            && arguments.iter().any(|argument| argument == "-Z")
+        {
             command.env("RUSTC_BOOTSTRAP", "1");
         }
-        if configured.executable == "cargo" {
+        if configured.adapter == VerificationRunnerAdapter::CargoLibtest {
             // Reuse one target directory for all exact verification jobs in a
             // workspace. Keep an explicitly supplied target directory (the
             // test runner uses this to stay off the source volume); otherwise
@@ -1737,6 +1739,7 @@ fn validate_exact_claim_identity(
                 anyhow::anyhow!("go-test verification claim must name the exact package")
             })?;
             validate_go_package_identity(target, package, workspace_root)?;
+            validate_go_test_file_identity(target, test_identity, workspace_root)?;
         }
         VerificationRunnerAdapter::CargoLibtest | VerificationRunnerAdapter::Shell => {}
     }
@@ -1780,6 +1783,36 @@ fn validate_go_package_identity(
         "go-test package {package} does not identify verification target {}",
         target.path.to_string_lossy()
     )
+}
+
+fn validate_go_test_file_identity(
+    target: &mitase_spec_model::ArtifactTarget,
+    identity: &str,
+    workspace_root: Option<&Path>,
+) -> Result<()> {
+    let Some(workspace_root) = workspace_root else {
+        return Ok(());
+    };
+    let test_name = identity.split('/').next().unwrap_or(identity);
+    let source_path = workspace_root.join(target.path.as_path());
+    let source = fs::read_to_string(&source_path).with_context(|| {
+        format!(
+            "read Go verification target source {}",
+            target.path.to_string_lossy()
+        )
+    })?;
+    let declaration = format!("func {test_name}(");
+    let declaration_with_space = format!("func {test_name} (");
+    if !source.lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with(&declaration) || line.starts_with(&declaration_with_space)
+    }) {
+        bail!(
+            "go-test identity {identity} is not defined in verification target {}",
+            target.path.to_string_lossy()
+        );
+    }
+    Ok(())
 }
 
 fn go_test_regex_fragment(identity: &str) -> String {
@@ -6656,6 +6689,12 @@ requirements:
             "module example.com/go-only\n",
         )
         .expect("go module");
+        fs::create_dir_all(go_workspace.path().join("go")).expect("go package directory");
+        fs::write(
+            go_workspace.path().join("go/exact_test.go"),
+            "package go\n\nfunc TestGoRequirement(t *testing.T) {}\n",
+        )
+        .expect("go test target");
         let module_go_arguments = BTreeMap::from([
             ("test".to_string(), "TestGoRequirement".to_string()),
             ("package".to_string(), "example.com/go-only/go".to_string()),
