@@ -841,18 +841,16 @@ pub fn execute_verification(
             // use a workspace-specific temporary directory so verification
             // never mutates or nests a target directory inside a temporary
             // clone's source tree.
-            let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+            let target_root = std::env::var_os("CARGO_TARGET_DIR")
                 .map(PathBuf::from)
-                .unwrap_or_else(|| {
-                    std::env::temp_dir()
-                        .join("mitase-verification")
-                        // `sha256:` is part of Mitase's digest wire format, but
-                        // `:` is a library-path separator on Unix.
-                        .join(
-                            digest(workspace.root.to_string_lossy().as_bytes())
-                                .trim_start_matches("sha256:"),
-                        )
-                });
+                .unwrap_or_else(|| std::env::temp_dir().join("mitase-verification"));
+            // Keep each workspace (including temporary self-hosted clones)
+            // isolated even when the caller supplies one shared target root.
+            // `sha256:` is part of Mitase's digest wire format, but `:` is a
+            // library-path separator on Unix.
+            let target_dir = target_root.join(
+                digest(workspace.root.to_string_lossy().as_bytes()).trim_start_matches("sha256:"),
+            );
             command.env("CARGO_TARGET_DIR", target_dir);
         }
         let output = command
@@ -1756,6 +1754,7 @@ fn validate_exact_claim_identity(
                     "node-test verification identity {test_identity} must match {expected_identity}"
                 );
             }
+            validate_node_test_file_identity(target, name, workspace_root)?;
         }
         VerificationRunnerAdapter::GoTest => {
             let package = claim_arguments.get("package").ok_or_else(|| {
@@ -1850,6 +1849,148 @@ fn validate_go_test_file_identity(
         );
     }
     Ok(())
+}
+
+fn validate_node_test_file_identity(
+    target: &mitase_spec_model::ArtifactTarget,
+    name: &str,
+    workspace_root: Option<&Path>,
+) -> Result<()> {
+    let Some(workspace_root) = workspace_root else {
+        return Ok(());
+    };
+    let source_path = workspace_root.join(target.path.as_path());
+    let source = fs::read_to_string(&source_path).with_context(|| {
+        format!(
+            "read Node verification target source {}",
+            target.path.to_string_lossy()
+        )
+    })?;
+    if !node_test_source_declares_name(&source, name) {
+        bail!(
+            "node-test identity {name} is not defined in verification target {}",
+            target.path.to_string_lossy()
+        );
+    }
+    Ok(())
+}
+
+fn node_test_source_declares_name(source: &str, expected_name: &str) -> bool {
+    let bytes = source.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'/' && bytes.get(cursor + 1) == Some(&b'/') {
+            cursor = source[cursor + 2..]
+                .find('\n')
+                .map(|offset| cursor + 2 + offset + 1)
+                .unwrap_or(bytes.len());
+            continue;
+        }
+        if bytes[cursor] == b'/' && bytes.get(cursor + 1) == Some(&b'*') {
+            cursor = source[cursor + 2..]
+                .find("*/")
+                .map(|offset| cursor + 2 + offset + 2)
+                .unwrap_or(bytes.len());
+            continue;
+        }
+        if matches!(bytes[cursor], b'\'' | b'"' | b'`') {
+            cursor = skip_node_js_string(source, cursor);
+            continue;
+        }
+        if is_node_identifier_start(bytes[cursor]) {
+            let start = cursor;
+            cursor += 1;
+            while cursor < bytes.len() && is_node_identifier_continue(bytes[cursor]) {
+                cursor += 1;
+            }
+            let identifier = &source[start..cursor];
+            if identifier != "test" && identifier != "it" {
+                continue;
+            }
+            let mut argument_start = skip_node_js_whitespace(bytes, cursor);
+            if bytes.get(argument_start) == Some(&b'.') {
+                argument_start += 1;
+                while argument_start < bytes.len()
+                    && is_node_identifier_continue(bytes[argument_start])
+                {
+                    argument_start += 1;
+                }
+                argument_start = skip_node_js_whitespace(bytes, argument_start);
+            }
+            if bytes.get(argument_start) != Some(&b'(') {
+                continue;
+            }
+            argument_start = skip_node_js_whitespace(bytes, argument_start + 1);
+            if let Some((name, _)) = parse_node_js_string(source, argument_start)
+                && name == expected_name
+            {
+                return true;
+            }
+            continue;
+        }
+        cursor += source[cursor..]
+            .chars()
+            .next()
+            .map(char::len_utf8)
+            .unwrap_or(1);
+    }
+    false
+}
+
+fn is_node_identifier_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_' || byte == b'$'
+}
+
+fn is_node_identifier_continue(byte: u8) -> bool {
+    is_node_identifier_start(byte) || byte.is_ascii_digit()
+}
+
+fn skip_node_js_whitespace(bytes: &[u8], mut cursor: usize) -> usize {
+    while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+        cursor += 1;
+    }
+    cursor
+}
+
+fn skip_node_js_string(source: &str, cursor: usize) -> usize {
+    parse_node_js_string(source, cursor)
+        .map(|(_, end)| end)
+        .unwrap_or_else(|| source.len())
+}
+
+fn parse_node_js_string(source: &str, cursor: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let quote = *bytes.get(cursor)?;
+    if !matches!(quote, b'\'' | b'"' | b'`') {
+        return None;
+    }
+    let mut value = String::new();
+    let mut cursor = cursor + 1;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            byte if byte == quote => return Some((value, cursor + 1)),
+            b'\\' => {
+                cursor += 1;
+                let escaped = *bytes.get(cursor)?;
+                match escaped {
+                    b'n' => value.push('\n'),
+                    b'r' => value.push('\r'),
+                    b't' => value.push('\t'),
+                    b'\\' => value.push('\\'),
+                    b'\'' => value.push('\''),
+                    b'"' => value.push('"'),
+                    other => value.push(other as char),
+                }
+                cursor += 1;
+            }
+            _ => {
+                let character = source[cursor..].chars().next()?;
+                value.push(character);
+                cursor += character.len_utf8();
+            }
+        }
+    }
+    None
 }
 
 fn go_test_regex_fragment(identity: &str) -> String {
@@ -2391,6 +2532,12 @@ pub(crate) fn canonical_runner_arguments_for_adapter(
     adapter: VerificationRunnerAdapter,
     mut arguments: Vec<String>,
 ) -> Vec<String> {
+    if adapter == VerificationRunnerAdapter::Pytest {
+        // Pytest merges `addopts` from configuration files after parsing the
+        // command line. Override it last so an exact receipt cannot be widened
+        // by a repository-local pytest.ini or pyproject.toml.
+        arguments.extend(["-o".into(), "addopts=".into()]);
+    }
     if adapter == VerificationRunnerAdapter::CargoLibtest
         && arguments.iter().any(|argument| argument == "test")
     {
@@ -6890,6 +7037,30 @@ requirements:
         )
         .expect("pytest proof");
         assert_eq!(pytest_proof.status, VerificationProofStatus::Passed);
+        let canonical_pytest_arguments = canonical_runner_arguments_for_adapter(
+            VerificationRunnerAdapter::Pytest,
+            vec![
+                "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                "-v".into(),
+            ],
+        );
+        assert_eq!(
+            canonical_pytest_arguments,
+            vec![
+                "tests/exact_test.py::exact_test_execution_requires_match",
+                "-v",
+                "-o",
+                "addopts=",
+            ]
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::Pytest,
+                &canonical_pytest_arguments,
+                &pytest_arguments,
+            )
+            .is_ok()
+        );
         assert!(
             ensure_exact_test_executed(
                 VerificationRunnerAdapter::Pytest,
@@ -7028,6 +7199,45 @@ requirements:
         )
         .expect("node test proof");
         assert_eq!(node_proof.matched_count, 1);
+        let node_workspace = tempdir().expect("node workspace");
+        fs::create_dir_all(node_workspace.path().join("src")).expect("node source directory");
+        fs::write(
+            node_workspace.path().join("src/app.test.ts"),
+            "import './helper.js';\n",
+        )
+        .expect("node target source");
+        fs::write(
+            node_workspace.path().join("src/helper.js"),
+            "import { test } from 'node:test';\ntest('exact_test_execution_requires_match', () => {});\n",
+        )
+        .expect("node imported source");
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::NodeTest,
+                &node_target,
+                &node_arguments,
+                Some(node_workspace.path()),
+                &[],
+                b"TAP version 13\nok 1 - exact_test_execution_requires_match\n",
+            )
+            .is_err()
+        );
+        fs::write(
+            node_workspace.path().join("src/app.test.ts"),
+            "import './helper.js';\nimport { test } from 'node:test';\ntest('exact_test_execution_requires_match', () => {});\n",
+        )
+        .expect("node declared source");
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::NodeTest,
+                &node_target,
+                &node_arguments,
+                Some(node_workspace.path()),
+                &[],
+                b"TAP version 13\nok 1 - exact_test_execution_requires_match\n",
+            )
+            .is_ok()
+        );
         assert!(
             ensure_exact_test_executed(
                 VerificationRunnerAdapter::NodeTest,
