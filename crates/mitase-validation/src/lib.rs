@@ -808,10 +808,10 @@ pub fn execute_verification(
             })
             .collect::<Vec<_>>();
         let arguments = canonical_runner_arguments_for_adapter(configured.adapter, arguments);
-        if !runner_ref
+        if runner_ref
             .arguments
             .get("test")
-            .is_some_and(|identity| !identity.is_empty())
+            .is_none_or(|identity| identity.is_empty())
         {
             bail!("verification claim must name the exact test identity");
         }
@@ -1122,10 +1122,10 @@ pub fn validate_verification_receipt(
             })
             .collect::<Vec<_>>();
         let arguments = canonical_runner_arguments_for_adapter(configured.adapter, arguments);
-        if !runner_ref
+        if runner_ref
             .arguments
             .get("test")
-            .is_some_and(|identity| !identity.is_empty())
+            .is_none_or(|identity| identity.is_empty())
         {
             bail!("verification claim must name the exact test identity");
         }
@@ -1767,7 +1767,7 @@ fn validate_go_package_identity(
 ) -> Result<()> {
     let target_parent = Path::new(target.path.as_path())
         .parent()
-        .map(|path| path.to_string_lossy().into_owned())
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
         .unwrap_or_default();
     let package_path = package.trim_start_matches("./").trim_end_matches('/');
     let target_parent = target_parent.trim_start_matches("./");

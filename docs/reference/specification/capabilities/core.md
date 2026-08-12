@@ -107,6 +107,12 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: tests[cfg(test)]
+        - **id**: project-config-runner-adapters
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
 - **id**: FEAT-INVENTORY-001
   - **title**: Inventory providers
   - **summary**: Discover active artifact units through profile-selected providers.
@@ -291,6 +297,12 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: readiness::target_is_absent
+        - **id**: readiness-proof-closure
+          - **adapter**: rust
+          - **path**: crates/mitase-validation/src/readiness.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
       - **targets**:
         - **id**: readiness-evaluate
           - **adapter**: rust
@@ -479,6 +491,12 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_targets
+        - **id**: validation-proof-adapters
+          - **adapter**: rust
+          - **path**: crates/mitase-validation/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
       - **targets**:
         - **id**: change-validate
           - **adapter**: rust
@@ -559,6 +577,10 @@ features:
             adapter: rust
             path: crates/mitase-project-model/src/lib.rs
             selector: { kind: module, name: 'tests[cfg(test)]' }
+          - id: project-config-runner-adapters
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: '*' }
 
   - id: FEAT-INVENTORY-001
     title: Inventory providers
@@ -704,6 +726,10 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::target_is_absent' }
+          - id: readiness-proof-closure
+            adapter: rust
+            path: crates/mitase-validation/src/readiness.rs
+            selector: { kind: module, name: '*' }
         targets:
           - id: readiness-evaluate
             adapter: rust
@@ -835,6 +861,10 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_targets' }
+          - id: validation-proof-adapters
+            adapter: rust
+            path: crates/mitase-validation/src/lib.rs
+            selector: { kind: module, name: '*' }
         targets:
           - id: change-validate
             adapter: rust

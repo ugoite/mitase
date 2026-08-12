@@ -305,6 +305,12 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **selector**:
             - **kind**: module
             - **name**: lib::readonly_targets_fingerprint_for_execution
+        - **id**: work-model-verification-proof
+          - **adapter**: rust
+          - **path**: crates/mitase-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
       - **targets**:
         - **id**: canonical-plan
           - **adapter**: rust
@@ -568,6 +574,35 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **selector**:
             - **kind**: path-prefix
             - **value**: docs/workflows
+        - **id**: examples-go-only
+          - **adapter**: declared
+          - **path**: examples/go-only
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: examples/go-only
+        - **id**: examples-polyglot
+          - **adapter**: declared
+          - **path**: examples/polyglot
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: examples/polyglot
+        - **id**: examples-python-only
+          - **adapter**: declared
+          - **path**: examples/python-only
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: examples/python-only
+        - **id**: examples-typescript-only
+          - **adapter**: declared
+          - **path**: examples/typescript-only
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: examples/typescript-only
+        - **id**: valid-web-app-fixture
+          - **adapter**: declared
+          - **path**: fixtures/v1/valid-web-app/mitase.yaml
+          - **selector**:
+            - **kind**: file
         - **id**: documentation-index
           - **adapter**: declared
           - **path**: docs/index.md
@@ -832,6 +867,10 @@ features:
             adapter: rust
             path: crates/mitase-work-model/src/lib.rs
             selector: { kind: module, name: 'lib::readonly_targets_fingerprint_for_execution' }
+          - id: work-model-verification-proof
+            adapter: rust
+            path: crates/mitase-work-model/src/lib.rs
+            selector: { kind: module, name: '*' }
         targets:
           - id: canonical-plan
             adapter: rust
@@ -1014,6 +1053,11 @@ features:
           - { id: documentation-mitase, adapter: declared, path: docs/mitase, selector: { kind: path-prefix, value: docs/mitase } }
           - { id: documentation-understand, adapter: declared, path: docs/understand, selector: { kind: path-prefix, value: docs/understand } }
           - { id: documentation-workflows, adapter: declared, path: docs/workflows, selector: { kind: path-prefix, value: docs/workflows } }
+          - { id: examples-go-only, adapter: declared, path: examples/go-only, selector: { kind: path-prefix, value: examples/go-only } }
+          - { id: examples-polyglot, adapter: declared, path: examples/polyglot, selector: { kind: path-prefix, value: examples/polyglot } }
+          - { id: examples-python-only, adapter: declared, path: examples/python-only, selector: { kind: path-prefix, value: examples/python-only } }
+          - { id: examples-typescript-only, adapter: declared, path: examples/typescript-only, selector: { kind: path-prefix, value: examples/typescript-only } }
+          - { id: valid-web-app-fixture, adapter: declared, path: fixtures/v1/valid-web-app/mitase.yaml, selector: { kind: file } }
           - { id: documentation-index, adapter: declared, path: docs/index.md, selector: { kind: file } }
           - { id: site-docs-generator, adapter: declared, path: scripts/generate-site-docs.py, selector: { kind: file } }
           - { id: site-docs-extras-generator, adapter: declared, path: scripts/generate-docs-site-extras.py, selector: { kind: file } }
