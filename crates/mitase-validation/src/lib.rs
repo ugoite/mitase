@@ -1837,18 +1837,81 @@ fn validate_go_test_file_identity(
             target.path.to_string_lossy()
         )
     })?;
-    let declaration = format!("func {test_name}(");
-    let declaration_with_space = format!("func {test_name} (");
-    if !source.lines().any(|line| {
-        let line = line.trim_start();
-        line.starts_with(&declaration) || line.starts_with(&declaration_with_space)
-    }) {
+    if !go_source_declares_test(&source, test_name) {
         bail!(
             "go-test identity {identity} is not defined in verification target {}",
             target.path.to_string_lossy()
         );
     }
     Ok(())
+}
+
+fn go_source_declares_test(source: &str, expected_name: &str) -> bool {
+    let tokens = go_source_tokens(source);
+    tokens
+        .windows(3)
+        .any(|window| window == ["func", expected_name, "("])
+}
+
+fn go_source_tokens(source: &str) -> Vec<&str> {
+    let bytes = source.as_bytes();
+    let mut tokens = Vec::new();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        if bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+            continue;
+        }
+        if bytes[cursor] == b'/' && bytes.get(cursor + 1) == Some(&b'/') {
+            cursor = source[cursor + 2..]
+                .find('\n')
+                .map(|offset| cursor + 2 + offset + 1)
+                .unwrap_or(bytes.len());
+            continue;
+        }
+        if bytes[cursor] == b'/' && bytes.get(cursor + 1) == Some(&b'*') {
+            cursor = source[cursor + 2..]
+                .find("*/")
+                .map(|offset| cursor + 2 + offset + 2)
+                .unwrap_or(bytes.len());
+            continue;
+        }
+        if matches!(bytes[cursor], b'"' | b'\'' | b'`') {
+            cursor = skip_go_literal(source, cursor);
+            continue;
+        }
+        if bytes[cursor].is_ascii_alphabetic() || bytes[cursor] == b'_' {
+            let start = cursor;
+            cursor += 1;
+            while cursor < bytes.len()
+                && (bytes[cursor].is_ascii_alphanumeric() || bytes[cursor] == b'_')
+            {
+                cursor += 1;
+            }
+            tokens.push(&source[start..cursor]);
+            continue;
+        }
+        tokens.push(&source[cursor..cursor + 1]);
+        cursor += 1;
+    }
+    tokens
+}
+
+fn skip_go_literal(source: &str, mut cursor: usize) -> usize {
+    let bytes = source.as_bytes();
+    let quote = bytes[cursor];
+    cursor += 1;
+    while cursor < bytes.len() {
+        if quote != b'`' && bytes[cursor] == b'\\' {
+            cursor = (cursor + 2).min(bytes.len());
+            continue;
+        }
+        if bytes[cursor] == quote {
+            return cursor + 1;
+        }
+        cursor += 1;
+    }
+    bytes.len()
 }
 
 fn validate_node_test_file_identity(
@@ -2214,6 +2277,11 @@ fn validate_pytest_output_arguments(arguments: &[String]) -> Result<()> {
             validate_pytest_capture_mode(mode)?;
         } else if argument == "-o" || argument == "--override-ini" {
             pending_value = Some("override");
+        } else if let Some(value) = argument
+            .strip_prefix("--override-ini=")
+            .or_else(|| argument.strip_prefix("-o="))
+        {
+            validate_pytest_override(value)?;
         } else if argument == "--verbose"
             || argument.strip_prefix('-').is_some_and(|value| {
                 !value.is_empty() && value.chars().all(|character| character == 'v')
@@ -7077,6 +7145,24 @@ requirements:
             .is_err()
         );
 
+        for capture_override in ["--override-ini=capture=no", "-o=capture=no"] {
+            assert!(
+                ensure_exact_test_executed(
+                    VerificationRunnerAdapter::Pytest,
+                    &pytest_target,
+                    &pytest_arguments,
+                    None,
+                    &[
+                        "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                        "-v".into(),
+                        capture_override.into(),
+                    ],
+                    b"tests/exact_test.py::exact_test_execution_requires_match PASSED\n",
+                )
+                .is_err()
+            );
+        }
+
         let pytest_parameterized_arguments = BTreeMap::from([(
             "test".to_string(),
             "tests/exact_test.py::exact_test_execution_requires_match[param value]".to_string(),
@@ -7433,13 +7519,27 @@ requirements:
         fs::create_dir_all(go_workspace.path().join("go")).expect("go package directory");
         fs::write(
             go_workspace.path().join("go/exact_test.go"),
-            "package go\n\nfunc TestGoRequirement(t *testing.T) {}\n",
+            "package go\n\n// func TestGoRequirement(t *testing.T) {}\nvar fake = `func TestGoRequirement(`\n",
         )
         .expect("go test target");
         let module_go_arguments = BTreeMap::from([
             ("test".to_string(), "TestGoRequirement".to_string()),
             ("package".to_string(), "example.com/go-only/go".to_string()),
         ]);
+        assert!(
+            validate_exact_claim_identity(
+                VerificationRunnerAdapter::GoTest,
+                &go_target,
+                &module_go_arguments,
+                Some(go_workspace.path()),
+            )
+            .is_err()
+        );
+        fs::write(
+            go_workspace.path().join("go/exact_test.go"),
+            "package go\n\nfunc /* comment */ TestGoRequirement(t *testing.T) {}\n",
+        )
+        .expect("go test declaration");
         assert!(
             validate_exact_claim_identity(
                 VerificationRunnerAdapter::GoTest,
