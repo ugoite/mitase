@@ -1771,7 +1771,10 @@ fn validate_go_package_identity(
         .unwrap_or_default();
     let package_path = package.trim_start_matches("./").trim_end_matches('/');
     let target_parent = target_parent.trim_start_matches("./");
-    if package_path == target_parent || (package_path == "." && target_parent.is_empty()) {
+    let is_local_package = package == "." || package.starts_with("./");
+    if is_local_package
+        && (package_path == target_parent || (package_path == "." && target_parent.is_empty()))
+    {
         return Ok(());
     }
 
@@ -1807,6 +1810,17 @@ fn validate_go_test_file_identity(
     let Some(workspace_root) = workspace_root else {
         return Ok(());
     };
+    if !target
+        .path
+        .as_path()
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().ends_with("_test.go"))
+    {
+        bail!(
+            "go-test verification target {} must be a *_test.go file",
+            target.path.to_string_lossy()
+        );
+    }
     let test_name = identity.split('/').next().unwrap_or(identity);
     let source_path = workspace_root.join(target.path.as_path());
     let source = fs::read_to_string(&source_path).with_context(|| {
@@ -7100,6 +7114,28 @@ requirements:
                 Some(go_workspace.path()),
             )
             .is_ok()
+        );
+        let mut bare_go_arguments = module_go_arguments.clone();
+        bare_go_arguments.insert("package".into(), "go".into());
+        assert!(
+            validate_exact_claim_identity(
+                VerificationRunnerAdapter::GoTest,
+                &go_target,
+                &bare_go_arguments,
+                Some(go_workspace.path()),
+            )
+            .is_err()
+        );
+        let mut implementation_target = go_target.clone();
+        implementation_target.path = RepoPath::new("go/app.go").unwrap();
+        assert!(
+            validate_exact_claim_identity(
+                VerificationRunnerAdapter::GoTest,
+                &implementation_target,
+                &go_arguments,
+                Some(go_workspace.path()),
+            )
+            .is_err()
         );
 
         let mut zero_match = pytest_proof;
