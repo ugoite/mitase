@@ -811,7 +811,12 @@ pub fn execute_verification(
         {
             bail!("verification claim must name the exact test identity");
         }
-        validate_exact_claim_identity(configured.adapter, target, &runner_ref.arguments)?;
+        validate_exact_claim_identity(
+            configured.adapter,
+            target,
+            &runner_ref.arguments,
+            Some(&workspace.root),
+        )?;
         require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
@@ -1107,7 +1112,12 @@ pub fn validate_verification_receipt(
         {
             bail!("verification claim must name the exact test identity");
         }
-        validate_exact_claim_identity(configured.adapter, target, &runner_ref.arguments)?;
+        validate_exact_claim_identity(
+            configured.adapter,
+            target,
+            &runner_ref.arguments,
+            Some(&workspace.root),
+        )?;
         require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         let expected_command = std::iter::once(configured.executable.clone())
             .chain(arguments)
@@ -1628,7 +1638,7 @@ fn ensure_exact_test_executed(
     let Some(test_identity) = claim_arguments.get("test") else {
         bail!("verification claim must name the exact test identity");
     };
-    validate_exact_claim_identity(adapter, target, claim_arguments)?;
+    validate_exact_claim_identity(adapter, target, claim_arguments, None)?;
     let (matched_count, failed) = match adapter {
         VerificationRunnerAdapter::CargoLibtest => {
             parse_cargo_libtest_output(test_identity, stdout)?
@@ -1687,6 +1697,7 @@ fn validate_exact_claim_identity(
     adapter: VerificationRunnerAdapter,
     target: &mitase_spec_model::ArtifactTarget,
     claim_arguments: &BTreeMap<String, String>,
+    workspace_root: Option<&Path>,
 ) -> Result<()> {
     let test_identity = claim_arguments
         .get("test")
@@ -1720,27 +1731,62 @@ fn validate_exact_claim_identity(
             let package = claim_arguments.get("package").ok_or_else(|| {
                 anyhow::anyhow!("go-test verification claim must name the exact package")
             })?;
-            let target_parent = Path::new(target.path.as_path())
-                .parent()
-                .map(|path| path.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let package_path = package.trim_start_matches("./").trim_end_matches('/');
-            let target_parent = target_parent.trim_start_matches("./");
-            let module_qualified_parent =
-                !target_parent.is_empty() && package_path.ends_with(&format!("/{target_parent}"));
-            if package_path != target_parent
-                && !(package_path == "." && target_parent.is_empty())
-                && !module_qualified_parent
-            {
-                bail!(
-                    "go-test package {package} does not contain verification target {}",
-                    target.path.to_string_lossy()
-                );
-            }
+            validate_go_package_identity(target, package, workspace_root)?;
         }
         VerificationRunnerAdapter::CargoLibtest | VerificationRunnerAdapter::Shell => {}
     }
     Ok(())
+}
+
+fn validate_go_package_identity(
+    target: &mitase_spec_model::ArtifactTarget,
+    package: &str,
+    workspace_root: Option<&Path>,
+) -> Result<()> {
+    let target_parent = Path::new(target.path.as_path())
+        .parent()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let package_path = package.trim_start_matches("./").trim_end_matches('/');
+    let target_parent = target_parent.trim_start_matches("./");
+    if package_path == target_parent || (package_path == "." && target_parent.is_empty()) {
+        return Ok(());
+    }
+
+    if let Some(workspace_root) = workspace_root
+        && let Ok(source) = fs::read_to_string(workspace_root.join("go.mod"))
+        && let Some(module) = source.lines().find_map(|line| {
+            line.strip_prefix("module ")
+                .map(str::trim)
+                .filter(|module| !module.is_empty())
+        })
+    {
+        let expected = if target_parent.is_empty() {
+            module.to_owned()
+        } else {
+            format!("{module}/{target_parent}")
+        };
+        if package == expected {
+            return Ok(());
+        }
+    }
+
+    bail!(
+        "go-test package {package} does not identify verification target {}",
+        target.path.to_string_lossy()
+    )
+}
+
+fn go_test_regex_fragment(identity: &str) -> String {
+    identity
+        .split('/')
+        .map(regex_escape)
+        .collect::<Vec<_>>()
+        .join("$/^")
+}
+
+fn go_test_exact_pattern(identity: &str) -> String {
+    format!("^{}$", go_test_regex_fragment(identity))
 }
 
 fn require_claim_path_matches_target(
@@ -1817,6 +1863,9 @@ fn require_exact_runner_filter(
             }
         }
         VerificationRunnerAdapter::NodeTest => {
+            if !arguments.iter().any(|argument| argument == "--test") {
+                bail!("node-test verification runner must enable Node's --test mode");
+            }
             let name = claim_arguments.get("name").ok_or_else(|| {
                 anyhow::anyhow!("node-test verification claim must name the exact test title")
             })?;
@@ -1842,7 +1891,7 @@ fn require_exact_runner_filter(
             }
         }
         VerificationRunnerAdapter::GoTest => {
-            let exact_pattern = format!("^{}$", regex_escape(test_identity));
+            let exact_pattern = go_test_exact_pattern(test_identity);
             let has_exact_run = arguments
                 .windows(2)
                 .any(|window| window[0] == "-run" && window[1] == exact_pattern)
@@ -2036,10 +2085,12 @@ pub(crate) fn expand_runner_argument_for_adapter(
     values
         .iter()
         .fold(template.to_owned(), |value, (key, replacement)| {
-            let replacement = if adapter == VerificationRunnerAdapter::NodeTest && key == "name" {
-                regex_escape(replacement)
-            } else {
-                replacement.clone()
+            let replacement = match adapter {
+                VerificationRunnerAdapter::NodeTest if key == "name" => regex_escape(replacement),
+                VerificationRunnerAdapter::GoTest if key == "test" => {
+                    go_test_regex_fragment(replacement)
+                }
+                _ => replacement.clone(),
             };
             value.replace(&format!("{{{key}}}"), &replacement)
         })
@@ -6515,6 +6566,7 @@ requirements:
             require_exact_runner_filter(
                 VerificationRunnerAdapter::NodeTest,
                 &[
+                    "--test".into(),
                     "--test-name-pattern=^foo\\.bar$".into(),
                     "src/app.test.ts".into(),
                 ],
@@ -6536,7 +6588,7 @@ requirements:
                 "test".to_string(),
                 "tests::exact_test_execution_requires_match".to_string(),
             ),
-            ("package".to_string(), "example.com/go-only/go".to_string()),
+            ("package".to_string(), "./go".to_string()),
         ]);
         let go_target = mitase_spec_model::ArtifactTarget {
             id: "go-exact-test".into(),
@@ -6557,8 +6609,8 @@ requirements:
         .expect("go test proof");
         assert_eq!(go_proof.schema, VERIFICATION_PROOF_SCHEMA);
         let special_go_arguments = BTreeMap::from([
-            ("test".to_string(), "TestFoo.Bar".to_string()),
-            ("package".to_string(), "example.com/go-only/go".to_string()),
+            ("test".to_string(), "TestFoo/bar.baz".to_string()),
+            ("package".to_string(), "./go".to_string()),
         ]);
         assert!(
             require_exact_runner_filter(
@@ -6566,10 +6618,37 @@ requirements:
                 &[
                     "-json".into(),
                     "-run".into(),
-                    "^TestFoo\\.Bar$".into(),
-                    "example.com/go-only/go".into()
+                    "^TestFoo$/^bar\\.baz$".into(),
+                    "./go".into()
                 ],
                 &special_go_arguments,
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            expand_runner_argument_for_adapter(
+                VerificationRunnerAdapter::GoTest,
+                "^{test}$",
+                &special_go_arguments,
+            ),
+            "^TestFoo$/^bar\\.baz$"
+        );
+        let go_workspace = tempdir().expect("go module workspace");
+        fs::write(
+            go_workspace.path().join("go.mod"),
+            "module example.com/go-only\n",
+        )
+        .expect("go module");
+        let module_go_arguments = BTreeMap::from([
+            ("test".to_string(), "TestGoRequirement".to_string()),
+            ("package".to_string(), "example.com/go-only/go".to_string()),
+        ]);
+        assert!(
+            validate_exact_claim_identity(
+                VerificationRunnerAdapter::GoTest,
+                &go_target,
+                &module_go_arguments,
+                Some(go_workspace.path()),
             )
             .is_ok()
         );

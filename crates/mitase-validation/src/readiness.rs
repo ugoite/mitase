@@ -1331,6 +1331,7 @@ fn validate_durable_receipt_closure(
             configured.adapter,
             verification_target,
             &runner_ref.arguments,
+            Some(&baseline_workspace.root),
         )?;
         crate::require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         crate::validate_verification_proof(&execution.proof)?;
