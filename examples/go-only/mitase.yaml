@@ -15,6 +15,11 @@ validation:
   changed:
     require_owned_changes: false
     require_plan: false
-verification: { runners: {} }
+verification:
+  runners:
+    go-test:
+      adapter: go-test
+      executable: go
+      arguments: [test, -json, -run, "^{test}$", "{package}"]
 work:
   slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 4, max_readonly_targets: 8, max_total_bytes: 16384 }

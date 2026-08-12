@@ -127,9 +127,24 @@ pub struct VerificationConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerificationRunner {
+    pub adapter: VerificationRunnerAdapter,
     pub executable: String,
     #[serde(default)]
     pub arguments: Vec<String>,
+}
+
+/// The output protocol used to turn a configured test runner's output into a
+/// verification proof.  Keeping this separate from the executable lets a
+/// repository use wrappers such as `python -m pytest` without making receipt
+/// validation depend on a command name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerificationRunnerAdapter {
+    CargoLibtest,
+    Pytest,
+    NodeTest,
+    GoTest,
+    Shell,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

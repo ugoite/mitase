@@ -89,7 +89,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
         - POL-ADOPTION-001#rule.feature-evidence
     - **id**: verification-execution
       - **kind**: behavior
-      - **statement**: Verification executes only a configured exact test and rejects zero-match or unprovable runs.
+      - **statement**: Verification executes only a configured exact test through a runner-neutral proof adapter and rejects zero-match or unprovable runs.
       - **governed_by**:
         - POL-ADOPTION-001#rule.feature-evidence
     - **id**: plan-validation
@@ -711,7 +711,7 @@ requirements:
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: verification-execution
         kind: behavior
-        statement: Verification executes only a configured exact test and rejects zero-match or unprovable runs.
+        statement: Verification executes only a configured exact test through a runner-neutral proof adapter and rejects zero-match or unprovable runs.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: plan-validation
         kind: security

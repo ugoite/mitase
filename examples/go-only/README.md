@@ -6,13 +6,14 @@ It demonstrates one requirement and one feature connected through explicit bindi
 
 Current commands:
 
-- `cargo run --quiet -- validate examples/go-only`
+- `cargo run --quiet -- validate workspace examples/go-only`
 - `cargo run --quiet -- workbench project --workspace examples/go-only`
+- `(cd examples/go-only && go test -json -run '^TestGoRequirement$' ./go)`
 
 Primary implementation targets:
 - `go/app.go` (go)
 
 Primary verification targets:
-- `go/app_test.go` (go)
+- `go/app_test.go` (go; exact claim `TestGoRequirement`)
 
 The example is written for the active v1 CLI and spec model.

@@ -23,21 +23,29 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: shell
+      adapter: typescript
       path: frontend/traceability.test.ts
-      selector:
-        kind: marker
-        value: "export function typescriptRequirementTest() {"
+      selector: { kind: file }
       claims:
       - kind: verifies
         criterion: REQ-POLYGLOT-001#criterion.owned-delivery
         covers:
         - FEAT-POLYGLOT-001#binding.implementation/target.target-1
         runner:
-          runner: cargo-test
+          runner: node-test
+          arguments:
+            path: frontend/traceability.test.ts
+            name: typescriptRequirementTest
+            test: frontend/traceability.test.ts::typescriptRequirementTest
     - id: target-2
-      adapter: shell
+      adapter: python
       path: python/test_traceability.py
-      selector:
-        kind: marker
-        value: "def test_python_requirement():"
+      selector: { kind: file }
+      claims:
+      - kind: verifies
+        criterion: REQ-POLYGLOT-001#criterion.owned-delivery
+        covers:
+        - FEAT-POLYGLOT-001#binding.implementation/target.target-2
+        runner:
+          runner: pytest
+          arguments: { test: python/test_traceability.py::test_python_requirement }

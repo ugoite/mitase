@@ -9,7 +9,8 @@ use sha2::{Digest, Sha256};
 
 pub const WORK_REQUEST_SCHEMA: &str = "mitase/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "mitase/work-plan/v1";
-pub const VERIFICATION_RECEIPT_SCHEMA: &str = "mitase/verification-receipt/v3";
+pub const VERIFICATION_PROOF_SCHEMA: &str = "mitase/verification-proof/v1";
+pub const VERIFICATION_RECEIPT_SCHEMA: &str = "mitase/verification-receipt/v4";
 pub const COMPLETION_REPORT_SCHEMA: &str = "mitase/completion-report/v1";
 pub const CONTEXT_PACK_SCHEMA: &str = "mitase/context-pack/v1";
 pub const PLAN_APPROVAL_SCHEMA: &str = "mitase/plan-approval/v1";
@@ -813,7 +814,7 @@ pub struct VerificationReceipt {
 #[serde(deny_unknown_fields)]
 pub struct VerificationExecution {
     pub target: BoundTargetRef,
-    /// v3 receipts carry the criterion-specific claim explicitly. `null` is
+    /// v4 receipts carry the criterion-specific claim explicitly. `null` is
     /// retained for a verification execution that is not claim-bound.
     pub claim: Option<VerificationClaimRef>,
     pub runner: String,
@@ -821,17 +822,33 @@ pub struct VerificationExecution {
     pub exit_code: i32,
     pub stdout_digest: String,
     pub stderr_digest: String,
-    pub proof: ExactTestEvidence,
+    pub proof: VerificationProof,
     pub implementation_digests: std::collections::BTreeMap<BoundTargetRef, String>,
     pub verification_digest: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ExactTestEvidence {
+pub struct VerificationProof {
+    pub schema: String,
     pub identity: String,
     pub matched_count: usize,
+    pub status: VerificationProofStatus,
 }
+
+/// The proof status is deliberately part of the runner-neutral protocol. An
+/// exit code is useful diagnostics, but it is not exact-test evidence by
+/// itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerificationProofStatus {
+    Passed,
+    Failed,
+}
+
+/// Source compatibility for callers that used the pre-protocol name. The
+/// serialized receipt shape is the new `VerificationProof` contract.
+pub type ExactTestEvidence = VerificationProof;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -904,7 +921,7 @@ pub struct VerificationExecutionAttempt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stderr_digest: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proof: Option<ExactTestEvidence>,
+    pub proof: Option<VerificationProof>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

@@ -1,7 +1,14 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { typescriptFeature } from './feature.ts'
+
 /**
  * REQ-MIX-001
  * typescript requirement doc
  */
-export function typescriptRequirementTest() {
-  return true;
+function typescriptRequirementTest() {
+  assert.equal(typescriptFeature(), 'ok')
 }
+
+test('typescriptRequirementTest', typescriptRequirementTest)

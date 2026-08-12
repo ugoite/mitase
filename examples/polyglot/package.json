@@ -1,0 +1,9 @@
+{
+  "name": "mitase-polyglot-example",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  },
+  "packageManager": "npm@11.8.0"
+}

@@ -370,7 +370,7 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
               - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
 - **id**: FEAT-VERIFICATION-001
   - **title**: Verification execution
-  - **summary**: Execute configured verification runners and produce canonical receipts.
+  - **summary**: Execute configured verification runners, normalize their exact-test proofs, and produce canonical receipts.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
@@ -408,7 +408,7 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
               - **criterion**: REQ-CAPABILITY-001#criterion.plan-validation
 - **id**: FEAT-RESULT-VALIDATION-001
   - **title**: Result validation
-  - **summary**: Validate verification receipts, lifecycle post-state, and explicit completion evidence against a plan.
+  - **summary**: Validate the shared verification proof and receipt contract, lifecycle post-state, and explicit completion evidence against a plan.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
@@ -890,7 +890,7 @@ features:
 
   - id: FEAT-VERIFICATION-001
     title: Verification execution
-    summary: Execute configured verification runners and produce canonical receipts.
+    summary: Execute configured verification runners, normalize their exact-test proofs, and produce canonical receipts.
     status: implemented
     bindings:
       - id: implementation
@@ -926,7 +926,7 @@ features:
 
   - id: FEAT-RESULT-VALIDATION-001
     title: Result validation
-    summary: Validate verification receipts, lifecycle post-state, and explicit completion evidence against a plan.
+    summary: Validate the shared verification proof and receipt contract, lifecycle post-state, and explicit completion evidence against a plan.
     status: implemented
     bindings:
       - id: implementation
