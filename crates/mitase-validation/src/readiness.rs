@@ -1314,6 +1314,11 @@ fn validate_durable_receipt_closure(
             .runners
             .get(&runner_ref.runner)
             .ok_or_else(|| anyhow::anyhow!("durable verification runner is not configured"))?;
+        if configured.arguments.iter().any(|argument| {
+            crate::has_unresolved_runner_placeholder(argument, &runner_ref.arguments)
+        }) {
+            bail!("durable verification runner has unresolved arguments");
+        }
         let arguments = configured
             .arguments
             .iter()

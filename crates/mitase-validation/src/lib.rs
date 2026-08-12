@@ -1953,11 +1953,8 @@ fn require_exact_runner_filter(
                 );
             }
             let exact_name_pattern = format!("^{}$", regex_escape(name));
-            let pattern = format!("--test-name-pattern={exact_name_pattern}");
-            let pattern_pair = ["--test-name-pattern".to_string(), exact_name_pattern];
-            if !arguments.iter().any(|argument| argument == &pattern)
-                && !arguments.windows(2).any(|window| window == pattern_pair)
-            {
+            let patterns = node_test_name_patterns(arguments);
+            if patterns.len() != 1 || patterns[0] != exact_name_pattern {
                 bail!("node-test verification runner must pass an exact test-name pattern");
             }
             let test_files = node_test_file_selectors(arguments);
@@ -1969,13 +1966,8 @@ fn require_exact_runner_filter(
         }
         VerificationRunnerAdapter::GoTest => {
             let exact_pattern = go_test_exact_pattern(test_identity);
-            let has_exact_run = arguments
-                .windows(2)
-                .any(|window| window[0] == "-run" && window[1] == exact_pattern)
-                || arguments
-                    .iter()
-                    .any(|argument| argument == &format!("-run={exact_pattern}"));
-            if !has_exact_run {
+            let run_filters = go_test_run_filters(arguments);
+            if run_filters.len() != 1 || run_filters[0] != exact_pattern {
                 bail!("go-test verification runner must pass an exact -run filter");
             }
             if !arguments.iter().any(|argument| argument == "-json") {
@@ -2057,6 +2049,24 @@ fn node_test_file_selectors(arguments: &[String]) -> Vec<&str> {
     selectors
 }
 
+fn node_test_name_patterns(arguments: &[String]) -> Vec<&str> {
+    let mut patterns = Vec::new();
+    let mut option_value = false;
+    for argument in arguments {
+        if option_value {
+            patterns.push(argument.as_str());
+            option_value = false;
+            continue;
+        }
+        if let Some(pattern) = argument.strip_prefix("--test-name-pattern=") {
+            patterns.push(pattern);
+        } else if argument == "--test-name-pattern" {
+            option_value = true;
+        }
+    }
+    patterns
+}
+
 fn node_option_takes_value(argument: &str) -> bool {
     matches!(
         argument,
@@ -2098,6 +2108,24 @@ fn go_test_package_selectors(arguments: &[String]) -> Vec<&str> {
         selectors.push(argument.as_str());
     }
     selectors
+}
+
+fn go_test_run_filters(arguments: &[String]) -> Vec<&str> {
+    let mut filters = Vec::new();
+    let mut option_value = false;
+    for argument in arguments {
+        if option_value {
+            filters.push(argument.as_str());
+            option_value = false;
+            continue;
+        }
+        if let Some(filter) = argument.strip_prefix("-run=") {
+            filters.push(filter);
+        } else if argument == "-run" {
+            option_value = true;
+        }
+    }
+    filters
 }
 
 fn go_test_option_takes_value(argument: &str) -> bool {
@@ -6931,6 +6959,19 @@ requirements:
             )
             .is_err()
         );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::NodeTest,
+                &[
+                    "--test".into(),
+                    "--test-name-pattern=^foo\\.bar$".into(),
+                    "--test-name-pattern=.".into(),
+                    "src/app.test.ts".into(),
+                ],
+                &special_node_arguments,
+            )
+            .is_err()
+        );
         let node_title_arguments = BTreeMap::from([
             (
                 "test".to_string(),
@@ -7007,6 +7048,21 @@ requirements:
                     "^TestFoo$/^bar\\.baz$".into(),
                     "./go".into(),
                     "./other".into(),
+                ],
+                &special_go_arguments,
+            )
+            .is_err()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::GoTest,
+                &[
+                    "test".into(),
+                    "-json".into(),
+                    "-run".into(),
+                    "^TestFoo$/^bar\\.baz$".into(),
+                    "-run=.".into(),
+                    "./go".into(),
                 ],
                 &special_go_arguments,
             )
