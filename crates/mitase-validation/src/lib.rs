@@ -786,6 +786,16 @@ pub fn execute_verification(
                     runner_ref.runner
                 )
             })?;
+        if configured
+            .arguments
+            .iter()
+            .any(|argument| has_unresolved_runner_placeholder(argument, &runner_ref.arguments))
+        {
+            bail!(
+                "verification runner {} has unresolved arguments",
+                runner_ref.runner
+            );
+        }
         let arguments = configured
             .arguments
             .iter()
@@ -797,12 +807,6 @@ pub fn execute_verification(
                 )
             })
             .collect::<Vec<_>>();
-        if arguments.iter().any(|argument| argument.contains('{')) {
-            bail!(
-                "verification runner {} has unresolved arguments",
-                runner_ref.runner
-            );
-        }
         let arguments = canonical_runner_arguments_for_adapter(configured.adapter, arguments);
         if !runner_ref
             .arguments
@@ -1096,6 +1100,16 @@ pub fn validate_verification_receipt(
                     runner_ref.runner
                 )
             })?;
+        if configured
+            .arguments
+            .iter()
+            .any(|argument| has_unresolved_runner_placeholder(argument, &runner_ref.arguments))
+        {
+            bail!(
+                "verification runner {} has unresolved arguments",
+                runner_ref.runner
+            );
+        }
         let arguments = configured
             .arguments
             .iter()
@@ -2193,7 +2207,7 @@ fn parse_node_test_output(name: &str, stdout: &[u8]) -> (usize, bool) {
     (matched_count, failed)
 }
 
-fn parse_node_tap_title(remainder: &str) -> Option<(&str, Option<&str>)> {
+fn parse_node_tap_title(remainder: &str) -> Option<(String, Option<String>)> {
     let remainder = remainder.trim_start();
     let mut fields = remainder.splitn(2, char::is_whitespace);
     let first = fields.next()?;
@@ -2206,9 +2220,33 @@ fn parse_node_tap_title(remainder: &str) -> Option<(&str, Option<&str>)> {
         && (directive.trim().eq_ignore_ascii_case("skip")
             || directive.trim().eq_ignore_ascii_case("todo"))
     {
-        return Some((title.trim(), Some(directive.trim())));
+        return Some((
+            decode_node_tap_escapes(title.trim()),
+            Some(directive.trim().to_owned()),
+        ));
     }
-    Some((title, None))
+    Some((decode_node_tap_escapes(title), None))
+}
+
+fn decode_node_tap_escapes(value: &str) -> String {
+    let mut decoded = String::with_capacity(value.len());
+    let mut characters = value.chars();
+    while let Some(character) = characters.next() {
+        if character == '\\' {
+            match characters.next() {
+                Some('#') => decoded.push('#'),
+                Some('\\') => decoded.push('\\'),
+                Some(next) => {
+                    decoded.push('\\');
+                    decoded.push(next);
+                }
+                None => decoded.push('\\'),
+            }
+        } else {
+            decoded.push(character);
+        }
+    }
+    decoded
 }
 
 fn parse_go_test_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
@@ -2302,6 +2340,22 @@ pub(crate) fn expand_runner_argument_for_adapter(
             };
             value.replace(&format!("{{{key}}}"), &replacement)
         })
+}
+
+fn has_unresolved_runner_placeholder(template: &str, values: &BTreeMap<String, String>) -> bool {
+    let mut remaining = template;
+    while let Some(start) = remaining.find('{') {
+        let after_start = &remaining[start + 1..];
+        let Some(end) = after_start.find('}') else {
+            break;
+        };
+        let key = &after_start[..end];
+        if !key.is_empty() && !values.contains_key(key) {
+            return true;
+        }
+        remaining = &after_start[end + 1..];
+    }
+    false
 }
 
 fn digest(bytes: &[u8]) -> String {
@@ -6846,6 +6900,24 @@ requirements:
             ),
             "--test-name-pattern=^foo\\.bar$"
         );
+        let brace_node_arguments = BTreeMap::from([
+            ("test".to_string(), "src/app.test.ts::case {id}".to_string()),
+            ("path".to_string(), "src/app.test.ts".to_string()),
+            ("name".to_string(), "case {id}".to_string()),
+        ]);
+        let expanded_brace_pattern = expand_runner_argument_for_adapter(
+            VerificationRunnerAdapter::NodeTest,
+            "--test-name-pattern=^{name}$",
+            &brace_node_arguments,
+        );
+        assert_eq!(
+            expanded_brace_pattern,
+            "--test-name-pattern=^case \\{id\\}$"
+        );
+        assert!(!has_unresolved_runner_placeholder(
+            "--test-name-pattern=^{name}$",
+            &brace_node_arguments,
+        ));
         assert!(
             require_exact_runner_filter(
                 VerificationRunnerAdapter::NodeTest,
@@ -6876,7 +6948,7 @@ requirements:
                 &node_target,
                 &node_title_arguments,
                 None,
-                b"TAP version 13\nok 1 - request - succeeds # quickly\n",
+                b"TAP version 13\nok 1 - request - succeeds \\# quickly\n",
             )
             .is_ok()
         );
