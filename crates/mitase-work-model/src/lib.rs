@@ -846,10 +846,6 @@ pub enum VerificationProofStatus {
     Failed,
 }
 
-/// Source compatibility for callers that used the pre-protocol name. The
-/// serialized receipt shape is the new `VerificationProof` contract.
-pub type ExactTestEvidence = VerificationProof;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CompletionStatus {
