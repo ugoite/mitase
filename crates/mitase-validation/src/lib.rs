@@ -1891,8 +1891,13 @@ fn go_source_tokens(source: &str) -> Vec<&str> {
             tokens.push(&source[start..cursor]);
             continue;
         }
-        tokens.push(&source[cursor..cursor + 1]);
-        cursor += 1;
+        let character = source[cursor..]
+            .chars()
+            .next()
+            .expect("cursor remains within valid UTF-8 source");
+        let end = cursor + character.len_utf8();
+        tokens.push(&source[cursor..end]);
+        cursor = end;
     }
     tokens
 }
@@ -2119,12 +2124,10 @@ fn require_exact_runner_filter(
                         "cargo verification runner must provide an exact harness filter"
                     )
                 })?;
-            if !arguments[..separator]
-                .iter()
-                .any(|argument| argument == test_identity)
-            {
+            let selectors = cargo_test_positional_selectors(arguments, separator);
+            if selectors.len() != 1 || selectors[0] != test_identity {
                 bail!(
-                    "cargo verification runner must pass the exact test identity {test_identity} before --"
+                    "cargo verification runner must pass exactly the selected test identity {test_identity} as its positional filter"
                 );
             }
             if !arguments[separator + 1..]
@@ -2132,6 +2135,10 @@ fn require_exact_runner_filter(
                 .any(|argument| argument == "--exact")
             {
                 bail!("cargo verification runner must pass --exact to the test harness");
+            }
+            let formats = cargo_test_format_values(arguments, separator);
+            if formats.len() != 1 || formats[0] != "json" {
+                bail!("cargo verification runner must request exactly the JSON test format");
             }
         }
         VerificationRunnerAdapter::Pytest => {
@@ -2167,6 +2174,9 @@ fn require_exact_runner_filter(
         VerificationRunnerAdapter::NodeTest => {
             if !arguments.iter().any(|argument| argument == "--test") {
                 bail!("node-test verification runner must enable Node's --test mode");
+            }
+            if !node_test_uses_tap_stdout(arguments) {
+                bail!("node-test verification runner must emit exactly one TAP reporter to stdout");
             }
             let name = claim_arguments.get("name").ok_or_else(|| {
                 anyhow::anyhow!("node-test verification claim must name the exact test title")
@@ -2216,6 +2226,64 @@ fn require_exact_runner_filter(
         }
     }
     Ok(())
+}
+
+fn cargo_test_positional_selectors(arguments: &[String], separator: usize) -> Vec<&str> {
+    let mut selectors = Vec::new();
+    let mut after_test = false;
+    let mut option_value = false;
+    for argument in &arguments[..separator] {
+        if !after_test {
+            after_test = argument == "test";
+            continue;
+        }
+        if option_value {
+            option_value = false;
+            continue;
+        }
+        if argument.starts_with('-') {
+            option_value = cargo_test_option_takes_value(argument);
+            continue;
+        }
+        selectors.push(argument.as_str());
+    }
+    selectors
+}
+
+fn cargo_test_option_takes_value(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-p" | "--package"
+            | "--bin"
+            | "--example"
+            | "--test"
+            | "--bench"
+            | "--features"
+            | "--target"
+            | "--manifest-path"
+            | "--profile"
+            | "--config"
+            | "--jobs"
+            | "-j"
+    )
+}
+
+fn cargo_test_format_values(arguments: &[String], separator: usize) -> Vec<&str> {
+    let mut formats = Vec::new();
+    let mut option_value = false;
+    for argument in &arguments[separator + 1..] {
+        if option_value {
+            formats.push(argument.as_str());
+            option_value = false;
+            continue;
+        }
+        if let Some(format) = argument.strip_prefix("--format=") {
+            formats.push(format);
+        } else if argument == "--format" {
+            option_value = true;
+        }
+    }
+    formats
 }
 
 fn pytest_option_takes_value(argument: &str) -> bool {
@@ -2360,6 +2428,33 @@ fn node_test_name_patterns(arguments: &[String]) -> Vec<&str> {
         }
     }
     patterns
+}
+
+fn node_test_uses_tap_stdout(arguments: &[String]) -> bool {
+    let reporters = node_option_values(arguments, "--test-reporter");
+    let destinations = node_option_values(arguments, "--test-reporter-destination");
+    reporters.len() == 1
+        && reporters[0] == "tap"
+        && (destinations.is_empty() || (destinations.len() == 1 && destinations[0] == "stdout"))
+}
+
+fn node_option_values<'a>(arguments: &'a [String], option: &str) -> Vec<&'a str> {
+    let inline_prefix = format!("{option}=");
+    let mut values = Vec::new();
+    let mut pending = false;
+    for argument in arguments {
+        if pending {
+            values.push(argument.as_str());
+            pending = false;
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix(&inline_prefix) {
+            values.push(value);
+        } else if argument == option {
+            pending = true;
+        }
+    }
+    values
 }
 
 fn node_option_takes_value(argument: &str) -> bool {
@@ -2545,8 +2640,11 @@ fn parse_node_tap_title(remainder: &str) -> Option<(String, Option<String>)> {
         remainder.strip_prefix("- ")?.trim()
     };
     if let Some((title, directive)) = title.rsplit_once(" # ")
-        && (directive.trim().eq_ignore_ascii_case("skip")
-            || directive.trim().eq_ignore_ascii_case("todo"))
+        && matches!(
+            directive.split_whitespace().next(),
+            Some(value) if value.eq_ignore_ascii_case("skip")
+                || value.eq_ignore_ascii_case("todo")
+        )
     {
         return Some((
             decode_node_tap_escapes(title.trim()),
@@ -2617,10 +2715,7 @@ pub(crate) fn canonical_runner_arguments_for_adapter(
             {
                 arguments.insert(harness_start, "--exact".into());
             }
-            if !arguments[harness_start..]
-                .iter()
-                .any(|argument| argument == "--format")
-            {
+            if cargo_test_format_values(&arguments, index).is_empty() {
                 arguments.splice(
                     harness_start..harness_start,
                     [
@@ -7068,6 +7163,49 @@ requirements:
 "#,
         )
         .is_err());
+        let cargo_arguments = vec![
+            "test".into(),
+            "-p".into(),
+            "sample".into(),
+            "tests::exact_test_execution_requires_match".into(),
+            "--".into(),
+            "--exact".into(),
+            "--format".into(),
+            "json".into(),
+        ];
+        let cargo_claim = BTreeMap::from([(
+            "test".to_string(),
+            "tests::exact_test_execution_requires_match".to_string(),
+        )]);
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::CargoLibtest,
+                &cargo_arguments,
+                &cargo_claim,
+            )
+            .is_ok()
+        );
+        let mut cargo_option_value_only = cargo_arguments.clone();
+        cargo_option_value_only.remove(3);
+        cargo_option_value_only[2] = "tests::exact_test_execution_requires_match".into();
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::CargoLibtest,
+                &cargo_option_value_only,
+                &cargo_claim,
+            )
+            .is_err()
+        );
+        let mut cargo_pretty = cargo_arguments.clone();
+        cargo_pretty[7] = "pretty".into();
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::CargoLibtest,
+                &cargo_pretty,
+                &cargo_claim,
+            )
+            .is_err()
+        );
         assert!(
             ensure_exact_test_executed(
                 VerificationRunnerAdapter::Pytest,
@@ -7346,11 +7484,24 @@ requirements:
                 &[
                     "--test".into(),
                     "--test-name-pattern=^foo\\.bar$".into(),
+                    "--test-reporter=tap".into(),
                     "src/app.test.ts".into(),
                 ],
                 &special_node_arguments,
             )
             .is_ok()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::NodeTest,
+                &[
+                    "--test".into(),
+                    "--test-name-pattern=^foo\\.bar$".into(),
+                    "src/app.test.ts".into(),
+                ],
+                &special_node_arguments,
+            )
+            .is_err()
         );
         assert_eq!(
             expand_runner_argument_for_adapter(
@@ -7425,6 +7576,17 @@ requirements:
                 b"TAP version 13\nok 1 - request - succeeds \\# quickly\n",
             )
             .is_ok()
+        );
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::NodeTest,
+                &node_target,
+                &node_title_arguments,
+                None,
+                &[],
+                b"TAP version 13\nok 1 - request - succeeds # SKIP not ready\n",
+            )
+            .is_err()
         );
 
         let go_arguments = BTreeMap::from([
@@ -7537,7 +7699,7 @@ requirements:
         );
         fs::write(
             go_workspace.path().join("go/exact_test.go"),
-            "package go\n\nfunc /* comment */ TestGoRequirement(t *testing.T) {}\n",
+            "package go\n\nvar café = `func TestGoRequirement(`\nfunc /* comment */ TestGoRequirement(t *testing.T) {}\n",
         )
         .expect("go test declaration");
         assert!(
