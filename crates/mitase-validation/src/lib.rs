@@ -1894,9 +1894,31 @@ fn require_exact_runner_filter(
             }
         }
         VerificationRunnerAdapter::Pytest => {
-            if !arguments.iter().any(|argument| argument == test_identity) {
+            let mut matched_selectors = 0;
+            let mut option_value = false;
+            for argument in arguments {
+                if option_value {
+                    option_value = false;
+                    continue;
+                }
+                if argument == test_identity {
+                    matched_selectors += 1;
+                    continue;
+                }
+                if argument.starts_with('-') {
+                    option_value = pytest_option_takes_value(argument);
+                    continue;
+                }
+                // Pytest accepts a path/node-id for every positional selector.
+                // A second positional token would let unrelated tests execute
+                // while the proof parser still finds the requested node.
                 bail!(
-                    "pytest verification runner must pass the exact test identity {test_identity}"
+                    "pytest verification runner must pass exactly one positional test selector; found {argument}"
+                );
+            }
+            if matched_selectors != 1 {
+                bail!(
+                    "pytest verification runner must pass the exact test identity {test_identity} exactly once"
                 );
             }
         }
@@ -1954,6 +1976,36 @@ fn require_exact_runner_filter(
         }
     }
     Ok(())
+}
+
+fn pytest_option_takes_value(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-k" | "--keyword"
+            | "-m"
+            | "--markexpr"
+            | "--rootdir"
+            | "--confcutdir"
+            | "--basetemp"
+            | "--override-ini"
+            | "--ignore"
+            | "--ignore-glob"
+            | "--deselect"
+            | "--import-mode"
+            | "--doctest-glob"
+            | "--log-level"
+            | "--log-format"
+            | "--log-date-format"
+            | "--log-cli-level"
+            | "--log-cli-format"
+            | "--capture"
+            | "--tb"
+            | "--color"
+            | "--maxfail"
+            | "--durations"
+            | "--durations-min"
+            | "--junitxml"
+    )
 }
 
 fn parse_cargo_libtest_output(identity: &str, stdout: &[u8]) -> Result<(usize, bool)> {
@@ -6564,6 +6616,39 @@ requirements:
                 &mismatched_pytest_arguments,
                 None,
                 b"other/test.py::exact_test_execution_requires_match PASSED\n",
+            )
+            .is_err()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::Pytest,
+                &[
+                    "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                    "-v".into(),
+                ],
+                &pytest_arguments,
+            )
+            .is_ok()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::Pytest,
+                &[
+                    "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                    "other/test.py::other_test".into(),
+                ],
+                &pytest_arguments,
+            )
+            .is_err()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::Pytest,
+                &[
+                    "other/test.py::other_test".into(),
+                    "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                ],
+                &pytest_arguments,
             )
             .is_err()
         );
