@@ -1317,7 +1317,13 @@ fn validate_durable_receipt_closure(
         let arguments = configured
             .arguments
             .iter()
-            .map(|argument| crate::expand_runner_argument(argument, &runner_ref.arguments))
+            .map(|argument| {
+                crate::expand_runner_argument_for_adapter(
+                    configured.adapter,
+                    argument,
+                    &runner_ref.arguments,
+                )
+            })
             .collect::<Vec<_>>();
         let arguments =
             crate::canonical_runner_arguments_for_adapter(configured.adapter, arguments);

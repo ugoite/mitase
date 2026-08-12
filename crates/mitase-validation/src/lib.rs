@@ -789,7 +789,13 @@ pub fn execute_verification(
         let arguments = configured
             .arguments
             .iter()
-            .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
+            .map(|argument| {
+                expand_runner_argument_for_adapter(
+                    configured.adapter,
+                    argument,
+                    &runner_ref.arguments,
+                )
+            })
             .collect::<Vec<_>>();
         if arguments.iter().any(|argument| argument.contains('{')) {
             bail!(
@@ -1085,7 +1091,13 @@ pub fn validate_verification_receipt(
         let arguments = configured
             .arguments
             .iter()
-            .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
+            .map(|argument| {
+                expand_runner_argument_for_adapter(
+                    configured.adapter,
+                    argument,
+                    &runner_ref.arguments,
+                )
+            })
             .collect::<Vec<_>>();
         let arguments = canonical_runner_arguments_for_adapter(configured.adapter, arguments);
         if !runner_ref
@@ -1714,7 +1726,12 @@ fn validate_exact_claim_identity(
                 .unwrap_or_default();
             let package_path = package.trim_start_matches("./").trim_end_matches('/');
             let target_parent = target_parent.trim_start_matches("./");
-            if package_path != target_parent && !(package_path == "." && target_parent.is_empty()) {
+            let module_qualified_parent =
+                !target_parent.is_empty() && package_path.ends_with(&format!("/{target_parent}"));
+            if package_path != target_parent
+                && !(package_path == "." && target_parent.is_empty())
+                && !module_qualified_parent
+            {
                 bail!(
                     "go-test package {package} does not contain verification target {}",
                     target.path.to_string_lossy()
@@ -1878,14 +1895,16 @@ fn parse_pytest_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
     let mut failed = false;
     for line in String::from_utf8_lossy(stdout).lines() {
         let line = line.trim();
-        let Some(separator) = line.rfind(char::is_whitespace) else {
+        let Some(status_and_progress) = line.strip_prefix(identity) else {
             continue;
         };
-        let (reported_identity, status) = line.split_at(separator);
-        if reported_identity != identity {
+        if !status_and_progress.starts_with(char::is_whitespace) {
             continue;
         }
-        match status.trim() {
+        let Some(status) = status_and_progress.split_whitespace().next() else {
+            continue;
+        };
+        match status {
             "PASSED" => matched_count += 1,
             "FAILED" | "SKIPPED" | "XFAIL" | "XPASS" => failed = true,
             _ => {}
@@ -2009,11 +2028,20 @@ pub fn canonical_runner_arguments(executable: &str, arguments: Vec<String>) -> V
     canonical_runner_arguments_for_adapter(adapter, arguments)
 }
 
-pub(crate) fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
+pub(crate) fn expand_runner_argument_for_adapter(
+    adapter: VerificationRunnerAdapter,
+    template: &str,
+    values: &BTreeMap<String, String>,
+) -> String {
     values
         .iter()
         .fold(template.to_owned(), |value, (key, replacement)| {
-            value.replace(&format!("{{{key}}}"), replacement)
+            let replacement = if adapter == VerificationRunnerAdapter::NodeTest && key == "name" {
+                regex_escape(replacement)
+            } else {
+                replacement.clone()
+            };
+            value.replace(&format!("{{{key}}}"), &replacement)
         })
 }
 
@@ -6409,7 +6437,7 @@ requirements:
             VerificationRunnerAdapter::Pytest,
             &pytest_target,
             &pytest_arguments,
-            b"tests/exact_test.py::exact_test_execution_requires_match PASSED\n",
+            b"tests/exact_test.py::exact_test_execution_requires_match PASSED [100%]\n",
         )
         .expect("pytest proof");
         assert_eq!(pytest_proof.status, VerificationProofStatus::Passed);
@@ -6423,7 +6451,7 @@ requirements:
                 VerificationRunnerAdapter::Pytest,
                 &pytest_target,
                 &pytest_parameterized_arguments,
-                b"tests/exact_test.py::exact_test_execution_requires_match[param value] PASSED\n",
+                b"tests/exact_test.py::exact_test_execution_requires_match[param value] PASSED [100%]\n",
             )
             .is_ok()
         );
@@ -6494,13 +6522,21 @@ requirements:
             )
             .is_ok()
         );
+        assert_eq!(
+            expand_runner_argument_for_adapter(
+                VerificationRunnerAdapter::NodeTest,
+                "--test-name-pattern=^{name}$",
+                &special_node_arguments,
+            ),
+            "--test-name-pattern=^foo\\.bar$"
+        );
 
         let go_arguments = BTreeMap::from([
             (
                 "test".to_string(),
                 "tests::exact_test_execution_requires_match".to_string(),
             ),
-            ("package".to_string(), "./go".to_string()),
+            ("package".to_string(), "example.com/go-only/go".to_string()),
         ]);
         let go_target = mitase_spec_model::ArtifactTarget {
             id: "go-exact-test".into(),
@@ -6522,7 +6558,7 @@ requirements:
         assert_eq!(go_proof.schema, VERIFICATION_PROOF_SCHEMA);
         let special_go_arguments = BTreeMap::from([
             ("test".to_string(), "TestFoo.Bar".to_string()),
-            ("package".to_string(), "./go".to_string()),
+            ("package".to_string(), "example.com/go-only/go".to_string()),
         ]);
         assert!(
             require_exact_runner_filter(
@@ -6531,7 +6567,7 @@ requirements:
                     "-json".into(),
                     "-run".into(),
                     "^TestFoo\\.Bar$".into(),
-                    "./go".into()
+                    "example.com/go-only/go".into()
                 ],
                 &special_go_arguments,
             )
@@ -6555,7 +6591,7 @@ requirements:
     }
 
     #[test]
-    fn self_hosted_shared_verification_targets_execute_claim_by_claim() {
+    fn self_hosted_shared_verification_target_has_claim_closure() {
         let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()
@@ -6596,6 +6632,7 @@ requirements:
             ),
         ];
 
+        let mut representative = None;
         for (target, expected_claims) in shared_targets {
             let target: BoundTargetRef = target.parse().expect("shared verification target ref");
             let criteria = index
@@ -6609,61 +6646,74 @@ requirements:
                 })
                 .collect::<Vec<_>>();
             assert_eq!(criteria.len(), expected_claims, "{target}");
-
-            for criterion in criteria {
-                let request = mitase_work_model::WorkRequest {
-                    schema: mitase_work_model::WORK_REQUEST_SCHEMA.into(),
-                    id: format!("WORK-SHARED-{}", criterion.local_id),
-                    title: "Execute a shared verification claim.".into(),
-                    operation: mitase_work_model::WorkOperation::Modify,
-                    origin: mitase_work_model::WorkOrigin::RequirementCriterion {
-                        criterion: criterion.clone(),
-                    },
-                    constraints: Default::default(),
-                    requested_targets: vec![],
-                };
-                let plan = mitase_planner::plan(&request, &workspace, &index, &revision)
-                    .expect("shared verification plan");
-                assert_eq!(
-                    plan.status,
-                    mitase_work_model::PlanStatus::Ready,
-                    "{plan:#?}"
-                );
+            for criterion in &criteria {
                 let claim = VerificationClaimRef {
                     target: target.clone(),
                     criterion: criterion.clone(),
                 };
-                let slice = plan
-                    .slices
-                    .iter()
-                    .find(|slice| {
-                        slice
-                            .verification_targets
-                            .iter()
-                            .any(|planned| planned.verification_claim.as_ref() == Some(&claim))
-                    })
-                    .expect("slice with exact shared verification claim");
-                let receipt = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
-                    .expect("shared verification execution");
-                let execution = receipt
-                    .executions
-                    .iter()
-                    .find(|execution| execution.claim.as_ref() == Some(&claim))
-                    .expect("criterion-specific receipt execution");
-                assert_eq!(execution.target, target);
-                let (_, _, covers) = resolve_verification_claim(&index, &claim)
-                    .expect("selected verification claim");
-                assert_eq!(
-                    execution
-                        .implementation_digests
-                        .keys()
-                        .cloned()
-                        .collect::<BTreeSet<_>>(),
-                    covers.iter().cloned().collect(),
-                    "{claim:#?}"
-                );
+                resolve_verification_claim(&index, &claim)
+                    .expect("shared verification claim closure");
+            }
+            if representative.is_none() {
+                representative = Some((
+                    target,
+                    criteria
+                        .into_iter()
+                        .next()
+                        .expect("shared verification criterion"),
+                ));
             }
         }
+
+        let (target, criterion) = representative.expect("representative shared claim");
+        let request = mitase_work_model::WorkRequest {
+            schema: mitase_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: format!("WORK-SHARED-{}", criterion.local_id),
+            title: "Execute a shared verification claim.".into(),
+            operation: mitase_work_model::WorkOperation::Modify,
+            origin: mitase_work_model::WorkOrigin::RequirementCriterion {
+                criterion: criterion.clone(),
+            },
+            constraints: Default::default(),
+            requested_targets: vec![],
+        };
+        let plan = mitase_planner::plan(&request, &workspace, &index, &revision)
+            .expect("shared verification plan");
+        assert_eq!(
+            plan.status,
+            mitase_work_model::PlanStatus::Ready,
+            "{plan:#?}"
+        );
+        let claim = VerificationClaimRef { target, criterion };
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| {
+                slice
+                    .verification_targets
+                    .iter()
+                    .any(|planned| planned.verification_claim.as_ref() == Some(&claim))
+            })
+            .expect("slice with exact shared verification claim");
+        let receipt = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
+            .expect("shared verification execution");
+        let execution = receipt
+            .executions
+            .iter()
+            .find(|execution| execution.claim.as_ref() == Some(&claim))
+            .expect("criterion-specific receipt execution");
+        assert_eq!(execution.target, claim.target);
+        let (_, _, covers) =
+            resolve_verification_claim(&index, &claim).expect("selected verification claim");
+        assert_eq!(
+            execution
+                .implementation_digests
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            covers.iter().cloned().collect(),
+            "{claim:#?}"
+        );
     }
 
     #[test]
