@@ -1197,6 +1197,8 @@ fn finalized_absent_targets(
         if validate_durable_receipt_closure(
             &baseline.workspace,
             &baseline.index,
+            workspace,
+            index,
             &approval.plan,
             slice,
             &attempt,
@@ -1254,6 +1256,8 @@ fn finalized_absent_targets(
 fn validate_durable_receipt_closure(
     baseline_workspace: &SpecWorkspace,
     baseline_index: &SpecIndex,
+    post_workspace: &SpecWorkspace,
+    post_index: &SpecIndex,
     plan: &mitase_work_model::WorkPlan,
     slice: &mitase_work_model::ExecutionSlice,
     attempt: &CompletionAttempt,
@@ -1336,7 +1340,7 @@ fn validate_durable_receipt_closure(
             configured.adapter,
             verification_target,
             &runner_ref.arguments,
-            Some(&baseline_workspace.root),
+            Some(&post_workspace.root),
         )?;
         crate::require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         crate::validate_verification_proof(&execution.proof)?;
@@ -1352,8 +1356,8 @@ fn validate_durable_receipt_closure(
             .find(|target| target.reference == execution.target)
             .ok_or_else(|| anyhow::anyhow!("receipt target is outside the selected slice"))?;
         let resolved_verification = crate::resolve_planned_target_for_workspace(
-            baseline_workspace,
-            baseline_index,
+            post_workspace,
+            post_index,
             planned_verification,
         )
         .ok_or_else(|| anyhow::anyhow!("durable verification target cannot be resolved"))?;
@@ -1378,8 +1382,8 @@ fn validate_durable_receipt_closure(
                             .find(|target| target.reference == *covered)
                             .and_then(|target| {
                                 crate::resolve_planned_target_for_workspace(
-                                    baseline_workspace,
-                                    baseline_index,
+                                    post_workspace,
+                                    post_index,
                                     target,
                                 )
                                 .map(|resolved| resolved.content_hash)
