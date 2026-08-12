@@ -1946,8 +1946,11 @@ fn require_exact_runner_filter(
             {
                 bail!("node-test verification runner must pass an exact test-name pattern");
             }
-            if !arguments.iter().any(|argument| argument == path) {
-                bail!("node-test verification runner must pass the exact test file {path}");
+            let test_files = node_test_file_selectors(arguments);
+            if test_files.len() != 1 || test_files[0] != path {
+                bail!(
+                    "node-test verification runner must pass exactly the selected test file {path}"
+                );
             }
         }
         VerificationRunnerAdapter::GoTest => {
@@ -1967,8 +1970,11 @@ fn require_exact_runner_filter(
             let package = claim_arguments.get("package").ok_or_else(|| {
                 anyhow::anyhow!("go-test verification claim must name the exact package")
             })?;
-            if !arguments.iter().any(|argument| argument == package) {
-                bail!("go-test verification runner must pass the exact package {package}");
+            let packages = go_test_package_selectors(arguments);
+            if packages.len() != 1 || packages[0] != package {
+                bail!(
+                    "go-test verification runner must pass exactly the selected package {package}"
+                );
             }
         }
         VerificationRunnerAdapter::Shell => {
@@ -2005,6 +2011,110 @@ fn pytest_option_takes_value(argument: &str) -> bool {
             | "--durations"
             | "--durations-min"
             | "--junitxml"
+            | "--junit-prefix"
+            | "--show-capture"
+            | "--assert"
+            | "--pdbcls"
+            | "--pastebin"
+            | "--code-highlight"
+            | "-o"
+            | "-p"
+    )
+}
+
+fn node_test_file_selectors(arguments: &[String]) -> Vec<&str> {
+    let mut selectors = Vec::new();
+    let mut option_value = false;
+    for (index, argument) in arguments.iter().enumerate() {
+        if option_value {
+            option_value = false;
+            continue;
+        }
+        if argument == "--" {
+            selectors.extend(arguments[index + 1..].iter().map(String::as_str));
+            break;
+        }
+        if argument.starts_with('-') {
+            option_value = node_option_takes_value(argument);
+            continue;
+        }
+        selectors.push(argument.as_str());
+    }
+    selectors
+}
+
+fn node_option_takes_value(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-e" | "--eval"
+            | "-r"
+            | "--require"
+            | "--import"
+            | "--loader"
+            | "--conditions"
+            | "--test-name-pattern"
+            | "--test-reporter"
+            | "--test-reporter-destination"
+            | "--test-concurrency"
+            | "--test-shard"
+            | "--watch-path"
+            | "--inspect"
+            | "--inspect-brk"
+            | "--inspect-port"
+    )
+}
+
+fn go_test_package_selectors(arguments: &[String]) -> Vec<&str> {
+    let mut selectors = Vec::new();
+    let mut after_test = false;
+    let mut option_value = false;
+    for argument in arguments {
+        if !after_test {
+            after_test = argument == "test";
+            continue;
+        }
+        if option_value {
+            option_value = false;
+            continue;
+        }
+        if argument.starts_with('-') {
+            option_value = go_test_option_takes_value(argument);
+            continue;
+        }
+        selectors.push(argument.as_str());
+    }
+    selectors
+}
+
+fn go_test_option_takes_value(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-run"
+            | "-bench"
+            | "-benchtime"
+            | "-count"
+            | "-cpu"
+            | "-list"
+            | "-parallel"
+            | "-shuffle"
+            | "-skip"
+            | "-timeout"
+            | "-trace"
+            | "-vet"
+            | "-cover"
+            | "-covermode"
+            | "-coverpkg"
+            | "-coverprofile"
+            | "-gocoverdir"
+            | "-exec"
+            | "-mod"
+            | "-modfile"
+            | "-overlay"
+            | "-p"
+            | "-o"
+            | "-fuzz"
+            | "-fuzztime"
+            | "-fuzzminimizetime"
     )
 }
 
@@ -2064,17 +2174,7 @@ fn parse_node_test_output(name: &str, stdout: &[u8]) -> (usize, bool) {
         } else {
             continue;
         };
-        let Some((title, directive)) = remainder
-            .split_once(" - ")
-            .map(|(_, title)| title.trim())
-            .map(|title| {
-                title
-                    .split_once(" # ")
-                    .map_or((title, None), |(title, directive)| {
-                        (title.trim(), Some(directive.trim()))
-                    })
-            })
-        else {
+        let Some((title, directive)) = parse_node_tap_title(remainder) else {
             continue;
         };
         if title != name {
@@ -2091,6 +2191,24 @@ fn parse_node_test_output(name: &str, stdout: &[u8]) -> (usize, bool) {
         }
     }
     (matched_count, failed)
+}
+
+fn parse_node_tap_title(remainder: &str) -> Option<(&str, Option<&str>)> {
+    let remainder = remainder.trim_start();
+    let mut fields = remainder.splitn(2, char::is_whitespace);
+    let first = fields.next()?;
+    let title = if first.chars().all(|character| character.is_ascii_digit()) {
+        fields.next()?.trim_start().strip_prefix("- ")?.trim()
+    } else {
+        remainder.strip_prefix("- ")?.trim()
+    };
+    if let Some((title, directive)) = title.rsplit_once(" # ")
+        && (directive.trim().eq_ignore_ascii_case("skip")
+            || directive.trim().eq_ignore_ascii_case("todo"))
+    {
+        return Some((title.trim(), Some(directive.trim())));
+    }
+    Some((title, None))
 }
 
 fn parse_go_test_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
@@ -6645,6 +6763,18 @@ requirements:
             require_exact_runner_filter(
                 VerificationRunnerAdapter::Pytest,
                 &[
+                    "-o".into(),
+                    "addopts=--strict-markers".into(),
+                    "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                ],
+                &pytest_arguments,
+            )
+            .is_ok()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::Pytest,
+                &[
                     "other/test.py::other_test".into(),
                     "tests/exact_test.py::exact_test_execution_requires_match".into(),
                 ],
@@ -6716,6 +6846,40 @@ requirements:
             ),
             "--test-name-pattern=^foo\\.bar$"
         );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::NodeTest,
+                &[
+                    "--test".into(),
+                    "--test-name-pattern=^foo\\.bar$".into(),
+                    "src/app.test.ts".into(),
+                    "src/other.test.ts".into(),
+                ],
+                &special_node_arguments,
+            )
+            .is_err()
+        );
+        let node_title_arguments = BTreeMap::from([
+            (
+                "test".to_string(),
+                "src/app.test.ts::request - succeeds # quickly".to_string(),
+            ),
+            ("path".to_string(), "src/app.test.ts".to_string()),
+            (
+                "name".to_string(),
+                "request - succeeds # quickly".to_string(),
+            ),
+        ]);
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::NodeTest,
+                &node_target,
+                &node_title_arguments,
+                None,
+                b"TAP version 13\nok 1 - request - succeeds # quickly\n",
+            )
+            .is_ok()
+        );
 
         let go_arguments = BTreeMap::from([
             (
@@ -6751,6 +6915,7 @@ requirements:
             require_exact_runner_filter(
                 VerificationRunnerAdapter::GoTest,
                 &[
+                    "test".into(),
                     "-json".into(),
                     "-run".into(),
                     "^TestFoo$/^bar\\.baz$".into(),
@@ -6759,6 +6924,21 @@ requirements:
                 &special_go_arguments,
             )
             .is_ok()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::GoTest,
+                &[
+                    "test".into(),
+                    "-json".into(),
+                    "-run".into(),
+                    "^TestFoo$/^bar\\.baz$".into(),
+                    "./go".into(),
+                    "./other".into(),
+                ],
+                &special_go_arguments,
+            )
+            .is_err()
         );
         assert_eq!(
             expand_runner_argument_for_adapter(
