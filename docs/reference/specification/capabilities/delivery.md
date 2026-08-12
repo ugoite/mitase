@@ -76,6 +76,12 @@ description: "Generated reference for docs/mitase/features/capabilities/delivery
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_agent_event_digest
+        - **id**: delivery-completion-proof
+          - **adapter**: rust
+          - **path**: crates/mitase-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
       - **targets**:
         - **id**: delivery-store
           - **adapter**: rust
@@ -702,6 +708,10 @@ features:
             adapter: rust
             path: crates/mitase-delivery/src/lib.rs
             selector: { kind: module, name: 'lib::validate_agent_event_digest' }
+          - id: delivery-completion-proof
+            adapter: rust
+            path: crates/mitase-delivery/src/lib.rs
+            selector: { kind: module, name: '*' }
         targets:
           - id: delivery-store
             adapter: rust

@@ -1,7 +1,7 @@
 schema: mitase/config/v1
 workspace:
   spec_roots: [docs/mitase]
-  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, fixtures/v1/valid-web-app/work.yaml, website/package-lock.json, website/package.json, examples/polyglot/package.json, .github/workflows/maintenance.yml]
+  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, fixtures/v1/valid-web-app/work.yaml, website/package-lock.json, website/package.json, examples/polyglot/package.json, examples/polyglot/package-lock.json, .github/workflows/maintenance.yml]
 inventory:
   active_profile: default
   profiles:
@@ -36,6 +36,10 @@ inventory:
             - editors/vscode/README.md
             - release-please-config.json
             - docs
+            - examples/go-only
+            - examples/polyglot
+            - examples/python-only
+            - examples/typescript-only
             - scripts
             - website/docusaurus.config.js
             - website/sidebars.js
