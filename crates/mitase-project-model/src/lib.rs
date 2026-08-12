@@ -175,14 +175,21 @@ pub enum VerificationRunnerAdapter {
 
 impl VerificationRunnerAdapter {
     fn infer(executable: &str, arguments: &[String]) -> Self {
-        let executable = executable.rsplit('/').next().unwrap_or(executable);
-        if executable == "cargo" {
+        let executable = executable
+            .rsplit(|character| character == '/' || character == '\\')
+            .next()
+            .unwrap_or(executable)
+            .strip_suffix(".exe")
+            .unwrap_or(executable);
+        if executable.eq_ignore_ascii_case("cargo") {
             Self::CargoLibtest
-        } else if executable == "pytest" || arguments.iter().any(|argument| argument == "pytest") {
+        } else if executable.eq_ignore_ascii_case("pytest")
+            || arguments.iter().any(|argument| argument == "pytest")
+        {
             Self::Pytest
-        } else if executable == "node" {
+        } else if executable.eq_ignore_ascii_case("node") {
             Self::NodeTest
-        } else if executable == "go" {
+        } else if executable.eq_ignore_ascii_case("go") {
             Self::GoTest
         } else {
             Self::Shell
@@ -307,6 +314,14 @@ work:
             serde_yaml::from_str(&legacy_source).expect("legacy project config");
         assert_eq!(
             legacy_config.verification.runners["cargo-test"].adapter,
+            VerificationRunnerAdapter::CargoLibtest
+        );
+        let windows_legacy_source =
+            legacy_source.replace("executable: cargo", r"executable: C:\\toolchain\\cargo.exe");
+        let windows_legacy_config: ProjectConfig =
+            serde_yaml::from_str(&windows_legacy_source).expect("Windows legacy config");
+        assert_eq!(
+            windows_legacy_config.verification.runners["cargo-test"].adapter,
             VerificationRunnerAdapter::CargoLibtest
         );
         assert!(
