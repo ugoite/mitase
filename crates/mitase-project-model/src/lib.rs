@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use mitase_spec_model::{RepoPath, SpecAnchor};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -124,13 +124,39 @@ pub struct VerificationConfig {
     #[serde(default)]
     pub runners: BTreeMap<String, VerificationRunner>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerificationRunner {
     pub adapter: VerificationRunnerAdapter,
     pub executable: String,
     #[serde(default)]
     pub arguments: Vec<String>,
+}
+
+impl<'de> Deserialize<'de> for VerificationRunner {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            #[serde(default)]
+            adapter: Option<VerificationRunnerAdapter>,
+            executable: String,
+            #[serde(default)]
+            arguments: Vec<String>,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        Ok(Self {
+            adapter: wire.adapter.unwrap_or_else(|| {
+                VerificationRunnerAdapter::infer(&wire.executable, &wire.arguments)
+            }),
+            executable: wire.executable,
+            arguments: wire.arguments,
+        })
+    }
 }
 
 /// The output protocol used to turn a configured test runner's output into a
@@ -145,6 +171,23 @@ pub enum VerificationRunnerAdapter {
     NodeTest,
     GoTest,
     Shell,
+}
+
+impl VerificationRunnerAdapter {
+    fn infer(executable: &str, arguments: &[String]) -> Self {
+        let executable = executable.rsplit('/').next().unwrap_or(executable);
+        if executable == "cargo" {
+            Self::CargoLibtest
+        } else if executable == "pytest" || arguments.iter().any(|argument| argument == "pytest") {
+            Self::Pytest
+        } else if executable == "node" {
+            Self::NodeTest
+        } else if executable == "go" {
+            Self::GoTest
+        } else {
+            Self::Shell
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -255,6 +298,16 @@ work:
                 max_readonly_targets: 12,
                 max_total_bytes: 160_000,
             }
+        );
+        let legacy_source = source.replace(
+            "verification: { runners: {} }",
+            "verification:\n  runners:\n    cargo-test:\n      executable: cargo\n      arguments: [test, -p, sample, sample_test]",
+        );
+        let legacy_config: ProjectConfig =
+            serde_yaml::from_str(&legacy_source).expect("legacy project config");
+        assert_eq!(
+            legacy_config.verification.runners["cargo-test"].adapter,
+            VerificationRunnerAdapter::CargoLibtest
         );
         assert!(
             serde_yaml::from_str::<ProjectConfig>(&format!("{source}unknown: true\n")).is_err()
