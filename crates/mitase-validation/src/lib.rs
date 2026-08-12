@@ -858,6 +858,7 @@ pub fn execute_verification(
             configured.adapter,
             target,
             &runner_ref.arguments,
+            Some(&workspace.root),
             &output.stdout,
         )?;
         let mut implementation_digests = BTreeMap::new();
@@ -1633,12 +1634,13 @@ fn ensure_exact_test_executed(
     adapter: VerificationRunnerAdapter,
     target: &mitase_spec_model::ArtifactTarget,
     claim_arguments: &BTreeMap<String, String>,
+    workspace_root: Option<&Path>,
     stdout: &[u8],
 ) -> Result<VerificationProof> {
     let Some(test_identity) = claim_arguments.get("test") else {
         bail!("verification claim must name the exact test identity");
     };
-    validate_exact_claim_identity(adapter, target, claim_arguments, None)?;
+    validate_exact_claim_identity(adapter, target, claim_arguments, workspace_root)?;
     let (matched_count, failed) = match adapter {
         VerificationRunnerAdapter::CargoLibtest => {
             parse_cargo_libtest_output(test_identity, stdout)?
@@ -1708,6 +1710,9 @@ fn validate_exact_claim_identity(
         bail!("verification argument {test_identity} does not identify selector {selector_name}");
     }
     match adapter {
+        VerificationRunnerAdapter::CargoLibtest if exact_selector_name(target).is_none() => {
+            bail!("cargo verification targets must use an exact symbol selector");
+        }
         VerificationRunnerAdapter::Pytest => {
             let path = test_identity.split("::").next().unwrap_or(test_identity);
             require_claim_path_matches_target(adapter, target, path)?;
@@ -6418,6 +6423,7 @@ requirements:
             VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
+            None,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
 {"type":"suite","event":"ok"}
 "#,
@@ -6432,6 +6438,7 @@ requirements:
                 VerificationRunnerAdapter::CargoLibtest,
                 &target,
                 &arguments,
+                None,
                 br#"{"type":"test","name":"tests::other","event":"ok"}
 "#,
             )
@@ -6441,6 +6448,7 @@ requirements:
             VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
+            None,
             br#"{"type":"test","name":"other::tests::exact_test_execution_requires_match","event":"ok"}
 "#,
         )
@@ -6449,6 +6457,7 @@ requirements:
             VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
+            None,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ignored"}
 "#,
         )
@@ -6457,6 +6466,7 @@ requirements:
             VerificationRunnerAdapter::CargoLibtest,
             &target,
             &arguments,
+            None,
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
 {"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
 "#,
@@ -6467,6 +6477,7 @@ requirements:
                 VerificationRunnerAdapter::Pytest,
                 &target,
                 &arguments,
+                None,
                 b"ok"
             )
             .is_err()
@@ -6488,6 +6499,7 @@ requirements:
             VerificationRunnerAdapter::Pytest,
             &pytest_target,
             &pytest_arguments,
+            None,
             b"tests/exact_test.py::exact_test_execution_requires_match PASSED [100%]\n",
         )
         .expect("pytest proof");
@@ -6502,6 +6514,7 @@ requirements:
                 VerificationRunnerAdapter::Pytest,
                 &pytest_target,
                 &pytest_parameterized_arguments,
+                None,
                 b"tests/exact_test.py::exact_test_execution_requires_match[param value] PASSED [100%]\n",
             )
             .is_ok()
@@ -6516,6 +6529,7 @@ requirements:
                 VerificationRunnerAdapter::Pytest,
                 &pytest_target,
                 &mismatched_pytest_arguments,
+                None,
                 b"other/test.py::exact_test_execution_requires_match PASSED\n",
             )
             .is_err()
@@ -6544,6 +6558,7 @@ requirements:
             VerificationRunnerAdapter::NodeTest,
             &node_target,
             &node_arguments,
+            None,
             b"TAP version 13\nok 1 - exact_test_execution_requires_match\n",
         )
         .expect("node test proof");
@@ -6553,6 +6568,7 @@ requirements:
                 VerificationRunnerAdapter::NodeTest,
                 &node_target,
                 &node_arguments,
+                None,
                 b"TAP version 13\nok 1 - exact_test_execution_requires_match # SKIP\n",
             )
             .is_err()
@@ -6602,6 +6618,7 @@ requirements:
             VerificationRunnerAdapter::GoTest,
             &go_target,
             &go_arguments,
+            None,
             br#"{"Action":"run","Test":"tests::exact_test_execution_requires_match"}
 {"Action":"pass","Test":"tests::exact_test_execution_requires_match"}
 "#,
