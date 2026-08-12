@@ -61,6 +61,9 @@ Key fields:
 Every successful runner emits the shared `mitase/verification-proof/v1` evidence shape:
 `{ schema, identity, matched_count, status }`. The receipt validator accepts only
 `status: passed` with exactly one match, regardless of which adapter produced it.
+The pytest adapter also requires verbose output with pytest's default file-descriptor
+capture (and removes `PYTEST_ADDOPTS`) so test-body stdout cannot masquerade as a
+pytest result line.
 
 Probe identity and required level are one typed configuration unit. Advance a capability only when its acceptance and behavioral verification are present; do not add catch-all ownership or planned targets to make a readiness count pass.
 

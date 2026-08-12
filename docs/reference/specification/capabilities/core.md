@@ -472,7 +472,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: lib::tests::self_hosted_shared_verification_targets_execute_claim_by_claim
+            - **name**: lib::tests::self_hosted_shared_verification_target_has_claim_closure
         - **id**: validation-tests-module
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
@@ -866,7 +866,7 @@ features:
           - id: validation-shared-verification-test
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::self_hosted_shared_verification_targets_execute_claim_by_claim' }
+            selector: { kind: module, name: 'lib::tests::self_hosted_shared_verification_target_has_claim_closure' }
           - id: validation-tests-module
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
