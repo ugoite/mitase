@@ -107,12 +107,30 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: tests[cfg(test)]
-        - **id**: project-config-runner-adapters
+        - **id**: project-config-runner
           - **adapter**: rust
           - **path**: crates/mitase-project-model/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: *
+            - **name**: lib::VerificationRunner
+        - **id**: project-config-runner-deserialize
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(Deserialize&lt;'de&gt;forVerificationRunner)::deserialize
+        - **id**: project-config-runner-adapter
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::VerificationRunnerAdapter
+        - **id**: project-config-runner-adapter-infer
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(VerificationRunnerAdapter)::infer
 - **id**: FEAT-INVENTORY-001
   - **title**: Inventory providers
   - **summary**: Discover active artifact units through profile-selected providers.
@@ -302,7 +320,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: module
-            - **name**: *
+            - **name**: readiness::validate_durable_receipt_closure
       - **targets**:
         - **id**: readiness-evaluate
           - **adapter**: rust
@@ -577,10 +595,22 @@ features:
             adapter: rust
             path: crates/mitase-project-model/src/lib.rs
             selector: { kind: module, name: 'tests[cfg(test)]' }
-          - id: project-config-runner-adapters
+          - id: project-config-runner
             adapter: rust
             path: crates/mitase-project-model/src/lib.rs
-            selector: { kind: module, name: '*' }
+            selector: { kind: module, name: 'lib::VerificationRunner' }
+          - id: project-config-runner-deserialize
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: "lib::impl(Deserialize<'de>forVerificationRunner)::deserialize" }
+          - id: project-config-runner-adapter
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'lib::VerificationRunnerAdapter' }
+          - id: project-config-runner-adapter-infer
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(VerificationRunnerAdapter)::infer' }
 
   - id: FEAT-INVENTORY-001
     title: Inventory providers
@@ -729,7 +759,7 @@ features:
           - id: readiness-proof-closure
             adapter: rust
             path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: '*' }
+            selector: { kind: module, name: 'readiness::validate_durable_receipt_closure' }
         targets:
           - id: readiness-evaluate
             adapter: rust
