@@ -824,6 +824,11 @@ pub fn execute_verification(
         require_exact_runner_filter(configured.adapter, &arguments, &runner_ref.arguments)?;
         let mut command = Command::new(&configured.executable);
         command.args(&arguments).current_dir(&workspace.root);
+        if configured.adapter == VerificationRunnerAdapter::Pytest {
+            // Do not let ambient pytest configuration add selectors or disable
+            // capture after the exact command has been validated.
+            command.env_remove("PYTEST_ADDOPTS");
+        }
         if configured.adapter == VerificationRunnerAdapter::CargoLibtest
             && arguments.iter().any(|argument| argument == "-Z")
         {
@@ -865,6 +870,7 @@ pub fn execute_verification(
             target,
             &runner_ref.arguments,
             Some(&workspace.root),
+            &arguments,
             &output.stdout,
         )?;
         let mut implementation_digests = BTreeMap::new();
@@ -1651,6 +1657,7 @@ fn ensure_exact_test_executed(
     target: &mitase_spec_model::ArtifactTarget,
     claim_arguments: &BTreeMap<String, String>,
     workspace_root: Option<&Path>,
+    runner_arguments: &[String],
     stdout: &[u8],
 ) -> Result<VerificationProof> {
     let Some(test_identity) = claim_arguments.get("test") else {
@@ -1661,7 +1668,9 @@ fn ensure_exact_test_executed(
         VerificationRunnerAdapter::CargoLibtest => {
             parse_cargo_libtest_output(test_identity, stdout)?
         }
-        VerificationRunnerAdapter::Pytest => parse_pytest_output(test_identity, stdout),
+        VerificationRunnerAdapter::Pytest => {
+            parse_pytest_output(test_identity, runner_arguments, stdout)?
+        }
         VerificationRunnerAdapter::NodeTest => {
             let name = claim_arguments
                 .get("name")
@@ -1949,6 +1958,7 @@ fn require_exact_runner_filter(
                     "pytest verification runner must pass the exact test identity {test_identity} exactly once"
                 );
             }
+            validate_pytest_output_arguments(arguments)?;
         }
         VerificationRunnerAdapter::NodeTest => {
             if !arguments.iter().any(|argument| argument == "--test") {
@@ -2040,6 +2050,68 @@ fn pytest_option_takes_value(argument: &str) -> bool {
             | "-o"
             | "-p"
     )
+}
+
+fn validate_pytest_output_arguments(arguments: &[String]) -> Result<()> {
+    let mut verbose = false;
+    let mut pending_value = None;
+    for argument in arguments {
+        if let Some(option) = pending_value.take() {
+            match option {
+                "capture" => validate_pytest_capture_mode(argument)?,
+                "override" => validate_pytest_override(argument)?,
+                _ => {}
+            }
+            continue;
+        }
+        if argument == "-s" {
+            bail!("pytest verification runner must keep output capture enabled");
+        }
+        if argument == "--capture" {
+            pending_value = Some("capture");
+        } else if let Some(mode) = argument.strip_prefix("--capture=") {
+            validate_pytest_capture_mode(mode)?;
+        } else if argument == "-o" || argument == "--override-ini" {
+            pending_value = Some("override");
+        } else if argument == "--verbose"
+            || argument.strip_prefix('-').is_some_and(|value| {
+                !value.is_empty() && value.chars().all(|character| character == 'v')
+            })
+        {
+            verbose = true;
+        }
+    }
+    if pending_value.is_some() {
+        bail!("pytest verification runner has an incomplete output option");
+    }
+    if !verbose {
+        bail!("pytest verification runner must request verbose authoritative output");
+    }
+    Ok(())
+}
+
+fn validate_pytest_capture_mode(mode: &str) -> Result<()> {
+    if mode != "fd" {
+        bail!("pytest verification runner must use fd output capture");
+    }
+    Ok(())
+}
+
+fn validate_pytest_override(value: &str) -> Result<()> {
+    let Some((key, setting)) = value.split_once('=') else {
+        return Ok(());
+    };
+    if key == "capture" {
+        validate_pytest_capture_mode(setting)?;
+    }
+    if key == "addopts"
+        && setting.split_whitespace().any(|option| {
+            option == "-s" || option == "--capture" || option.starts_with("--capture=")
+        })
+    {
+        bail!("pytest verification runner must not override output capture through addopts");
+    }
+    Ok(())
 }
 
 fn node_test_file_selectors(arguments: &[String]) -> Vec<&str> {
@@ -2195,7 +2267,12 @@ fn parse_cargo_libtest_output(identity: &str, stdout: &[u8]) -> Result<(usize, b
     Ok((matched_count, failed))
 }
 
-fn parse_pytest_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
+fn parse_pytest_output(
+    identity: &str,
+    runner_arguments: &[String],
+    stdout: &[u8],
+) -> Result<(usize, bool)> {
+    validate_pytest_output_arguments(runner_arguments)?;
     let mut matched_count = 0;
     let mut failed = false;
     for line in String::from_utf8_lossy(stdout).lines() {
@@ -2215,7 +2292,7 @@ fn parse_pytest_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
             _ => {}
         }
     }
-    (matched_count, failed)
+    Ok((matched_count, failed))
 }
 
 fn parse_node_test_output(name: &str, stdout: &[u8]) -> (usize, bool) {
@@ -6723,6 +6800,7 @@ requirements:
             &target,
             &arguments,
             None,
+            &[],
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
 {"type":"suite","event":"ok"}
 "#,
@@ -6738,6 +6816,7 @@ requirements:
                 &target,
                 &arguments,
                 None,
+                &[],
                 br#"{"type":"test","name":"tests::other","event":"ok"}
 "#,
             )
@@ -6748,6 +6827,7 @@ requirements:
             &target,
             &arguments,
             None,
+            &[],
             br#"{"type":"test","name":"other::tests::exact_test_execution_requires_match","event":"ok"}
 "#,
         )
@@ -6757,6 +6837,7 @@ requirements:
             &target,
             &arguments,
             None,
+            &[],
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ignored"}
 "#,
         )
@@ -6766,6 +6847,7 @@ requirements:
             &target,
             &arguments,
             None,
+            &[],
             br#"{"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
 {"type":"test","name":"tests::exact_test_execution_requires_match","event":"ok"}
 "#,
@@ -6777,6 +6859,7 @@ requirements:
                 &target,
                 &arguments,
                 None,
+                &[],
                 b"ok"
             )
             .is_err()
@@ -6799,10 +6882,29 @@ requirements:
             &pytest_target,
             &pytest_arguments,
             None,
+            &[
+                "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                "-v".into(),
+            ],
             b"tests/exact_test.py::exact_test_execution_requires_match PASSED [100%]\n",
         )
         .expect("pytest proof");
         assert_eq!(pytest_proof.status, VerificationProofStatus::Passed);
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::Pytest,
+                &pytest_target,
+                &pytest_arguments,
+                None,
+                &[
+                    "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                    "-v".into(),
+                    "-s".into(),
+                ],
+                b"tests/exact_test.py::exact_test_execution_requires_match PASSED\n",
+            )
+            .is_err()
+        );
 
         let pytest_parameterized_arguments = BTreeMap::from([(
             "test".to_string(),
@@ -6814,6 +6916,7 @@ requirements:
                 &pytest_target,
                 &pytest_parameterized_arguments,
                 None,
+                &["tests/exact_test.py::exact_test_execution_requires_match[param value]".into(), "-v".into()],
                 b"tests/exact_test.py::exact_test_execution_requires_match[param value] PASSED [100%]\n",
             )
             .is_ok()
@@ -6829,6 +6932,10 @@ requirements:
                 &pytest_target,
                 &mismatched_pytest_arguments,
                 None,
+                &[
+                    "other/test.py::exact_test_execution_requires_match".into(),
+                    "-v".into()
+                ],
                 b"other/test.py::exact_test_execution_requires_match PASSED\n",
             )
             .is_err()
@@ -6849,6 +6956,18 @@ requirements:
                 VerificationRunnerAdapter::Pytest,
                 &[
                     "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                    "-v".into(),
+                    "-s".into(),
+                ],
+                &pytest_arguments,
+            )
+            .is_err()
+        );
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::Pytest,
+                &[
+                    "tests/exact_test.py::exact_test_execution_requires_match".into(),
                     "other/test.py::other_test".into(),
                 ],
                 &pytest_arguments,
@@ -6861,6 +6980,7 @@ requirements:
                 &[
                     "-o".into(),
                     "addopts=--strict-markers".into(),
+                    "-v".into(),
                     "tests/exact_test.py::exact_test_execution_requires_match".into(),
                 ],
                 &pytest_arguments,
@@ -6903,6 +7023,7 @@ requirements:
             &node_target,
             &node_arguments,
             None,
+            &[],
             b"TAP version 13\nok 1 - exact_test_execution_requires_match\n",
         )
         .expect("node test proof");
@@ -6913,6 +7034,7 @@ requirements:
                 &node_target,
                 &node_arguments,
                 None,
+                &[],
                 b"TAP version 13\nok 1 - exact_test_execution_requires_match # SKIP\n",
             )
             .is_err()
@@ -7003,6 +7125,7 @@ requirements:
                 &node_target,
                 &node_title_arguments,
                 None,
+                &[],
                 b"TAP version 13\nok 1 - request - succeeds \\# quickly\n",
             )
             .is_ok()
@@ -7028,6 +7151,7 @@ requirements:
             &go_target,
             &go_arguments,
             None,
+            &[],
             br#"{"Action":"run","Test":"tests::exact_test_execution_requires_match"}
 {"Action":"pass","Test":"tests::exact_test_execution_requires_match"}
 "#,
