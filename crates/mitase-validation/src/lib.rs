@@ -1684,19 +1684,79 @@ fn validate_exact_claim_identity(
     {
         bail!("verification argument {test_identity} does not identify selector {selector_name}");
     }
-    if adapter == VerificationRunnerAdapter::NodeTest {
-        let path = claim_arguments.get("path").ok_or_else(|| {
-            anyhow::anyhow!("node-test verification claim must name the exact test file")
-        })?;
-        let name = claim_arguments.get("name").ok_or_else(|| {
-            anyhow::anyhow!("node-test verification claim must name the exact test title")
-        })?;
-        let expected_identity = format!("{path}::{name}");
-        if test_identity != &expected_identity {
-            bail!("node-test verification identity {test_identity} must match {expected_identity}");
+    match adapter {
+        VerificationRunnerAdapter::Pytest => {
+            let path = test_identity.split("::").next().unwrap_or(test_identity);
+            require_claim_path_matches_target(adapter, target, path)?;
         }
+        VerificationRunnerAdapter::NodeTest => {
+            let path = claim_arguments.get("path").ok_or_else(|| {
+                anyhow::anyhow!("node-test verification claim must name the exact test file")
+            })?;
+            let name = claim_arguments.get("name").ok_or_else(|| {
+                anyhow::anyhow!("node-test verification claim must name the exact test title")
+            })?;
+            require_claim_path_matches_target(adapter, target, path)?;
+            let expected_identity = format!("{path}::{name}");
+            if test_identity != &expected_identity {
+                bail!(
+                    "node-test verification identity {test_identity} must match {expected_identity}"
+                );
+            }
+        }
+        VerificationRunnerAdapter::GoTest => {
+            let package = claim_arguments.get("package").ok_or_else(|| {
+                anyhow::anyhow!("go-test verification claim must name the exact package")
+            })?;
+            let target_parent = Path::new(target.path.as_path())
+                .parent()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let package_path = package.trim_start_matches("./").trim_end_matches('/');
+            let target_parent = target_parent.trim_start_matches("./");
+            if package_path != target_parent && !(package_path == "." && target_parent.is_empty()) {
+                bail!(
+                    "go-test package {package} does not contain verification target {}",
+                    target.path.to_string_lossy()
+                );
+            }
+        }
+        VerificationRunnerAdapter::CargoLibtest | VerificationRunnerAdapter::Shell => {}
     }
     Ok(())
+}
+
+fn require_claim_path_matches_target(
+    adapter: VerificationRunnerAdapter,
+    target: &mitase_spec_model::ArtifactTarget,
+    claim_path: &str,
+) -> Result<()> {
+    if claim_path != target.path.to_string_lossy() {
+        bail!(
+            "{} verification path {claim_path} does not match selected target {}",
+            match adapter {
+                VerificationRunnerAdapter::Pytest => "pytest",
+                VerificationRunnerAdapter::NodeTest => "node-test",
+                _ => "runner",
+            },
+            target.path.to_string_lossy()
+        );
+    }
+    Ok(())
+}
+
+fn regex_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(
+            character,
+            '\\' | '^' | '$' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 fn require_exact_runner_filter(
@@ -1752,8 +1812,9 @@ fn require_exact_runner_filter(
                     "node-test verification identity {test_identity} must match {expected_identity}"
                 );
             }
-            let pattern = format!("--test-name-pattern=^{name}$");
-            let pattern_pair = ["--test-name-pattern".to_string(), format!("^{name}$")];
+            let exact_name_pattern = format!("^{}$", regex_escape(name));
+            let pattern = format!("--test-name-pattern={exact_name_pattern}");
+            let pattern_pair = ["--test-name-pattern".to_string(), exact_name_pattern];
             if !arguments.iter().any(|argument| argument == &pattern)
                 && !arguments.windows(2).any(|window| window == pattern_pair)
             {
@@ -1764,7 +1825,7 @@ fn require_exact_runner_filter(
             }
         }
         VerificationRunnerAdapter::GoTest => {
-            let exact_pattern = format!("^{test_identity}$");
+            let exact_pattern = format!("^{}$", regex_escape(test_identity));
             let has_exact_run = arguments
                 .windows(2)
                 .any(|window| window[0] == "-run" && window[1] == exact_pattern)
@@ -1816,13 +1877,17 @@ fn parse_pytest_output(identity: &str, stdout: &[u8]) -> (usize, bool) {
     let mut matched_count = 0;
     let mut failed = false;
     for line in String::from_utf8_lossy(stdout).lines() {
-        let mut fields = line.split_whitespace();
-        if fields.next() != Some(identity) {
+        let line = line.trim();
+        let Some(separator) = line.rfind(char::is_whitespace) else {
+            continue;
+        };
+        let (reported_identity, status) = line.split_at(separator);
+        if reported_identity != identity {
             continue;
         }
-        match fields.next() {
-            Some("PASSED") => matched_count += 1,
-            Some("FAILED") | Some("SKIPPED") | Some("XFAIL") | Some("XPASS") => failed = true,
+        match status.trim() {
+            "PASSED" => matched_count += 1,
+            "FAILED" | "SKIPPED" | "XFAIL" | "XPASS" => failed = true,
             _ => {}
         }
     }
@@ -6328,14 +6393,54 @@ requirements:
             .is_err()
         );
 
+        let pytest_target = mitase_spec_model::ArtifactTarget {
+            id: "pytest-exact-test".into(),
+            adapter: "python".into(),
+            path: RepoPath::new("tests/exact_test.py").unwrap(),
+            selector: mitase_spec_model::ExactSelector::File,
+            lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
+            claims: vec![],
+        };
+        let pytest_arguments = BTreeMap::from([(
+            "test".to_string(),
+            "tests/exact_test.py::exact_test_execution_requires_match".to_string(),
+        )]);
         let pytest_proof = ensure_exact_test_executed(
             VerificationRunnerAdapter::Pytest,
-            &target,
-            &arguments,
-            b"tests::exact_test_execution_requires_match PASSED\n",
+            &pytest_target,
+            &pytest_arguments,
+            b"tests/exact_test.py::exact_test_execution_requires_match PASSED\n",
         )
         .expect("pytest proof");
         assert_eq!(pytest_proof.status, VerificationProofStatus::Passed);
+
+        let pytest_parameterized_arguments = BTreeMap::from([(
+            "test".to_string(),
+            "tests/exact_test.py::exact_test_execution_requires_match[param value]".to_string(),
+        )]);
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::Pytest,
+                &pytest_target,
+                &pytest_parameterized_arguments,
+                b"tests/exact_test.py::exact_test_execution_requires_match[param value] PASSED\n",
+            )
+            .is_ok()
+        );
+        let mut mismatched_pytest_arguments = pytest_arguments.clone();
+        mismatched_pytest_arguments.insert(
+            "test".into(),
+            "other/test.py::exact_test_execution_requires_match".into(),
+        );
+        assert!(
+            ensure_exact_test_executed(
+                VerificationRunnerAdapter::Pytest,
+                &pytest_target,
+                &mismatched_pytest_arguments,
+                b"other/test.py::exact_test_execution_requires_match PASSED\n",
+            )
+            .is_err()
+        );
 
         let node_arguments = BTreeMap::from([
             (
@@ -6348,9 +6453,17 @@ requirements:
                 "exact_test_execution_requires_match".to_string(),
             ),
         ]);
+        let node_target = mitase_spec_model::ArtifactTarget {
+            id: "node-exact-test".into(),
+            adapter: "typescript".into(),
+            path: RepoPath::new("src/app.test.ts").unwrap(),
+            selector: mitase_spec_model::ExactSelector::File,
+            lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
+            claims: vec![],
+        };
         let node_proof = ensure_exact_test_executed(
             VerificationRunnerAdapter::NodeTest,
-            &target,
+            &node_target,
             &node_arguments,
             b"TAP version 13\nok 1 - exact_test_execution_requires_match\n",
         )
@@ -6359,11 +6472,27 @@ requirements:
         assert!(
             ensure_exact_test_executed(
                 VerificationRunnerAdapter::NodeTest,
-                &target,
+                &node_target,
                 &node_arguments,
                 b"TAP version 13\nok 1 - exact_test_execution_requires_match # SKIP\n",
             )
             .is_err()
+        );
+        let special_node_arguments = BTreeMap::from([
+            ("test".to_string(), "src/app.test.ts::foo.bar".to_string()),
+            ("path".to_string(), "src/app.test.ts".to_string()),
+            ("name".to_string(), "foo.bar".to_string()),
+        ]);
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::NodeTest,
+                &[
+                    "--test-name-pattern=^foo\\.bar$".into(),
+                    "src/app.test.ts".into(),
+                ],
+                &special_node_arguments,
+            )
+            .is_ok()
         );
 
         let go_arguments = BTreeMap::from([
@@ -6373,9 +6502,17 @@ requirements:
             ),
             ("package".to_string(), "./go".to_string()),
         ]);
+        let go_target = mitase_spec_model::ArtifactTarget {
+            id: "go-exact-test".into(),
+            adapter: "go".into(),
+            path: RepoPath::new("go/exact_test.go").unwrap(),
+            selector: mitase_spec_model::ExactSelector::File,
+            lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
+            claims: vec![],
+        };
         let go_proof = ensure_exact_test_executed(
             VerificationRunnerAdapter::GoTest,
-            &target,
+            &go_target,
             &go_arguments,
             br#"{"Action":"run","Test":"tests::exact_test_execution_requires_match"}
 {"Action":"pass","Test":"tests::exact_test_execution_requires_match"}
@@ -6383,6 +6520,23 @@ requirements:
         )
         .expect("go test proof");
         assert_eq!(go_proof.schema, VERIFICATION_PROOF_SCHEMA);
+        let special_go_arguments = BTreeMap::from([
+            ("test".to_string(), "TestFoo.Bar".to_string()),
+            ("package".to_string(), "./go".to_string()),
+        ]);
+        assert!(
+            require_exact_runner_filter(
+                VerificationRunnerAdapter::GoTest,
+                &[
+                    "-json".into(),
+                    "-run".into(),
+                    "^TestFoo\\.Bar$".into(),
+                    "./go".into()
+                ],
+                &special_go_arguments,
+            )
+            .is_ok()
+        );
 
         let mut zero_match = pytest_proof;
         zero_match.matched_count = 0;
