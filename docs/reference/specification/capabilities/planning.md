@@ -310,7 +310,7 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **path**: crates/mitase-work-model/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: *
+            - **name**: lib::VerificationProof
       - **targets**:
         - **id**: canonical-plan
           - **adapter**: rust
@@ -870,7 +870,7 @@ features:
           - id: work-model-verification-proof
             adapter: rust
             path: crates/mitase-work-model/src/lib.rs
-            selector: { kind: module, name: '*' }
+            selector: { kind: module, name: 'lib::VerificationProof' }
         targets:
           - id: canonical-plan
             adapter: rust

@@ -81,7 +81,7 @@ description: "Generated reference for docs/mitase/features/capabilities/delivery
           - **path**: crates/mitase-delivery/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: *
+            - **name**: lib::validate_completion_attempt_against_plan
       - **targets**:
         - **id**: delivery-store
           - **adapter**: rust
@@ -711,7 +711,7 @@ features:
           - id: delivery-completion-proof
             adapter: rust
             path: crates/mitase-delivery/src/lib.rs
-            selector: { kind: module, name: '*' }
+            selector: { kind: module, name: 'lib::validate_completion_attempt_against_plan' }
         targets:
           - id: delivery-store
             adapter: rust

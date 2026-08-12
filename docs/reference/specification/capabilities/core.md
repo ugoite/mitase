@@ -496,7 +496,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: *
+            - **name**: lib::validate_verification_proof
       - **targets**:
         - **id**: change-validate
           - **adapter**: rust
@@ -864,7 +864,7 @@ features:
           - id: validation-proof-adapters
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: '*' }
+            selector: { kind: module, name: 'lib::validate_verification_proof' }
         targets:
           - id: change-validate
             adapter: rust
