@@ -175,12 +175,14 @@ pub enum VerificationRunnerAdapter {
 
 impl VerificationRunnerAdapter {
     fn infer(executable: &str, arguments: &[String]) -> Self {
-        let executable = executable
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(executable)
-            .strip_suffix(".exe")
-            .unwrap_or(executable);
+        let executable = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
+        let executable = if executable.len() >= 4
+            && executable[executable.len() - 4..].eq_ignore_ascii_case(".exe")
+        {
+            &executable[..executable.len() - 4]
+        } else {
+            executable
+        };
         if executable.eq_ignore_ascii_case("cargo") {
             Self::CargoLibtest
         } else if executable.eq_ignore_ascii_case("pytest")
@@ -322,6 +324,22 @@ work:
             serde_yaml::from_str(&windows_legacy_source).expect("Windows legacy config");
         assert_eq!(
             windows_legacy_config.verification.runners["cargo-test"].adapter,
+            VerificationRunnerAdapter::CargoLibtest
+        );
+        let unix_path_legacy_source =
+            legacy_source.replace("executable: cargo", "executable: /usr/bin/cargo");
+        let unix_path_legacy_config: ProjectConfig =
+            serde_yaml::from_str(&unix_path_legacy_source).expect("Unix path legacy config");
+        assert_eq!(
+            unix_path_legacy_config.verification.runners["cargo-test"].adapter,
+            VerificationRunnerAdapter::CargoLibtest
+        );
+        let mixed_case_windows_source =
+            legacy_source.replace("executable: cargo", r"executable: C:\\toolchain\\cargo.ExE");
+        let mixed_case_windows_config: ProjectConfig =
+            serde_yaml::from_str(&mixed_case_windows_source).expect("mixed-case Windows config");
+        assert_eq!(
+            mixed_case_windows_config.verification.runners["cargo-test"].adapter,
             VerificationRunnerAdapter::CargoLibtest
         );
         assert!(
