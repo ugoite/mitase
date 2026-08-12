@@ -176,7 +176,7 @@ pub enum VerificationRunnerAdapter {
 impl VerificationRunnerAdapter {
     fn infer(executable: &str, arguments: &[String]) -> Self {
         let executable = executable
-            .rsplit(|character| character == '/' || character == '\\')
+            .rsplit(['/', '\\'])
             .next()
             .unwrap_or(executable)
             .strip_suffix(".exe")

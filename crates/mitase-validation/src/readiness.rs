@@ -1197,8 +1197,7 @@ fn finalized_absent_targets(
         if validate_durable_receipt_closure(
             &baseline.workspace,
             &baseline.index,
-            workspace,
-            index,
+            (workspace, index),
             &approval.plan,
             slice,
             &attempt,
@@ -1256,13 +1255,13 @@ fn finalized_absent_targets(
 fn validate_durable_receipt_closure(
     baseline_workspace: &SpecWorkspace,
     baseline_index: &SpecIndex,
-    post_workspace: &SpecWorkspace,
-    post_index: &SpecIndex,
+    post_state: (&SpecWorkspace, &SpecIndex),
     plan: &mitase_work_model::WorkPlan,
     slice: &mitase_work_model::ExecutionSlice,
     attempt: &CompletionAttempt,
     receipt: &VerificationReceipt,
 ) -> Result<()> {
+    let (post_workspace, post_index) = post_state;
     if receipt.schema != VERIFICATION_RECEIPT_SCHEMA
         || receipt.plan_digest != plan.canonical_digest
         || receipt.slice_id != slice.id
