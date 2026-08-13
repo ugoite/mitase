@@ -2331,6 +2331,7 @@ fn validate_pytest_output_arguments(arguments: &[String]) -> Result<()> {
         if let Some(option) = pending_value.take() {
             match option {
                 "capture" => validate_pytest_capture_mode(argument)?,
+                "color" => validate_pytest_color_mode(argument)?,
                 "override" => validate_pytest_override(argument)?,
                 _ => {}
             }
@@ -2343,6 +2344,10 @@ fn validate_pytest_output_arguments(arguments: &[String]) -> Result<()> {
             pending_value = Some("capture");
         } else if let Some(mode) = argument.strip_prefix("--capture=") {
             validate_pytest_capture_mode(mode)?;
+        } else if argument == "--color" {
+            pending_value = Some("color");
+        } else if let Some(mode) = argument.strip_prefix("--color=") {
+            validate_pytest_color_mode(mode)?;
         } else if argument == "-o" || argument == "--override-ini" {
             pending_value = Some("override");
         } else if let Some(value) = argument
@@ -2374,6 +2379,13 @@ fn validate_pytest_capture_mode(mode: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_pytest_color_mode(mode: &str) -> Result<()> {
+    if mode != "no" {
+        bail!("pytest verification runner must disable colored output");
+    }
+    Ok(())
+}
+
 fn validate_pytest_override(value: &str) -> Result<()> {
     let Some((key, setting)) = value.split_once('=') else {
         return Ok(());
@@ -2381,9 +2393,16 @@ fn validate_pytest_override(value: &str) -> Result<()> {
     if key == "capture" {
         validate_pytest_capture_mode(setting)?;
     }
+    if key == "color" {
+        validate_pytest_color_mode(setting)?;
+    }
     if key == "addopts"
         && setting.split_whitespace().any(|option| {
-            option == "-s" || option == "--capture" || option.starts_with("--capture=")
+            option == "-s"
+                || option == "--capture"
+                || option.starts_with("--capture=")
+                || option == "--color"
+                || option.starts_with("--color=")
         })
     {
         bail!("pytest verification runner must not override output capture through addopts");
@@ -2702,7 +2721,7 @@ pub(crate) fn canonical_runner_arguments_for_adapter(
         // Pytest merges `addopts` from configuration files after parsing the
         // command line. Override it last so an exact receipt cannot be widened
         // by a repository-local pytest.ini or pyproject.toml.
-        arguments.extend(["-o".into(), "addopts=".into()]);
+        arguments.extend(["-o".into(), "addopts=".into(), "--color=no".into()]);
     }
     if adapter == VerificationRunnerAdapter::CargoLibtest
         && arguments.iter().any(|argument| argument == "test")
@@ -7257,6 +7276,7 @@ requirements:
                 "-v",
                 "-o",
                 "addopts=",
+                "--color=no",
             ]
         );
         assert!(
@@ -7282,6 +7302,23 @@ requirements:
             )
             .is_err()
         );
+        for colored_output in ["--color=yes", "-o=color=yes", "-o=addopts=--color=yes"] {
+            assert!(
+                ensure_exact_test_executed(
+                    VerificationRunnerAdapter::Pytest,
+                    &pytest_target,
+                    &pytest_arguments,
+                    None,
+                    &[
+                        "tests/exact_test.py::exact_test_execution_requires_match".into(),
+                        "-v".into(),
+                        colored_output.into(),
+                    ],
+                    b"tests/exact_test.py::exact_test_execution_requires_match PASSED\n",
+                )
+                .is_err()
+            );
+        }
 
         for capture_override in ["--override-ini=capture=no", "-o=capture=no"] {
             assert!(
