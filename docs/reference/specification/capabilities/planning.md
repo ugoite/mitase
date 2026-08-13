@@ -311,6 +311,12 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **selector**:
             - **kind**: module
             - **name**: lib::VerificationProof
+        - **id**: work-model-verification-protocol-module
+          - **adapter**: rust
+          - **path**: crates/mitase-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
       - **targets**:
         - **id**: canonical-plan
           - **adapter**: rust
@@ -871,6 +877,10 @@ features:
             adapter: rust
             path: crates/mitase-work-model/src/lib.rs
             selector: { kind: module, name: 'lib::VerificationProof' }
+          - id: work-model-verification-protocol-module
+            adapter: rust
+            path: crates/mitase-work-model/src/lib.rs
+            selector: { kind: module, name: lib }
         targets:
           - id: canonical-plan
             adapter: rust
