@@ -6,14 +6,17 @@ sidebar_position: 1
 
 # The specification model
 
-`mitase` keeps four persistent layers distinct so a repository can change its
-implementation without losing its intent:
+`mitase` keeps intent, responsibility, and evidence distinct so a repository
+can change its implementation without losing its specification:
 
 1. Philosophy records the durable ideal.
 2. Policy turns that ideal into rules.
-3. Requirement states what must be true and how it can be verified.
-4. Feature connects the requirement to implementation and evidence.
+3. Requirement states what must be true.
+4. Criterion turns a Requirement into an independently verifiable condition.
+5. Feature owns the implementation responsibility.
+6. Binding connects that responsibility to an exact Artifact target.
 
 The [concepts](./concepts.md) page is the compact vocabulary guide. The
-[v1 architecture](./v1-architecture.md) explains the canonical document and
+[domain glossary](./domain-glossary.md) provides the complete terms. The
+[architecture](./v1-architecture.md) explains the canonical graph and
 traceability rules behind it.

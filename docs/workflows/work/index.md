@@ -4,7 +4,11 @@ description: "Turn an exact request into bounded slices, review it, and carry it
 sidebar_position: 1
 ---
 
-# Plan and execute work
+# Transitional Work runtime
+
+> This page documents the pre-Re-Foundation execution runtime. It is not part
+> of the frozen Mitase product boundary and must not be extended with new
+> planning, agent, delivery, or mutation responsibilities.
 
 `mitase work` is the execution side of the model. It derives small, reviewable
 slices from one exact Work origin, lets Workbench select a canonical slice
