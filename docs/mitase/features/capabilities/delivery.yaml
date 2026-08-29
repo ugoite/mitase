@@ -224,13 +224,6 @@ features:
             path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalizations_dir }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
-          - id: task-run
-            adapter: rust
-            path: src/lib.rs
-            selector: { kind: symbol, name: run_task }
-            claims:
-              - kind: satisfies
-                criterion: REQ-WORK-002#criterion.finalization-handoff
       - id: verification
         role: verification
         facet: delivery
@@ -299,7 +292,6 @@ features:
               - kind: verifies
                 criterion: REQ-WORK-002#criterion.finalization-handoff
                 covers:
-                  - FEAT-DELIVERY-001#binding.implementation/target.task-run
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-finalization
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-finalization
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization

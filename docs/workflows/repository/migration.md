@@ -24,7 +24,7 @@ wire and CLI shapes. There are no compatibility aliases:
 | Previous surface | Current surface | Required action |
 |---|---|---|
 | Generic Work summaries/seeds and implicit behavior selection | `mitase/work-request/v1` with an exact `origin` and `requested_targets` | Rewrite request artifacts. “Behavior” means the exact Requirement criterion; Feature implementation bindings and exact implementation targets are separate origin choices. |
-| `mitase work verify` and receipt-only result validation | `mitase task approve` → `mitase task verify` → durable `CompletionAttempt` and `mitase validate result --attempt-id ...` | Approve one exact plan/slice before verification and validate the stored attempt identity. |
+| `mitase work` / `mitase task` execution lifecycle | External repository tooling; the former Mitase command groups are removed | Keep planning, execution, retry, and finalization outside Mitase. Transitional plan/result inspection remains until the Work runtime removal phase. |
 | `max_slices_per_seed` | `max_slices_per_origin` | Rename the config key. |
 | Legacy `ReadinessLevel` public-entrypoint combinations | v1 public-entrypoint probes support only `off`, `seedable`, or `work-ready` | Change unsupported probe levels; they are rejected by configuration validation. |
 

@@ -1,4 +1,8 @@
-# Work plan format
+# Transitional Work plan format
+
+Work plans are execution artifacts owned by external repository tooling. They
+are retained temporarily so the Work runtime can be removed in focused steps;
+the Mitase CLI does not create, approve, execute, retry, or finalize them.
 
 The active planner output is `mitase/work-plan/v1`.
 
@@ -12,14 +16,12 @@ A work plan contains:
 - slice budgets
 - completion checks
 
-Validation entry points:
+The remaining transitional inspection entrypoint is:
 
 ```bash
-cargo run --quiet -- validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
-cargo run --quiet -- work export-context --workspace . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
+mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
 ```
 
-When more than one ready slice is produced, Workbench exposes the canonical
-slice ids as accessible choices. Selecting one creates the only executable
-plan boundary; approval and delivery always use the exact `{ plan_digest,
-slice_id }` pair. Use `mitase/work-plan/v1` as the current planner output format.
+External tooling owns slice selection, context export, approval, delivery, and
+the exact `{ plan_digest, slice_id }` execution identity. Use
+`mitase/work-plan/v1` only as the transitional planner output format.

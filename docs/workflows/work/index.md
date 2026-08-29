@@ -10,11 +10,12 @@ sidebar_position: 1
 > of the frozen Mitase product boundary and must not be extended with new
 > planning, agent, delivery, or mutation responsibilities.
 
-`mitase work` is the execution side of the model. It derives small, reviewable
-slices from one exact Work origin, lets Workbench select a canonical slice
-when the origin expands into independent candidates, exports the context
-needed for one slice, and keeps completion evidence tied to the exact
-plan-and-slice identity.
+External repository tooling owns the execution side of the former model. It
+may derive small, reviewable slices from one exact Work origin, select a
+canonical slice when the origin expands into independent candidates, export
+context, and keep completion evidence tied to the exact plan-and-slice
+identity. Mitase only retains transitional inspection entrypoints while this
+runtime is removed.
 
 - [Workbench](./workbench.md) — the current product flow and projection.
 - [Implementation planning](./implementation-planning.md) — the canonical
