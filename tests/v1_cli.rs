@@ -1,5 +1,4 @@
 use assert_cmd::Command;
-use mitase_work_model::{CompletionAttempt, WorkPlan};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -22,6 +21,27 @@ fn current_workspace_validates_and_reports_configured_readiness() {
     assert!(output.status.success());
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["target"], "traceable");
+}
+
+#[test]
+fn public_cli_does_not_expose_work_or_task_commands() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("work "))
+    );
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("task "))
+    );
 }
 
 #[test]
@@ -270,172 +290,4 @@ fn staged_change_validation_rejects_invalid_index_content_and_invalid_options() 
         .args(["--staged", "--baseline", "parent"])
         .assert()
         .failure();
-}
-
-fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
-    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-workbench-flow");
-    let temp = tempdir().unwrap();
-    let artifacts = tempdir().unwrap();
-    copy_fixture_tree(&fixture, temp.path());
-    initialize_fixture_git(temp.path());
-
-    let plan_path = artifacts.path().join("plan.yaml");
-    let output = Command::cargo_bin("mitase")
-        .unwrap()
-        .args(["work", "plan", "--request"])
-        .arg(temp.path().join("work.yaml"))
-        .args(["--out"])
-        .arg(&plan_path)
-        .args(["--workspace"])
-        .arg(temp.path())
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "plan failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let plan: WorkPlan = serde_yaml::from_str(&fs::read_to_string(&plan_path).unwrap()).unwrap();
-    let slice = plan
-        .slices
-        .iter()
-        .find(|slice| !slice.verification_targets.is_empty())
-        .unwrap()
-        .id
-        .clone();
-
-    let context_path = artifacts.path().join("context.yaml");
-    let output = Command::cargo_bin("mitase")
-        .unwrap()
-        .args(["work", "export-context", "--plan"])
-        .arg(&plan_path)
-        .args(["--plan-digest"])
-        .arg(&plan.canonical_digest)
-        .args(["--slice-id"])
-        .arg(&slice)
-        .args(["--workspace"])
-        .arg(temp.path())
-        .args(["--out"])
-        .arg(&context_path)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "context export failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let output = Command::cargo_bin("mitase")
-        .unwrap()
-        .args(["task", "approve", "--plan"])
-        .arg(&plan_path)
-        .args(["--plan-digest"])
-        .arg(&plan.canonical_digest)
-        .args(["--slice-id"])
-        .arg(&slice)
-        .args(["--workspace"])
-        .arg(temp.path())
-        .args(["--format", "json"])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "approval failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    if out_of_scope {
-        fs::write(
-            temp.path().join("src/unrelated.rs"),
-            "pub const UNRELATED: bool = true;\n",
-        )
-        .unwrap();
-    } else {
-        fs::write(
-            temp.path().join("src/lib.rs"),
-            "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
-        )
-        .unwrap();
-    }
-
-    let receipt_path = artifacts.path().join("receipt.yaml");
-
-    let output = Command::cargo_bin("mitase")
-        .unwrap()
-        .args(["task", "verify", "--plan"])
-        .arg(&plan_path)
-        .args(["--plan-digest"])
-        .arg(&plan.canonical_digest)
-        .args(["--slice-id"])
-        .arg(&slice)
-        .args(["--workspace"])
-        .arg(temp.path())
-        .args(["--format", "json"])
-        .output()
-        .unwrap();
-    let attempt: CompletionAttempt =
-        serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
-            panic!(
-                "invalid attempt output: {error}; status={} stdout={} stderr={}",
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            )
-        });
-    if out_of_scope {
-        assert!(
-            !output.status.success(),
-            "out-of-scope verification unexpectedly passed"
-        );
-        assert_eq!(
-            attempt.report.status,
-            mitase_work_model::CompletionStatus::Blocked
-        );
-        assert!(!attempt.report.blockers.is_empty());
-        return false;
-    } else {
-        assert!(
-            output.status.success(),
-            "unexpected verification status: {}\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout)
-        );
-        assert_eq!(
-            attempt.report.status,
-            mitase_work_model::CompletionStatus::Complete
-        );
-        let receipt = attempt.receipt.as_ref().expect("complete attempt receipt");
-        fs::write(&receipt_path, serde_yaml::to_string(receipt).unwrap()).unwrap();
-    }
-
-    let output = Command::cargo_bin("mitase")
-        .unwrap()
-        .args(["validate", "result"])
-        .arg(temp.path())
-        .args(["--plan"])
-        .arg(&plan_path)
-        .args(["--plan-digest"])
-        .arg(&plan.canonical_digest)
-        .args(["--slice-id"])
-        .arg(&slice)
-        .args(["--attempt-id"])
-        .arg(&attempt.attempt_id)
-        .args(["--receipt"])
-        .arg(&receipt_path)
-        .args(["--format", "json"])
-        .output()
-        .unwrap();
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(
-        output.status.success(),
-        "result validation failed: {report}"
-    );
-    assert_eq!(report["status"], "complete");
-    true
-}
-
-#[test]
-fn cli_post_state_flow_accepts_editable_change_and_rejects_out_of_scope_change() {
-    assert!(run_cli_post_state_flow(false));
-    assert!(!run_cli_post_state_flow(true));
 }
