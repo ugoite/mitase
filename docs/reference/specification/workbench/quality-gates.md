@@ -68,6 +68,42 @@ description: "Generated reference for docs/mitase/features/workbench/quality-gat
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-010#criterion.lifecycle-separation
       - **owns**:
+        - **id**: repository-instructions
+          - **adapter**: declared
+          - **path**: AGENTS.md
+          - **selector**:
+            - **kind**: file
+        - **id**: mise-configuration
+          - **adapter**: declared
+          - **path**: mise.toml
+          - **selector**:
+            - **kind**: file
+        - **id**: rust-toolchain-configuration
+          - **adapter**: declared
+          - **path**: rust-toolchain.toml
+          - **selector**:
+            - **kind**: file
+        - **id**: rust-setup-action
+          - **adapter**: declared
+          - **path**: .github/actions/setup-rust/action.yml
+          - **selector**:
+            - **kind**: file
+        - **id**: pull-request-template
+          - **adapter**: declared
+          - **path**: .github/pull_request_template.md
+          - **selector**:
+            - **kind**: file
+        - **id**: pull-request-issue-workflow
+          - **adapter**: declared
+          - **path**: .github/workflows/pr-require-close-issue.yml
+          - **selector**:
+            - **kind**: file
+        - **id**: repository-skills
+          - **adapter**: declared
+          - **path**: .agents/skills
+          - **selector**:
+            - **kind**: path-prefix
+            - **value**: .agents/skills
         - **id**: ci-workflow
           - **adapter**: declared
           - **path**: .github/workflows/ci.yml
@@ -134,6 +170,12 @@ description: "Generated reference for docs/mitase/features/workbench/quality-gat
           - **path**: src/lib.rs
           - **selector**:
             - **kind**: file
+        - **id**: cli-validation-module
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
         - **id**: cli-validation-tests
           - **adapter**: declared
           - **path**: tests/v1_cli.rs
@@ -238,6 +280,34 @@ features:
       - kind: satisfies
         criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
     owns:
+    - id: repository-instructions
+      adapter: declared
+      path: AGENTS.md
+      selector: { kind: file }
+    - id: mise-configuration
+      adapter: declared
+      path: mise.toml
+      selector: { kind: file }
+    - id: rust-toolchain-configuration
+      adapter: declared
+      path: rust-toolchain.toml
+      selector: { kind: file }
+    - id: rust-setup-action
+      adapter: declared
+      path: .github/actions/setup-rust/action.yml
+      selector: { kind: file }
+    - id: pull-request-template
+      adapter: declared
+      path: .github/pull_request_template.md
+      selector: { kind: file }
+    - id: pull-request-issue-workflow
+      adapter: declared
+      path: .github/workflows/pr-require-close-issue.yml
+      selector: { kind: file }
+    - id: repository-skills
+      adapter: declared
+      path: .agents/skills
+      selector: { kind: path-prefix, value: .agents/skills }
     - id: ci-workflow
       adapter: declared
       path: .github/workflows/ci.yml
@@ -290,6 +360,10 @@ features:
       adapter: declared
       path: src/lib.rs
       selector: { kind: file }
+    - id: cli-validation-module
+      adapter: rust
+      path: src/lib.rs
+      selector: { kind: module, name: "*" }
     - id: cli-validation-tests
       adapter: declared
       path: tests/v1_cli.rs

@@ -14,17 +14,10 @@ page with [workbench](./workbench.md).
 | Task | Command | Choose it when |
 | --- | --- | --- |
 | Confirm the installed binary | `mitase --version` | verify the binary on your `PATH` before touching a workspace |
-| Validate the current workspace | `mitase validate workspace .` | run the canonical v1 graph and work-plan validation pass |
+| Validate the current workspace | `mitase validate workspace .` | run the canonical v1 specification validation pass |
 | Validate a changed range | `mitase validate change . --range origin/main...HEAD` | check changed-file ownership and impact against a git range |
-| Validate one work plan | `mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>` | re-check a saved work plan against one exact execution boundary |
-| Validate one verification result | `mitase validate result . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --attempt-id <attempt-id> --receipt receipt.yaml` | evaluate completion only from the exact durable verification attempt |
-| Approve an exact work plan | `mitase task approve --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .` | persist explicit review before any verification attempt |
-| Verify one work slice | `mitase task verify --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .` | append an immutable completion attempt, including failures and blockers |
-| Inspect attempt history | `mitase task attempts list --workspace .` | recover current and previous attempts after retries or restarts |
-| Finalize a complete attempt | `mitase task finalize preview/apply --attempt <attempt-id> --plan-digest <digest> --slice-id <slice-id> --workspace .` | revalidate and atomically promote only the exact planned slice |
-| Plan executable work | `mitase work plan --request work.yaml --out plan.yaml --workspace .` | turn a v1 work request into canonical execution slices |
-| Inspect a saved work plan | `mitase work show --plan plan.yaml` | read the exact YAML plan that the planner produced |
-| Export one slice context pack | `mitase work export-context --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .` | materialize one validated slice into a portable context pack |
+| Validate a proposed plan | `mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>` | transitional inspection of an externally produced plan artifact |
+| Validate one verification result | `mitase validate result . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --attempt-id <attempt-id> --receipt receipt.yaml` | transitional inspection of an externally produced verification receipt |
 | Inspect the Workbench projection | `mitase workbench project --workspace . --format json` | view the current typed server payload without starting a UI |
 | Inspect the Workbench projection for one request | `mitase workbench project --workspace . --request work.yaml --format yaml` | review how one work request appears through the current product projection |
 | Start the editor protocol server | `mitase lsp` | connect an editor client over stdio when you want the current hover-only LSP surface |
@@ -37,24 +30,15 @@ page with [workbench](./workbench.md).
 mitase validate workspace .
 ```
 
-### Validate a proposed work plan
+### Validate an externally produced plan
 
 ```bash
-mitase work plan --request work.yaml --out plan.yaml --workspace .
-mitase work show --plan plan.yaml
 mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
-mitase task approve --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .
-mitase task verify --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .
-mitase task attempts list --workspace .
-mitase task finalize preview --attempt <attempt-id> --plan-digest <digest> --slice-id <slice-id> --workspace .
-mitase task finalize apply --attempt <attempt-id> --plan-digest <digest> --slice-id <slice-id> --workspace . --preview-token <preview-token>
+```
 ```
 
-### Export one execution slice
-
-```bash
-mitase work export-context --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --workspace .
-```
+Planning, execution, retry, and finalization are repository-tooling concerns;
+the Mitase CLI does not expose `work` or `task` commands.
 
 ### Inspect the current Workbench data
 
