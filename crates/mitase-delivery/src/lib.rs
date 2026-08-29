@@ -72,7 +72,7 @@ pub const MUTATION_JOURNAL_SCHEMA: &str = "mitase/workspace-mutation-journal/v1"
 
 impl Drop for WorkspaceLock {
     fn drop(&mut self) {
-        let _ = self.file.unlock();
+        let _ = fs2::FileExt::unlock(&self.file);
     }
 }
 
