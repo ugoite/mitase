@@ -1,27 +1,20 @@
 # Concepts
 
-The active v1 model is built from four persistent spec layers and two temporary work artifacts.
-
-Persistent layers:
-
-- philosophies
-- policies
-- requirements
-- features
-
-Temporary work artifacts:
-
-- work requests (`mitase/work-request/v1`)
-- work plans (`mitase/work-plan/v1`)
-- exported context packs (`mitase/context-pack/v1`)
+The active Mitase model is a persistent specification graph. It describes the
+conditions a repository must satisfy and the artifacts that carry the
+responsibility or proof. It does not own a work queue or an execution session.
 
 Core ideas:
 
-- bindings connect spec anchors to exact artifact targets
-- requirements express criteria
-- features satisfy criteria through implementation bindings
-- verification bindings provide execution evidence
-- work planning derives bounded execution slices from the graph
+- Requirements state observable behavior or contracts.
+- Criteria make each Requirement independently verifiable.
+- Features are implementation responsibilities, not execution jobs.
+- Bindings connect Features to exact Artifact targets.
+- Verification Claims connect Criteria to the evidence that proves them.
+- Reverse relationships are derived by `SpecIndex` rather than persisted twice.
+
+See the [domain glossary](./domain-glossary.md) for the complete vocabulary and
+the [architecture](./v1-architecture.md) for validation and dependency rules.
 
 ## Philosophy
 
@@ -33,10 +26,22 @@ The repository-wide rule that makes the ideal actionable and reviewable.
 
 ## Requirements
 
-The concrete criteria that must be satisfied and can be checked against
-implementation or verification evidence.
+The observable behavior or contract that must be satisfied.
+
+## Criterion
+
+One concrete acceptance condition used to determine whether a Requirement is
+satisfied.
 
 ## Features
 
-The implemented capability that connects requirements to exact code, tests, and
-other evidence.
+The implementation responsibility that realizes one or more Requirements.
+
+## Binding
+
+The connection between a Feature and an exact repository Artifact target.
+
+## Artifact
+
+An object outside the specification hierarchy, such as source, test,
+configuration, API definition, workflow, directory, or symbol.

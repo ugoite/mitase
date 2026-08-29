@@ -1,14 +1,48 @@
 # Mitase
 
-Mitase v1 connects Philosophy principles, Policy rules, Requirement criteria, Feature bindings, exact artifact targets, validation, and executable work slices.
+Mitase is a compiler for executable software specifications. It connects a
+repository's intent to its implementation and verifies that the repository
+still satisfies its own specification.
 
-```bash
-cargo run -- validate workspace .
-cargo run -- work plan --request fixtures/v1/valid-web-app/work.yaml --out plan.yaml --workspace fixtures/v1/valid-web-app
-cargo run -- validate plan fixtures/v1/valid-web-app --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
-cargo run -- work export-context --plan plan.yaml --plan-digest <digest> --slice-id invalid-credentials-backend --workspace fixtures/v1/valid-web-app
+> Mitase tells you what must be true. It does not make it true.
+
+Mitase owns the specification graph, exact artifact bindings, repository
+inventory, artifact resolution, validation, verification claims, coverage,
+diagnostics, and queries that explain how those pieces connect. It is
+repository-native: the specification and its references live with the code
+they describe.
+
+## Frozen product boundary
+
+The canonical model is:
+
+```text
+Philosophy → Policy → Requirement → Criterion → Feature → Binding → Artifact
+                                      │
+                                      └→ Verification Claim → Verifier / Test / Artifact
 ```
 
-Only `mitase/spec/v1`, `mitase/config/v1`, `mitase/work-request/v1`, and `mitase/work-plan/v1` are accepted. YAML parsing is strict and unknown fields are errors.
+Forward relations are persisted in the specification. Reverse relations are
+derived by the index. A Binding owns the exact Artifact target that a Feature
+is responsible for; an Artifact is an external repository object, not another
+specification kind.
+
+Work requests and plans, execution slices, shell or test execution, patch
+application, agents, retries, delivery state, task queues, and workspace
+mutation are outside Mitase. The current checkout still contains transitional
+implementation surfaces for that earlier direction; they are not part of the
+frozen product boundary and are scheduled for removal in follow-up changes.
+
+Read the [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md)
+for the decision, acceptance gates, and follow-up sequence.
+
+```bash
+cargo run --quiet -- validate workspace .
+```
+
+The target v1 CLI is intentionally limited to specification operations:
+`mitase check`, `mitase validate`, `mitase query`, `mitase show`, and
+`mitase list`. The re-foundation removes execution commands rather than
+replacing them with compatibility aliases.
 
 See [the v1 architecture](docs/understand/model/v1-architecture.md).

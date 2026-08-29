@@ -1,11 +1,11 @@
 # ADR 0001: Mitase v1 canonical model
 
-Status: accepted
+Status: superseded by [ADR 0002](./adr-0002-remove-work-execution.md)
 
-Mitase v1 uses strict, single-version documents for specifications, project configuration, work requests, and work plans. Specifications retain four layers. Relations are persisted only from rules to principles, criteria to rules, and bindings to criteria. `SpecIndex` derives every reverse view.
+This ADR records the original strict, single-version model. Its decisions about
+schema strictness, stable anchors, exact targets, and derived reverse
+relationships remain useful. Its decision to treat work requests, work plans,
+and executable slices as Mitase-owned artifacts no longer applies.
 
-Stable local anchors identify principles, rules, criteria, bindings, and contracts. Binding-owned targets require a local target ID, adapter, repository-relative path, and typed selector. Line ranges are resolved metadata and are never persistent identity.
-
-Contracts remain Feature-local entities and connect provider/consumer-style participants across facets. Executable slices may only originate from explicit bindings with resolved targets. Heuristics may produce review candidates but never executable scope.
-
-The cutover intentionally provides no compatibility parser, migration command, field aliases, or deprecated commands.
+The current product boundary is defined by the [Mitase Re-Foundation
+freeze](./mitase-re-foundation-freeze.md) and ADR 0002.
