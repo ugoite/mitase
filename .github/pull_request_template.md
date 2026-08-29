@@ -1,18 +1,22 @@
 ## Summary
 
-Linked issue or specification: FEAT-WORKBENCH-READINESS-UI-001
+<!-- Describe the externally visible problem and the smallest design/behavior change. -->
 
-This PR intentionally makes the v1 readiness and Workbench contracts stricter and is not compatibility-preserving before release.
+## Related Issue (required)
 
-## Work plan
+Closes #
 
-- Request / plan: canonical artifact-index, readiness, verification, and Workbench session closure.
-- Execution slice: inventory → ownership → seedability → workability → verification → post-state validation.
+## Scope and boundaries
 
-## Validation
+<!-- State the owning surface and any intentional transitional or non-goal boundary. -->
 
-- [ ] `cargo fmt --check`
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace`
-- [ ] `mitase validate workspace .`
-- [ ] `mitase readiness report . --format json`
+## Testing
+
+- [ ] `mise run fmt:check`
+- [ ] `mise run lint`
+- [ ] `mise run check`
+- [ ] `mise run test`
+
+## Review scope
+
+<!-- Keep review details public-safe. Record the reviewed commit and invariants; do not include private prompts, local paths, credentials, or usage data. -->

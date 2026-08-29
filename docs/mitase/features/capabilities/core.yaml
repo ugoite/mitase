@@ -88,6 +88,42 @@ features:
               - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.stable-identity }
               - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.semantic-diff }
         owns:
+          - id: inventory-source
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: file }
+          - id: inventory-discover-rust
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::discover_rust' }
+          - id: inventory-html-marker-units
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::html_marker_units' }
+          - id: inventory-markdown-headings
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::markdown_headings' }
+          - id: inventory-openapi-operations
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::openapi_operations' }
+          - id: inventory-schema-nodes
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::schema_nodes' }
+          - id: inventory-source-symbol-units
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::source_symbol_units' }
+          - id: inventory-support-unit
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::support_unit' }
+          - id: inventory-unit
+            adapter: rust
+            path: crates/mitase-inventory/src/lib.rs
+            selector: { kind: module, name: 'lib::unit' }
           - id: inventory-manifest
             adapter: declared
             path: crates/mitase-inventory/Cargo.toml
@@ -171,6 +207,10 @@ features:
         facet: readiness
         responsibility: Evaluate readiness subjects and canonical execution closure.
         owns:
+          - id: readiness-source
+            adapter: rust
+            path: crates/mitase-validation/src/readiness.rs
+            selector: { kind: file }
           - id: readiness-absence-obligation
             adapter: rust
             path: crates/mitase-validation/src/readiness.rs
@@ -226,6 +266,14 @@ features:
         facet: validation
         responsibility: Validate semantic changed units against ownership and plan scope.
         owns:
+          - id: validation-source
+            adapter: rust
+            path: crates/mitase-validation/src/lib.rs
+            selector: { kind: file }
+          - id: validation-init-git-repo
+            adapter: rust
+            path: crates/mitase-validation/src/lib.rs
+            selector: { kind: module, name: 'lib::tests::init_git_repo' }
           - id: validation-readonly-fingerprint
             adapter: rust
             path: crates/mitase-validation/src/lib.rs

@@ -432,7 +432,7 @@ pub fn evaluate(
                     });
                 }
                 seed_subjects.push(ReadinessSubject {
-                    id: format!("criterion:{criterion}/target:{}", target_ref),
+                    id: format!("criterion:{criterion}/target:{target_ref}"),
                     scope_id: scope_id.clone(),
                     required_level,
                     ready: seed_blockers.is_empty(),
