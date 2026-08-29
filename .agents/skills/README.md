@@ -31,8 +31,8 @@ Copy the `codex-github-workflows` directory into your Codex skills directory.
 The skill includes a helper script for copy-paste prompts:
 
 ```bash
-python skills/codex-github-workflows/scripts/build_prompt.py pr_merge 123
-python skills/codex-github-workflows/scripts/build_prompt.py pr_review 123
-python skills/codex-github-workflows/scripts/build_prompt.py implementation 45
-python skills/codex-github-workflows/scripts/build_prompt.py issue_creation 3
+python .agents/skills/codex-github-workflows/scripts/build_prompt.py pr_merge 123
+python .agents/skills/codex-github-workflows/scripts/build_prompt.py pr_review 123
+python .agents/skills/codex-github-workflows/scripts/build_prompt.py implementation 45
+python .agents/skills/codex-github-workflows/scripts/build_prompt.py issue_creation 3
 ```
