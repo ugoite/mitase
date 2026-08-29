@@ -4966,7 +4966,7 @@ mod tests {
                 .current_dir(root)
                 .status()
                 .unwrap();
-            assert!(status.success(), "git {:?} failed", args);
+            assert!(status.success(), "git {args:?} failed");
         };
         run(&["init"]);
         run(&["config", "user.name", "Codex"]);

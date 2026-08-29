@@ -20,10 +20,14 @@ inventory:
         html: { roots: [crates/mitase-app-ui/assets] }
         declared:
           roots:
+            - AGENTS.md
+            - .agents/skills
             - .github/ISSUE_TEMPLATE/bug_report.yml
+            - .github/actions/setup-rust/action.yml
             - .github/pull_request_template.md
             - .github/workflows/branch-push.yml
             - .github/workflows/ci.yml
+            - .github/workflows/pr-require-close-issue.yml
             - .github/workflows/quality.yml
             - .github/workflows/release-artifacts.yml
             - .pre-commit-config.yaml
@@ -36,7 +40,9 @@ inventory:
             - editors/vscode/README.md
             - release-please-config.json
             - docs
+            - mise.toml
             - scripts
+            - rust-toolchain.toml
             - website/docusaurus.config.js
             - website/sidebars.js
             - crates/mitase-app-ui/assets/js/api.js
