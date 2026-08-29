@@ -60,7 +60,6 @@ sha2.workspace = true
 uuid.workspace = true
 url = "2.5.7"
 mitase-diagnostics = { path = "crates/mitase-diagnostics" }
-mitase-delivery = { path = "crates/mitase-delivery" }
 mitase-inventory = { path = "crates/mitase-inventory" }
 mitase-app-ui = { path = "crates/mitase-app-ui" }
 mitase-code-intel = { path = "crates/mitase-code-intel" }

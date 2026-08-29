@@ -16,8 +16,6 @@ page with [workbench](./workbench.md).
 | Confirm the installed binary | `mitase --version` | verify the binary on your `PATH` before touching a workspace |
 | Validate the current workspace | `mitase validate workspace .` | run the canonical v1 specification validation pass |
 | Validate a changed range | `mitase validate change . --range origin/main...HEAD` | check changed-file ownership and impact against a git range |
-| Validate a proposed plan | `mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>` | transitional inspection of an externally produced plan artifact |
-| Validate one verification result | `mitase validate result . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id> --attempt-id <attempt-id> --receipt receipt.yaml` | transitional inspection of an externally produced verification receipt |
 | Inspect the Workbench projection | `mitase workbench project --workspace . --format json` | view the current typed server payload without starting a UI |
 | Inspect the Workbench projection for one request | `mitase workbench project --workspace . --request work.yaml --format yaml` | review how one work request appears through the current product projection |
 | Start the editor protocol server | `mitase lsp` | connect an editor client over stdio when you want the current hover-only LSP surface |
@@ -30,15 +28,9 @@ page with [workbench](./workbench.md).
 mitase validate workspace .
 ```
 
-### Validate an externally produced plan
-
-```bash
-mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
-```
-```
-
-Planning, execution, retry, and finalization are repository-tooling concerns;
-the Mitase CLI does not expose `work` or `task` commands.
+Planning, execution, retry, finalization, and validation of their execution
+artifacts are repository-tooling concerns. The Mitase CLI does not expose
+`work`, `task`, `validate plan`, or `validate result` commands.
 
 ### Inspect the current Workbench data
 

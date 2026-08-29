@@ -3,7 +3,6 @@ mod lsp;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use mitase_delivery::DeliveryStore;
 use mitase_inventory::{InventoryContext, InventoryRegistry};
 use mitase_planner::validate_work_request;
 use mitase_project_model::{ChangeBaseline, GitRef};
@@ -11,7 +10,7 @@ use mitase_spec_model::RepoPath;
 use mitase_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
-use mitase_work_model::{CompletionStatus, ExecutionIdentity, WorkPlan, WorkRequest};
+use mitase_work_model::WorkRequest;
 use mitase_workbench_server::project as project_workbench;
 use mitase_workspace::SpecWorkspace;
 use std::{
@@ -64,8 +63,6 @@ struct ValidateArgs {
 enum ValidateCommand {
     Workspace(ValidateOptions),
     Change(ValidateOptions),
-    Plan(ValidateOptions),
-    Result(ValidateResultOptions),
 }
 #[derive(Debug, Args)]
 struct ValidateOptions {
@@ -77,23 +74,8 @@ struct ValidateOptions {
     baseline: Option<String>,
     #[arg(long)]
     staged: bool,
-    #[arg(long)]
-    plan: Option<PathBuf>,
-    #[arg(long)]
-    plan_digest: Option<String>,
-    #[arg(long)]
-    slice_id: Option<String>,
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
-}
-#[derive(Debug, Args)]
-struct ValidateResultOptions {
-    #[command(flatten)]
-    validate: ValidateOptions,
-    #[arg(long)]
-    attempt_id: String,
-    #[arg(long)]
-    receipt: PathBuf,
 }
 #[derive(Debug, Args)]
 #[command(
@@ -224,14 +206,9 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     })
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {
-    if let ValidateCommand::Result(result) = args.command {
-        return run_validate_result(result);
-    }
-    let (is_change, force_post_state, enforce_readiness, args) = match args.command {
-        ValidateCommand::Workspace(args) => (false, false, true, args),
-        ValidateCommand::Change(args) => (true, false, false, args),
-        ValidateCommand::Plan(args) => (false, false, false, args),
-        ValidateCommand::Result(_) => unreachable!("result validation handled above"),
+    let (is_change, enforce_readiness, args) = match args.command {
+        ValidateCommand::Workspace(args) => (false, true, args),
+        ValidateCommand::Change(args) => (true, false, args),
     };
     if args.staged {
         if !is_change {
@@ -239,9 +216,6 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         }
         if args.range.is_some() || args.baseline.is_some() {
             bail!("--staged cannot be combined with --range or --baseline");
-        }
-        if args.plan.is_some() || args.slice_id.is_some() {
-            bail!("--staged cannot be combined with --plan or --slice-id");
         }
     }
     let staged_snapshot = args
@@ -254,67 +228,19 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         .unwrap_or(&args.workspace);
     let workspace = SpecWorkspace::load(workspace_path)?;
     let index = workspace.index()?;
-    let plan = args
-        .plan
-        .as_ref()
-        .map(|path| read_yaml::<WorkPlan>(path))
-        .transpose()?;
-    match (&plan, &args.plan_digest) {
-        (Some(plan), Some(digest)) if plan.canonical_digest == *digest => {}
-        (Some(_), Some(_)) => bail!("submitted plan does not match --plan-digest"),
-        (Some(_), None) => bail!("--plan requires --plan-digest"),
-        (None, Some(_)) => bail!("--plan-digest requires --plan"),
-        (None, None) => {}
-    }
     // Every validation invocation gets one explicit revision. Changed-unit
     // probes use the same resolved baseline plus staged, working-tree, and
     // untracked changes below.
     let revision = Some(revision(&workspace.root)?);
-    let selected = match (&plan, &args.slice_id) {
-        (Some(p), Some(id)) => Some(
-            p.slices
-                .iter()
-                .find(|s| &s.id == id)
-                .with_context(|| format!("slice {id} not found"))?,
-        ),
-        (None, Some(_)) => bail!("--slice-id requires --plan"),
-        (Some(_), None) => bail!("--plan requires --slice-id"),
-        (None, None) => None,
-    };
-    let mut validation_inputs = validation_inputs_for_cli(&workspace, &args, plan.as_ref())?;
-    if force_post_state {
-        if plan.as_ref().is_some_and(|plan| plan.slices.len() > 1) && args.slice_id.is_none() {
-            bail!("validate result requires the receipt-selected slice for a multi-slice plan");
-        }
-        validation_inputs.plan_mode = PlanValidationMode::PostState;
-        // Result validation is the selected receipt slice's post-state
-        // closure. Always inspect the real diff from the plan basis so an
-        // omitted file cannot bypass scope validation.
-        validation_inputs.changed_files = Some(changed_files_against_revision(
-            &workspace.root,
-            &plan
-                .as_ref()
-                .expect("result validation requires a plan")
-                .basis
-                .revision,
-        )?);
-        validation_inputs.reported_changed_files = None;
-        validation_inputs.change_base_revision = Some(
-            plan.as_ref()
-                .expect("result validation requires a plan")
-                .basis
-                .revision
-                .clone(),
-        );
-    }
+    let validation_inputs = validation_inputs_for_cli(&workspace, &args)?;
     let context = ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
         index: &index,
         changed_files: validation_inputs.changed_files.as_deref(),
         reported_changed_files: validation_inputs.reported_changed_files.as_deref(),
-        work_plan: plan.as_ref(),
-        selected_slice: selected,
+        work_plan: None,
+        selected_slice: None,
         plan_mode: validation_inputs.plan_mode,
         preset: workspace.config.validation.preset,
         revision: revision.as_deref(),
@@ -338,90 +264,6 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         }
     }
     Ok(if result.is_valid() { 0 } else { 1 })
-}
-
-fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
-    let plan_path = args
-        .validate
-        .plan
-        .as_ref()
-        .context("validate result requires --plan")?;
-    let submitted_plan: WorkPlan = read_yaml(plan_path)?;
-    let plan_digest = args
-        .validate
-        .plan_digest
-        .as_deref()
-        .context("validate result requires --plan-digest")?;
-    let slice_id = args
-        .validate
-        .slice_id
-        .as_deref()
-        .context("validate result requires --slice-id")?;
-    if submitted_plan.canonical_digest != plan_digest {
-        bail!("submitted plan does not match --plan-digest");
-    }
-    let workspace = SpecWorkspace::load(&args.validate.workspace)?;
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
-    let identity = ExecutionIdentity {
-        plan_digest: plan_digest.to_owned(),
-        slice_id: slice_id.to_owned(),
-    };
-    let attempt = store.attempt(&identity, &args.attempt_id)?;
-    if attempt.attempt_id != args.attempt_id
-        || attempt.report.attempt_id != args.attempt_id
-        || attempt.report.status != CompletionStatus::Complete
-    {
-        bail!("attempt is not a complete durable verification attempt");
-    }
-    let approval = store.approval(&identity)?;
-    if approval.plan != submitted_plan {
-        bail!("submitted plan differs from the approved durable plan");
-    }
-    let receipt: mitase_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
-    let canonical = attempt
-        .receipt
-        .as_ref()
-        .context("complete attempt has no durable verification receipt")?;
-    if receipt != *canonical
-        || receipt.plan_digest != plan_digest
-        || receipt.slice_id != slice_id
-        || attempt.report.receipt_digest.as_deref()
-            != Some(DeliveryStore::verification_digest(canonical)?.as_str())
-    {
-        bail!("receipt does not match the exact durable verification attempt");
-    }
-    let index = workspace.index()?;
-    let report =
-        mitase_validation::evaluate_completion(&workspace, &index, &approval.plan, &receipt)?;
-    match args.validate.format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
-        Format::Text => {
-            println!(
-                "Completion: {:?}\nPlan: {}\nSlice: {}",
-                report.status, report.plan_digest, report.slice_id
-            );
-            if report.demonstrated.is_empty() {
-                println!("Demonstrated criteria: none");
-            } else {
-                println!("Demonstrated criteria:");
-                for criterion in &report.demonstrated {
-                    println!("- {}: {}", criterion.anchor, criterion.statement);
-                }
-            }
-            println!("Completion checks: {}", report.checks.len());
-            for blocker in &report.blockers {
-                println!(
-                    "BLOCKED {}: {}\n  Next action: {}",
-                    blocker.code, blocker.message, blocker.next_action
-                );
-            }
-        }
-    }
-    Ok(if report.status == CompletionStatus::Complete {
-        0
-    } else {
-        1
-    })
 }
 
 fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
@@ -557,7 +399,6 @@ fn default_change_baseline(workspace: &SpecWorkspace) -> Result<String> {
 fn validation_inputs_for_cli(
     workspace: &SpecWorkspace,
     args: &ValidateOptions,
-    plan: Option<&WorkPlan>,
 ) -> Result<ValidationInputs> {
     if args.staged {
         return Ok(ValidationInputs {
@@ -572,23 +413,6 @@ fn validation_inputs_for_cli(
         });
     }
     let reported_changed_files = changed_files_for_validation(workspace, args)?;
-    if let Some(plan) = plan {
-        let actual_changes = changed_files_against_revision(&workspace.root, &plan.basis.revision)?
-            .into_iter()
-            .filter(|file| governed_change(workspace, file))
-            .collect::<Vec<_>>();
-        let plan_mode = if actual_changes.is_empty() {
-            PlanValidationMode::PreState
-        } else {
-            PlanValidationMode::PostState
-        };
-        return Ok(ValidationInputs {
-            changed_files: (!actual_changes.is_empty()).then_some(actual_changes),
-            reported_changed_files,
-            change_base_revision: Some(plan.basis.revision.clone()),
-            plan_mode,
-        });
-    }
     let change_base_revision = if let Some(range) = &args.range {
         Some(change_base_revision_for_range(workspace, range)?)
     } else if let Some(baseline) = &args.baseline {
@@ -607,18 +431,6 @@ fn validation_inputs_for_cli(
         change_base_revision,
         plan_mode: PlanValidationMode::PreState,
     })
-}
-
-fn governed_change(workspace: &SpecWorkspace, file: &ChangedFile) -> bool {
-    file.old_path
-        .iter()
-        .chain(file.new_path.iter())
-        .any(|path| {
-            path.as_path() == Path::new("mitase.yaml")
-                || workspace.path_is_spec(path.as_path())
-                || (workspace.path_is_artifact(path.as_path())
-                    && !workspace.path_is_excluded(path.as_path()))
-        })
 }
 
 fn parse_cli_baseline(value: &str) -> Result<ChangeBaseline> {
@@ -698,47 +510,6 @@ fn revision_parent(root: &Path) -> Result<String> {
         bail!("git rev-parse HEAD^ failed");
     }
     Ok(String::from_utf8(output.stdout)?.trim().into())
-}
-
-fn changed_files_against_revision(root: &Path, revision: &str) -> Result<Vec<ChangedFile>> {
-    let status_output = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["diff", "--name-status", "-z", "-M", "--relative", revision])
-        .output()?;
-    if !status_output.status.success() {
-        bail!("git diff --name-status {revision} failed");
-    }
-    let untracked_output = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["ls-files", "--others", "--exclude-standard", "-z"])
-        .output()?;
-    if !untracked_output.status.success() {
-        bail!("git ls-files --others failed");
-    }
-    let patch_output = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args([
-            "diff",
-            "-M",
-            "--relative",
-            "--unified=0",
-            "--no-color",
-            revision,
-        ])
-        .output()?;
-    if !patch_output.status.success() {
-        bail!("git diff --unified=0 {revision} failed");
-    }
-    let mut files = parse_changed_files(
-        &status_output.stdout,
-        &untracked_output.stdout,
-        &String::from_utf8(patch_output.stdout)?,
-    )?;
-    synthesize_untracked_ranges(root, &mut files)?;
-    Ok(files)
 }
 
 fn staged_workspace_snapshot(workspace: &Path) -> Result<(tempfile::TempDir, PathBuf)> {

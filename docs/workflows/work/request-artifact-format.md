@@ -39,13 +39,9 @@ Supported transitions are:
 - `run-only`: the target must already exist and is planned as run-only context.
 - `readonly`: the target must already exist and is planned as readonly context.
 
-The former CLI planner is no longer available. External repository tooling
-may produce this transitional artifact; Mitase can still inspect its exact
-plan boundary:
-
-```bash
-mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
-```
+The former CLI planner and transitional plan-validation command are no longer
+available. External repository tooling may produce and inspect this artifact;
+Mitase does not own execution-state validation.
 
 `Requirement criterion` is the human-facing semantic meaning of “behavior” in
 this flow. Feature implementation bindings and exact implementation targets
