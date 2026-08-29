@@ -16,12 +16,7 @@ A work plan contains:
 - slice budgets
 - completion checks
 
-The remaining transitional inspection entrypoint is:
-
-```bash
-mitase validate plan . --plan plan.yaml --plan-digest <digest> --slice-id <slice-id>
-```
-
-External tooling owns slice selection, context export, approval, delivery, and
-the exact `{ plan_digest, slice_id }` execution identity. Use
+External tooling owns plan inspection, slice selection, context export,
+approval, delivery, and the exact `{ plan_digest, slice_id }` execution
+identity. Use
 `mitase/work-plan/v1` only as the transitional planner output format.

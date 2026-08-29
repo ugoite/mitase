@@ -14,8 +14,8 @@ External repository tooling owns the execution side of the former model. It
 may derive small, reviewable slices from one exact Work origin, select a
 canonical slice when the origin expands into independent candidates, export
 context, and keep completion evidence tied to the exact plan-and-slice
-identity. Mitase only retains transitional inspection entrypoints while this
-runtime is removed.
+identity. Mitase does not inspect execution artifacts while this runtime is
+removed.
 
 - [Workbench](./workbench.md) — the current product flow and projection.
 - [Implementation planning](./implementation-planning.md) — the canonical

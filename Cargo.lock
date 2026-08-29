@@ -708,7 +708,6 @@ dependencies = [
  "clap",
  "mitase-app-ui",
  "mitase-code-intel",
- "mitase-delivery",
  "mitase-diagnostics",
  "mitase-inventory",
  "mitase-planner",
