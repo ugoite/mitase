@@ -175,7 +175,7 @@ description: "Generated reference for docs/mitase/features/workbench/quality-gat
           - **path**: src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: lib
+            - **name**: *
         - **id**: cli-validation-tests
           - **adapter**: declared
           - **path**: tests/v1_cli.rs
@@ -363,7 +363,7 @@ features:
     - id: cli-validation-module
       adapter: rust
       path: src/lib.rs
-      selector: { kind: module, name: lib }
+      selector: { kind: module, name: "*" }
     - id: cli-validation-tests
       adapter: declared
       path: tests/v1_cli.rs
