@@ -11,6 +11,12 @@ evidence close together. This site is organized around the questions a person
 has while adopting and using that model, not around the names of the folders
 that happen to store the source files.
 
+The [Mitase Re-Foundation freeze](./project/mitase-re-foundation-freeze.md) is
+the source of truth for the product boundary. Some workflow and reference
+pages still describe the transitional execution-oriented alpha surface; those
+pages are retained until the follow-up removal phases and are not the target
+Mitase product definition.
+
 ## Pick a path
 
 - [Start here](./start-here/index.md) if this is your first time with `mitase`.

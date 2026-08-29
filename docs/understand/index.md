@@ -6,14 +6,17 @@ sidebar_position: 1
 
 # Understand the model
 
-The `mitase` model is intentionally strict: four persistent specification layers
-explain why a repository should behave a certain way, and temporary work
-artifacts turn that explanation into bounded execution. Read the model before
-you tune configuration or plan work so the commands have the right context.
+The `mitase` model is intentionally strict: a persistent specification graph
+explains why a repository should behave a certain way, how implementation is
+owned, and what evidence proves it. Read the model before you tune
+configuration so the specification and the repository remain aligned.
 
-## The two parts of the model
+## The model
 
 - [The specification model](./model/index.md) explains Philosophy, Policy,
-  Requirement, Feature, and the v1 architecture connecting them.
+  Requirement, Criterion, Feature, Binding, Artifact, and the architecture
+  connecting them.
+- [The domain glossary](./model/domain-glossary.md) defines the stable terms
+  used in the specification graph.
 - [Quality and anti-patterns](./quality/index.md) explains the shapes that are
   technically valid but work against traceable delivery.

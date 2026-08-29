@@ -12,4 +12,13 @@ Run the full release gate before opening a change:
 scripts/ci/quality-gates.sh full
 ```
 
-Executable changes should be driven by `mitase work plan` from exact specification anchors. Keep edits inside the selected slice and use `mitase validate --plan` to verify scope.
+Specification changes should preserve the forward Philosophy → Policy →
+Requirement → Criterion → Feature → Binding graph and exact Artifact targets.
+Do not add new planning, agent, delivery, retry, or workspace-mutation
+responsibilities to Mitase. Those are external-tool concerns under the
+[Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md).
+
+The current checkout still contains transitional execution-oriented code while
+the follow-up removal phases land. Tests for that code may remain until their
+removal PR, but new product documentation and new APIs must follow the frozen
+boundary.
