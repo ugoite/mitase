@@ -1,6 +1,9 @@
 # FEAT-QUALITY-001
+#
+# Legacy helper for maintenance workflows. The canonical CI workflow uses
+# mise.toml directly; this helper follows the same dependency-only cache rule.
 name: Set up Rust toolchain
-description: Install the Rust toolchain and restore the Swatinem build cache.
+description: Install the pinned Rust toolchain and restore Cargo dependencies.
 
 inputs:
   components:
@@ -15,13 +18,32 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+    - name: Install pinned Mise toolchain
+      uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
       with:
-        components: ${{ inputs.components }}
-        targets: ${{ inputs.targets }}
+        install: true
+        cache: true
+
+    - name: Install requested Rust components and targets
+      shell: bash
+      env:
+        RUST_COMPONENTS: ${{ inputs.components }}
+        RUST_TARGETS: ${{ inputs.targets }}
+      run: |
+        if [[ -n "$RUST_COMPONENTS" ]]; then
+          IFS=',' read -r -a components <<<"$RUST_COMPONENTS"
+          rustup component add "${components[@]}"
+        fi
+        if [[ -n "$RUST_TARGETS" ]]; then
+          IFS=',' read -r -a targets <<<"$RUST_TARGETS"
+          rustup target add "${targets[@]}"
+        fi
 
     - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        cache-bin: false
+        cache-targets: "false"
+        cache-bin: "false"
+        shared-key: "cargo-deps"
+        add-job-id-key: "false"
+        save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

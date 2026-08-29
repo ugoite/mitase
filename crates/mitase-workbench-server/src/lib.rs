@@ -1030,10 +1030,7 @@ impl IntoResponse for ApiError {
     }
 }
 fn structured_api_error(status: StatusCode, value: serde_json::Value) -> ApiError {
-    ApiError(
-        status,
-        anyhow::anyhow!(format!("__MITASE_STRUCTURED__{}", value)),
-    )
+    ApiError(status, anyhow::anyhow!("__MITASE_STRUCTURED__{value}"))
 }
 
 fn work_action_error(
@@ -4035,7 +4032,7 @@ fn specification_patch_content(
                         .and_then(serde_yaml::Value::as_str)
                         .is_some_and(|id| id == parsed.local_id.to_string())
                 })
-                .ok_or_else(|| anyhow::anyhow!("anchor {} not found", anchor))?;
+                .ok_or_else(|| anyhow::anyhow!("anchor {anchor} not found"))?;
             let entry = entry
                 .as_mapping_mut()
                 .ok_or_else(|| anyhow::anyhow!("anchor is not a mapping"))?;
@@ -4324,10 +4321,7 @@ fn nested_patch_content(
                 NestedEditOperation::Upsert => {
                     let value = serde_yaml::to_value(claim)?;
                     if *claim_index > claims.len() {
-                        anyhow::bail!(
-                            "claim index {} is outside the target claim list",
-                            claim_index
-                        );
+                        anyhow::bail!("claim index {claim_index} is outside the target claim list");
                     }
                     if *claim_index == claims.len() {
                         claims.push(value);
@@ -4337,10 +4331,7 @@ fn nested_patch_content(
                 }
                 NestedEditOperation::Delete => {
                     if *claim_index >= claims.len() {
-                        anyhow::bail!(
-                            "claim index {} is outside the target claim list",
-                            claim_index
-                        );
+                        anyhow::bail!("claim index {claim_index} is outside the target claim list");
                     }
                     claims.remove(*claim_index);
                 }
