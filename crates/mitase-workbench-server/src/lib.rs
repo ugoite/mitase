@@ -5218,7 +5218,7 @@ fn collect_branch_patch(
         let Some(new) = parts.next() else { continue };
         let parse_range = |value: &str| -> Option<(usize, usize)> {
             let value = value.get(1..)?;
-            let (start, count) = value.split_once(',').map_or((value, "1"), |parts| parts);
+            let (start, count) = value.split_once(',').unwrap_or((value, "1"));
             Some((start.parse().ok()?, count.parse().ok()?))
         };
         let Some((old_start, old_count)) = parse_range(old) else {

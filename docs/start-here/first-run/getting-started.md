@@ -12,14 +12,19 @@ curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/instal
 cargo run --quiet -- validate .
 ```
 
-Current root CLI surface:
+The target v1 CLI surface is specification-only:
 
 - `validate`
-- `work plan`
-- `work show`
-- `work export-context`
-- `workbench project`
-- `lsp`
+- `check`
+- `query`
+- `show`
+- `list`
+
+The current alpha checkout also exposes transitional `work`, `task`, and
+`workbench` commands. They are retained only until the Re-Foundation removal
+phases land; they are not part of the frozen product boundary. See the
+[Re-Foundation freeze](../../project/mitase-re-foundation-freeze.md) before
+building new integrations.
 
 A new workspace needs:
 

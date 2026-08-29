@@ -1,4 +1,9 @@
-# Migration guide
+# Historical migration notes
+
+> **Re-Foundation policy:** These notes describe earlier alpha cutovers only.
+> They are not a compatibility contract for the Mitase Re-Foundation. New
+> pre-v1 work must use the canonical current design; no legacy internal-format
+> parser, alias, or migration layer is added unless explicitly requested.
 
 Start here when you are upgrading an existing `mitase` workspace between alpha
 releases. This page documents breaking changes and release-specific upgrade
