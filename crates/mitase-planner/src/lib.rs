@@ -3150,10 +3150,7 @@ fn one_target(
     {
         let mut d = Diagnostic::error(
             "MITASE-TARGET-002",
-            format!(
-                "target {} does not resolve to one active inventory artifact",
-                reference
-            ),
+            format!("target {reference} does not resolve to one active inventory artifact"),
             target.path.to_string_lossy(),
         );
         d.target = Some(reference.clone());

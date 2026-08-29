@@ -156,7 +156,7 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
         .strip_prefix(root)
         .context("OpenAPI path escaped workspace")?;
     let repo_path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("OpenAPI path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("OpenAPI path {path:?}: {error}"))?;
     let document: serde_yaml::Value = serde_yaml::from_slice(&read_bytes(context, &path)?)?;
     let mut units = Vec::new();
     if let Some(paths) = document
@@ -221,7 +221,7 @@ fn schema_nodes(
         .strip_prefix(&context.workspace_root)
         .context("schema path escaped workspace")?;
     let repo_path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("schema path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("schema path {path:?}: {error}"))?;
     let bytes = read_bytes(context, &path)?;
     let document: serde_yaml::Value = if adapter == "json" || adapter == "json-schema" {
         let json: serde_json::Value = serde_json::from_slice(&bytes)
@@ -319,7 +319,7 @@ fn markdown_headings(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
         .strip_prefix(root)
         .context("markdown path escaped workspace")?;
     let repo_path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("Markdown path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("Markdown path {path:?}: {error}"))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut units = Vec::new();
     for (line_index, line) in source.lines().enumerate() {
@@ -403,7 +403,7 @@ fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<Arti
         .strip_prefix(root)
         .context("inventory path escaped workspace")?;
     let path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("file inventory path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("file inventory path {path:?}: {error}"))?;
     let bytes = read_bytes(context, &root.join(path.as_path()))?;
     let text = String::from_utf8_lossy(&bytes);
     Ok(ArtifactUnit {
@@ -648,7 +648,7 @@ fn html_marker_units(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
         .strip_prefix(root)
         .context("HTML path escaped workspace")?;
     let repo_path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("HTML marker path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("HTML marker path {path:?}: {error}"))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut occurrences = BTreeMap::<String, usize>::new();
     let mut units = Vec::new();
@@ -734,7 +734,7 @@ fn source_symbol_units(
         .strip_prefix(root)
         .context("source path escaped workspace")?;
     let repo_path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("source symbol path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("source symbol path {path:?}: {error}"))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut units: Vec<ArtifactUnit> = Vec::new();
     let mut identities: BTreeMap<String, usize> = BTreeMap::new();
@@ -1051,7 +1051,7 @@ fn discover_rust(
             .strip_prefix(&context.workspace_root)
             .context("Rust inventory path escaped workspace")?;
         let repo_path = RepoPath::from_path(relative)
-            .map_err(|error| anyhow::anyhow!("Rust path {:?}: {error}", path))?;
+            .map_err(|error| anyhow::anyhow!("Rust path {path:?}: {error}"))?;
         units.push(unit(context, "rust", path.clone())?);
         let is_test_file = relative.components().any(|component| {
             component.as_os_str() == "tests" || component.as_os_str() == "benches"
@@ -1089,7 +1089,7 @@ fn support_unit(context: &InventoryContext, path: PathBuf) -> Result<ArtifactUni
         .strip_prefix(root)
         .context("included support path escaped workspace")?;
     let repo_path = RepoPath::from_path(relative)
-        .map_err(|error| anyhow::anyhow!("support path {:?}: {error}", path))?;
+        .map_err(|error| anyhow::anyhow!("support path {path:?}: {error}"))?;
     let bytes = read_bytes(context, &path)?;
     Ok(ArtifactUnit {
         adapter: "rust".into(),

@@ -1,0 +1,96 @@
+min_version = "2025.11.3"
+
+[env]
+CARGO_HOME = "{{env.HOME}}/.cargo"
+RUSTUP_HOME = "{{env.HOME}}/.rustup"
+CARGO_TARGET_DIR = "target/rust"
+RUST_BACKTRACE = "1"
+
+[tools]
+rust = "1.88.0"
+
+[tools."github:nextest-rs/nextest"]
+version = "cargo-nextest-0.9.143"
+matching = "cargo-nextest"
+
+[tasks.setup]
+description = "Install the pinned Rust components and fetch locked dependencies"
+run = [
+  "rustup component add rustfmt clippy",
+  "cargo fetch --locked",
+]
+
+[tasks.fmt]
+description = "Format the Rust workspace"
+run = "cargo fmt --all"
+
+[tasks."fmt:check"]
+description = "Check Rust formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks."lint:rust"]
+description = "Lint the Rust workspace"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.lint]
+description = "Run all repository linters"
+run = [{ task = "lint:rust" }]
+
+[tasks."check:rust"]
+description = "Compile-check the Rust workspace"
+run = "cargo check --workspace --all-targets"
+
+[tasks."check:repo"]
+description = "Run the transitional repository validator"
+run = "cargo run --locked --quiet -- validate workspace ."
+
+[tasks.check]
+description = "Run Rust and repository checks"
+run = [
+  { task = "check:rust" },
+  { task = "check:repo" },
+]
+
+[tasks."test:rust"]
+description = "Run the canonical Rust workspace tests"
+run = "cargo test --workspace"
+
+[tasks.test]
+description = "Run the repository test suite"
+run = [{ task = "test:rust" }]
+
+[tasks.ci]
+description = "Run the complete local repository quality gate"
+run = [
+  { task = "fmt:check" },
+  { task = "lint" },
+  { task = "check" },
+  { task = "test" },
+]
+
+[tasks."ci:lane:rust-check"]
+description = "Run hosted Rust formatting, lint, and compile checks"
+run = [
+  { task = "fmt:check" },
+  { task = "lint:rust" },
+  { task = "check:rust" },
+]
+
+[tasks."ci:lane:rust-test"]
+description = "Run hosted Rust tests"
+run = [{ task = "test:rust" }]
+
+[tasks."ci:lane:repo"]
+description = "Run the hosted repository validation lane"
+run = [{ task = "check:repo" }]
+
+[tasks."ci:lane:workbench-transitional"]
+description = "Run the transitional Workbench gate until the re-foundation removes it"
+run = [
+  "cargo check -p mitase-workbench-server -p mitase-app-ui",
+  "bash scripts/ci/workbench-visual.sh",
+]
+
+[tasks."ci:merge"]
+description = "Run the merge-equivalent product quality gate locally"
+run = [{ task = "ci" }]

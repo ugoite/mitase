@@ -17,6 +17,14 @@ features:
             adapter: declared
             path: crates/mitase-delivery/Cargo.toml
             selector: { kind: file }
+          - id: delivery-source
+            adapter: rust
+            path: crates/mitase-delivery/src/lib.rs
+            selector: { kind: file }
+          - id: delivery-workspace-lock-drop
+            adapter: rust
+            path: crates/mitase-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(DropforWorkspaceLock)::drop' }
           - id: delivery-agent-events-all
             adapter: rust
             path: crates/mitase-delivery/src/lib.rs
