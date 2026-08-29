@@ -24,7 +24,7 @@ The durable ideal that should survive implementation changes.
 
 The repository-wide rule that makes the ideal actionable and reviewable.
 
-## Requirement
+## Requirements
 
 The observable behavior or contract that must be satisfied.
 
@@ -33,7 +33,7 @@ The observable behavior or contract that must be satisfied.
 One concrete acceptance condition used to determine whether a Requirement is
 satisfied.
 
-## Feature
+## Features
 
 The implementation responsibility that realizes one or more Requirements.
 
