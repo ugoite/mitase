@@ -45,6 +45,27 @@ fn public_cli_does_not_expose_work_or_task_commands() {
 }
 
 #[test]
+fn public_cli_does_not_expose_transitional_validation_commands() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["validate", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("plan "))
+    );
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("result "))
+    );
+}
+
+#[test]
 fn generated_spec_reference_covers_every_source_document() {
     let index =
         fs::read_to_string("docs/reference/specification/index.md").expect("generated index");
