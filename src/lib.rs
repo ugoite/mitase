@@ -5,16 +5,13 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use mitase_delivery::DeliveryStore;
 use mitase_inventory::{InventoryContext, InventoryRegistry};
-use mitase_planner::{export_context, plan, validate_work_origin, validate_work_request};
+use mitase_planner::validate_work_request;
 use mitase_project_model::{ChangeBaseline, GitRef};
 use mitase_spec_model::RepoPath;
 use mitase_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
-use mitase_work_model::{
-    CompletionStatus, ExecutionIdentity, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
-    VerificationAttemptStatus, WorkPlan, WorkRequest,
-};
+use mitase_work_model::{CompletionStatus, ExecutionIdentity, WorkPlan, WorkRequest};
 use mitase_workbench_server::project as project_workbench;
 use mitase_workspace::SpecWorkspace;
 use std::{
@@ -32,7 +29,7 @@ struct ValidationInputs {
 }
 
 #[derive(Debug, Parser)]
-#[command(name="mitase", version=env!("MITASE_GIT_VERSION"), about="Exact specification work planning and validation")]
+#[command(name="mitase", version=env!("MITASE_GIT_VERSION"), about="Exact specification validation")]
 struct Cli {
     #[command(subcommand)]
     command: CommandKind,
@@ -41,8 +38,6 @@ struct Cli {
 enum CommandKind {
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
-    Work(WorkArgs),
-    Task(TaskArgs),
     Workbench(WorkbenchArgs),
     Lsp,
 }
@@ -101,104 +96,6 @@ struct ValidateResultOptions {
     receipt: PathBuf,
 }
 #[derive(Debug, Args)]
-struct WorkArgs {
-    #[command(subcommand)]
-    command: WorkCommand,
-}
-#[derive(Debug, Args)]
-struct TaskArgs {
-    #[command(subcommand)]
-    command: TaskCommand,
-}
-#[derive(Debug, Subcommand)]
-enum TaskCommand {
-    Approve {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long, value_enum, default_value = "text")]
-        format: Format,
-    },
-    Verify {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long, value_enum, default_value = "text")]
-        format: Format,
-    },
-    Attempts {
-        #[command(subcommand)]
-        command: AttemptCommand,
-    },
-    Finalize {
-        #[command(subcommand)]
-        command: FinalizeCommand,
-    },
-}
-#[derive(Debug, Subcommand)]
-enum AttemptCommand {
-    List {
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        plan_digest: Option<String>,
-        #[arg(long)]
-        slice_id: Option<String>,
-        #[arg(long, value_enum, default_value = "text")]
-        format: Format,
-    },
-    Show {
-        attempt_id: String,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long, value_enum, default_value = "json")]
-        format: Format,
-    },
-}
-#[derive(Debug, Subcommand)]
-enum FinalizeCommand {
-    Preview {
-        #[arg(long)]
-        attempt: String,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long, value_enum, default_value = "json")]
-        format: Format,
-    },
-    Apply {
-        #[arg(long)]
-        attempt: String,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long)]
-        preview_token: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long, value_enum, default_value = "json")]
-        format: Format,
-    },
-}
-#[derive(Debug, Args)]
 #[command(
     about = "Run the Workbench server or print its canonical projection",
     after_help = "Serve options: --bind <IP> --port <PORT> --allow-remote-bind --show-log"
@@ -220,33 +117,6 @@ struct WorkbenchArgs {
     session_token: Option<String>,
     #[arg(long)]
     no_open: bool,
-}
-#[derive(Debug, Subcommand)]
-enum WorkCommand {
-    Plan {
-        #[arg(long)]
-        request: PathBuf,
-        #[arg(long)]
-        out: PathBuf,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-    },
-    Show {
-        #[arg(long)]
-        plan: PathBuf,
-    },
-    ExportContext {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        plan_digest: String,
-        #[arg(long)]
-        slice_id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
 }
 #[derive(Debug, Subcommand)]
 enum WorkbenchCommand {
@@ -293,8 +163,6 @@ pub fn run() -> Result<i32> {
     match Cli::parse().command {
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
-        CommandKind::Work(args) => run_work(args),
-        CommandKind::Task(args) => run_task(args),
         CommandKind::Workbench(args) => run_workbench(args),
         CommandKind::Lsp => {
             lsp::run_lsp_server()?;
@@ -556,267 +424,6 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
     })
 }
 
-fn run_task(args: TaskArgs) -> Result<i32> {
-    match args.command {
-        TaskCommand::Approve {
-            plan: plan_path,
-            plan_digest,
-            slice_id,
-            workspace: root,
-            format,
-        } => {
-            let workspace = SpecWorkspace::load(&root)?;
-            let store = DeliveryStore::for_workspace(&workspace.root)?;
-            let _workspace_lock = store.lock_workspace()?;
-            let index = workspace.index()?;
-            let revision = revision(&workspace.root)?;
-            let submitted: WorkPlan = read_yaml(&plan_path)?;
-            let canonical = mitase_validation::canonical_plan_for_execution(
-                &workspace, &index, &submitted, &revision,
-            )?;
-            if !matches!(canonical.status, PlanStatus::Ready) {
-                bail!("only a ready canonical plan can be approved");
-            }
-            if canonical.canonical_digest != plan_digest
-                || canonical.slices.len() != 1
-                || canonical.slices[0].id != slice_id
-            {
-                bail!("approval requires the exact --plan-digest and --slice-id pair");
-            }
-            let approval = PlanApproval {
-                schema: PLAN_APPROVAL_SCHEMA.into(),
-                approval_id: store.new_id("approval"),
-                plan_digest: canonical.canonical_digest.clone(),
-                slice_id,
-                workspace_fingerprint: workspace.try_fingerprint()?,
-                revision,
-                reviewed_at: now_timestamp(),
-                plan: canonical,
-            };
-            let approval = store.approve_while_locked(&approval)?;
-            emit_task_value(&approval, format, "approved plan")?;
-            Ok(0)
-        }
-        TaskCommand::Verify {
-            plan: plan_path,
-            plan_digest,
-            slice_id,
-            workspace: root,
-            format,
-        } => {
-            let workspace = SpecWorkspace::load(&root)?;
-            let plan: WorkPlan = read_yaml(&plan_path)?;
-            let store = DeliveryStore::for_workspace(&workspace.root)?;
-            if plan.canonical_digest != plan_digest {
-                bail!("submitted plan does not match --plan-digest");
-            }
-            let approval = store
-                .approval(&ExecutionIdentity {
-                    plan_digest: plan.canonical_digest.clone(),
-                    slice_id: slice_id.clone(),
-                })
-                .context("plan has not been explicitly approved; run mitase task approve first")?;
-            if approval.plan != plan {
-                bail!(
-                    "submitted plan differs from the approved plan; approve the exact plan again"
-                );
-            }
-            let slice_value = plan
-                .slices
-                .iter()
-                .find(|value| value.id == slice_id)
-                .with_context(|| format!("slice {slice_id} not found"))?;
-            if slice_value.verification_targets.is_empty() {
-                bail!("selected slice has no verification targets");
-            }
-            let attempt = store.execute_and_append_attempt(&workspace, &plan, &slice_id)?;
-            emit_task_value(&attempt, format, "completion attempt")?;
-            Ok(
-                if matches!(
-                    attempt.verification.status,
-                    VerificationAttemptStatus::Complete
-                ) && attempt.report.status == CompletionStatus::Complete
-                {
-                    0
-                } else {
-                    1
-                },
-            )
-        }
-        TaskCommand::Attempts { command } => {
-            let root = match &command {
-                AttemptCommand::List { workspace, .. } | AttemptCommand::Show { workspace, .. } => {
-                    workspace
-                }
-            };
-            let store = DeliveryStore::for_workspace(&SpecWorkspace::load(root)?.root)?;
-            match command {
-                AttemptCommand::List {
-                    plan_digest,
-                    slice_id,
-                    format,
-                    ..
-                } => {
-                    let attempts = store
-                        .attempts()?
-                        .into_iter()
-                        .filter(|attempt| {
-                            plan_digest
-                                .as_ref()
-                                .is_none_or(|digest| &attempt.plan_digest == digest)
-                                && slice_id.as_ref().is_none_or(|id| &attempt.slice_id == id)
-                        })
-                        .collect::<Vec<_>>();
-                    emit_task_value(&attempts, format, "completion attempts")?;
-                    Ok(0)
-                }
-                AttemptCommand::Show {
-                    attempt_id,
-                    plan_digest,
-                    slice_id,
-                    format,
-                    ..
-                } => {
-                    let attempt = store.attempt(
-                        &ExecutionIdentity {
-                            plan_digest,
-                            slice_id,
-                        },
-                        &attempt_id,
-                    )?;
-                    emit_task_value(&attempt, format, "completion attempt")?;
-                    Ok(0)
-                }
-            }
-        }
-        TaskCommand::Finalize { command } => {
-            let (attempt_id, plan_digest, slice_id, root, format, token) = match command {
-                FinalizeCommand::Preview {
-                    attempt,
-                    plan_digest,
-                    slice_id,
-                    workspace,
-                    format,
-                } => (attempt, plan_digest, slice_id, workspace, format, None),
-                FinalizeCommand::Apply {
-                    attempt,
-                    plan_digest,
-                    slice_id,
-                    preview_token,
-                    workspace,
-                    format,
-                } => (
-                    attempt,
-                    plan_digest,
-                    slice_id,
-                    workspace,
-                    format,
-                    Some(preview_token),
-                ),
-            };
-            let workspace = SpecWorkspace::load(&root)?;
-            let store = DeliveryStore::for_workspace(&workspace.root)?;
-            let identity = ExecutionIdentity {
-                plan_digest,
-                slice_id,
-            };
-            let attempt = store.attempt(&identity, &attempt_id)?;
-            let preview = store.finalization_preview(&workspace, &attempt)?;
-            if let Some(token) = token {
-                let receipt = store.apply_finalization(&workspace, &attempt, &preview, &token)?;
-                emit_task_value(&receipt, format, "finalization receipt")?;
-                Ok(0)
-            } else {
-                let status = preview.status;
-                emit_task_value(&preview, format, "finalization preview")?;
-                Ok(if status == CompletionStatus::Complete {
-                    0
-                } else {
-                    1
-                })
-            }
-        }
-    }
-}
-
-fn emit_task_value<T: serde::Serialize>(value: &T, format: Format, label: &str) -> Result<()> {
-    match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(value)?),
-        Format::Text => println!("{label}:\n{}", serde_yaml::to_string(value)?),
-    }
-    Ok(())
-}
-
-fn now_timestamp() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .to_string()
-}
-
-fn run_work(args: WorkArgs) -> Result<i32> {
-    match args.command {
-        WorkCommand::Plan {
-            request,
-            out,
-            workspace,
-        } => {
-            let workspace = SpecWorkspace::load(workspace)?;
-            let index = workspace.index()?;
-            let request: WorkRequest = read_yaml(&request)?;
-            ensure_clean_plan_workspace(&workspace)?;
-            validate_work_origin(&index, &request.origin)
-                .context("work plan requires an exact implemented Work origin")?;
-            validate_work_request(&index, &request)
-                .context("work plan contains an out-of-scope requested target")?;
-            let plan = plan(&request, &workspace, &index, &revision(&workspace.root)?)?;
-            write_yaml(&out, &plan)?;
-            println!("wrote {} ({:?})", out.display(), plan.status);
-            Ok(
-                if matches!(plan.status, mitase_work_model::PlanStatus::Ready) {
-                    0
-                } else {
-                    1
-                },
-            )
-        }
-        WorkCommand::Show { plan } => {
-            let plan: WorkPlan = read_yaml(&plan)?;
-            println!("{}", serde_yaml::to_string(&plan)?);
-            Ok(0)
-        }
-        WorkCommand::ExportContext {
-            plan,
-            plan_digest,
-            slice_id,
-            workspace,
-            out,
-        } => {
-            let workspace = SpecWorkspace::load(workspace)?;
-            let index = workspace.index()?;
-            let plan: WorkPlan = read_yaml(&plan)?;
-            if plan.canonical_digest != plan_digest {
-                bail!("submitted plan does not match --plan-digest");
-            }
-            plan.slices
-                .iter()
-                .find(|s| s.id == slice_id)
-                .with_context(|| format!("slice {slice_id} not found"))?;
-            let current_revision = revision(&workspace.root)?;
-            let context = export_context(&plan, &slice_id, &workspace, &index, &current_revision)?;
-            let yaml = serde_yaml::to_string(&context)?;
-            if let Some(path) = out {
-                fs::write(&path, yaml)?;
-                println!("wrote {}", path.display());
-            } else {
-                print!("{yaml}");
-            }
-            Ok(0)
-        }
-    }
-}
 fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
     let command = args.command.unwrap_or(WorkbenchCommand::Serve {
         workspace: args.workspace,
@@ -903,13 +510,6 @@ fn read_yaml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
         &fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?,
     )
     .with_context(|| format!("strict parse {}", path.display()))
-}
-fn write_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, serde_yaml::to_string(value)?)?;
-    Ok(())
 }
 fn revision(root: &Path) -> Result<String> {
     let output = Command::new("git")
@@ -1225,39 +825,6 @@ fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
     )?;
     synthesize_untracked_ranges(root, &mut files)?;
     Ok(files)
-}
-
-fn ensure_clean_plan_workspace(workspace: &SpecWorkspace) -> Result<()> {
-    let mut args = vec![
-        "-C".to_string(),
-        workspace.root.to_string_lossy().into_owned(),
-        "status".to_string(),
-        "--porcelain".to_string(),
-        "-z".to_string(),
-        "--untracked-files=all".to_string(),
-        "--".to_string(),
-        "mitase.yaml".to_string(),
-    ];
-    for root in &workspace.config.workspace.spec_roots {
-        args.push(root.to_string_lossy().into_owned());
-    }
-    let output = Command::new("git").args(&args).output()?;
-    if !output.status.success() {
-        bail!("git status for governed workspace roots failed");
-    }
-    if output.stdout.is_empty() {
-        return Ok(());
-    }
-    let first_dirty = output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|entry| !entry.is_empty())
-        .nth(1)
-        .map(|entry| String::from_utf8_lossy(entry).into_owned())
-        .unwrap_or_else(|| "governed workspace".to_string());
-    bail!(
-        "work plan requires a clean governed workspace rooted at HEAD; dirty path: {first_dirty}"
-    );
 }
 
 fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<Vec<ChangedFile>> {
