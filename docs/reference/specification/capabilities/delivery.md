@@ -40,6 +40,17 @@ description: "Generated reference for docs/mitase/features/capabilities/delivery
           - **path**: crates/mitase-delivery/Cargo.toml
           - **selector**:
             - **kind**: file
+        - **id**: delivery-source
+          - **adapter**: rust
+          - **path**: crates/mitase-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: file
+        - **id**: delivery-workspace-lock-drop
+          - **adapter**: rust
+          - **path**: crates/mitase-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(DropforWorkspaceLock)::drop
         - **id**: delivery-agent-events-all
           - **adapter**: rust
           - **path**: crates/mitase-delivery/src/lib.rs
@@ -382,15 +393,6 @@ description: "Generated reference for docs/mitase/features/capabilities/delivery
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
-        - **id**: task-run
-          - **adapter**: rust
-          - **path**: src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: run_task
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
     - **id**: verification
       - **role**: verification
       - **facet**: delivery
@@ -479,7 +481,6 @@ description: "Generated reference for docs/mitase/features/capabilities/delivery
             - **kind**: verifies
               - **criterion**: REQ-WORK-002#criterion.finalization-handoff
               - **covers**:
-                - FEAT-DELIVERY-001#binding.implementation/target.task-run
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-finalization
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-finalization
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization
@@ -678,6 +679,14 @@ features:
             adapter: declared
             path: crates/mitase-delivery/Cargo.toml
             selector: { kind: file }
+          - id: delivery-source
+            adapter: rust
+            path: crates/mitase-delivery/src/lib.rs
+            selector: { kind: file }
+          - id: delivery-workspace-lock-drop
+            adapter: rust
+            path: crates/mitase-delivery/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(DropforWorkspaceLock)::drop' }
           - id: delivery-agent-events-all
             adapter: rust
             path: crates/mitase-delivery/src/lib.rs
@@ -877,13 +886,6 @@ features:
             path: crates/mitase-delivery/src/lib.rs
             selector: { kind: symbol, name: finalizations_dir }
             claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
-          - id: task-run
-            adapter: rust
-            path: src/lib.rs
-            selector: { kind: symbol, name: run_task }
-            claims:
-              - kind: satisfies
-                criterion: REQ-WORK-002#criterion.finalization-handoff
       - id: verification
         role: verification
         facet: delivery
@@ -952,7 +954,6 @@ features:
               - kind: verifies
                 criterion: REQ-WORK-002#criterion.finalization-handoff
                 covers:
-                  - FEAT-DELIVERY-001#binding.implementation/target.task-run
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-finalization
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-finalization
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization

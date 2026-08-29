@@ -43,7 +43,7 @@ PY
 }
 
 main() {
-  local install_root binary_name installed_binary expected_version actual_version workspace fixture plan projection validation_report
+  local install_root binary_name installed_binary expected_version actual_version workspace fixture projection validation_report
 
   trap cleanup EXIT
   cd "$repo_root"
@@ -55,7 +55,6 @@ main() {
   expected_version="$(resolve_package_version)"
   workspace="${temp_root}/workspace"
   fixture="${repo_root}/fixtures/v1/valid-web-app"
-  plan="${temp_root}/plan.yaml"
   projection="${temp_root}/projection.json"
 
   cargo install --path "$repo_root" --root "$install_root" --force --locked
@@ -75,12 +74,6 @@ main() {
     cat "$validation_report" >&2
     exit 1
   fi
-  "${installed_binary}" work plan \
-    --request "${workspace}/work.yaml" \
-    --out "$plan" \
-    --workspace "$workspace"
-  test -f "$plan"
-
   "${installed_binary}" workbench project \
     --workspace "$workspace" \
     --request "${workspace}/work.yaml" \

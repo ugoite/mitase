@@ -15,7 +15,8 @@ What to check:
 
 - changed artifacts still have explicit owners
 - changed requirements and features still validate cleanly
-- any checked-in work plan still matches the canonical planner output
-- exported context was produced from the current revision
+- any transitional plan artifact is externally produced and has the exact
+  digest and slice under review
+- execution context and delivery evidence are owned by repository tooling
 
 Historical `trace`, `relate`, `log`, and `browse` commands are not part of the active root CLI.

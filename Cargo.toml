@@ -46,7 +46,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 build = "build.rs"
-description = "Specification-driven work planning and validation"
+description = "Specification-driven validation"
 
 [dependencies]
 anyhow.workspace = true
