@@ -1,9 +1,9 @@
 ---
-title: "Mitase functional units / Planning"
-description: "Generated reference for docs/mitase/features/capabilities/planning.yaml"
+title: "Mitase functional units / Surfaces"
+description: "Generated reference for docs/mitase/features/capabilities/surfaces.yaml"
 ---
 
-> Generated from `docs/mitase/features/capabilities/planning.yaml`.
+> Generated from `docs/mitase/features/capabilities/surfaces.yaml`.
 
 ## Parsed content
 
