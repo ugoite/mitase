@@ -7,7 +7,6 @@ Suggested sequence:
 ```bash
 cargo run --quiet -- validate workspace .
 cargo run --quiet -- validate change . --range origin/main...HEAD
-cargo run --quiet -- workbench project --workspace . --format json
 ```
 
 What to check:

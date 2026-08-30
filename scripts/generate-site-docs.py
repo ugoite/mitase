@@ -30,11 +30,6 @@ CATEGORY_METADATA = {
         "position": 3,
         "description": "The public entrypoints and typed contracts exposed by the self-hosted system.",
     },
-    "workbench": {
-        "label": "Workbench internals",
-        "position": 4,
-        "description": "The Workbench behaviors that support guided, bounded repository changes.",
-    },
 }
 
 
@@ -125,7 +120,6 @@ def output_relative_path(relative_path: Path) -> Path:
         section = {
             "capabilities": "capabilities",
             "public-entrypoints": "contracts",
-            "workbench": "workbench",
         }.get(parts[1])
         output_parts = (section, *parts[2:]) if section else ("capabilities", *parts[1:])
     else:
