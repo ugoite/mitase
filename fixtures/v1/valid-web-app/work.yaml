@@ -1,9 +1,0 @@
-schema: mitase/work-request/v1
-id: WORK-AUTH-FAILURE
-title: Keep login failures generic.
-operation: modify
-origin:
-  kind: requirement-criterion
-  criterion: REQ-AUTH-001#criterion.invalid-credentials
-requested_targets: []
-constraints: { include_facets: [ui, backend, api], exclude_paths: [], max_slices: 3 }
