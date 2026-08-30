@@ -520,7 +520,16 @@ impl InventoryRegistry {
             .iter()
             .map(|(adapter, settings)| provider_for(adapter, settings.clone()))
             .collect::<Result<Vec<_>>>()?;
+        // Inventory providers resolve include! and include_str! paths through
+        // the filesystem. Normalize the root as well so temporary workspaces
+        // mounted through a symlink (notably revision baselines) do not make
+        // an otherwise in-workspace support file look external.
+        let workspace_root = context
+            .workspace_root
+            .canonicalize()
+            .unwrap_or_else(|_| context.workspace_root.clone());
         let context = InventoryContext {
+            workspace_root,
             settings: serde_yaml::Value::Null,
             excludes: excludes.clone(),
             ..context.clone()

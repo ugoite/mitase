@@ -17,7 +17,6 @@ context, and keep completion evidence tied to the exact plan-and-slice
 identity. Mitase does not inspect execution artifacts while this runtime is
 removed.
 
-- [Workbench](./workbench.md) — the current product flow and projection.
 - [Implementation planning](./implementation-planning.md) — the canonical
   plan-first loop.
 - [Work request format](./request-artifact-format.md) — the input artifact.
