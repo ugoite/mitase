@@ -42,9 +42,16 @@ repos:
         pass_filenames: false
         files: \.rs$
         stages: [pre-commit]
-      - id: mitase-quality-gates
-        name: mitase-quality-gates
-        entry: scripts/ci/quality-gates.sh fast
+      - id: mitase-rust-quality-gates
+        name: mitase-rust-quality-gates
+        entry: mise run ci:lane:rust-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push, manual]
+      - id: mitase-repo-quality-gates
+        name: mitase-repo-quality-gates
+        entry: mise run ci:lane:repo
         language: system
         pass_filenames: false
         always_run: true
