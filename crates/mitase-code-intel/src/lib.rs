@@ -42,12 +42,88 @@ pub fn resolve_symbol(adapter: &str, source: &str, name: &str) -> Result<SymbolR
 }
 
 fn resolve_typescript(source: &str, name: &str) -> Result<SymbolResolution> {
+    if let Some((container, leaf)) = name.rsplit_once("::") {
+        return resolve_javascript_method(source, container, leaf);
+    }
+    let mut found = Vec::new();
+    let mut first_error = None;
     for prefix in ["function ", "class "] {
-        if let Ok(found) = resolve_keyword_definition(source, name, prefix) {
-            return Ok(found);
+        match resolve_keyword_definition(source, name, prefix) {
+            Ok(resolved) => found.push(resolved),
+            Err(error) if first_error.is_none() => first_error = Some(error),
+            Err(_) => {}
         }
     }
-    resolve_assignment_block(source, name, &["const ", "let ", "var "])
+    match resolve_assignment_block(source, name, &["const ", "let ", "var "]) {
+        Ok(resolved) => found.push(resolved),
+        Err(error) if first_error.is_none() => first_error = Some(error),
+        Err(_) => {}
+    }
+    match found.as_slice() {
+        [resolved] => Ok(resolved.clone()),
+        [] => {
+            Err(first_error.unwrap_or_else(|| anyhow::anyhow!("symbol {name} has no definition")))
+        }
+        _ => bail!("symbol {name} is ambiguous in TypeScript/JavaScript source"),
+    }
+}
+
+fn resolve_javascript_method(
+    source: &str,
+    container: &str,
+    name: &str,
+) -> Result<SymbolResolution> {
+    let lines = source.lines().collect::<Vec<_>>();
+    let mut class_ranges = Vec::new();
+    for (line_index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix("class ") else {
+            continue;
+        };
+        if !starts_with_symbol(rest, container) {
+            continue;
+        }
+        let start = line_start_byte(source, line_index);
+        let (end, _) = block_from_brace(source, start, BraceScanMode::CLike)?;
+        class_ranges.push((start, end));
+    }
+    let mut matches = Vec::new();
+    for (class_start, class_end) in class_ranges {
+        let class_source = &source[class_start..class_end];
+        for (line_index, line) in class_source.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let candidate = trimmed
+                .strip_prefix("async ")
+                .or_else(|| trimmed.strip_prefix("get "))
+                .or_else(|| trimmed.strip_prefix("set "))
+                .unwrap_or(trimmed);
+            if !starts_with_symbol(candidate, name)
+                || !candidate[name.len()..].trim_start().starts_with('(')
+            {
+                continue;
+            }
+            let start = class_start + line_start_byte(class_source, line_index);
+            let (end, line_end) = block_from_brace(source, start, BraceScanMode::CLike)?;
+            matches.push(build(
+                &format!("{container}::{name}"),
+                "method",
+                source,
+                start,
+                end,
+                source[..start]
+                    .bytes()
+                    .filter(|byte| *byte == b'\n')
+                    .count()
+                    + 1,
+                line_end,
+            ));
+        }
+    }
+    match matches.as_slice() {
+        [resolved] => Ok(resolved.clone()),
+        [] => bail!("symbol {container}::{name} has no definition"),
+        _ => bail!("symbol {container}::{name} is ambiguous in TypeScript/JavaScript source"),
+    }
 }
 
 fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
@@ -75,6 +151,13 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
 
     impl<'ast> syn::visit::Visit<'ast> for Finder<'_> {
         fn visit_item_mod(&mut self, value: &'ast syn::ItemMod) {
+            if value.ident == self.name {
+                self.candidates.push(Candidate {
+                    kind: "module",
+                    identity: self.scoped_identity(&value.ident.to_string()),
+                    span: value.span(),
+                });
+            }
             self.module_path.push(value.ident.to_string());
             syn::visit::visit_item_mod(self, value);
             self.module_path.pop();
@@ -116,6 +199,46 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
             if value.ident == self.name {
                 self.candidates.push(Candidate {
                     kind: "struct",
+                    identity: self.scoped_identity(&value.ident.to_string()),
+                    span: value.span(),
+                });
+            }
+        }
+
+        fn visit_item_const(&mut self, value: &'ast syn::ItemConst) {
+            if value.ident == self.name {
+                self.candidates.push(Candidate {
+                    kind: "constant",
+                    identity: self.scoped_identity(&value.ident.to_string()),
+                    span: value.span(),
+                });
+            }
+        }
+
+        fn visit_item_static(&mut self, value: &'ast syn::ItemStatic) {
+            if value.ident == self.name {
+                self.candidates.push(Candidate {
+                    kind: "static",
+                    identity: self.scoped_identity(&value.ident.to_string()),
+                    span: value.span(),
+                });
+            }
+        }
+
+        fn visit_item_type(&mut self, value: &'ast syn::ItemType) {
+            if value.ident == self.name {
+                self.candidates.push(Candidate {
+                    kind: "type",
+                    identity: self.scoped_identity(&value.ident.to_string()),
+                    span: value.span(),
+                });
+            }
+        }
+
+        fn visit_item_union(&mut self, value: &'ast syn::ItemUnion) {
+            if value.ident == self.name {
+                self.candidates.push(Candidate {
+                    kind: "union",
                     identity: self.scoped_identity(&value.ident.to_string()),
                     span: value.span(),
                 });
@@ -361,6 +484,9 @@ fn resolve_assignment_block(
 }
 
 fn resolve_go(source: &str, name: &str) -> Result<SymbolResolution> {
+    if let Some((receiver, method)) = name.rsplit_once("::") {
+        return resolve_go_method(source, receiver, method);
+    }
     let mut matches = Vec::new();
     for (line_index, line) in source.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -389,6 +515,46 @@ fn resolve_go(source: &str, name: &str) -> Result<SymbolResolution> {
     Ok(build(
         name,
         "definition",
+        source,
+        start,
+        end,
+        line_index + 1,
+        line_end,
+    ))
+}
+
+fn resolve_go_method(source: &str, receiver: &str, name: &str) -> Result<SymbolResolution> {
+    let mut matches = Vec::new();
+    for (line_index, line) in source.lines().enumerate() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix("func ") else {
+            continue;
+        };
+        let Some(close) = rest.find(')') else {
+            continue;
+        };
+        let receiver_text = rest[1..close]
+            .split_whitespace()
+            .last()
+            .unwrap_or_default()
+            .trim_start_matches('*');
+        let method = rest[close + 1..].trim_start();
+        if receiver_text != receiver || !starts_with_symbol(method, name) {
+            continue;
+        }
+        matches.push((line_index, trimmed.to_owned()));
+    }
+    match matches.as_slice() {
+        [] => bail!("symbol {receiver}::{name} has no definition"),
+        [_single] => {}
+        _ => bail!("symbol {receiver}::{name} is ambiguous in Go source"),
+    }
+    let (line_index, _) = matches.into_iter().next().expect("one match");
+    let start = line_start_byte(source, line_index);
+    let (end, line_end) = block_from_brace(source, start, BraceScanMode::CLike)?;
+    Ok(build(
+        &format!("{receiver}::{name}"),
+        "method",
         source,
         start,
         end,
@@ -433,6 +599,9 @@ fn resolve_shell(source: &str, name: &str) -> Result<SymbolResolution> {
 }
 
 fn resolve_python(source: &str, name: &str) -> Result<SymbolResolution> {
+    if let Some((container, method)) = name.rsplit_once("::") {
+        return resolve_python_method(source, container, method);
+    }
     let lines = source.lines().collect::<Vec<_>>();
     let mut matches = Vec::new();
     for (line_index, line) in lines.iter().enumerate() {
@@ -484,6 +653,76 @@ fn resolve_python(source: &str, name: &str) -> Result<SymbolResolution> {
         end,
         start_line + 1,
         end_line.max(start_line + 1),
+    ))
+}
+
+fn resolve_python_method(source: &str, container: &str, name: &str) -> Result<SymbolResolution> {
+    let lines = source.lines().collect::<Vec<_>>();
+    let mut class_ranges = Vec::new();
+    for (line_index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix("class ") else {
+            continue;
+        };
+        if !starts_with_symbol(rest, container) {
+            continue;
+        }
+        let class_indent = indentation(line);
+        let mut end_line = lines.len();
+        for (next_index, next) in lines.iter().enumerate().skip(line_index + 1) {
+            if !next.trim().is_empty() && indentation(next) <= class_indent {
+                end_line = next_index;
+                break;
+            }
+        }
+        class_ranges.push((line_index, end_line));
+    }
+    let mut matches = Vec::new();
+    for (class_start, class_end) in class_ranges {
+        for (line_index, line) in lines
+            .iter()
+            .enumerate()
+            .skip(class_start + 1)
+            .take(class_end.saturating_sub(class_start + 1))
+        {
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed.strip_prefix("def ") else {
+                continue;
+            };
+            if !starts_with_symbol(rest, name) {
+                continue;
+            }
+            matches.push(line_index);
+        }
+    }
+    match matches.as_slice() {
+        [] => bail!("symbol {container}::{name} has no definition"),
+        [_single] => {}
+        _ => bail!("symbol {container}::{name} is ambiguous in Python source"),
+    }
+    let method_line = matches[0];
+    let start_indent = indentation(lines[method_line]);
+    let mut end_line = lines.len();
+    for (line_index, line) in lines.iter().enumerate().skip(method_line + 1) {
+        if !line.trim().is_empty() && indentation(line) <= start_indent {
+            end_line = line_index;
+            break;
+        }
+    }
+    let start = line_start_byte(source, method_line);
+    let end = if end_line == lines.len() {
+        source.len()
+    } else {
+        line_start_byte(source, end_line)
+    };
+    Ok(build(
+        &format!("{container}::{name}"),
+        "method",
+        source,
+        start,
+        end,
+        method_line + 1,
+        end_line.max(method_line + 1),
     ))
 }
 
@@ -736,6 +975,34 @@ mod tests {
     }
 
     #[test]
+    fn rust_modules_types_and_test_functions_use_qualified_identity() {
+        let source = concat!(
+            "mod api {\n",
+            "    pub struct Service;\n",
+            "    pub fn run() {}\n",
+            "}\n",
+            "#[test]\n",
+            "fn test_service() {}\n",
+        );
+        assert_eq!(
+            resolve_symbol("rust", source, "api").unwrap().kind,
+            "module"
+        );
+        assert_eq!(
+            resolve_symbol("rust", source, "Service").unwrap().kind,
+            "struct"
+        );
+        assert_eq!(
+            resolve_symbol("rust", source, "api::run").unwrap().identity,
+            "api::run"
+        );
+        assert_eq!(
+            resolve_symbol("rust", source, "test_service").unwrap().kind,
+            "function"
+        );
+    }
+
+    #[test]
     fn typescript_definition_covers_function_body() {
         let r = resolve_symbol(
             "typescript",
@@ -760,6 +1027,21 @@ mod tests {
     }
 
     #[test]
+    fn typescript_qualified_method_selector_is_exact() {
+        let source = concat!(
+            "class Service {\n",
+            "  submit() { return true; }\n",
+            "}\n",
+            "class Other {\n",
+            "  submit() { return false; }\n",
+            "}\n",
+        );
+        let resolved = resolve_symbol("typescript", source, "Service::submit").unwrap();
+        assert_eq!(resolved.identity, "Service::submit");
+        assert!(resolved.excerpt.contains("return true"));
+    }
+
+    #[test]
     fn go_definition_ignores_raw_strings() {
         let r = resolve_symbol(
             "go",
@@ -769,6 +1051,20 @@ mod tests {
         .unwrap();
         assert!(r.excerpt.contains("println(query)"));
         assert_eq!(r.line_end, 5);
+    }
+
+    #[test]
+    fn go_qualified_method_selector_matches_receiver() {
+        let source = concat!(
+            "type Service struct{}\n",
+            "func (s *Service) Submit() {\n",
+            "    println(s)\n",
+            "}\n",
+            "func Submit() {}\n",
+        );
+        let resolved = resolve_symbol("go", source, "Service::Submit").unwrap();
+        assert_eq!(resolved.identity, "Service::Submit");
+        assert!(resolved.excerpt.contains("println(s)"));
     }
 
     #[test]
@@ -820,5 +1116,20 @@ def run_task():\n\
         .unwrap();
         assert!(r.excerpt.contains("@decorator"));
         assert!(r.line_end >= 2);
+    }
+
+    #[test]
+    fn python_qualified_method_selector_matches_class() {
+        let source = concat!(
+            "class Service:\n",
+            "    def submit(self):\n",
+            "        return True\n",
+            "\n",
+            "def submit():\n",
+            "    return False\n",
+        );
+        let resolved = resolve_symbol("python", source, "Service::submit").unwrap();
+        assert_eq!(resolved.identity, "Service::submit");
+        assert!(resolved.excerpt.contains("return True"));
     }
 }
