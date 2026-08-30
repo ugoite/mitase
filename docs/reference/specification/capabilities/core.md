@@ -361,13 +361,13 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
               - **criterion**: REQ-CAPABILITY-001#criterion.readiness-ladder
 - **id**: FEAT-CHANGE-VALIDATION-001
   - **title**: Change validation
-  - **summary**: Validate changed work against the canonical workspace and plan.
+  - **summary**: Validate changed artifacts against the canonical workspace and ownership.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: validation
-      - **responsibility**: Validate semantic changed units against ownership and plan scope.
+      - **responsibility**: Validate semantic changed units against ownership and semantic impact.
       - **owns**:
         - **id**: validation-source
           - **adapter**: rust
@@ -380,48 +380,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::init_git_repo
-        - **id**: validation-readonly-fingerprint
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::current_readonly_fingerprint
-        - **id**: validation-add-target-file
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::editable_add_target_matches_file
-        - **id**: validation-lifecycle-fingerprint
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::lifecycle_ownership_fingerprint
-        - **id**: validation-lifecycle-shared-path
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::lifecycle_transition_shares_path
-        - **id**: validation-plan-lifecycle
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::plan_has_lifecycle_transition
-        - **id**: validation-readiness-regressions
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::readiness_regression_blockers
-        - **id**: validation-runonly-post-state
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::run_only_target_is_post_state_add
         - **id**: validation-deleted-anchor-test
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
@@ -458,24 +416,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::planned_feature_ownership_is_rejected
-        - **id**: validation-ready-plan-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::ready_plan_does_not_mask_broken_capability_behavior
-        - **id**: validation-sample-target-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::sample_target
-        - **id**: validation-shared-verification-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::self_hosted_shared_verification_targets_execute_claim_by_claim
         - **id**: validation-tests-module
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
@@ -494,18 +434,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: lib::validate_document_shapes
-        - **id**: validation-plan
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::validate_plan
-        - **id**: validation-slice-scope
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::validate_slice_scope
         - **id**: validation-targets
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
@@ -522,8 +450,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.change-validation
-            - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-002#criterion.generated-change-scope
 
 ## Source YAML
 
@@ -788,13 +714,13 @@ features:
 
   - id: FEAT-CHANGE-VALIDATION-001
     title: Change validation
-    summary: Validate changed work against the canonical workspace and plan.
+    summary: Validate changed artifacts against the canonical workspace and ownership.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: validation
-        responsibility: Validate semantic changed units against ownership and plan scope.
+        responsibility: Validate semantic changed units against ownership and semantic impact.
         owns:
           - id: validation-source
             adapter: rust
@@ -804,34 +730,6 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::init_git_repo' }
-          - id: validation-readonly-fingerprint
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::current_readonly_fingerprint' }
-          - id: validation-add-target-file
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::editable_add_target_matches_file' }
-          - id: validation-lifecycle-fingerprint
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::lifecycle_ownership_fingerprint' }
-          - id: validation-lifecycle-shared-path
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::lifecycle_transition_shares_path' }
-          - id: validation-plan-lifecycle
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::plan_has_lifecycle_transition' }
-          - id: validation-readiness-regressions
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::readiness_regression_blockers' }
-          - id: validation-runonly-post-state
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::run_only_target_is_post_state_add' }
           - id: validation-deleted-anchor-test
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
@@ -856,18 +754,6 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::planned_feature_ownership_is_rejected' }
-          - id: validation-ready-plan-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::ready_plan_does_not_mask_broken_capability_behavior' }
-          - id: validation-sample-target-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::sample_target' }
-          - id: validation-shared-verification-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::self_hosted_shared_verification_targets_execute_claim_by_claim' }
           - id: validation-tests-module
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
@@ -880,14 +766,6 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::validate_document_shapes' }
-          - id: validation-plan
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::validate_plan' }
-          - id: validation-slice-scope
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::validate_slice_scope' }
           - id: validation-targets
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
@@ -900,6 +778,4 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-CAPABILITY-001#criterion.change-validation
-              - kind: satisfies
-                criterion: REQ-CAPABILITY-002#criterion.generated-change-scope
 ```

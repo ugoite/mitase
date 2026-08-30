@@ -785,15 +785,12 @@ dependencies = [
  "anyhow",
  "mitase-diagnostics",
  "mitase-inventory",
- "mitase-planner",
  "mitase-project-model",
  "mitase-spec-model",
- "mitase-work-model",
  "mitase-workspace",
  "serde",
  "serde_json",
  "serde_yaml",
- "sha2",
  "tempfile",
 ]
 
