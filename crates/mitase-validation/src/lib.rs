@@ -459,6 +459,22 @@ pub(crate) fn resolve_verification_claim<'a>(
     &'a VerificationRunnerRef,
     &'a [BoundTargetRef],
 )> {
+    if !index.target_to_artifact.contains_key(&claim.target) {
+        bail!(
+            "verification target {} is not a current exact artifact",
+            claim.target
+        );
+    }
+    if !index
+        .bindings
+        .get(&claim.target.binding)
+        .is_some_and(|binding| binding.role == BindingRole::Verification)
+    {
+        bail!(
+            "verification target {} is not owned by a verification binding",
+            claim.target
+        );
+    }
     let target = index
         .target(&claim.target)
         .ok_or_else(|| anyhow::anyhow!("verification target {} is unresolved", claim.target))?;
@@ -1828,32 +1844,12 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                                     .into_iter()
                                     .flatten()
                                     .any(|verification_ref| {
-                                        ctx.index
-                                            .bindings
-                                            .get(&verification_ref.binding)
-                                            .is_some_and(|binding| {
-                                                binding.role == BindingRole::Verification
-                                            })
-                                            && ctx.index.target(verification_ref).is_some_and(
-                                                |verification| {
-                                                    verification.claims.iter().any(|claim| {
-                                                        matches!(
-                                                            claim,
-                                                            TargetClaim::Verifies {
-                                                                criterion: actual,
-                                                                covers,
-                                                                runner,
-                                                            } if actual == &criterion
-                                                                && covers.contains(&verified_target)
-                                                                && ctx
-                                                                    .config
-                                                                    .verification
-                                                                    .runners
-                                                                    .contains_key(&runner.runner)
-                                                        )
-                                                    })
-                                                },
-                                            )
+                                        current_verification_covers(
+                                            ctx,
+                                            verification_ref,
+                                            &criterion,
+                                            &verified_target,
+                                        )
                                     });
                                 if !verified {
                                     push(
@@ -2415,6 +2411,95 @@ fn check_kind(
     }
 }
 
+fn is_current_exact_target(
+    ctx: &ValidationContext<'_>,
+    reference: &BoundTargetRef,
+    role: BindingRole,
+) -> bool {
+    ctx.index.target_to_artifact.contains_key(reference)
+        && ctx
+            .index
+            .bindings
+            .get(&reference.binding)
+            .is_some_and(|binding| binding.role == role)
+}
+
+fn target_satisfies(
+    ctx: &ValidationContext<'_>,
+    reference: &BoundTargetRef,
+    criterion: &SpecAnchor,
+) -> bool {
+    is_current_exact_target(ctx, reference, BindingRole::Implementation)
+        && ctx.index.target(reference).is_some_and(|target| {
+            target.claims.iter().any(|claim| {
+                matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
+            })
+        })
+}
+
+fn runner_argument_placeholders(argument: &str) -> Vec<&str> {
+    argument
+        .match_indices('{')
+        .filter_map(|(start, _)| {
+            let end = argument[start + 1..].find('}')? + start + 1;
+            Some(&argument[start + 1..end])
+        })
+        .collect()
+}
+
+pub(crate) fn verification_runner_is_complete(
+    config: &ProjectConfig,
+    runner: &VerificationRunnerRef,
+) -> bool {
+    let Some(configured) = config.verification.runners.get(&runner.runner) else {
+        return false;
+    };
+    !configured.executable.trim().is_empty()
+        && configured.arguments.iter().all(|argument| {
+            !argument.trim().is_empty()
+                && runner_argument_placeholders(argument).iter().all(|key| {
+                    runner
+                        .arguments
+                        .get(*key)
+                        .is_some_and(|value| !value.is_empty())
+                })
+        })
+        && runner
+            .arguments
+            .values()
+            .all(|value| !value.is_empty() && !value.contains('{'))
+}
+
+fn current_verification_covers(
+    ctx: &ValidationContext<'_>,
+    verification: &BoundTargetRef,
+    criterion: &SpecAnchor,
+    implementation: &BoundTargetRef,
+) -> bool {
+    if !is_current_exact_target(ctx, verification, BindingRole::Verification)
+        || !target_satisfies(ctx, implementation, criterion)
+    {
+        return false;
+    }
+    let Some(target) = ctx.index.target(verification) else {
+        return false;
+    };
+    let mut claims = target.claims.iter().filter_map(|claim| match claim {
+        TargetClaim::Verifies {
+            criterion: actual,
+            covers,
+            runner,
+        } if actual == criterion => Some((covers, runner)),
+        _ => None,
+    });
+    let Some((covers, runner)) = claims.next() else {
+        return false;
+    };
+    claims.next().is_none()
+        && covers.contains(implementation)
+        && verification_runner_is_complete(ctx.config, runner)
+}
+
 fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     // Planned items are an advisory catalog, not current ownership. Their
     // exact targets can intentionally be absent until a later implementation
@@ -2588,6 +2673,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         if binding.role != BindingRole::Verification {
             continue;
         }
+        let planned = ctx.index.item_status.get(&anchor.item) == Some(&ItemStatus::Planned);
         for target in &binding.targets {
             let reference = BoundTargetRef {
                 binding: anchor.clone(),
@@ -2602,6 +2688,60 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 else {
                     continue;
                 };
+                let claim_count = target
+                    .claims
+                    .iter()
+                    .filter(|claim| {
+                        matches!(
+                            claim,
+                            TargetClaim::Verifies {
+                                criterion: actual,
+                                ..
+                            } if actual == criterion
+                        )
+                    })
+                    .count();
+                if claim_count > 1 {
+                    push(
+                        out,
+                        "MITASE-VERIFICATION-001",
+                        format!(
+                            "verification target {reference} has multiple claims for criterion {criterion}"
+                        ),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                for covered in covers {
+                    if ctx.index.target(covered).is_none() {
+                        push(
+                            out,
+                            "MITASE-VERIFICATION-002",
+                            format!("verification covers unresolved target {covered}"),
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+                // Planned claims remain available in the catalog, but do not
+                // assert current proof coverage or require current runner
+                // metadata. Their structural anchor checks still happen in
+                // graph validation.
+                if planned {
+                    continue;
+                }
+                if !is_current_exact_target(ctx, &reference, BindingRole::Verification) {
+                    push(
+                        out,
+                        "MITASE-VERIFICATION-002",
+                        format!(
+                            "verification target {reference} must resolve to one current exact artifact"
+                        ),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                    continue;
+                }
                 if covers.is_empty() {
                     push(
                         out,
@@ -2612,18 +2752,13 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     );
                 }
                 for covered in covers {
-                    let valid = ctx.index.target(covered).is_some_and(|covered_target| {
-                        ctx.index.bindings.get(&covered.binding).is_some_and(|covered_binding| {
-                            covered_binding.role == BindingRole::Implementation
-                                && covered_target.claims.iter().any(|claim| matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion))
-                        })
-                    });
+                    let valid = target_satisfies(ctx, covered, criterion);
                     if !valid {
                         push(
                             out,
                             "MITASE-VERIFICATION-002",
                             format!(
-                                "{reference} covers a non-implementation target or a target for another criterion: {covered}"
+                                "{reference} covers a non-current implementation target or a target for another criterion: {covered}"
                             ),
                             target.path.to_string_lossy(),
                             Some(anchor.clone()),
@@ -2640,14 +2775,36 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     );
                     continue;
                 };
+                if configured.executable.trim().is_empty() {
+                    push(
+                        out,
+                        "MITASE-VERIFICATION-002",
+                        format!(
+                            "verification runner {} has no executable metadata",
+                            runner.runner
+                        ),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                if configured
+                    .arguments
+                    .iter()
+                    .any(|argument| argument.trim().is_empty())
+                {
+                    push(
+                        out,
+                        "MITASE-VERIFICATION-002",
+                        format!(
+                            "verification runner {} has an empty argument metadata entry",
+                            runner.runner
+                        ),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
                 for argument in &configured.arguments {
-                    let placeholders = argument
-                        .match_indices('{')
-                        .filter_map(|(start, _)| {
-                            let end = argument[start + 1..].find('}')? + start + 1;
-                            Some(&argument[start + 1..end])
-                        })
-                        .collect::<Vec<_>>();
+                    let placeholders = runner_argument_placeholders(argument);
                     if placeholders
                         .iter()
                         .any(|key| runner.arguments.get(*key).is_none_or(String::is_empty))
@@ -2663,6 +2820,19 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         );
                     }
                 }
+                if runner
+                    .arguments
+                    .values()
+                    .any(|value| value.is_empty() || value.contains('{'))
+                {
+                    push(
+                        out,
+                        "MITASE-VERIFICATION-002",
+                        "verification runner arguments contain an unresolved value",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
             }
         }
     }
@@ -2671,10 +2841,25 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             continue;
         }
         for implementation in implementations {
-            if !ctx.index.criteria_to_verification_targets.get(criterion).into_iter().flatten().any(|verification| {
-                ctx.index.target(verification).is_some_and(|target| target.claims.iter().any(|claim| matches!(claim, TargetClaim::Verifies { criterion: actual, covers, .. } if actual == criterion && covers.contains(implementation))))
-            }) {
-                push(out, "MITASE-VERIFICATION-002", format!("implementation target {implementation} is not covered by a verification target for {criterion}"), "workspace", Some(criterion.clone()));
+            if !ctx
+                .index
+                .criteria_to_verification_targets
+                .get(criterion)
+                .into_iter()
+                .flatten()
+                .any(|verification| {
+                    current_verification_covers(ctx, verification, criterion, implementation)
+                })
+            {
+                push(
+                    out,
+                    "MITASE-VERIFICATION-002",
+                    format!(
+                        "implementation target {implementation} is not covered by a verification target for {criterion}"
+                    ),
+                    "workspace",
+                    Some(criterion.clone()),
+                );
             }
         }
     }
@@ -2772,6 +2957,297 @@ mod tests {
             revision: None,
             change_base_revision: None,
         })
+    }
+
+    fn verification_fixture(
+        feature_status: &str,
+        implementation_lifecycle: Option<&str>,
+        verification_lifecycle: Option<&str>,
+        verification_criterion: &str,
+        guide: &str,
+    ) -> (TempDir, SpecWorkspace, SpecIndex, ValidationResult) {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("spec")).expect("spec dir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
+        fs::create_dir_all(tempdir.path().join("docs")).expect("docs dir");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  excludes: []\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers:\n",
+                "        rust: { mode: test, include_tests: true }\n",
+                "        markdown: { roots: [docs] }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
+                "  changed: { require_owned_changes: false }\n",
+                "verification:\n",
+                "  runners:\n",
+                "    proof:\n",
+                "      executable: external-runner\n",
+                "      arguments: [\"{test}\"]\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("Cargo.toml"),
+            "[package]\nname = \"verification-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .expect("manifest");
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn implementation() {}\n",
+        )
+        .expect("implementation");
+        fs::write(tempdir.path().join("docs/guide.md"), guide).expect("verification artifact");
+        let implementation_lifecycle = implementation_lifecycle
+            .map(|value| format!("            lifecycle: {value}\n"))
+            .unwrap_or_default();
+        let verification_lifecycle = verification_lifecycle
+            .map(|value| format!("            lifecycle: {value}\n"))
+            .unwrap_or_default();
+        let spec = r#"schema: mitase/spec/v1
+kind: requirements
+namespace: test
+category: Verification
+requirements:
+  - id: REQ-TEST-001
+    title: Verification
+    description: Verification fixture.
+    priority: high
+    status: implemented
+    criteria:
+      - id: acceptance
+        kind: behavior
+        statement: The implementation is correct.
+        governed_by: []
+      - id: other
+        kind: behavior
+        statement: Another criterion.
+        governed_by: []
+    bindings: []
+"#
+        .to_string();
+        fs::write(tempdir.path().join("spec/requirement.yaml"), spec).expect("requirement");
+        let feature = format!(
+            r#"schema: mitase/spec/v1
+kind: features
+namespace: test
+category: Verification
+features:
+  - id: FEAT-TEST-001
+    title: Verification
+    summary: Verification fixture.
+    status: {feature_status}
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: test
+        responsibility: Own the implementation target.
+        targets:
+          - id: implementation
+            adapter: rust
+            path: src/lib.rs
+            selector:
+              kind: symbol
+              name: implementation
+{implementation_lifecycle}            claims:
+              - kind: satisfies
+                criterion: REQ-TEST-001#criterion.acceptance
+      - id: verification
+        role: verification
+        facet: test
+        responsibility: Declare the proof relationship.
+        targets:
+          - id: proof
+            adapter: markdown
+            path: docs/guide.md
+            selector:
+              kind: heading
+              value: Proof
+{verification_lifecycle}            claims:
+              - kind: verifies
+                criterion: {verification_criterion}
+                covers:
+                  - FEAT-TEST-001#binding.implementation/target.implementation
+                runner:
+                  runner: proof
+                  arguments: {{ test: proof }}
+"#,
+        );
+        fs::write(tempdir.path().join("spec/feature.yaml"), feature).expect("feature");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        (tempdir, workspace, index, result)
+    }
+
+    fn verification_diagnostics(result: &ValidationResult) -> Vec<&Diagnostic> {
+        result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.rule_id.starts_with("MITASE-VERIFICATION-"))
+            .collect()
+    }
+
+    #[test]
+    fn verification_claim_provides_exact_current_coverage() {
+        let (_tempdir, _workspace, index, result) = verification_fixture(
+            "implemented",
+            None,
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+        );
+        assert!(verification_diagnostics(&result).is_empty());
+        let implementation: BoundTargetRef =
+            "FEAT-TEST-001#binding.implementation/target.implementation"
+                .parse()
+                .expect("implementation target");
+        let proof: BoundTargetRef = "FEAT-TEST-001#binding.verification/target.proof"
+            .parse()
+            .expect("proof target");
+        assert!(
+            index
+                .verification_by_target
+                .get(&implementation)
+                .is_some_and(|targets| targets == &vec![proof])
+        );
+    }
+
+    #[test]
+    fn verification_claim_rejects_unrelated_criterion_coverage() {
+        let (_tempdir, _workspace, index, result) = verification_fixture(
+            "implemented",
+            None,
+            None,
+            "REQ-TEST-001#criterion.other",
+            "# Proof\n",
+        );
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("another criterion"))
+        );
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("not covered"))
+        );
+        let implementation: BoundTargetRef =
+            "FEAT-TEST-001#binding.implementation/target.implementation"
+                .parse()
+                .expect("implementation target");
+        assert!(!index.verification_by_target.contains_key(&implementation));
+    }
+
+    #[test]
+    fn verification_claim_rejects_ambiguous_proof_target() {
+        let (_tempdir, _workspace, index, result) = verification_fixture(
+            "implemented",
+            None,
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n## Proof\n",
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "MITASE-TARGET-002"
+                && diagnostic.message.contains("heading Proof is ambiguous")
+        }));
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("current exact artifact"))
+        );
+        let proof: BoundTargetRef = "FEAT-TEST-001#binding.verification/target.proof"
+            .parse()
+            .expect("proof target");
+        assert!(
+            !index
+                .criteria_to_verification_targets
+                .values()
+                .flatten()
+                .any(|target| target == &proof)
+        );
+    }
+
+    #[test]
+    fn planned_and_absent_targets_are_catalog_only_for_proof_coverage() {
+        let (_tempdir, _workspace, planned_index, planned_result) = verification_fixture(
+            "planned",
+            None,
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+        );
+        let implementation: BoundTargetRef =
+            "FEAT-TEST-001#binding.implementation/target.implementation"
+                .parse()
+                .expect("implementation target");
+        let proof: BoundTargetRef = "FEAT-TEST-001#binding.verification/target.proof"
+            .parse()
+            .expect("proof target");
+        assert!(verification_diagnostics(&planned_result).is_empty());
+        assert!(
+            planned_index
+                .all_verification_by_target
+                .get(&implementation)
+                .is_some_and(|targets| targets.contains(&proof))
+        );
+        assert!(
+            !planned_index
+                .verification_by_target
+                .contains_key(&implementation)
+        );
+
+        let (_tempdir, _workspace, absent_index, absent_result) = verification_fixture(
+            "implemented",
+            None,
+            Some("absent"),
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+        );
+        assert!(
+            verification_diagnostics(&absent_result)
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("current exact artifact"))
+        );
+        assert!(
+            absent_index
+                .criteria_to_verification_targets
+                .get(&"REQ-TEST-001#criterion.acceptance".parse().unwrap())
+                .is_none_or(Vec::is_empty)
+        );
+    }
+
+    #[test]
+    fn absent_implementation_target_cannot_be_currently_covered() {
+        let (_tempdir, _workspace, index, result) = verification_fixture(
+            "implemented",
+            Some("absent"),
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+        );
+        assert!(verification_diagnostics(&result).iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("non-current implementation target")
+        }));
+        let implementation: BoundTargetRef =
+            "FEAT-TEST-001#binding.implementation/target.implementation"
+                .parse()
+                .expect("implementation target");
+        assert!(!index.verification_by_target.contains_key(&implementation));
     }
 
     #[test]
