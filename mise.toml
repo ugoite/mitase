@@ -40,9 +40,16 @@ run = [{ task = "lint:rust" }]
 description = "Compile-check the Rust workspace"
 run = "cargo check --workspace --all-targets"
 
+[tasks."check:architecture"]
+description = "Check canonical production-crate responsibilities and dependencies"
+run = "python3 scripts/ci/check-architecture.py"
+
 [tasks."check:repo"]
-description = "Run the canonical repository validator"
-run = "cargo run --locked --quiet -- check ."
+description = "Run the architecture and canonical repository validators"
+run = [
+  { task = "check:architecture" },
+  "cargo run --locked --quiet -- check .",
+]
 
 [tasks.check]
 description = "Run Rust and repository checks"
