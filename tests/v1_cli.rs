@@ -1,5 +1,9 @@
 use assert_cmd::Command;
+use mitase_spec_model::{LocalAnchorKind, SpecDocument};
+use mitase_workspace::SpecWorkspace;
+use serde::Deserialize;
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
@@ -21,6 +25,176 @@ fn current_workspace_checks_and_reports_configured_readiness() {
     assert!(output.status.success());
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["target"], "traceable");
+}
+
+#[derive(Debug, Deserialize)]
+struct AcceptanceCorpus {
+    source: AcceptanceSource,
+    expected: AcceptanceExpected,
+}
+
+#[derive(Debug, Deserialize)]
+struct AcceptanceSource {
+    repository: String,
+    revision: String,
+    files: AcceptanceSourceFiles,
+}
+
+#[derive(Debug, Deserialize)]
+struct AcceptanceSourceFiles {
+    philosophies: String,
+    policies: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AcceptanceExpected {
+    philosophy_count: usize,
+    policy_count: usize,
+    philosophy_to_policies: BTreeMap<String, Vec<String>>,
+    policy_to_philosophies: BTreeMap<String, Vec<String>>,
+}
+
+#[test]
+fn ugoite_foundation_policy_fixture_preserves_items_and_derived_governance() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures/acceptance/ugoite-foundation-policy-v1");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    initialize_fixture_git(temp.path());
+
+    let corpus: AcceptanceCorpus =
+        serde_yaml::from_str(&fs::read_to_string(temp.path().join("corpus.yaml")).unwrap())
+            .expect("acceptance corpus manifest");
+    assert_eq!(corpus.source.repository, "ugoite/ugoite");
+    assert_eq!(
+        corpus.source.revision,
+        "a872f4992bcb3633681eb0383e101453f00b32db"
+    );
+    assert_eq!(
+        corpus.source.files.philosophies,
+        "docs/spec/philosophy/foundation.yaml"
+    );
+    assert_eq!(
+        corpus.source.files.policies,
+        "docs/spec/policies/policies.yaml"
+    );
+
+    let workspace = SpecWorkspace::load(temp.path()).expect("acceptance workspace");
+    let index = workspace.index().expect("acceptance index");
+    let mut philosophy_ids = BTreeSet::new();
+    let mut policy_ids = BTreeSet::new();
+    for loaded in &workspace.documents {
+        match &loaded.document {
+            SpecDocument::Philosophies { philosophies, .. } => {
+                for philosophy in philosophies {
+                    assert_eq!(philosophy.principles.len(), 2);
+                    assert!(
+                        philosophy
+                            .principles
+                            .iter()
+                            .any(|principle| principle.id.0 == "product-design-principle")
+                    );
+                    assert!(
+                        philosophy
+                            .principles
+                            .iter()
+                            .any(|principle| principle.id.0 == "coding-guideline")
+                    );
+                    philosophy_ids.insert(philosophy.id.0.clone());
+                }
+            }
+            SpecDocument::Policies { policies, .. } => {
+                for policy in policies {
+                    assert_eq!(policy.rules.len(), 1);
+                    assert_eq!(policy.rules[0].id.0, "governance");
+                    assert!(!policy.rules[0].governed_by.is_empty());
+                    assert!(policy.rules[0].governed_by.iter().all(|anchor| {
+                        anchor.kind == LocalAnchorKind::Principle
+                            && anchor.local_id.0 == "product-design-principle"
+                    }));
+                    policy_ids.insert(policy.id.0.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(philosophy_ids.len(), corpus.expected.philosophy_count);
+    assert_eq!(policy_ids.len(), corpus.expected.policy_count);
+    assert_eq!(
+        philosophy_ids,
+        corpus
+            .expected
+            .philosophy_to_policies
+            .keys()
+            .cloned()
+            .collect()
+    );
+    assert_eq!(
+        policy_ids,
+        corpus
+            .expected
+            .policy_to_philosophies
+            .keys()
+            .cloned()
+            .collect()
+    );
+
+    let translated_philosophies =
+        fs::read_to_string(temp.path().join("spec/foundation.yaml")).unwrap();
+    let translated_policies = fs::read_to_string(temp.path().join("spec/policies.yaml")).unwrap();
+    assert!(!translated_philosophies.contains("linked_policies:"));
+    assert!(!translated_policies.contains("linked_philosophies:"));
+
+    for (policy_id, expected_philosophies) in &corpus.expected.policy_to_philosophies {
+        let rule = index
+            .rules_to_principles
+            .iter()
+            .find(|(anchor, _)| {
+                anchor.item.0.as_str() == policy_id.as_str()
+                    && anchor.kind == LocalAnchorKind::Rule
+                    && anchor.local_id.0.as_str() == "governance"
+            })
+            .map(|(_, principles)| principles)
+            .expect("authored governance relation");
+        let mut authored = rule
+            .iter()
+            .map(|anchor| anchor.item.0.clone())
+            .collect::<Vec<_>>();
+        authored.sort();
+        let mut expected = expected_philosophies.clone();
+        expected.sort();
+        assert_eq!(authored, expected);
+    }
+
+    for (philosophy_id, expected_policies) in &corpus.expected.philosophy_to_policies {
+        let principle = index
+            .principles_to_rules
+            .keys()
+            .find(|anchor| {
+                anchor.item.0.as_str() == philosophy_id.as_str()
+                    && anchor.kind == LocalAnchorKind::Principle
+                    && anchor.local_id.0.as_str() == "product-design-principle"
+            })
+            .expect("derived principle anchor");
+        let mut derived = index
+            .principles_to_rules
+            .get(principle)
+            .expect("derived governance relation")
+            .iter()
+            .map(|anchor| anchor.item.0.clone())
+            .collect::<Vec<_>>();
+        derived.sort();
+        let mut expected = expected_policies.clone();
+        expected.sort();
+        assert_eq!(derived, expected);
+    }
+
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", "."])
+        .current_dir(temp.path())
+        .assert()
+        .success();
 }
 
 #[test]

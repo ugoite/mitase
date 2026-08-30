@@ -1,0 +1,56 @@
+schema: mitase/acceptance-corpus/v1
+fixture:
+  id: ugoite-foundation-policy
+  version: 1
+source:
+  repository: ugoite/ugoite
+  revision: a872f4992bcb3633681eb0383e101453f00b32db
+  files:
+    philosophies: docs/spec/philosophy/foundation.yaml
+    policies: docs/spec/policies/policies.yaml
+  source_metadata:
+    category:
+      philosophies: Philosophy
+      policies: Implementation Policies
+    version: 1
+    language: en
+    last_updated: 2026-02-15
+expected:
+  philosophy_count: 4
+  policy_count: 16
+  philosophy_to_policies:
+    PHIL-001: [POL-001, POL-002, POL-004, POL-005, POL-007, POL-012, POL-014, POL-016]
+    PHIL-002: [POL-003, POL-004, POL-005, POL-011]
+    PHIL-003: [POL-001, POL-002, POL-005, POL-006, POL-007, POL-008, POL-009, POL-012, POL-013, POL-014, POL-016]
+    PHIL-004: [POL-006, POL-008, POL-009, POL-010, POL-011, POL-015]
+  policy_to_philosophies:
+    POL-001: [PHIL-001, PHIL-003]
+    POL-002: [PHIL-001, PHIL-003]
+    POL-003: [PHIL-002]
+    POL-004: [PHIL-001, PHIL-002]
+    POL-005: [PHIL-001, PHIL-002, PHIL-003]
+    POL-006: [PHIL-003, PHIL-004]
+    POL-007: [PHIL-001, PHIL-003]
+    POL-008: [PHIL-003, PHIL-004]
+    POL-009: [PHIL-003, PHIL-004]
+    POL-010: [PHIL-004]
+    POL-011: [PHIL-002, PHIL-004]
+    POL-012: [PHIL-001, PHIL-003]
+    POL-013: [PHIL-003]
+    POL-014: [PHIL-001, PHIL-003]
+    POL-015: [PHIL-004]
+    POL-016: [PHIL-001, PHIL-003]
+translation:
+  philosophy_fields:
+    product_design_principle: principles[].id=product-design-principle
+    coding_guideline: principles[].id=coding-guideline
+  policy_fields:
+    linked_philosophies: rules[].governed_by
+    linked_requirements: recorded in translation-ledger.md; downstream migration is out of scope
+    linked_specifications: recorded in translation-ledger.md; exact Artifact bindings are deferred
+  policy_rule:
+    id: governance
+    level: should
+  reverse_relation: SpecIndex.rules_to_principles
+decision:
+  generic_mitase_schema_extension: none

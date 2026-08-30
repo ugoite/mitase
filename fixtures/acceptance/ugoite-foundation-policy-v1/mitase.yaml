@@ -1,0 +1,22 @@
+schema: mitase/config/v1
+workspace:
+  spec_roots: [spec]
+  excludes: []
+inventory:
+  active_profile: default
+  profiles:
+    - id: default
+      providers:
+        declared:
+          roots:
+            - corpus.yaml
+            - translation-ledger.md
+validation:
+  preset: strict
+  readiness:
+    target: off
+    limits: { max_ownership_scope_units: 64 }
+  changed:
+    baseline: { strategy: parent }
+    require_owned_changes: false
+verification: { runners: {} }
