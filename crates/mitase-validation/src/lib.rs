@@ -10,8 +10,8 @@ use mitase_spec_model::{
     TargetClaim, VerificationRunnerRef,
 };
 use mitase_workspace::{
-    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_target_in_workspace,
-    selector_supports_editable,
+    AnchorValue, ArtifactResolution, ResolvedTarget, SpecIndex, SpecWorkspace,
+    resolve_target_against_inventory, selector_supports_adapter, selector_supports_editable,
 };
 pub use readiness::{
     ReadinessAxis, ReadinessAxisId, ReadinessReport, ReadinessSubject,
@@ -1526,20 +1526,22 @@ fn target_changed_by_files(
     changed_files: &[ChangedFile],
 ) -> bool {
     let baseline_hit = baseline_workspace
-        .zip(baseline_index.and_then(|index| index.target(reference)))
-        .and_then(|(workspace, target)| {
-            resolve_target_in_workspace(workspace, target)
-                .ok()
-                .map(|resolved| {
+        .zip(baseline_index)
+        .and_then(|(workspace, index)| {
+            index.target(reference).and_then(|target| {
+                let resolution =
+                    resolve_target_against_inventory(workspace, target, &index.artifact_units);
+                resolution.resolved().map(|resolved| {
                     changed_files.iter().any(|file| {
                         changed_file_impacts_target(
                             TargetRangeSide::Old,
                             &resolved.path.to_string_lossy(),
-                            Some(&resolved),
+                            Some(resolved),
                             file,
                         )
                     })
                 })
+            })
         })
         .unwrap_or(false);
     if baseline_hit {
@@ -1548,18 +1550,21 @@ fn target_changed_by_files(
     current_index
         .target(reference)
         .and_then(|target| {
-            resolve_target_in_workspace(current_workspace, target)
-                .ok()
-                .map(|resolved| {
-                    changed_files.iter().any(|file| {
-                        changed_file_impacts_target(
-                            TargetRangeSide::New,
-                            &resolved.path.to_string_lossy(),
-                            Some(&resolved),
-                            file,
-                        )
-                    })
+            let resolution = resolve_target_against_inventory(
+                current_workspace,
+                target,
+                &current_index.artifact_units,
+            );
+            resolution.resolved().map(|resolved| {
+                changed_files.iter().any(|file| {
+                    changed_file_impacts_target(
+                        TargetRangeSide::New,
+                        &resolved.path.to_string_lossy(),
+                        Some(resolved),
+                        file,
+                    )
                 })
+            })
         })
         .unwrap_or(false)
 }
@@ -2480,24 +2485,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 }
                 _ => {}
             }
-            let expected = match &target.selector {
-                Selector::File => true,
-                Selector::Symbol { .. } => {
-                    matches!(
-                        target.adapter.as_str(),
-                        "rust" | "typescript" | "javascript" | "shell" | "python" | "go"
-                    )
-                }
-                Selector::Operation { .. } => target.adapter == "openapi",
-                Selector::Heading { .. } => target.adapter == "markdown",
-                Selector::JsonPointer { .. } => {
-                    matches!(
-                        target.adapter.as_str(),
-                        "yaml" | "json" | "json-schema" | "openapi"
-                    )
-                }
-                Selector::Marker { .. } => true,
-            };
+            let expected = selector_supports_adapter(&target.adapter, &target.selector);
             if !expected {
                 push(
                     out,
@@ -2523,8 +2511,12 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 target_id: target.id.clone(),
             };
             let advisory = advisory_absent_targets.contains(&target_ref);
-            match resolve_target_in_workspace(ctx.workspace, target) {
-                Ok(_) if target.lifecycle == ArtifactTargetLifecycle::Absent && !advisory => {
+            let resolution =
+                resolve_target_against_inventory(ctx.workspace, target, &ctx.index.artifact_units);
+            match resolution {
+                ArtifactResolution::Resolved(_)
+                    if target.lifecycle == ArtifactTargetLifecycle::Absent && !advisory =>
+                {
                     push(
                         out,
                         "MITASE-TARGET-002",
@@ -2533,11 +2525,27 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                Err(e) if target.lifecycle == ArtifactTargetLifecycle::Present && !advisory => {
+                ArtifactResolution::Unresolved(failure)
+                | ArtifactResolution::Ambiguous(failure)
+                    if target.lifecycle == ArtifactTargetLifecycle::Present && !advisory =>
+                {
                     push(
                         out,
                         "MITASE-TARGET-002",
-                        e.to_string(),
+                        failure.message,
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                ArtifactResolution::Unsupported(failure)
+                    if target.lifecycle == ArtifactTargetLifecycle::Present
+                        && !advisory
+                        && expected =>
+                {
+                    push(
+                        out,
+                        "MITASE-TARGET-005",
+                        failure.message,
                         target.path.to_string_lossy(),
                         Some(anchor.clone()),
                     );
@@ -2736,6 +2744,85 @@ mod tests {
         })
     }
 
+    #[test]
+    fn resolver_outcomes_enter_the_normal_target_diagnostic_model() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("spec")).expect("spec dir");
+        fs::create_dir_all(tempdir.path().join("docs")).expect("docs dir");
+        fs::write(
+            tempdir.path().join("docs/guide.md"),
+            "# Shared\nfirst\n## Shared\nsecond\n",
+        )
+        .expect("guide");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  excludes: []\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers:\n",
+                "        markdown: { roots: [docs] }\n",
+                "        rust: { roots: [docs] }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
+                "  changed:\n",
+                "    require_owned_changes: false\n",
+                "verification: { runners: {} }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: mitase/spec/v1\n",
+                "kind: features\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Resolver diagnostics\n",
+                "    summary: Resolver diagnostics.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: docs\n",
+                "        role: implementation\n",
+                "        facet: docs\n",
+                "        responsibility: Document resolver behavior.\n",
+                "        targets:\n",
+                "          - id: ambiguous-heading\n",
+                "            adapter: markdown\n",
+                "            path: docs/guide.md\n",
+                "            selector: { kind: heading, value: Shared }\n",
+                "          - id: unsupported-heading\n",
+                "            adapter: rust\n",
+                "            path: docs/guide.md\n",
+                "            selector: { kind: heading, value: Shared }\n",
+            ),
+        )
+        .expect("feature");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "MITASE-TARGET-002"
+                && diagnostic.message.contains("heading Shared is ambiguous")
+        }));
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "MITASE-TARGET-005"
+                && diagnostic
+                    .message
+                    .contains("adapter and selector kind are incompatible")
+        }));
+    }
+
     fn write_generated_binding_workspace(root: &Path) {
         fs::create_dir_all(root.join("spec")).expect("spec dir");
         fs::create_dir_all(root.join("src")).expect("src dir");
@@ -2750,7 +2837,7 @@ mod tests {
                 "  active_profile: default\n",
                 "  profiles:\n",
                 "    - id: default\n",
-                "      providers: { rust: {} }\n",
+                "      providers: { html: {} }\n",
                 "validation:\n",
                 "  preset: standard\n",
                 "  readiness:\n",
@@ -2762,7 +2849,11 @@ mod tests {
             ),
         )
         .expect("config");
-        fs::write(root.join("src/generated.rs"), "pub fn generated() {}\n").expect("artifact");
+        fs::write(
+            root.join("src/generated.html"),
+            r#"<main data-generated="yes"></main>"#,
+        )
+        .expect("artifact");
         fs::write(
             root.join("spec/feature.yaml"),
             concat!(
@@ -2781,7 +2872,7 @@ mod tests {
                 "        facet: backend\n",
                 "        responsibility: Generated artifact.\n",
                 "        targets:\n",
-                "          - { id: generated-file, adapter: rust, path: src/generated.rs, selector: { kind: marker, value: 'pub fn generated' }, claims: [] }\n",
+                "          - { id: generated-file, adapter: html, path: src/generated.html, selector: { kind: marker, value: 'data-generated=\"yes\"' }, claims: [] }\n",
             ),
         )
         .expect("feature spec");
@@ -3432,6 +3523,7 @@ requirements:
     #[test]
     fn non_file_targets_ignore_same_file_sibling_changes() {
         let resolved = ResolvedTarget {
+            identity: "typescript:web/login.ts::submitLogin".to_string(),
             path: PathBuf::from("web/login.ts"),
             description: "symbols submitLogin".to_string(),
             symbols: vec!["submitLogin".to_string()],

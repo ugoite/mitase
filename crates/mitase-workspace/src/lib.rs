@@ -377,13 +377,8 @@ impl SpecIndex {
                     target_id: target.id.clone(),
                 };
                 let identities = artifact_identities_for_target(&out.artifact_units, target);
-                if identities.len() > 1 {
-                    bail!(
-                        "target {target_ref} resolves to {} active artifact identities; exact selectors must resolve exactly one",
-                        identities.len()
-                    );
-                }
-                if let Some(identity) = identities.first() {
+                if identities.len() == 1 {
+                    let identity = &identities[0];
                     out.all_target_to_artifact
                         .insert(target_ref.clone(), identity.clone());
                     if current_target {
@@ -391,7 +386,7 @@ impl SpecIndex {
                             .insert(target_ref.clone(), identity.clone());
                     }
                 }
-                if let Some(identity) = identities.first()
+                if identities.len() == 1
                     && current_target
                     && matches!(
                         binding.role,
@@ -402,6 +397,7 @@ impl SpecIndex {
                         Some(ItemStatus::Planned)
                     )
                 {
+                    let identity = &identities[0];
                     out.artifact_owners
                         .entry(identity.clone())
                         .or_default()
@@ -636,51 +632,101 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
             {
                 return false;
             }
-            match &target.selector {
-                Selector::Symbol { name } => {
-                    unit.kind == ArtifactUnitKind::Symbol
-                        && symbol_identity_matches(&unit.identity, name)
-                }
-                Selector::Operation { method, path } => {
-                    unit.kind == ArtifactUnitKind::Operation
-                        && unit.identity.ends_with(&format!(
-                            "::{} {}",
-                            method.to_ascii_uppercase(),
-                            path
-                        ))
-                }
-                Selector::Heading { value } => {
-                    unit.kind == ArtifactUnitKind::Heading
-                        && unit.identity.ends_with(&format!("::heading::{value}"))
-                }
-                Selector::File => unit.kind == ArtifactUnitKind::File,
-                Selector::JsonPointer { value } => {
-                    unit.kind == ArtifactUnitKind::SchemaNode
-                        && unit.identity.ends_with(&format!("::pointer::{value}"))
-                }
-                Selector::Marker { value } => {
-                    unit.kind == ArtifactUnitKind::Marker
-                        && unit.identity.starts_with(&format!(
-                            "{}:{}::marker::{}@",
-                            target.adapter,
-                            target.path.to_string_lossy(),
-                            value
-                        ))
-                }
-            }
+            artifact_unit_matches_selector(unit, &target.selector)
         })
         .map(|unit| unit.identity.clone())
         .collect()
 }
 
+fn artifact_unit_matches_selector(unit: &ArtifactUnit, selector: &Selector) -> bool {
+    if matches!(selector, Selector::File) {
+        return unit.kind == ArtifactUnitKind::File;
+    }
+    let Some(identity) = unit_semantic_identity(unit) else {
+        return false;
+    };
+    match selector {
+        Selector::File => unreachable!("file selectors return before semantic identity parsing"),
+        Selector::Symbol { name } => {
+            unit.kind == ArtifactUnitKind::Symbol && symbol_identity_matches(identity, name)
+        }
+        Selector::Operation { method, path } => {
+            unit.kind == ArtifactUnitKind::Operation
+                && operation_identity_matches(identity, method, path)
+        }
+        Selector::Heading { value } => {
+            unit.kind == ArtifactUnitKind::Heading
+                && identity.starts_with("heading::")
+                && structured_identity_matches(identity, "heading::", value)
+        }
+        Selector::JsonPointer { value } => {
+            unit.kind == ArtifactUnitKind::SchemaNode
+                && identity.starts_with("pointer::")
+                && structured_identity_matches(identity, "pointer::", value)
+        }
+        Selector::Marker { value } => {
+            unit.kind == ArtifactUnitKind::Marker
+                && identity.starts_with("marker::")
+                && marker_identity_matches(identity, value)
+        }
+    }
+}
+
+fn unit_semantic_identity(unit: &ArtifactUnit) -> Option<&str> {
+    let prefix = format!("{}:{}::", unit.adapter, unit.path.to_string_lossy());
+    unit.identity.strip_prefix(&prefix)
+}
+
+/// A bare symbol selects an exact leaf name within the target file; a
+/// qualified name selects the exact trailing semantic path. This is a
+/// deliberate shorthand, not a substring search: path separators and the
+/// optional inventory metadata suffix are parsed as identity boundaries.
 fn symbol_identity_matches(identity: &str, name: &str) -> bool {
-    identity.ends_with(&format!("::{name}"))
-        || identity.contains(&format!("::{name}["))
-        || identity.contains(&format!("::{name}@"))
-        || identity.ends_with(&format!("::{name})"))
+    let identity = identity.split_once('[').map_or(identity, |(base, _)| base);
+    identity == name
+        || identity.ends_with(&format!("::{name}"))
         || name.rsplit_once("::").is_some_and(|(container, leaf)| {
             identity.ends_with(&format!("::impl({container})::{leaf}"))
         })
+}
+
+fn operation_identity_matches(identity: &str, method: &str, path: &str) -> bool {
+    let Some((actual_method, actual_path)) = identity.split_once(' ') else {
+        return false;
+    };
+    actual_method.eq_ignore_ascii_case(method) && actual_path == path
+}
+
+fn structured_identity_matches(identity: &str, marker: &str, value: &str) -> bool {
+    let Some(actual) = identity.strip_prefix(marker) else {
+        return false;
+    };
+    let base = actual
+        .rsplit_once('@')
+        .filter(|(_, occurrence)| {
+            !occurrence.is_empty() && occurrence.chars().all(|c| c.is_ascii_digit())
+        })
+        .map_or(actual, |(base, _)| base);
+    base == value
+}
+
+fn marker_identity_matches(identity: &str, value: &str) -> bool {
+    let Some(actual) = identity.strip_prefix("marker::") else {
+        return false;
+    };
+    let actual = actual
+        .rsplit_once('@')
+        .map_or(actual, |(marker, occurrence)| {
+            if occurrence
+                .chars()
+                .all(|character| character.is_ascii_digit())
+            {
+                marker
+            } else {
+                actual
+            }
+        });
+    actual == value
 }
 
 fn scope_matches(scope: &OwnershipScope, unit: &ArtifactUnit) -> bool {
@@ -797,8 +843,126 @@ fn compile_excludes(patterns: &[mitase_project_model::RepoPathPattern]) -> Resul
     Ok(Some(builder.build()?))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SelectorKind {
+    File,
+    Symbol,
+    Operation,
+    Heading,
+    JsonPointer,
+    Marker,
+}
+
+impl SelectorKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Symbol => "symbol",
+            Self::Operation => "operation",
+            Self::Heading => "heading",
+            Self::JsonPointer => "json-pointer",
+            Self::Marker => "marker",
+        }
+    }
+}
+
+pub fn selector_kind(selector: &Selector) -> SelectorKind {
+    match selector {
+        Selector::File => SelectorKind::File,
+        Selector::Symbol { .. } => SelectorKind::Symbol,
+        Selector::Operation { .. } => SelectorKind::Operation,
+        Selector::Heading { .. } => SelectorKind::Heading,
+        Selector::JsonPointer { .. } => SelectorKind::JsonPointer,
+        Selector::Marker { .. } => SelectorKind::Marker,
+    }
+}
+
+const FILE_SELECTORS: &[SelectorKind] = &[SelectorKind::File];
+const SYMBOL_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Symbol];
+const MARKDOWN_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Heading];
+const OPENAPI_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Operation];
+const STRUCTURED_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::JsonPointer];
+const HTML_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Marker];
+
+/// The authoritative adapter × exact-selector compatibility matrix.
+pub fn supported_selector_kinds(adapter: &str) -> &'static [SelectorKind] {
+    match adapter {
+        "rust" | "typescript" | "javascript" | "shell" | "python" | "go" => SYMBOL_SELECTORS,
+        "markdown" => MARKDOWN_SELECTORS,
+        "openapi" => OPENAPI_SELECTORS,
+        "json" | "json-schema" => STRUCTURED_SELECTORS,
+        "yaml" => FILE_SELECTORS,
+        "html" => HTML_SELECTORS,
+        "declared" => FILE_SELECTORS,
+        _ => &[],
+    }
+}
+
+pub fn selector_supports_adapter(adapter: &str, selector: &Selector) -> bool {
+    supported_selector_kinds(adapter).contains(&selector_kind(selector))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolutionFailure {
+    pub adapter: String,
+    pub selector: SelectorKind,
+    pub message: String,
+    pub candidates: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtifactResolution {
+    Resolved(ResolvedTarget),
+    Unresolved(ResolutionFailure),
+    Ambiguous(ResolutionFailure),
+    Unsupported(ResolutionFailure),
+}
+
+impl ArtifactResolution {
+    pub fn resolved(&self) -> Option<&ResolvedTarget> {
+        match self {
+            Self::Resolved(target) => Some(target),
+            Self::Unresolved(_) | Self::Ambiguous(_) | Self::Unsupported(_) => None,
+        }
+    }
+
+    pub fn failure(&self) -> Option<&ResolutionFailure> {
+        match self {
+            Self::Resolved(_) => None,
+            Self::Unresolved(failure) | Self::Ambiguous(failure) | Self::Unsupported(failure) => {
+                Some(failure)
+            }
+        }
+    }
+
+    pub const fn status(&self) -> &'static str {
+        match self {
+            Self::Resolved(_) => "resolved",
+            Self::Unresolved(_) => "unresolved",
+            Self::Ambiguous(_) => "ambiguous",
+            Self::Unsupported(_) => "unsupported",
+        }
+    }
+
+    pub fn message(&self) -> Option<&str> {
+        self.failure().map(|failure| failure.message.as_str())
+    }
+
+    /// Preserve the convenient assertion style used by callers while keeping
+    /// semantic resolution states explicit in the return type.
+    pub fn expect(self, message: &str) -> ResolvedTarget {
+        match self {
+            Self::Resolved(target) => target,
+            other => panic!("{message}: {}", other.message().unwrap_or(other.status())),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedTarget {
+    /// Stable semantic identity. Source offsets below are derived metadata and
+    /// must not be used as the target's persisted identity.
+    pub identity: String,
     pub path: PathBuf,
     pub description: String,
     pub symbols: Vec<String>,
@@ -811,34 +975,31 @@ pub struct ResolvedTarget {
     pub excerpt: String,
     pub excerpt_hash: String,
 }
-pub fn resolve_target(root: &Path, target: &ArtifactTarget) -> Result<ResolvedTarget> {
+pub fn resolve_target(root: &Path, target: &ArtifactTarget) -> ArtifactResolution {
     resolve_target_with_adapters(root, target, std::slice::from_ref(&target.adapter))
 }
 
 pub fn resolve_target_in_workspace(
     workspace: &SpecWorkspace,
     target: &ArtifactTarget,
-) -> Result<ResolvedTarget> {
-    const KNOWN: &[&str] = &[
-        "rust",
-        "typescript",
-        "javascript",
-        "shell",
-        "python",
-        "go",
-        "java",
-        "ruby",
-        "csharp",
-        "markdown",
-        "openapi",
-        "yaml",
-        "json",
-        "json-schema",
-        "html",
-        "declared",
-    ];
-    if !KNOWN.contains(&target.adapter.as_str()) {
-        bail!("unknown adapter {}", target.adapter);
+) -> ArtifactResolution {
+    if supported_selector_kinds(&target.adapter).is_empty() {
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!("unknown adapter {}", target.adapter),
+            vec![],
+        ));
+    }
+    if !selector_supports_adapter(&target.adapter, &target.selector) {
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!(
+                "adapter {} does not support {} selectors",
+                target.adapter,
+                selector_kind(&target.selector).as_str()
+            ),
+            vec![],
+        ));
     }
     if !workspace
         .config
@@ -848,46 +1009,121 @@ pub fn resolve_target_in_workspace(
         .find(|profile| profile.id == workspace.config.inventory.active_profile)
         .is_some_and(|profile| profile.providers.contains_key(&target.adapter))
     {
-        bail!("adapter {} is disabled", target.adapter);
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!("adapter {} is disabled", target.adapter),
+            vec![],
+        ));
     }
-    let canonical_root = workspace.root.canonicalize()?;
+    let canonical_root = match workspace.root.canonicalize() {
+        Ok(root) => root,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure(
+                target,
+                format!("workspace root could not be canonicalized: {error}"),
+                vec![],
+            ));
+        }
+    };
     let path = workspace.root.join(target.path.as_path());
     let canonical_path = path
         .canonicalize()
-        .with_context(|| format!("target path does not exist: {}", target.path.display()))?;
+        .with_context(|| format!("target path does not exist: {}", target.path.display()));
+    let canonical_path = match canonical_path {
+        Ok(path) => path,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure(target, error.to_string(), vec![]));
+        }
+    };
     if !canonical_path.starts_with(&canonical_root) {
-        bail!("target path escapes workspace through a symlink");
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            "target path escapes workspace through a symlink".into(),
+            vec![],
+        ));
     }
-    let content = workspace.read_bytes(&canonical_path)?;
-    resolve_target_from_content(&workspace.root, target, content)
+    let profile = workspace
+        .config
+        .inventory
+        .profiles
+        .iter()
+        .find(|profile| profile.id == workspace.config.inventory.active_profile)
+        .expect("checked active inventory profile");
+    let units = match InventoryRegistry::discover(
+        &InventoryContext {
+            workspace_root: workspace.root.clone(),
+            profile: profile.id.clone(),
+            settings: serde_yaml::Value::Null,
+            excludes: workspace
+                .config
+                .workspace
+                .excludes
+                .iter()
+                .map(|pattern| pattern.0.clone())
+                .collect(),
+            overlays: BTreeMap::new(),
+        },
+        profile,
+    ) {
+        Ok(units) => units,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure(
+                target,
+                format!("inventory could not resolve target: {error}"),
+                vec![],
+            ));
+        }
+    };
+    resolve_target_against_inventory(workspace, target, &units)
 }
 
 /// Resolve an active semantic inventory unit to its exact source range. The
 /// inventory may keep coarse spans (notably OpenAPI operations and JSON
 /// pointer nodes), so callers receive the exact source range rather than a
 /// coarse inventory span.
-pub fn resolve_artifact_unit(
-    workspace: &SpecWorkspace,
-    unit: &ArtifactUnit,
-) -> Result<ResolvedTarget> {
+pub fn resolve_artifact_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> ArtifactResolution {
     if !matches!(
         unit.reachability,
         mitase_inventory::ArtifactReachability::Active
     ) {
-        bail!("semantic artifact {} is not active", unit.identity);
+        return ArtifactResolution::Unresolved(ResolutionFailure {
+            adapter: unit.adapter.clone(),
+            selector: artifact_unit_kind_selector(&unit.kind),
+            message: format!("semantic artifact {} is not active", unit.identity),
+            candidates: vec![],
+        });
+    }
+    if unit.kind == ArtifactUnitKind::Symbol
+        && matches!(unit.adapter.as_str(), "python" | "go" | "shell")
+    {
+        return resolve_text_symbol_unit(workspace, unit);
     }
     let selector = match unit.kind {
         ArtifactUnitKind::Operation => {
             let operation = unit
                 .identity
-                .rsplit_once("::")
-                .map(|(_, operation)| operation)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("operation identity is malformed: {}", unit.identity)
-                })?;
-            let (method, path) = operation.split_once(' ').ok_or_else(|| {
-                anyhow::anyhow!("operation identity is malformed: {}", unit.identity)
-            })?;
+                .strip_prefix(&format!(
+                    "{}:{}::",
+                    unit.adapter,
+                    unit.path.to_string_lossy()
+                ))
+                .ok_or_else(|| format!("operation identity is malformed: {}", unit.identity));
+            let operation = match operation {
+                Ok(operation) => operation,
+                Err(message) => {
+                    return ArtifactResolution::Unresolved(failure_for_unit(unit, message, vec![]));
+                }
+            };
+            let (method, path) = match operation.split_once(' ') {
+                Some(parts) => parts,
+                None => {
+                    return ArtifactResolution::Unresolved(failure_for_unit(
+                        unit,
+                        format!("operation identity is malformed: {}", unit.identity),
+                        vec![],
+                    ));
+                }
+            };
             Selector::Operation {
                 method: method.into(),
                 path: path.into(),
@@ -896,32 +1132,66 @@ pub fn resolve_artifact_unit(
         ArtifactUnitKind::SchemaNode => {
             let pointer = unit
                 .identity
-                .rsplit_once("::pointer::")
-                .map(|(_, pointer)| pointer)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("schema identity is malformed: {}", unit.identity)
-                })?;
+                .strip_prefix(&format!(
+                    "{}:{}::pointer::",
+                    unit.adapter,
+                    unit.path.to_string_lossy()
+                ))
+                .ok_or_else(|| format!("schema identity is malformed: {}", unit.identity));
+            let pointer = match pointer {
+                Ok(pointer) => pointer,
+                Err(message) => {
+                    return ArtifactResolution::Unresolved(failure_for_unit(unit, message, vec![]));
+                }
+            };
             Selector::JsonPointer {
                 value: pointer.into(),
             }
         }
         _ => {
-            // Symbol, heading and marker inventory spans are source-derived
-            // already.  Preserve those exact spans instead of attempting to
-            // recover a declared target from a potentially broader owner.
-            let bytes = workspace.read_bytes(&workspace.root.join(unit.path.as_path()))?;
-            let text = std::str::from_utf8(&bytes).map_err(|error| {
-                anyhow::anyhow!("inventory target source is not UTF-8: {error}")
-            })?;
+            // File, symbol, heading, and marker inventory spans are source-
+            // derived already. Preserve those exact spans instead of
+            // attempting to recover a declared target from a potentially
+            // broader owner. Only structured units above need source-aware
+            // range recovery because their inventory spans are intentionally
+            // coarse.
+            let bytes = match workspace.read_bytes(&workspace.root.join(unit.path.as_path())) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    return ArtifactResolution::Unresolved(failure_for_unit(
+                        unit,
+                        format!("read inventory target source: {error}"),
+                        vec![],
+                    ));
+                }
+            };
+            let text = match std::str::from_utf8(&bytes) {
+                Ok(text) => text,
+                Err(error) => {
+                    return ArtifactResolution::Unresolved(failure_for_unit(
+                        unit,
+                        format!("inventory target source is not UTF-8: {error}"),
+                        vec![],
+                    ));
+                }
+            };
             let start = unit.span.byte_start.min(bytes.len());
             let end = unit.span.byte_end.min(bytes.len()).max(start);
-            let excerpt = text.get(start..end).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "inventory span is not on UTF-8 boundaries: {}",
-                    unit.identity
-                )
-            })?;
-            return Ok(ResolvedTarget {
+            let excerpt = match text.get(start..end) {
+                Some(excerpt) => excerpt,
+                None => {
+                    return ArtifactResolution::Unresolved(failure_for_unit(
+                        unit,
+                        format!(
+                            "inventory span is not on UTF-8 boundaries: {}",
+                            unit.identity
+                        ),
+                        vec![],
+                    ));
+                }
+            };
+            return ArtifactResolution::Resolved(ResolvedTarget {
+                identity: unit.identity.clone(),
                 path: unit.path.as_path().to_path_buf(),
                 description: format!("semantic artifact {}", unit.identity),
                 symbols: if matches!(unit.kind, ArtifactUnitKind::File) {
@@ -954,52 +1224,196 @@ pub fn resolve_artifact_unit(
         lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
         claims: vec![],
     };
-    resolve_target_in_workspace(workspace, &target)
+    let content = match workspace.read_bytes(&workspace.root.join(unit.path.as_path())) {
+        Ok(content) => content,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure_for_unit(
+                unit,
+                format!("read inventory target source: {error}"),
+                vec![],
+            ));
+        }
+    };
+    match resolve_target_from_content(&target, content) {
+        Ok(mut resolved) => {
+            resolved.identity = unit.identity.clone();
+            ArtifactResolution::Resolved(resolved)
+        }
+        Err(error) => {
+            ArtifactResolution::Unresolved(failure_for_unit(unit, error.to_string(), vec![]))
+        }
+    }
+}
+
+fn resolve_text_symbol_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> ArtifactResolution {
+    let name = match unit_semantic_identity(unit) {
+        Some(name) if !name.is_empty() => name,
+        _ => {
+            return ArtifactResolution::Unresolved(failure_for_unit(
+                unit,
+                format!("symbol identity is malformed: {}", unit.identity),
+                vec![],
+            ));
+        }
+    };
+    let content = match workspace.read_bytes(&workspace.root.join(unit.path.as_path())) {
+        Ok(content) => content,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure_for_unit(
+                unit,
+                format!("read inventory target source: {error}"),
+                vec![],
+            ));
+        }
+    };
+    let target = ArtifactTarget {
+        id: LocalId::from("semantic-unit"),
+        adapter: unit.adapter.clone(),
+        path: unit.path.clone(),
+        selector: Selector::Symbol {
+            name: name.to_owned(),
+        },
+        lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
+        claims: vec![],
+    };
+    match resolve_target_from_content(&target, content) {
+        Ok(mut resolved) => {
+            resolved.identity = unit.identity.clone();
+            ArtifactResolution::Resolved(resolved)
+        }
+        Err(error) => classify_content_error(&target, error),
+    }
+}
+
+/// Resolve a target against a previously discovered inventory. Validation and
+/// indexing use this entrypoint so every consumer observes the same match set.
+pub fn resolve_target_against_inventory(
+    workspace: &SpecWorkspace,
+    target: &ArtifactTarget,
+    units: &[ArtifactUnit],
+) -> ArtifactResolution {
+    if !selector_supports_adapter(&target.adapter, &target.selector) {
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!(
+                "adapter {} does not support {} selectors",
+                target.adapter,
+                selector_kind(&target.selector).as_str()
+            ),
+            vec![],
+        ));
+    }
+    if !workspace
+        .config
+        .inventory
+        .profiles
+        .iter()
+        .find(|profile| profile.id == workspace.config.inventory.active_profile)
+        .is_some_and(|profile| profile.providers.contains_key(&target.adapter))
+    {
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!("adapter {} is disabled", target.adapter),
+            vec![],
+        ));
+    }
+    let matches = units
+        .iter()
+        .filter(|unit| {
+            unit.adapter == target.adapter
+                && unit.path == target.path
+                && matches!(
+                    unit.reachability,
+                    mitase_inventory::ArtifactReachability::Active
+                )
+                && artifact_unit_matches_selector(unit, &target.selector)
+        })
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => ArtifactResolution::Unresolved(failure(target, unresolved_message(target), vec![])),
+        [unit] => resolve_artifact_unit(workspace, unit),
+        _ => ArtifactResolution::Ambiguous(failure(
+            target,
+            ambiguous_message(target, matches.len()),
+            matches.iter().map(|unit| unit.identity.clone()).collect(),
+        )),
+    }
 }
 
 pub fn resolve_target_with_adapters(
     root: &Path,
     target: &ArtifactTarget,
     enabled: &[String],
-) -> Result<ResolvedTarget> {
-    const KNOWN: &[&str] = &[
-        "rust",
-        "typescript",
-        "javascript",
-        "shell",
-        "python",
-        "go",
-        "java",
-        "ruby",
-        "csharp",
-        "markdown",
-        "openapi",
-        "yaml",
-        "json",
-        "json-schema",
-        "html",
-        "declared",
-    ];
-    if !KNOWN.contains(&target.adapter.as_str()) {
-        bail!("unknown adapter {}", target.adapter);
+) -> ArtifactResolution {
+    if supported_selector_kinds(&target.adapter).is_empty() {
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!("unknown adapter {}", target.adapter),
+            vec![],
+        ));
+    }
+    if !selector_supports_adapter(&target.adapter, &target.selector) {
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!(
+                "adapter {} does not support {} selectors",
+                target.adapter,
+                selector_kind(&target.selector).as_str()
+            ),
+            vec![],
+        ));
     }
     if !enabled.contains(&target.adapter) {
-        bail!("adapter {} is disabled", target.adapter);
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            format!("adapter {} is disabled", target.adapter),
+            vec![],
+        ));
     }
-    let canonical_root = root.canonicalize()?;
+    let canonical_root = match root.canonicalize() {
+        Ok(root) => root,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure(
+                target,
+                format!("workspace root could not be canonicalized: {error}"),
+                vec![],
+            ));
+        }
+    };
     let path = root.join(target.path.as_path());
     let canonical_path = path
         .canonicalize()
-        .with_context(|| format!("target path does not exist: {}", target.path.display()))?;
+        .with_context(|| format!("target path does not exist: {}", target.path.display()));
+    let canonical_path = match canonical_path {
+        Ok(path) => path,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure(target, error.to_string(), vec![]));
+        }
+    };
     if !canonical_path.starts_with(&canonical_root) {
-        bail!("target path escapes workspace through a symlink");
+        return ArtifactResolution::Unsupported(failure(
+            target,
+            "target path escapes workspace through a symlink".into(),
+            vec![],
+        ));
     }
-    let content = fs::read(&canonical_path)?;
-    resolve_target_from_content(root, target, content)
+    let content = match fs::read(&canonical_path) {
+        Ok(content) => content,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure(
+                target,
+                format!("read target: {error}"),
+                vec![],
+            ));
+        }
+    };
+    match resolve_target_from_content(target, content) {
+        Ok(resolved) => ArtifactResolution::Resolved(resolved),
+        Err(error) => classify_content_error(target, error),
+    }
 }
 
 fn resolve_target_from_content(
-    _root: &Path,
     target: &ArtifactTarget,
     content: Vec<u8>,
 ) -> Result<ResolvedTarget> {
@@ -1144,18 +1558,25 @@ fn resolve_target_from_content(
                 if value.trim().is_empty() {
                     bail!("marker selector must not be empty");
                 }
-                let marker_matches = text.match_indices(value).count();
-                if marker_matches == 0 {
+                let matches = html_marker_matches(&text, value);
+                if matches.is_empty() {
                     bail!("marker {value} not found");
                 }
-                if marker_matches > 1 {
+                if matches.len() > 1 {
                     bail!("marker {value} is ambiguous");
                 }
-                let (byte_start, byte_end, line_start, line_end, excerpt) =
-                    extract_marker_block(&text, value).unwrap_or_else(|| {
-                        let excerpt = text.to_string();
-                        (0, content.len(), 1, text.lines().count(), excerpt)
-                    });
+                let (byte_start, byte_end, _marker_index) = matches[0];
+                let line_start = text[..byte_start]
+                    .bytes()
+                    .filter(|byte| *byte == b'\n')
+                    .count()
+                    + 1;
+                let line_end = text[..byte_end]
+                    .bytes()
+                    .filter(|byte| *byte == b'\n')
+                    .count()
+                    + 1;
+                let excerpt = text[byte_start..byte_end].to_owned();
                 (
                     format!("marker {value}"),
                     vec![],
@@ -1171,6 +1592,7 @@ fn resolve_target_from_content(
     let mut hash = Sha256::new();
     hash.update(&content);
     Ok(ResolvedTarget {
+        identity: target_identity(target, &text, byte_start),
         path: target.path.as_path().to_path_buf(),
         description,
         symbols,
@@ -1183,6 +1605,148 @@ fn resolve_target_from_content(
         excerpt,
         excerpt_hash,
     })
+}
+
+fn failure(target: &ArtifactTarget, message: String, candidates: Vec<String>) -> ResolutionFailure {
+    ResolutionFailure {
+        adapter: target.adapter.clone(),
+        selector: selector_kind(&target.selector),
+        message,
+        candidates,
+    }
+}
+
+fn failure_for_unit(
+    unit: &ArtifactUnit,
+    message: String,
+    candidates: Vec<String>,
+) -> ResolutionFailure {
+    ResolutionFailure {
+        adapter: unit.adapter.clone(),
+        selector: artifact_unit_kind_selector(&unit.kind),
+        message,
+        candidates,
+    }
+}
+
+fn artifact_unit_kind_selector(kind: &ArtifactUnitKind) -> SelectorKind {
+    match kind {
+        ArtifactUnitKind::File | ArtifactUnitKind::Generated => SelectorKind::File,
+        ArtifactUnitKind::Symbol => SelectorKind::Symbol,
+        ArtifactUnitKind::Marker => SelectorKind::Marker,
+        ArtifactUnitKind::Operation => SelectorKind::Operation,
+        ArtifactUnitKind::Heading => SelectorKind::Heading,
+        ArtifactUnitKind::SchemaNode => SelectorKind::JsonPointer,
+    }
+}
+
+fn unresolved_message(target: &ArtifactTarget) -> String {
+    match &target.selector {
+        Selector::Symbol { name } => format!("symbol {name} not found"),
+        Selector::Operation { method, path } => {
+            format!("operation {} {path} not found", method.to_ascii_uppercase())
+        }
+        Selector::Heading { value } => format!("heading {value} not found"),
+        Selector::JsonPointer { value } => format!("pointer {value} not found"),
+        Selector::Marker { value } => format!("marker {value} not found"),
+        Selector::File => format!("file {} not found", target.path.display()),
+    }
+}
+
+fn ambiguous_message(target: &ArtifactTarget, matches: usize) -> String {
+    let subject = match &target.selector {
+        Selector::Symbol { name } => format!("symbol {name}"),
+        Selector::Operation { method, path } => {
+            format!("operation {} {path}", method.to_ascii_uppercase())
+        }
+        Selector::Heading { value } => format!("heading {value}"),
+        Selector::JsonPointer { value } => format!("pointer {value}"),
+        Selector::Marker { value } => format!("marker {value}"),
+        Selector::File => format!("file {}", target.path.display()),
+    };
+    format!("{subject} is ambiguous ({matches} active matches)")
+}
+
+fn classify_content_error(target: &ArtifactTarget, error: anyhow::Error) -> ArtifactResolution {
+    let message = error.to_string();
+    if message.to_ascii_lowercase().contains("ambiguous") {
+        ArtifactResolution::Ambiguous(failure(target, message, vec![]))
+    } else {
+        ArtifactResolution::Unresolved(failure(target, message, vec![]))
+    }
+}
+
+fn target_identity(target: &ArtifactTarget, text: &str, byte_start: usize) -> String {
+    let path = target.path.to_string_lossy();
+    match &target.selector {
+        Selector::File => format!("{}:{path}", target.adapter),
+        Selector::Symbol { name } => format!("{}:{path}::{name}", target.adapter),
+        Selector::Operation {
+            method,
+            path: route,
+        } => format!(
+            "{}:{path}::{} {route}",
+            target.adapter,
+            method.to_ascii_uppercase()
+        ),
+        Selector::Heading { value } => format!("{}:{path}::heading::{value}", target.adapter),
+        Selector::JsonPointer { value } => format!("{}:{path}::pointer::{value}", target.adapter),
+        Selector::Marker { value } => {
+            let occurrence = html_marker_matches(text, value)
+                .into_iter()
+                .find(|(start, _, _)| *start == byte_start)
+                .map(|(_, _, occurrence)| occurrence)
+                .unwrap_or(0);
+            format!("{}:{path}::marker::{value}@{occurrence}", target.adapter)
+        }
+    }
+}
+
+fn html_marker_matches(text: &str, value: &str) -> Vec<(usize, usize, usize)> {
+    let mut occurrences = BTreeMap::<String, usize>::new();
+    let mut matches = Vec::new();
+    for (start, _) in text.match_indices("data-") {
+        let name_end = source_attribute_name_end(text, start);
+        let equals_start = name_end
+            + text[name_end..]
+                .find(|character: char| !character.is_ascii_whitespace())
+                .unwrap_or(0);
+        if text.as_bytes().get(equals_start) != Some(&b'=') {
+            continue;
+        }
+        let value_start = equals_start
+            + 1
+            + text[equals_start + 1..]
+                .find(|character: char| !character.is_ascii_whitespace())
+                .unwrap_or(0);
+        let Some(quote @ (b'"' | b'\'')) = text.as_bytes().get(value_start).copied() else {
+            continue;
+        };
+        let content_start = value_start + 1;
+        let Some(content_end_offset) = text.as_bytes()[content_start..]
+            .iter()
+            .position(|byte| *byte == quote)
+        else {
+            continue;
+        };
+        let end = content_start + content_end_offset + 1;
+        let marker = &text[start..end];
+        let occurrence = occurrences.entry(marker.to_owned()).or_insert(0);
+        if marker == value {
+            matches.push((start, end, *occurrence));
+        }
+        *occurrence += 1;
+    }
+    matches
+}
+
+fn source_attribute_name_end(text: &str, start: usize) -> usize {
+    text[start..]
+        .find(|character: char| {
+            character.is_ascii_whitespace() || matches!(character, '=' | '>' | '/')
+        })
+        .map(|offset| start + offset)
+        .unwrap_or(text.len())
 }
 
 fn is_json_document(text: &str) -> bool {
@@ -1461,27 +2025,6 @@ fn extract_heading_block(
     ))
 }
 
-fn extract_marker_block(text: &str, marker: &str) -> Option<(usize, usize, usize, usize, String)> {
-    let start_byte = text.find(marker)?;
-    let mut byte = 0usize;
-    for (index, line) in text.lines().enumerate() {
-        let line_start = index + 1;
-        let next = byte + line.len() + 1;
-        if next > start_byte {
-            let line_end = byte + line.len();
-            return Some((
-                byte,
-                line_end,
-                line_start,
-                line_start,
-                text[byte..line_end].to_string(),
-            ));
-        }
-        byte = next;
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1502,11 +2045,11 @@ mod tests {
         .expect("doc");
     }
 
-    fn target(selector: Selector) -> mitase_spec_model::ArtifactTarget {
+    fn target(adapter: &str, path: &str, selector: Selector) -> mitase_spec_model::ArtifactTarget {
         mitase_spec_model::ArtifactTarget {
             id: "doc".into(),
-            adapter: "rust".into(),
-            path: RepoPath::new("src/doc.md").expect("path"),
+            adapter: adapter.into(),
+            path: RepoPath::new(path).expect("path"),
             selector,
             lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
             claims: vec![],
@@ -1519,37 +2062,48 @@ mod tests {
         write_workspace(tempdir.path());
         let result = resolve_target_with_adapters(
             tempdir.path(),
-            &target(Selector::Heading {
-                value: "Shared".into(),
-            }),
-            &["rust".into()],
+            &target(
+                "markdown",
+                "src/doc.md",
+                Selector::Heading {
+                    value: "Shared".into(),
+                },
+            ),
+            &["markdown".into()],
         );
-        assert!(result.is_err());
+        assert!(matches!(result, ArtifactResolution::Ambiguous(_)));
         assert!(
             result
-                .unwrap_err()
-                .to_string()
-                .contains("heading Shared is ambiguous")
+                .message()
+                .is_some_and(|message| message.contains("heading Shared is ambiguous"))
         );
     }
 
     #[test]
     fn marker_selectors_reject_ambiguity() {
         let tempdir = tempdir().expect("tempdir");
-        write_workspace(tempdir.path());
+        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
+        fs::write(
+            tempdir.path().join("src/doc.html"),
+            r#"<main data-page="one"></main><aside data-page="one"></aside>"#,
+        )
+        .expect("html");
         let result = resolve_target_with_adapters(
             tempdir.path(),
-            &target(Selector::Marker {
-                value: "::dup::".into(),
-            }),
-            &["rust".into()],
+            &target(
+                "html",
+                "src/doc.html",
+                Selector::Marker {
+                    value: "data-page=\"one\"".into(),
+                },
+            ),
+            &["html".into()],
         );
-        assert!(result.is_err());
+        assert!(matches!(result, ArtifactResolution::Ambiguous(_)));
         assert!(
             result
-                .unwrap_err()
-                .to_string()
-                .contains("marker ::dup:: is ambiguous")
+                .message()
+                .is_some_and(|message| message.contains("marker data-page=\"one\" is ambiguous"))
         );
     }
 
@@ -1616,6 +2170,143 @@ mod tests {
         assert!(!resolved.excerpt.contains("other path"));
         assert_eq!(resolved.line_start, 4);
         assert_eq!(resolved.line_end, 4);
+    }
+
+    #[test]
+    fn selector_matrix_and_resolution_outcomes_are_explicit() {
+        assert!(selector_supports_adapter(
+            "rust",
+            &Selector::Symbol { name: "run".into() }
+        ));
+        assert!(selector_supports_adapter(
+            "openapi",
+            &Selector::Operation {
+                method: "GET".into(),
+                path: "/items".into(),
+            }
+        ));
+        assert!(selector_supports_adapter(
+            "json-schema",
+            &Selector::JsonPointer {
+                value: "/properties/id".into(),
+            }
+        ));
+        assert!(!selector_supports_adapter(
+            "openapi",
+            &Selector::JsonPointer {
+                value: "/paths".into(),
+            }
+        ));
+        assert!(!selector_supports_adapter(
+            "rust",
+            &Selector::Heading {
+                value: "Overview".into(),
+            }
+        ));
+
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
+        fs::write(tempdir.path().join("src/lib.rs"), "fn run() {}\n").expect("source");
+        let resolved = resolve_target(
+            tempdir.path(),
+            &target(
+                "rust",
+                "src/lib.rs",
+                Selector::Symbol { name: "run".into() },
+            ),
+        );
+        assert!(matches!(resolved, ArtifactResolution::Resolved(_)));
+        let identity = resolved.resolved().expect("resolved").identity.clone();
+
+        fs::write(tempdir.path().join("src/lib.rs"), "\nfn run() {}\n").expect("moved source");
+        let moved = resolve_target(
+            tempdir.path(),
+            &target(
+                "rust",
+                "src/lib.rs",
+                Selector::Symbol { name: "run".into() },
+            ),
+        );
+        assert_eq!(moved.resolved().expect("resolved").identity, identity);
+
+        let unresolved = resolve_target(
+            tempdir.path(),
+            &target(
+                "rust",
+                "src/lib.rs",
+                Selector::Symbol {
+                    name: "missing".into(),
+                },
+            ),
+        );
+        assert!(matches!(unresolved, ArtifactResolution::Unresolved(_)));
+
+        fs::write(
+            tempdir.path().join("src/doc.md"),
+            "# Shared\ntext\n## Shared\nmore\n",
+        )
+        .expect("markdown");
+        let ambiguous = resolve_target_with_adapters(
+            tempdir.path(),
+            &target(
+                "markdown",
+                "src/doc.md",
+                Selector::Heading {
+                    value: "Shared".into(),
+                },
+            ),
+            &["markdown".into()],
+        );
+        assert!(matches!(ambiguous, ArtifactResolution::Ambiguous(_)));
+
+        let unsupported = resolve_target_with_adapters(
+            tempdir.path(),
+            &target(
+                "openapi",
+                "src/lib.rs",
+                Selector::JsonPointer {
+                    value: "/paths".into(),
+                },
+            ),
+            &["openapi".into()],
+        );
+        assert!(matches!(unsupported, ArtifactResolution::Unsupported(_)));
+    }
+
+    #[test]
+    fn inventory_headings_are_exact_and_duplicate_titles_are_ambiguous() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs")).expect("docs dir");
+        fs::write(
+            tempdir.path().join("docs/guide.md"),
+            "# Shared\ntext\n## Shared\nmore\n",
+        )
+        .expect("markdown");
+        let profile = mitase_project_model::InventoryProfile {
+            id: "default".into(),
+            providers: BTreeMap::from([(
+                "markdown".into(),
+                serde_yaml::from_str("{ roots: [docs/guide.md] }").unwrap(),
+            )]),
+        };
+        let units = InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: tempdir.path().into(),
+                profile: "default".into(),
+                settings: serde_yaml::Value::Null,
+                excludes: vec![],
+                overlays: BTreeMap::new(),
+            },
+            &profile,
+        )
+        .expect("inventory");
+        let headings = units
+            .iter()
+            .filter(|unit| unit.kind == ArtifactUnitKind::Heading)
+            .collect::<Vec<_>>();
+        assert_eq!(headings.len(), 2);
+        assert_ne!(headings[0].identity, headings[1].identity);
+        assert!(headings.iter().all(|unit| unit.identity.contains("Shared")));
     }
 
     #[test]
@@ -1798,5 +2489,51 @@ mod tests {
                 .get(&implementation)
                 .is_none_or(Vec::is_empty)
         );
+    }
+
+    #[test]
+    fn text_symbol_resolution_uses_inventory_identity_and_full_source_span() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("spec")).expect("spec dir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
+        fs::write(
+            tempdir.path().join("src/service.py"),
+            "class Service:\n    def submit(self):\n        return True\n",
+        )
+        .expect("source");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  excludes: []\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers: { python: { roots: [src] } }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness: { target: off, limits: { max_ownership_scope_units: 64 } }\n",
+                "  changed: { require_owned_changes: false }\n",
+                "verification: { runners: {} }\n",
+            ),
+        )
+        .expect("config");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let target = target(
+            "python",
+            "src/service.py",
+            Selector::Symbol {
+                name: "Service::submit".into(),
+            },
+        );
+        let resolution = resolve_target_in_workspace(&workspace, &target);
+        let resolved = resolution.resolved().expect("resolved symbol");
+        assert_eq!(resolved.identity, "python:src/service.py::Service::submit");
+        assert!(resolved.excerpt.contains("return True"));
+        assert_eq!(resolved.line_start, 2);
+        assert_eq!(resolved.line_end, 3);
     }
 }

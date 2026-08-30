@@ -321,20 +321,32 @@ fn markdown_headings(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
     let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("Markdown path {path:?}: {error}"))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
+    let mut occurrences = BTreeMap::<String, usize>::new();
     let mut units = Vec::new();
     for (line_index, line) in source.lines().enumerate() {
         let trimmed = line.trim_start();
         let Some(value) = trimmed
             .strip_prefix('#')
-            .map(str::trim)
+            .map(|_| trimmed.trim_start_matches('#').trim())
             .filter(|value| !value.is_empty())
         else {
             continue;
         };
+        let occurrence = occurrences.entry(value.to_owned()).or_insert(0);
+        let identity = if *occurrence == 0 {
+            format!("markdown:{}::heading::{value}", repo_path.to_string_lossy())
+        } else {
+            format!(
+                "markdown:{}::heading::{value}@{}",
+                repo_path.to_string_lossy(),
+                *occurrence
+            )
+        };
+        *occurrence += 1;
         units.push(ArtifactUnit {
             adapter: "markdown".into(),
             path: repo_path.clone(),
-            identity: format!("markdown:{}::heading::{value}", repo_path.to_string_lossy()),
+            identity,
             kind: ArtifactUnitKind::Heading,
             exposure: ArtifactExposure::Workspace,
             reachability: ArtifactReachability::Active,
@@ -643,6 +655,8 @@ impl InventoryProvider for ExtensionInventoryProvider {
                 units.extend(schema_nodes(context, path, &self.adapter)?);
             } else if matches!(self.adapter.as_str(), "javascript" | "typescript") {
                 units.extend(source_symbol_units(context, path, &self.adapter)?);
+            } else if matches!(self.adapter.as_str(), "python" | "go" | "shell") {
+                units.extend(source_text_symbol_units(context, path, &self.adapter)?);
             } else if self.adapter == "html" {
                 units.extend(html_marker_units(context, path)?);
             }
@@ -909,6 +923,154 @@ fn source_symbol_units(
         }
     }
     Ok(units)
+}
+
+/// Inventory symbols for the line-oriented languages whose exact identity
+/// grammar is intentionally small and explicit. The workspace resolver still
+/// owns source-range recovery; inventory owns only stable semantic names.
+fn source_text_symbol_units(
+    context: &InventoryContext,
+    path: PathBuf,
+    adapter: &str,
+) -> Result<Vec<ArtifactUnit>> {
+    let relative = path
+        .strip_prefix(&context.workspace_root)
+        .context("source path escaped workspace")?;
+    let repo_path = RepoPath::from_path(relative)
+        .map_err(|error| anyhow::anyhow!("source path {path:?}: {error}"))?;
+    let source = String::from_utf8(read_bytes(context, &path)?)?;
+    let lines = source.lines().collect::<Vec<_>>();
+    let test_file = adapter == "go"
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with("_test.go"));
+    let mut declarations = Vec::<(String, usize, ArtifactExposure)>::new();
+    let mut scopes = Vec::<(usize, String)>::new();
+    for (line_index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+            continue;
+        }
+        let indent = line.len() - trimmed.len();
+        while scopes
+            .last()
+            .is_some_and(|(scope_indent, _)| *scope_indent >= indent)
+        {
+            scopes.pop();
+        }
+        let (name, qualified, is_scope) = match adapter {
+            "python" => {
+                let (keyword, rest) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
+                if keyword != "def" && keyword != "class" {
+                    continue;
+                }
+                let name = rest.split(['(', ':']).next().unwrap_or_default().trim();
+                if name.is_empty() {
+                    continue;
+                }
+                let qualified = scopes
+                    .iter()
+                    .map(|(_, scope)| scope.as_str())
+                    .chain(std::iter::once(name))
+                    .collect::<Vec<_>>()
+                    .join("::");
+                (name.to_owned(), qualified, keyword == "class")
+            }
+            "go" => {
+                if let Some(rest) = trimmed.strip_prefix("type ") {
+                    let name = rest.split_whitespace().next().unwrap_or_default();
+                    if name.is_empty() {
+                        continue;
+                    }
+                    (name.to_owned(), name.to_owned(), false)
+                } else if let Some(rest) = trimmed.strip_prefix("func ") {
+                    let (receiver, method) = if rest.starts_with('(') {
+                        let Some(close) = rest.find(')') else {
+                            continue;
+                        };
+                        let receiver = rest[1..close]
+                            .split_whitespace()
+                            .last()
+                            .unwrap_or_default()
+                            .trim_start_matches('*');
+                        (Some(receiver), rest[close + 1..].trim_start())
+                    } else {
+                        (None, rest)
+                    };
+                    let name = method.split(['(', ' ']).next().unwrap_or_default();
+                    if name.is_empty() {
+                        continue;
+                    }
+                    let qualified = receiver
+                        .filter(|receiver| !receiver.is_empty())
+                        .map_or_else(|| name.to_owned(), |receiver| format!("{receiver}::{name}"));
+                    (name.to_owned(), qualified, false)
+                } else {
+                    continue;
+                }
+            }
+            "shell" => {
+                let function_form = trimmed.strip_prefix("function ").map(str::trim_start);
+                let candidate = function_form.unwrap_or(trimmed);
+                let name = candidate.split(['(', ' ', '{']).next().unwrap_or_default();
+                let suffix = &candidate[name.len()..];
+                let is_function = suffix.trim_start().starts_with("()")
+                    || function_form.is_some_and(|_| suffix.trim_start().starts_with('{'));
+                if name.is_empty() || !is_function {
+                    continue;
+                }
+                (name.to_owned(), name.to_owned(), false)
+            }
+            _ => continue,
+        };
+        declarations.push((
+            qualified,
+            line_index,
+            if test_file || name.starts_with("test") {
+                ArtifactExposure::Test
+            } else {
+                ArtifactExposure::Private
+            },
+        ));
+        if is_scope {
+            scopes.push((indent, name));
+        }
+    }
+    let mut units = Vec::new();
+    for (identity, line_index, exposure) in declarations {
+        let start = line_start_offset(&source, line_index);
+        let end = start + lines[line_index].len();
+        let excerpt = &source[start..end];
+        units.push(ArtifactUnit {
+            adapter: adapter.into(),
+            path: repo_path.clone(),
+            identity: format!("{adapter}:{}::{identity}", repo_path.to_string_lossy()),
+            kind: ArtifactUnitKind::Symbol,
+            exposure,
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: start,
+                byte_end: end,
+                line_start: line_index + 1,
+                line_end: line_index + 1,
+            },
+            digest: digest(excerpt.as_bytes()),
+            structural_digest: structural_digest(
+                excerpt,
+                identity.rsplit("::").next().unwrap_or(&identity),
+            ),
+        });
+    }
+    Ok(units)
+}
+
+fn line_start_offset(source: &str, line_index: usize) -> usize {
+    source
+        .lines()
+        .take(line_index)
+        .map(|line| line.len() + 1)
+        .sum()
 }
 
 fn javascript_declaration_names(
@@ -2979,6 +3141,69 @@ mod tests {
                 "missing {expected}"
             );
         }
+    }
+
+    #[test]
+    fn text_language_inventory_exposes_qualified_symbols_and_tests() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::create_dir_all(temp.path().join("tests")).unwrap();
+        fs::write(
+            temp.path().join("src/service.py"),
+            "class Service:\n    def submit(self):\n        return True\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("src/service.go"),
+            "type Service struct{}\nfunc (s *Service) Submit() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("tests/service_test.go"),
+            "func TestService(t *testing.T) {}\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("src/service.sh"),
+            "function run_service {\n  echo ok\n}\n",
+        )
+        .unwrap();
+        let profile = InventoryProfile {
+            id: "default".into(),
+            providers: BTreeMap::from([
+                ("python".into(), serde_yaml::Value::Null),
+                ("go".into(), serde_yaml::Value::Null),
+                ("shell".into(), serde_yaml::Value::Null),
+            ]),
+        };
+        let units = InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: temp.path().into(),
+                profile: "default".into(),
+                settings: serde_yaml::Value::Null,
+                excludes: vec![],
+                overlays: BTreeMap::new(),
+            },
+            &profile,
+        )
+        .unwrap();
+        for expected in [
+            "python:src/service.py::Service",
+            "python:src/service.py::Service::submit",
+            "go:src/service.go::Service",
+            "go:src/service.go::Service::Submit",
+            "go:tests/service_test.go::TestService",
+            "shell:src/service.sh::run_service",
+        ] {
+            assert!(
+                units.iter().any(|unit| unit.identity == expected),
+                "missing {expected}"
+            );
+        }
+        assert!(units.iter().any(|unit| {
+            unit.identity == "go:tests/service_test.go::TestService"
+                && unit.exposure == ArtifactExposure::Test
+        }));
     }
 
     #[test]
