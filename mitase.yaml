@@ -157,6 +157,7 @@ inventory:
             - fixtures/v1/valid-web-app/spec/feature.yaml
             - fixtures/v1/valid-web-app/spec/requirement.yaml
             - fixtures/v1/valid-web-app/mitase.yaml
+            - fixtures/acceptance/ugoite-foundation-policy-v1
             - scripts/ci/installed-binary-smoke.sh
             - scripts/dev/validate-changed.sh
             - src/lib.rs
