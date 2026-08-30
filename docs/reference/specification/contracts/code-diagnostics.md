@@ -72,6 +72,20 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/co
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
+    - **id**: public-api-032
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-032-rust-crates-mitase-diagnostics-src-lib-rs-validationphase
+          - **adapter**: rust
+          - **path**: crates/mitase-diagnostics/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: ValidationPhase
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
 
 ## Source YAML
 
@@ -125,6 +139,20 @@ features:
       selector:
         kind: symbol
         name: ValidationResult::is_valid
+      claims:
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
+  - id: public-api-032
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-032-rust-crates-mitase-diagnostics-src-lib-rs-validationphase
+      adapter: rust
+      path: crates/mitase-diagnostics/src/lib.rs
+      selector:
+        kind: symbol
+        name: ValidationPhase
       claims:
       - kind: exposes
         target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
