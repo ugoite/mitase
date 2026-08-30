@@ -31,10 +31,7 @@ pub struct ReadinessReport {
     pub inventory: ReadinessAxis,
     pub ownership: ReadinessAxis,
     pub seedability: ReadinessAxis,
-    pub workability: ReadinessAxis,
     pub verification: ReadinessAxis,
-    pub closed_loop: ReadinessAxis,
-    pub execution_state: String,
 }
 
 impl ReadinessAxis {
@@ -59,9 +56,7 @@ impl ReadinessReport {
             ReadinessAxisId::Inventory => self.inventory.is_ready(),
             ReadinessAxisId::Ownership => self.ownership.is_ready(),
             ReadinessAxisId::Seedability => self.seedability.is_ready(),
-            ReadinessAxisId::Workability => self.workability.is_ready(),
             ReadinessAxisId::Verification => self.verification.is_ready(),
-            ReadinessAxisId::ClosedLoop => self.closed_loop.is_ready(),
         })
     }
 
@@ -97,13 +92,9 @@ impl ReadinessReport {
             ReadinessAxisId::Seedability => {
                 scoped_axis_is_ready(&self.seedability, scope_id, level)
             }
-            ReadinessAxisId::Workability => {
-                scoped_axis_is_ready(&self.workability, scope_id, level)
-            }
             ReadinessAxisId::Verification => {
                 scoped_axis_is_ready(&self.verification, scope_id, level)
             }
-            ReadinessAxisId::ClosedLoop => scoped_axis_is_ready(&self.closed_loop, scope_id, level),
         })
     }
 }
@@ -146,18 +137,7 @@ pub fn required_axes(level: ReadinessLevel) -> &'static [ReadinessAxisId] {
         ReadinessLevel::Off => &[],
         ReadinessLevel::Traceable => &[Inventory, Ownership],
         ReadinessLevel::Seedable => &[Inventory, Ownership, Seedability],
-        ReadinessLevel::WorkReady => &[Inventory, Ownership, Seedability, Workability],
-        ReadinessLevel::Verifiable => {
-            &[Inventory, Ownership, Seedability, Workability, Verification]
-        }
-        ReadinessLevel::ClosedLoop => &[
-            Inventory,
-            Ownership,
-            Seedability,
-            Workability,
-            Verification,
-            ClosedLoop,
-        ],
+        ReadinessLevel::Verifiable => &[Inventory, Ownership, Seedability, Verification],
     }
 }
 
@@ -166,9 +146,7 @@ pub enum ReadinessAxisId {
     Inventory,
     Ownership,
     Seedability,
-    Workability,
     Verification,
-    ClosedLoop,
 }
 
 /// Inspect specification and repository evidence without executing a runner.
@@ -290,9 +268,7 @@ pub fn evaluate(
     let ownership = axis_from_subjects(ownership_subjects);
 
     let mut seed_subjects = Vec::new();
-    let mut work_subjects = Vec::new();
     let mut verification_subjects = Vec::new();
-    let mut closed_subjects = Vec::new();
     for criterion in &criteria {
         let scope_id = criterion_scope(criterion);
         let implementations = implementation_obligations(index, criterion);
@@ -336,37 +312,11 @@ pub fn evaluate(
                 &verifications,
                 required_level,
             );
-            let verification_ready = verification.ready;
             if required_level >= ReadinessLevel::Verifiable {
                 verification_subjects.push(ReadinessSubject {
                     id: format!("criterion:{criterion}/target:{implementation}/verification"),
                     ..verification
                 });
-            }
-            if required_level >= ReadinessLevel::WorkReady {
-                let ready = target_ready && verification_ready;
-                work_subjects.push(subject(
-                    format!("criterion:{criterion}/target:{implementation}/work"),
-                    scope_id.clone(),
-                    required_level,
-                    ready,
-                    if ready {
-                        ""
-                    } else if !target_ready {
-                        "implementation target is not exact"
-                    } else {
-                        "verification claim closure is not exact"
-                    },
-                ));
-            }
-            if required_level >= ReadinessLevel::ClosedLoop {
-                closed_subjects.push(subject(
-                    format!("criterion:{criterion}/target:{implementation}/closed-loop"),
-                    scope_id.clone(),
-                    required_level,
-                    false,
-                    "closed-loop verification evidence is external to Mitase",
-                ));
             }
         }
 
@@ -379,31 +329,8 @@ pub fn evaluate(
                 &verifications,
                 required_level,
             );
-            let verification_ready = verification.ready;
             if required_level >= ReadinessLevel::Verifiable {
                 verification_subjects.push(verification);
-            }
-            if required_level >= ReadinessLevel::WorkReady {
-                work_subjects.push(subject(
-                    format!("criterion:{criterion}/work"),
-                    scope_id.clone(),
-                    required_level,
-                    false,
-                    if verification_ready {
-                        "criterion has no exact implementation target"
-                    } else {
-                        "criterion has no exact implementation or verification closure"
-                    },
-                ));
-            }
-            if required_level >= ReadinessLevel::ClosedLoop {
-                closed_subjects.push(subject(
-                    format!("criterion:{criterion}/closed-loop"),
-                    scope_id,
-                    required_level,
-                    false,
-                    "closed-loop verification evidence is external to Mitase",
-                ));
             }
         }
     }
@@ -423,14 +350,8 @@ pub fn evaluate(
         if level >= ReadinessLevel::Seedable {
             seed_subjects.extend(subjects.clone());
         }
-        if level >= ReadinessLevel::WorkReady {
-            work_subjects.extend(subjects.clone());
-        }
         if level >= ReadinessLevel::Verifiable {
-            verification_subjects.extend(subjects.clone());
-        }
-        if level >= ReadinessLevel::ClosedLoop {
-            closed_subjects.extend(subjects);
+            verification_subjects.extend(subjects);
         }
     }
 
@@ -445,14 +366,8 @@ pub fn evaluate(
     {
         let subjects = contract_subjects(index, level);
         seed_subjects.extend(subjects.clone());
-        if level >= ReadinessLevel::WorkReady {
-            work_subjects.extend(subjects.clone());
-        }
         if level >= ReadinessLevel::Verifiable {
-            verification_subjects.extend(subjects.clone());
-        }
-        if level >= ReadinessLevel::ClosedLoop {
-            closed_subjects.extend(subjects);
+            verification_subjects.extend(subjects);
         }
     }
 
@@ -517,10 +432,7 @@ pub fn evaluate(
         inventory,
         ownership,
         seedability: axis_from_subjects(seed_subjects),
-        workability: axis_from_subjects(work_subjects),
         verification: axis_from_subjects(verification_subjects),
-        closed_loop: axis_from_subjects(closed_subjects),
-        execution_state: "verification-external".into(),
     })
 }
 
@@ -807,9 +719,6 @@ fn public_entrypoint_subjects(
         .iter()
         .map(|(target_ref, exposed_target)| {
             let mut blockers = Vec::new();
-            if required_level > ReadinessLevel::WorkReady {
-                blockers.push("verification evidence above work-ready is external to Mitase".into());
-            }
             let Some(identity) = index.target_to_artifact.get(target_ref) else {
                 return subject(
                     format!("public:{target_ref}"),
@@ -1027,9 +936,7 @@ mod tests {
     fn readiness_levels_add_axes_monotonically() {
         assert_eq!(required_axes(ReadinessLevel::Traceable).len(), 2);
         assert_eq!(required_axes(ReadinessLevel::Seedable).len(), 3);
-        assert_eq!(required_axes(ReadinessLevel::WorkReady).len(), 4);
-        assert_eq!(required_axes(ReadinessLevel::Verifiable).len(), 5);
-        assert_eq!(required_axes(ReadinessLevel::ClosedLoop).len(), 6);
+        assert_eq!(required_axes(ReadinessLevel::Verifiable).len(), 4);
     }
 
     #[test]
@@ -1090,7 +997,6 @@ mod tests {
             runner.executable = "/definitely-not-an-executable".into();
         }
         let index = workspace.index().expect("index");
-        let report = evaluate(&workspace, &index, "readiness-test").expect("readiness");
-        assert_eq!(report.execution_state, "verification-external");
+        evaluate(&workspace, &index, "readiness-test").expect("readiness");
     }
 }

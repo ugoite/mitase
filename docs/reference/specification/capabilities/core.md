@@ -348,13 +348,13 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
               - **criterion**: REQ-CAPABILITY-001#criterion.ownership-resolution
 - **id**: FEAT-READINESS-001
   - **title**: Readiness validation
-  - **summary**: Evaluate traceable, seedable, work-ready, verifiable, and closed-loop readiness.
+  - **summary**: Evaluate traceable, seedable, and verifiable readiness.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: readiness
-      - **responsibility**: Evaluate readiness subjects and canonical execution closure.
+      - **responsibility**: Evaluate readiness subjects and verification closure.
       - **owns**:
         - **id**: readiness-source
           - **adapter**: rust
@@ -765,13 +765,13 @@ features:
 
   - id: FEAT-READINESS-001
     title: Readiness validation
-    summary: Evaluate traceable, seedable, work-ready, verifiable, and closed-loop readiness.
+    summary: Evaluate traceable, seedable, and verifiable readiness.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: readiness
-        responsibility: Evaluate readiness subjects and canonical execution closure.
+        responsibility: Evaluate readiness subjects and verification closure.
         owns:
           - id: readiness-source
             adapter: rust
