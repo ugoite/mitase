@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 mod readiness;
 use anyhow::{Context, Result, bail};
-use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
+use mitase_diagnostics::{Diagnostic, Evidence, ValidationPhase, ValidationResult};
 use mitase_inventory::ArtifactUnitKind;
 use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use mitase_spec_model::{
@@ -10,7 +10,7 @@ use mitase_spec_model::{
     TargetClaim, VerificationRunnerRef,
 };
 use mitase_workspace::{
-    AnchorValue, ArtifactResolution, ResolvedTarget, SpecIndex, SpecWorkspace,
+    AnchorValue, ArtifactResolution, ResolutionFailure, ResolvedTarget, SpecIndex, SpecWorkspace,
     resolve_target_against_inventory, selector_supports_adapter, selector_supports_editable,
 };
 pub use readiness::{
@@ -1887,6 +1887,36 @@ fn push(
     out.push(d);
 }
 
+fn push_resolution(
+    out: &mut Vec<Diagnostic>,
+    rule: &str,
+    failure: &ResolutionFailure,
+    path: impl Into<String>,
+    anchor: Option<SpecAnchor>,
+) {
+    let mut diagnostic = Diagnostic::error(rule, &failure.message, path);
+    diagnostic.anchor = anchor;
+    diagnostic.evidence.push(Evidence {
+        kind: "resolution-status".into(),
+        value: resolution_status(rule, failure).into(),
+    });
+    diagnostic
+        .evidence
+        .extend(failure.candidates.iter().map(|candidate| Evidence {
+            kind: "resolution-candidate".into(),
+            value: candidate.clone(),
+        }));
+    out.push(diagnostic);
+}
+
+fn resolution_status(rule: &str, failure: &ResolutionFailure) -> &'static str {
+    match rule {
+        "MITASE-TARGET-005" => "unsupported",
+        _ if failure.candidates.len() > 1 => "ambiguous",
+        _ => "unresolved",
+    }
+}
+
 fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     for (anchor, value) in &ctx.index.anchors {
         let path = ctx
@@ -2529,10 +2559,10 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 | ArtifactResolution::Ambiguous(failure)
                     if target.lifecycle == ArtifactTargetLifecycle::Present && !advisory =>
                 {
-                    push(
+                    push_resolution(
                         out,
                         "MITASE-TARGET-002",
-                        failure.message,
+                        &failure,
                         target.path.to_string_lossy(),
                         Some(anchor.clone()),
                     );
@@ -2542,10 +2572,10 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         && !advisory
                         && expected =>
                 {
-                    push(
+                    push_resolution(
                         out,
                         "MITASE-TARGET-005",
-                        failure.message,
+                        &failure,
                         target.path.to_string_lossy(),
                         Some(anchor.clone()),
                     );

@@ -1706,6 +1706,9 @@ fn html_marker_matches(text: &str, value: &str) -> Vec<(usize, usize, usize)> {
     let mut occurrences = BTreeMap::<String, usize>::new();
     let mut matches = Vec::new();
     for (start, _) in text.match_indices("data-") {
+        if !is_html_attribute_start(text, start) {
+            continue;
+        }
         let name_end = source_attribute_name_end(text, start);
         let equals_start = name_end
             + text[name_end..]
@@ -1738,6 +1741,21 @@ fn html_marker_matches(text: &str, value: &str) -> Vec<(usize, usize, usize)> {
         *occurrence += 1;
     }
     matches
+}
+
+fn is_html_attribute_start(text: &str, start: usize) -> bool {
+    let Some(tag_start) = text[..start].rfind('<') else {
+        return false;
+    };
+    if matches!(text.as_bytes().get(tag_start + 1), Some(b'/' | b'!' | b'?'))
+        || text[tag_start..start].contains('>')
+    {
+        return false;
+    }
+    text[..start]
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
 }
 
 fn source_attribute_name_end(text: &str, start: usize) -> usize {

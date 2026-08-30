@@ -680,6 +680,9 @@ fn html_marker_units(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
     // Keep the exact attribute span so two targets in one document can still
     // own distinct artifacts and changed-marker planning remains precise.
     for (start, _) in source.match_indices("data-") {
+        if !is_html_attribute_start(&source, start) {
+            continue;
+        }
         let name_end = source[start..]
             .find(|character: char| {
                 character.is_ascii_whitespace() || matches!(character, '=' | '>' | '/')
@@ -745,6 +748,23 @@ fn html_marker_units(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
         });
     }
     Ok(units)
+}
+
+fn is_html_attribute_start(source: &str, start: usize) -> bool {
+    let Some(tag_start) = source[..start].rfind('<') else {
+        return false;
+    };
+    if matches!(
+        source.as_bytes().get(tag_start + 1),
+        Some(b'/' | b'!' | b'?')
+    ) || source[tag_start..start].contains('>')
+    {
+        return false;
+    }
+    source[..start]
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
 }
 
 fn source_symbol_units(
@@ -2546,7 +2566,7 @@ mod tests {
         let path = temp.path().join("workbench.html");
         fs::write(
             &path,
-            r#"<aside data-page="work" data-i18n-aria="a11y.main_pages"></aside>"#,
+            r#"<aside data-page="work" data-i18n-aria="a11y.main_pages">data-fake="no"</aside>"#,
         )
         .unwrap();
         let context = InventoryContext {
@@ -2569,6 +2589,7 @@ mod tests {
                 .iter()
                 .all(|unit| unit.span.byte_end > unit.span.byte_start)
         );
+        assert!(!units.iter().any(|unit| unit.identity.contains("data-fake")));
     }
 
     #[test]
