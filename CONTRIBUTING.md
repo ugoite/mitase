@@ -21,10 +21,9 @@ Do not add new planning, agent, delivery, retry, or workspace-mutation
 responsibilities to Mitase. Those are external-tool concerns under the
 [Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md).
 
-The current checkout still contains transitional execution-oriented code while
-the follow-up removal phases land. Tests for that code may remain until their
-removal PR, but new product documentation and new APIs must follow the frozen
-boundary.
+The execution-oriented removal phases have landed in the current checkout.
+Historical documentation may explain that transition, but new product
+documentation and new APIs must follow the frozen boundary.
 
 Start each delivery unit from the repository default branch in an independent
 worktree, discover or create its Issue first, then implement, validate, open a
