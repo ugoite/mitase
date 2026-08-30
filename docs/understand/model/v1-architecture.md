@@ -21,8 +21,8 @@ The product boundary is deliberately smaller than a development agent:
 | Verification Claims, coverage, drift, diagnostics, and queries | Codex, Claude, or other implementation sessions |
 
 The table is a product boundary, not a claim that every row is already
-implemented in the current checkout. Transitional Workbench and execution
-surfaces are follow-up removal work, not a reason to expand the frozen core.
+implemented in the current checkout. Transitional execution surfaces are
+follow-up removal work, not a reason to expand the frozen core.
 
 ## Canonical model
 
@@ -96,7 +96,7 @@ spec-model → project-model → workspace / inventory → validation → CLI
 ```
 
 The CLI is a thin shell over these libraries. No core library may require a
-planner, agent runtime, delivery store, or Workbench execution lifecycle.
+planner, agent runtime, delivery store, or execution lifecycle.
 
 See the [domain glossary](./domain-glossary.md), the [product-boundary
 freeze](../../project/mitase-re-foundation-freeze.md), and [ADR

@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/java-only`
-- `cargo run --quiet -- workbench project --workspace examples/java-only`
 
 Primary implementation targets:
 - `src/main/java/example/app/OrderSummary.java` (java)

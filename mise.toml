@@ -84,13 +84,6 @@ run = [{ task = "test:rust" }]
 description = "Run the hosted repository validation lane"
 run = [{ task = "check:repo" }]
 
-[tasks."ci:lane:workbench-transitional"]
-description = "Run the transitional Workbench gate until the re-foundation removes it"
-run = [
-  "cargo check -p mitase-workbench-server -p mitase-app-ui",
-  "bash scripts/ci/workbench-visual.sh",
-]
-
 [tasks."ci:merge"]
 description = "Run the merge-equivalent product quality gate locally"
 run = [{ task = "ci" }]

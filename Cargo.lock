@@ -95,7 +95,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
 dependencies = [
  "axum-core",
- "axum-macros",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -139,17 +138,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "axum-macros"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aa268c23bfbbd2c4363b9cd302a4f504fb2a9dfe7e3451d66f35dd392e20aca"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -706,14 +694,12 @@ dependencies = [
  "assert_cmd",
  "axum",
  "clap",
- "mitase-app-ui",
  "mitase-code-intel",
  "mitase-diagnostics",
  "mitase-inventory",
  "mitase-project-model",
  "mitase-spec-model",
  "mitase-validation",
- "mitase-workbench-server",
  "mitase-workspace",
  "regex",
  "serde",
@@ -741,16 +727,6 @@ dependencies = [
  "serde",
  "sha2",
  "tempfile",
-]
-
-[[package]]
-name = "mitase-app-ui"
-version = "0.1.0"
-dependencies = [
- "mitase-diagnostics",
- "mitase-work-model",
- "mitase-workbench-server",
- "serde_json",
 ]
 
 [[package]]
@@ -876,33 +852,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
-]
-
-[[package]]
-name = "mitase-workbench-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "clap",
- "http",
- "http-body-util",
- "mitase-agent",
- "mitase-delivery",
- "mitase-diagnostics",
- "mitase-planner",
- "mitase-project-model",
- "mitase-spec-model",
- "mitase-validation",
- "mitase-work-model",
- "mitase-workspace",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "tokio",
- "tower",
 ]
 
 [[package]]

@@ -1869,6 +1869,20 @@ fn is_fixed_error_rule(rule_id: &str) -> bool {
     rule_metadata(rule_id)
         .is_some_and(|metadata| matches!(metadata.override_policy, OverridePolicy::FixedError))
 }
+
+fn requires_change_ownership(
+    unit: &mitase_inventory::ArtifactUnit,
+    owners: &[mitase_workspace::OwnershipRef],
+) -> bool {
+    // Declared file units describe repository support and control-plane
+    // artifacts. Their delivery contract lives in repository tooling, so an
+    // unowned declared file must not be mistaken for an unowned product
+    // implementation or verification target.
+    owners.is_empty()
+        && !(unit.adapter == "declared"
+            && matches!(unit.kind, mitase_inventory::ArtifactUnitKind::File))
+}
+
 fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {
         return;
@@ -2092,7 +2106,7 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 continue;
             }
             if ctx.config.validation.changed.require_owned_changes
-                && owners.is_none_or(|owners| owners.is_empty())
+                && owners.is_some_and(|owners| requires_change_ownership(&unit, owners))
             {
                 push(
                     out,
