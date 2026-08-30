@@ -3,12 +3,10 @@ members = [
   ".",
   "crates/mitase-spec-model",
   "crates/mitase-project-model",
-  "crates/mitase-work-model",
   "crates/mitase-diagnostics",
   "crates/mitase-workspace",
   "crates/mitase-inventory",
   "crates/mitase-validation",
-  "crates/mitase-planner",
   "crates/mitase-code-intel",
 ]
 resolver = "3"

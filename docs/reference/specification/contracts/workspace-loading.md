@@ -72,20 +72,6 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/wo
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-INDEX-001#binding.implementation/target.spec-index
-    - **id**: public-api-064
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-      - **targets**:
-        - **id**: entrypoint-069-rust-crates-mitase-workspace-src-lib-rs-specworkspace-fing
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: SpecWorkspace::fingerprint
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-INDEX-001#binding.implementation/target.spec-index
     - **id**: public-api-065
       - **role**: implementation
       - **facet**: public
@@ -111,34 +97,6 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/wo
           - **selector**:
             - **kind**: symbol
             - **name**: SpecWorkspace::load
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-INDEX-001#binding.implementation/target.spec-index
-    - **id**: public-api-067
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-      - **targets**:
-        - **id**: entrypoint-072-rust-crates-mitase-workspace-src-lib-rs-specworkspace-over
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: SpecWorkspace::overlay_config
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-INDEX-001#binding.implementation/target.spec-index
-    - **id**: public-api-068
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-      - **targets**:
-        - **id**: entrypoint-073-rust-crates-mitase-workspace-src-lib-rs-specworkspace-over
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: SpecWorkspace::overlay_document
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-INDEX-001#binding.implementation/target.spec-index
@@ -226,20 +184,6 @@ features:
       claims:
       - kind: exposes
         target: FEAT-INDEX-001#binding.implementation/target.spec-index
-  - id: public-api-064
-    role: implementation
-    facet: public
-    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-    targets:
-    - id: entrypoint-069-rust-crates-mitase-workspace-src-lib-rs-specworkspace-fing
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: SpecWorkspace::fingerprint
-      claims:
-      - kind: exposes
-        target: FEAT-INDEX-001#binding.implementation/target.spec-index
   - id: public-api-065
     role: implementation
     facet: public
@@ -265,34 +209,6 @@ features:
       selector:
         kind: symbol
         name: SpecWorkspace::load
-      claims:
-      - kind: exposes
-        target: FEAT-INDEX-001#binding.implementation/target.spec-index
-  - id: public-api-067
-    role: implementation
-    facet: public
-    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-    targets:
-    - id: entrypoint-072-rust-crates-mitase-workspace-src-lib-rs-specworkspace-over
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: SpecWorkspace::overlay_config
-      claims:
-      - kind: exposes
-        target: FEAT-INDEX-001#binding.implementation/target.spec-index
-  - id: public-api-068
-    role: implementation
-    facet: public
-    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-    targets:
-    - id: entrypoint-073-rust-crates-mitase-workspace-src-lib-rs-specworkspace-over
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: SpecWorkspace::overlay_document
       claims:
       - kind: exposes
         target: FEAT-INDEX-001#binding.implementation/target.spec-index

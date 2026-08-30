@@ -14,10 +14,7 @@ Every implementation binding must satisfy at least one requirement criterion.
 
 ## `required verification binding is missing`
 
-Every accepted criterion in an executable slice needs its verification bindings present in the plan.
-
-## `context pack exceeds serialized budget`
-
-Reduce slice size or raise `work.slicing.max_total_bytes`.
+Every implemented criterion needs an exact verification binding whose `covers`
+list names the implementation target.
 
 Historical `linked_*`, `tests`, and `implementations` troubleshooting does not apply to the active v1 model.

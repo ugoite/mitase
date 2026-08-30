@@ -1,9 +1,0 @@
-schema: mitase/work-request/v1
-id: WORK-FIXTURE-CLI
-title: Modify the fixture behavior through the CLI work flow.
-operation: modify
-origin:
-  kind: requirement-criterion
-  criterion: REQ-FIXTURE-001#criterion.behavior
-constraints: {}
-requested_targets: []

@@ -23,9 +23,9 @@ wire and CLI shapes. There are no compatibility aliases:
 
 | Previous surface | Current surface | Required action |
 |---|---|---|
-| Generic Work summaries/seeds and implicit behavior selection | `mitase/work-request/v1` with an exact `origin` and `requested_targets` | Rewrite request artifacts. “Behavior” means the exact Requirement criterion; Feature implementation bindings and exact implementation targets are separate origin choices. |
-| `mitase work` / `mitase task` execution lifecycle | External repository tooling; the former Mitase command groups are removed | Keep planning, execution, retry, finalization, and execution-artifact validation outside Mitase. The former `validate plan` and `validate result` commands are also removed. |
-| `max_slices_per_seed` | `max_slices_per_origin` | Rename the config key. |
+| Generic Work summaries/seeds and implicit behavior selection | Specification documents plus repository tooling | Keep work requests, planning, execution, retry, finalization, and execution-artifact validation outside Mitase. |
+| `mitase work` / `mitase task` execution lifecycle | External repository tooling; the former Mitase command groups are removed | The former `validate plan` and `validate result` commands are also removed. |
+| `validation.changed.require_plan`, `work.slicing`, and plan-scope limits | Removed from `mitase/config/v1` | Rewrite the configuration without compatibility aliases; repository tooling owns delivery planning and bounded implementation scope. |
 | Legacy `ReadinessLevel` public-entrypoint combinations | v1 public-entrypoint probes support only `off`, `seedable`, or `work-ready` | Change unsupported probe levels; they are rejected by configuration validation. |
 
 Recreate stale plan, approval, receipt, and context artifacts after migration;

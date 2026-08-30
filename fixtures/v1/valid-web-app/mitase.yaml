@@ -9,17 +9,14 @@ validation:
   preset: agent-ready
   readiness:
     target: closed-loop
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
+    limits: { max_ownership_scope_units: 64 }
   changed:
     baseline:
       strategy: merge-base
       against: origin/main
     require_owned_changes: true
-    require_plan: true
 verification:
   runners:
     cargo-test:
       executable: cargo
       arguments: [test, -p, "{package}", "{test}"]
-work:
-  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }

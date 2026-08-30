@@ -1,6 +1,6 @@
 # Examples and templates
 
-The active v1 CLI ships executable validation and work-planning commands. It does not currently expose a scaffold generator.
+The active v1 CLI ships executable validation and readiness commands. It does not currently expose a scaffold generator.
 
 Use the checked-in `examples/` directories as the source of truth for starter layouts.
 

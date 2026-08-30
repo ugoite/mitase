@@ -19,7 +19,7 @@ requirements:
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: project-config
         kind: behavior
-        statement: Project configuration preserves explicit inventory, readiness, verification, and work limits while rejecting unknown fields.
+        statement: Project configuration preserves explicit inventory, readiness, and verification settings while rejecting unknown fields.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: inventory-discovery
         kind: behavior
@@ -45,10 +45,6 @@ requirements:
         kind: security
         statement: Changed semantic artifacts are rejected when ownership, lifecycle, or semantic impact is incomplete.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: context-export
-        kind: behavior
-        statement: A selected plan slice exports bounded target and support context without exceeding configured budgets.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: contract-closure
         kind: behavior
         statement: Contract sources, participants, and guarantees retain exact typed references.
@@ -69,7 +65,7 @@ requirements:
       - id: core-verification
         role: verification
         facet: capability-verification
-        responsibility: Verify core specification, configuration, inventory, identity, index, ownership, readiness, change, context, and contract behavior.
+        responsibility: Verify core specification, configuration, inventory, identity, index, ownership, readiness, change, and contract behavior.
         targets:
           - id: spec-model-test
             adapter: rust
@@ -161,15 +157,6 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.change-validation
                 covers: [FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate]
                 runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::validate_reports_deleted_criterion_without_artifact_update } }
-          - id: context-test
-            adapter: rust
-            path: crates/mitase-planner/src/lib.rs
-            selector: { kind: symbol, name: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets }
-            claims:
-              - kind: verifies
-                criterion: REQ-CAPABILITY-001#criterion.context-export
-                covers: [FEAT-CONTEXT-001#binding.implementation/target.context-export]
-                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::context_pack_distinguishes_target_and_support_entries_for_missing_targets } }
           - id: contract-test
             adapter: rust
             path: crates/mitase-spec-model/src/lib.rs
@@ -213,8 +200,8 @@ requirements:
                 runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
 
   - id: REQ-CAPABILITY-002
-    title: Multi-language dependency planning
-    description: Semantic inventories and explicit dependency relations derive one exact, profile-aware work boundary across languages and generated artifacts.
+    title: Multi-language inventory
+    description: Semantic inventories expose stable, profile-aware artifact identities across supported languages and structured formats.
     priority: critical
     status: implemented
     criteria:
@@ -226,18 +213,6 @@ requirements:
         kind: compatibility
         statement: Semantic identity is independent of source line numbers and remains stable across line movement and formatting.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: build-profile-scope
-        kind: security
-        statement: Conditional artifacts outside the active build profile remain observable inventory context but never enter executable scope.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: coherent-cross-language
-        kind: behavior
-        statement: Explicit provider and consumer contract targets across languages share one coherent WorkPlan slice with dependency-aware readonly context.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: generated-source
-        kind: security
-        statement: Generated artifacts are derived context of exact source targets and cannot be directly editable.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: semantic-diff
         kind: behavior
         statement: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
@@ -246,7 +221,7 @@ requirements:
       - id: dependency-verification
         role: verification
         facet: capability-verification
-        responsibility: Verify language-aware inventory, stable identity, build-profile exclusion, contract closure, generated-source enforcement, and semantic change classification.
+        responsibility: Verify language-aware inventory, stable identity, contract closure, and semantic change classification.
         targets:
           - id: language-inventory-test
             adapter: rust
@@ -284,33 +259,6 @@ requirements:
                 criterion: REQ-CAPABILITY-002#criterion.stable-identity
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
                 runner: { runner: cargo-test, arguments: { package: mitase-inventory, test: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames } }
-          - id: build-profile-test
-            adapter: rust
-            path: crates/mitase-planner/src/lib.rs
-            selector: { kind: symbol, name: tests::inactive_build_profile_target_never_enters_executable_scope }
-            claims:
-              - kind: verifies
-                criterion: REQ-CAPABILITY-002#criterion.build-profile-scope
-                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::inactive_build_profile_target_never_enters_executable_scope } }
-          - id: cross-language-test
-            adapter: rust
-            path: crates/mitase-planner/src/lib.rs
-            selector: { kind: symbol, name: tests::cross_language_provider_and_consumer_share_one_contract_slice }
-            claims:
-              - kind: verifies
-                criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
-                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::cross_language_provider_and_consumer_share_one_contract_slice } }
-          - id: generated-source-test
-            adapter: rust
-            path: crates/mitase-planner/src/lib.rs
-            selector: { kind: symbol, name: tests::generated_outputs_are_derived_context_and_never_directly_editable }
-            claims:
-              - kind: verifies
-                criterion: REQ-CAPABILITY-002#criterion.generated-source
-                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
-                runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::generated_outputs_are_derived_context_and_never_directly_editable } }
           - id: semantic-diff-test
             adapter: rust
             path: crates/mitase-inventory/src/lib.rs
