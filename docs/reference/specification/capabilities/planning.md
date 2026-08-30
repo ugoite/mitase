@@ -368,72 +368,6 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
-- **id**: FEAT-VERIFICATION-001
-  - **title**: Verification execution
-  - **summary**: Execute configured verification runners and produce canonical receipts.
-  - **status**: implemented
-  - **bindings**:
-    - **id**: implementation
-      - **role**: implementation
-      - **facet**: verification
-      - **responsibility**: Execute configured exact verification targets and receipts.
-      - **targets**:
-        - **id**: execute-verification
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: execute_verification
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.verification-execution
-- **id**: FEAT-PLAN-VALIDATION-001
-  - **title**: Plan validation
-  - **summary**: Validate a canonical work plan before execution.
-  - **status**: implemented
-  - **bindings**:
-    - **id**: implementation
-      - **role**: implementation
-      - **facet**: plan-validation
-      - **responsibility**: Replan and validate an execution plan before running commands.
-      - **targets**:
-        - **id**: canonical-plan-validation
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: canonical_plan_for_execution
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.plan-validation
-- **id**: FEAT-RESULT-VALIDATION-001
-  - **title**: Result validation
-  - **summary**: Validate verification receipts, lifecycle post-state, and explicit completion evidence against a plan.
-  - **status**: implemented
-  - **bindings**:
-    - **id**: implementation
-      - **role**: implementation
-      - **facet**: result-validation
-      - **responsibility**: Validate canonical receipts, target lifecycle proofs, and post-state closure.
-      - **targets**:
-        - **id**: receipt-validation
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: validate_verification_receipt
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.receipt-validation
-        - **id**: completion-evaluation
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: evaluate_completion
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORK-001#criterion.completion-evidence
 - **id**: FEAT-CLI-001
   - **title**: CLI orchestration
   - **summary**: Orchestrate workspace, work, readiness, and validation commands.
@@ -453,6 +387,13 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
+      - **owns**:
+        - **id**: cli-readiness
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::run_readiness
 - **id**: FEAT-LSP-001
   - **title**: LSP
   - **summary**: Serve canonical specification navigation and hover information.
@@ -874,66 +815,6 @@ features:
             selector: { kind: symbol, name: Contract }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.contract-closure }]
 
-  - id: FEAT-VERIFICATION-001
-    title: Verification execution
-    summary: Execute configured verification runners and produce canonical receipts.
-    status: implemented
-    bindings:
-      - id: implementation
-        role: implementation
-        facet: verification
-        responsibility: Execute configured exact verification targets and receipts.
-        targets:
-          - id: execute-verification
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: execute_verification }
-            claims:
-              - kind: satisfies
-                criterion: REQ-CAPABILITY-001#criterion.verification-execution
-
-  - id: FEAT-PLAN-VALIDATION-001
-    title: Plan validation
-    summary: Validate a canonical work plan before execution.
-    status: implemented
-    bindings:
-      - id: implementation
-        role: implementation
-        facet: plan-validation
-        responsibility: Replan and validate an execution plan before running commands.
-        targets:
-          - id: canonical-plan-validation
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: canonical_plan_for_execution }
-            claims:
-              - kind: satisfies
-                criterion: REQ-CAPABILITY-001#criterion.plan-validation
-
-  - id: FEAT-RESULT-VALIDATION-001
-    title: Result validation
-    summary: Validate verification receipts, lifecycle post-state, and explicit completion evidence against a plan.
-    status: implemented
-    bindings:
-      - id: implementation
-        role: implementation
-        facet: result-validation
-        responsibility: Validate canonical receipts, target lifecycle proofs, and post-state closure.
-        targets:
-          - id: receipt-validation
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: validate_verification_receipt }
-            claims:
-              - kind: satisfies
-                criterion: REQ-CAPABILITY-001#criterion.receipt-validation
-          - id: completion-evaluation
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: evaluate_completion }
-            claims:
-              - kind: satisfies
-                criterion: REQ-WORK-001#criterion.completion-evidence
   - id: FEAT-CLI-001
     title: CLI orchestration
     summary: Orchestrate workspace, work, readiness, and validation commands.
@@ -951,6 +832,11 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
+        owns:
+          - id: cli-readiness
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: module, name: 'lib::run_readiness' }
 
   - id: FEAT-LSP-001
     title: LSP

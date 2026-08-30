@@ -142,20 +142,6 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/va
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
-    - **id**: public-api-execute-verification-attempt
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Govern durable exact verification attempts.
-      - **targets**:
-        - **id**: entrypoint-execute-verification-attempt
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: execute_verification_attempt
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-validate-workspace
       - **role**: implementation
       - **facet**: public
@@ -293,20 +279,6 @@ features:
       selector:
         kind: symbol
         name: changed_files_against_revision
-      claims:
-      - kind: exposes
-        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
-  - id: public-api-execute-verification-attempt
-    role: implementation
-    facet: public
-    responsibility: Govern durable exact verification attempts.
-    targets:
-    - id: entrypoint-execute-verification-attempt
-      adapter: rust
-      path: crates/mitase-validation/src/lib.rs
-      selector:
-        kind: symbol
-        name: execute_verification_attempt
       claims:
       - kind: exposes
         target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
