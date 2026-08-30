@@ -40,7 +40,7 @@ trap cleanup_tmp EXIT
   printf '};\n'
 } >"$tmp/catalog.js"
 
-cargo run --quiet -- workbench project \
+cargo run --quiet -p mitase-workbench-server --bin mitase-workbench -- project \
   --workspace fixtures/v1/valid-web-app \
   --format json >"$tmp/projection.json"
 
@@ -474,7 +474,7 @@ cleanup_browser() {
 }
 trap cleanup_browser EXIT
 
-cargo run --quiet -- workbench \
+cargo run --quiet -p mitase-workbench-server --bin mitase-workbench -- serve \
   --workspace fixtures/v1/valid-workbench-flow \
   --bind 127.0.0.1 \
   --port "$server_port" \

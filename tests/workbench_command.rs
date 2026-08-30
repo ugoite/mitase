@@ -1,17 +1,17 @@
 use assert_cmd::Command;
 
 #[test]
-fn workbench_help_lists_browser_launch_options() {
+fn root_cli_does_not_expose_transitional_workbench() {
     let assert = Command::cargo_bin("mitase")
         .expect("binary should build")
-        .args(["workbench", "--help"])
+        .arg("--help")
         .assert()
         .success();
 
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
-    assert!(stdout.contains("Run the Workbench server"));
-    assert!(stdout.contains("--bind"));
-    assert!(stdout.contains("--port"));
-    assert!(stdout.contains("--allow-remote-bind"));
-    assert!(stdout.contains("--show-log"));
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("workbench"))
+    );
 }

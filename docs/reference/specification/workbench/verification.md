@@ -119,7 +119,7 @@ description: "Generated reference for docs/mitase/features/workbench/verificatio
           - **path**: tests/workbench_command.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: workbench_help_lists_browser_launch_options
+            - **name**: root_cli_does_not_expose_transitional_workbench
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-WORKBENCH-002#criterion.work-session
@@ -130,7 +130,7 @@ description: "Generated reference for docs/mitase/features/workbench/verificatio
                 - **arguments**:
                   - **package**: mitase
                   - **harness**: workbench_command
-                  - **test**: workbench_help_lists_browser_launch_options
+                  - **test**: root_cli_does_not_expose_transitional_workbench
         - **id**: smoke-projection
           - **adapter**: rust
           - **path**: tests/workbench_smoke.rs
@@ -324,7 +324,7 @@ features:
       path: tests/workbench_command.rs
       selector:
         kind: symbol
-        name: workbench_help_lists_browser_launch_options
+        name: root_cli_does_not_expose_transitional_workbench
       claims:
       - kind: verifies
         criterion: REQ-WORKBENCH-002#criterion.work-session
@@ -335,7 +335,7 @@ features:
           arguments:
             package: mitase
             harness: workbench_command
-            test: workbench_help_lists_browser_launch_options
+            test: root_cli_does_not_expose_transitional_workbench
     - id: smoke-projection
       adapter: rust
       path: tests/workbench_smoke.rs
