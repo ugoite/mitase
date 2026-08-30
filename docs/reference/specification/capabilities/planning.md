@@ -370,13 +370,13 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
               - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
 - **id**: FEAT-CLI-001
   - **title**: CLI orchestration
-  - **summary**: Orchestrate workspace, work, readiness, and validation commands.
+  - **summary**: Orchestrate workspace, readiness, and validation commands.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: cli
-      - **responsibility**: Orchestrate canonical validation and work commands.
+      - **responsibility**: Orchestrate canonical validation and readiness commands.
       - **targets**:
         - **id**: cli-run
           - **adapter**: rust
@@ -394,6 +394,36 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **selector**:
             - **kind**: module
             - **name**: lib::run_readiness
+        - **id**: cli-type
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::Cli
+        - **id**: cli-validation-inputs
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::ValidationInputs
+        - **id**: cli-validate
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::run_validate
+        - **id**: cli-baseline
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::parse_cli_baseline
+        - **id**: cli-validation-inputs-for-cli
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::validation_inputs_for_cli
 - **id**: FEAT-LSP-001
   - **title**: LSP
   - **summary**: Serve canonical specification navigation and hover information.
@@ -817,13 +847,13 @@ features:
 
   - id: FEAT-CLI-001
     title: CLI orchestration
-    summary: Orchestrate workspace, work, readiness, and validation commands.
+    summary: Orchestrate workspace, readiness, and validation commands.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: cli
-        responsibility: Orchestrate canonical validation and work commands.
+        responsibility: Orchestrate canonical validation and readiness commands.
         targets:
           - id: cli-run
             adapter: rust
@@ -837,6 +867,26 @@ features:
             adapter: rust
             path: src/lib.rs
             selector: { kind: module, name: 'lib::run_readiness' }
+          - id: cli-type
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: module, name: 'lib::Cli' }
+          - id: cli-validation-inputs
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: module, name: 'lib::ValidationInputs' }
+          - id: cli-validate
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: module, name: 'lib::run_validate' }
+          - id: cli-baseline
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: module, name: 'lib::parse_cli_baseline' }
+          - id: cli-validation-inputs-for-cli
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: module, name: 'lib::validation_inputs_for_cli' }
 
   - id: FEAT-LSP-001
     title: LSP
