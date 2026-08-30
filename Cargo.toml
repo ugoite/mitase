@@ -11,8 +11,6 @@ members = [
   "crates/mitase-delivery",
   "crates/mitase-agent",
   "crates/mitase-planner",
-  "crates/mitase-workbench-server",
-  "crates/mitase-app-ui",
   "crates/mitase-code-intel",
 ]
 resolver = "3"
@@ -71,8 +69,6 @@ tokio = { version = "1.52.3", features = ["io-util", "net", "rt-multi-thread", "
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
-mitase-app-ui = { path = "crates/mitase-app-ui" }
-mitase-workbench-server = { path = "crates/mitase-workbench-server" }
 
 [build-dependencies]
 serde_json.workspace = true

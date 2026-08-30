@@ -16,7 +16,7 @@ together.
 
 - [Repository](./repository/index.md) — configuration, migration, and fixing a
   workspace that is not ready yet.
-- [Work](./work/index.md) — Workbench, work requests, plans, and the command
-  card for executing a bounded change.
+- [Work](./work/index.md) — transitional work requests, plans, and the
+  command card for bounded repository tooling.
 - [Integrations](./integrations/index.md) — VS Code, LSP, and language adapter
   details.

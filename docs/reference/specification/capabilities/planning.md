@@ -434,15 +434,6 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORK-001#criterion.completion-evidence
-        - **id**: lifecycle-proofs
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: target_lifecycle_proofs
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.receipt-validation
 - **id**: FEAT-CLI-001
   - **title**: CLI orchestration
   - **summary**: Orchestrate workspace, work, readiness, and validation commands.
@@ -504,11 +495,6 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
         - **id**: retired-generated-work
           - **adapter**: declared
           - **path**: docs/generated/site-spec/work.md
-          - **selector**:
-            - **kind**: file
-        - **id**: retired-generated-workbench-features
-          - **adapter**: declared
-          - **path**: docs/generated/site-spec/workbench-features.md
           - **selector**:
             - **kind**: file
         - **id**: legacy-guide-getting-started
@@ -948,14 +934,6 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-001#criterion.completion-evidence
-          - id: lifecycle-proofs
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: target_lifecycle_proofs }
-            claims:
-              - kind: satisfies
-                criterion: REQ-CAPABILITY-001#criterion.receipt-validation
-
   - id: FEAT-CLI-001
     title: CLI orchestration
     summary: Orchestrate workspace, work, readiness, and validation commands.
@@ -1003,7 +981,6 @@ features:
           - { id: retired-generated-delivery, adapter: declared, path: docs/generated/site-spec/delivery.md, selector: { kind: file } }
           - { id: retired-generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
           - { id: retired-generated-work, adapter: declared, path: docs/generated/site-spec/work.md, selector: { kind: file } }
-          - { id: retired-generated-workbench-features, adapter: declared, path: docs/generated/site-spec/workbench-features.md, selector: { kind: file } }
           - { id: legacy-guide-getting-started, adapter: declared, path: docs/guide/getting-started.md, selector: { kind: file } }
           - { id: legacy-generated-documentation-page, adapter: declared, path: docs/generated/site-spec/features/documentation/docs.md, selector: { kind: file } }
           - { id: legacy-generated-site-spec-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
