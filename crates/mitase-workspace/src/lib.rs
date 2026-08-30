@@ -383,6 +383,34 @@ impl SpecIndex {
                 Some(ItemStatus::Planned)
             );
             for target in &binding.targets {
+                if !active_binding || target.lifecycle == ArtifactTargetLifecycle::Absent {
+                    continue;
+                }
+                let target_ref = BoundTargetRef {
+                    binding: binding_anchor.clone(),
+                    target_id: target.id.clone(),
+                };
+                if artifact_identities_for_target(&out.artifact_units, target).len() != 1 {
+                    continue;
+                }
+                current_target_refs.insert(target_ref.clone());
+                match binding.role {
+                    BindingRole::Implementation => {
+                        current_implementation_target_refs.insert(target_ref);
+                    }
+                    BindingRole::Verification => {
+                        current_verification_target_refs.insert(target_ref);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for (binding_anchor, binding) in &out.bindings {
+            let active_binding = !matches!(
+                out.item_status.get(&binding_anchor.item),
+                Some(ItemStatus::Planned)
+            );
+            for target in &binding.targets {
                 let current_target = target.lifecycle != ArtifactTargetLifecycle::Absent;
                 let target_ref = BoundTargetRef {
                     binding: binding_anchor.clone(),

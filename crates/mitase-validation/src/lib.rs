@@ -2965,6 +2965,7 @@ mod tests {
         verification_lifecycle: Option<&str>,
         verification_criterion: &str,
         guide: &str,
+        reverse_binding_order: bool,
     ) -> (TempDir, SpecWorkspace, SpecIndex, ValidationResult) {
         let tempdir = tempdir().expect("tempdir");
         fs::create_dir_all(tempdir.path().join("spec")).expect("spec dir");
@@ -3015,6 +3016,11 @@ mod tests {
         let verification_lifecycle = verification_lifecycle
             .map(|value| format!("            lifecycle: {value}\n"))
             .unwrap_or_default();
+        let (implementation_binding_id, verification_binding_id) = if reverse_binding_order {
+            ("z-implementation", "a-verification")
+        } else {
+            ("implementation", "verification")
+        };
         let spec = r#"schema: mitase/spec/v1
 kind: requirements
 namespace: test
@@ -3049,7 +3055,7 @@ features:
     summary: Verification fixture.
     status: {feature_status}
     bindings:
-      - id: implementation
+      - id: {implementation_binding_id}
         role: implementation
         facet: test
         responsibility: Own the implementation target.
@@ -3063,7 +3069,7 @@ features:
 {implementation_lifecycle}            claims:
               - kind: satisfies
                 criterion: REQ-TEST-001#criterion.acceptance
-      - id: verification
+      - id: {verification_binding_id}
         role: verification
         facet: test
         responsibility: Declare the proof relationship.
@@ -3078,7 +3084,7 @@ features:
               - kind: verifies
                 criterion: {verification_criterion}
                 covers:
-                  - FEAT-TEST-001#binding.implementation/target.implementation
+                  - FEAT-TEST-001#binding.{implementation_binding_id}/target.implementation
                 runner:
                   runner: proof
                   arguments: {{ test: proof }}
@@ -3107,6 +3113,7 @@ features:
             None,
             "REQ-TEST-001#criterion.acceptance",
             "# Proof\n",
+            false,
         );
         assert!(verification_diagnostics(&result).is_empty());
         let implementation: BoundTargetRef =
@@ -3125,6 +3132,32 @@ features:
     }
 
     #[test]
+    fn verification_claim_indexing_is_order_independent() {
+        let (_tempdir, _workspace, index, result) = verification_fixture(
+            "implemented",
+            None,
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+            true,
+        );
+        assert!(verification_diagnostics(&result).is_empty());
+        let implementation: BoundTargetRef =
+            "FEAT-TEST-001#binding.z-implementation/target.implementation"
+                .parse()
+                .expect("implementation target");
+        let proof: BoundTargetRef = "FEAT-TEST-001#binding.a-verification/target.proof"
+            .parse()
+            .expect("proof target");
+        assert!(
+            index
+                .verification_by_target
+                .get(&implementation)
+                .is_some_and(|targets| targets == &vec![proof])
+        );
+    }
+
+    #[test]
     fn verification_claim_rejects_unrelated_criterion_coverage() {
         let (_tempdir, _workspace, index, result) = verification_fixture(
             "implemented",
@@ -3132,6 +3165,7 @@ features:
             None,
             "REQ-TEST-001#criterion.other",
             "# Proof\n",
+            false,
         );
         assert!(
             verification_diagnostics(&result)
@@ -3158,6 +3192,7 @@ features:
             None,
             "REQ-TEST-001#criterion.acceptance",
             "# Proof\n## Proof\n",
+            false,
         );
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.rule_id == "MITASE-TARGET-002"
@@ -3188,6 +3223,7 @@ features:
             None,
             "REQ-TEST-001#criterion.acceptance",
             "# Proof\n",
+            false,
         );
         let implementation: BoundTargetRef =
             "FEAT-TEST-001#binding.implementation/target.implementation"
@@ -3215,6 +3251,7 @@ features:
             Some("absent"),
             "REQ-TEST-001#criterion.acceptance",
             "# Proof\n",
+            false,
         );
         assert!(
             verification_diagnostics(&absent_result)
@@ -3237,6 +3274,7 @@ features:
             None,
             "REQ-TEST-001#criterion.acceptance",
             "# Proof\n",
+            false,
         );
         assert!(verification_diagnostics(&result).iter().any(|diagnostic| {
             diagnostic
