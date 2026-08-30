@@ -2022,7 +2022,10 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     digest: "deleted".into(),
                     structural_digest: "deleted".into(),
                 },
-                false,
+                // A deleted file may not be present in a reconstructed
+                // baseline inventory when another provider fails. It still
+                // belongs to the baseline ownership graph.
+                baseline.is_some(),
             ));
         }
         if units.is_empty() {
@@ -5548,6 +5551,104 @@ requirements:
                 .diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.rule_id == "MITASE-CHANGE-003")
+        );
+    }
+
+    #[test]
+    fn deleted_declared_artifact_uses_baseline_ownership_when_inventory_is_unavailable() {
+        let repository = tempdir().expect("temporary repository");
+        fs::create_dir_all(repository.path().join("spec")).expect("spec directory");
+        fs::write(
+            repository.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  excludes: []\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers:\n",
+                "        declared: { roots: [obsolete.txt] }\n",
+                "        rust: {}\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
+                "  changed:\n",
+                "    require_owned_changes: true\n",
+                "    require_plan: false\n",
+                "verification: { runners: {} }\n",
+                "work:\n",
+                "  slicing: { max_editable_files: 2, max_editable_symbols: 4, max_verification_targets: 2, max_readonly_targets: 2, max_total_bytes: 4096 }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(repository.path().join("obsolete.txt"), "legacy\n").expect("artifact");
+        fs::write(
+            repository.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: mitase/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Retire legacy artifact\n",
+                "    summary: Retire a legacy artifact.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: maintenance\n",
+                "        role: implementation\n",
+                "        facet: repository-tooling\n",
+                "        responsibility: Own the legacy artifact during retirement.\n",
+                "        owns:\n",
+                "          - id: legacy-artifact\n",
+                "            adapter: declared\n",
+                "            path: obsolete.txt\n",
+                "            selector: { kind: file }\n",
+                "        targets: []\n",
+            ),
+        )
+        .expect("feature spec");
+        let baseline = init_git_repo(repository.path());
+        fs::remove_file(repository.path().join("obsolete.txt")).expect("delete artifact");
+
+        let workspace = SpecWorkspace::load(repository.path()).expect("current workspace");
+        let index = workspace.index().expect("current index");
+        let changed_files = vec![ChangedFile {
+            status: ChangeStatus::Deleted,
+            old_path: Some(RepoPath::new("obsolete.txt").unwrap()),
+            new_path: None,
+            hunks: vec![ChangedRange {
+                old_start: 1,
+                old_end: 1,
+                new_start: 0,
+                new_end: 0,
+            }],
+        }];
+        let result = validate(&ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: Some(&changed_files),
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: Some(&baseline),
+        });
+        assert!(
+            !result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.rule_id == "MITASE-CHANGE-001"
+                    && diagnostic.message.contains("no ownership binding")
+            }),
+            "deleted baseline-owned artifact was rejected: {:?}",
+            result.diagnostics
         );
     }
 
