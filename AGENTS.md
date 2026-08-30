@@ -23,9 +23,9 @@ execution, patch application, agents, retries, delivery state, task queues,
 and workspace mutation belong to external repository tooling.
 
 The [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md)
-is the highest-priority design constraint. The current checkout still contains
-transitional Work surfaces; their existence is not permission to add new
-product responsibilities or compatibility layers.
+is the highest-priority design constraint. The former Work and Workbench
+surfaces have been removed from the current checkout; do not reintroduce them
+as product responsibilities or compatibility layers.
 
 ## Architecture
 
