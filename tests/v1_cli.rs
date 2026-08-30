@@ -175,27 +175,6 @@ fn obsolete_pre_release_fixture_is_rejected_under_canonical_mitase_identity() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("obsolete pre-release"));
 }
 
-#[test]
-fn workbench_projection_does_not_implicitly_plan() {
-    let output = Command::cargo_bin("mitase")
-        .unwrap()
-        .args([
-            "workbench",
-            "project",
-            "--workspace",
-            ".",
-            "--format",
-            "json",
-        ])
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    let projection: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(projection["work"]["request"].is_null());
-    assert!(projection["work"]["plan"].is_null());
-    assert_eq!(projection["diagnostics"]["validation"]["state"], "not_run");
-}
-
 fn copy_fixture_tree(source: &Path, destination: &Path) {
     fs::create_dir_all(destination).unwrap();
     for entry in fs::read_dir(source).unwrap() {

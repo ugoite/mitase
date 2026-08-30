@@ -61,20 +61,18 @@ uuid.workspace = true
 url = "2.5.7"
 mitase-diagnostics = { path = "crates/mitase-diagnostics" }
 mitase-inventory = { path = "crates/mitase-inventory" }
-mitase-app-ui = { path = "crates/mitase-app-ui" }
 mitase-code-intel = { path = "crates/mitase-code-intel" }
-mitase-planner = { path = "crates/mitase-planner" }
 mitase-project-model = { path = "crates/mitase-project-model" }
 mitase-spec-model = { path = "crates/mitase-spec-model" }
 mitase-validation = { path = "crates/mitase-validation" }
-mitase-work-model = { path = "crates/mitase-work-model" }
-mitase-workbench-server = { path = "crates/mitase-workbench-server" }
 mitase-workspace = { path = "crates/mitase-workspace" }
 tempfile.workspace = true
 tokio = { version = "1.52.3", features = ["io-util", "net", "rt-multi-thread", "signal", "sync"] }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
+mitase-app-ui = { path = "crates/mitase-app-ui" }
+mitase-workbench-server = { path = "crates/mitase-workbench-server" }
 
 [build-dependencies]
 serde_json.workspace = true
