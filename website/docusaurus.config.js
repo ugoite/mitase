@@ -68,7 +68,6 @@ const config = {
           title: 'Workflows',
           items: [
             { label: 'Configuration', to: '/docs/workflows/repository/configuration' },
-            { label: 'Plan and execute work', to: '/docs/workflows/work' },
             { label: 'Contribute', to: '/docs/contribute' }
           ]
         },
