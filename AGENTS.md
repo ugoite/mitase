@@ -24,8 +24,8 @@ and workspace mutation belong to external repository tooling.
 
 The [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md)
 is the highest-priority design constraint. The current checkout still contains
-transitional Work and Workbench surfaces; their existence is not permission to
-add new product responsibilities or compatibility layers.
+transitional Work surfaces; their existence is not permission to add new
+product responsibilities or compatibility layers.
 
 ## Architecture
 
@@ -35,9 +35,9 @@ add new product responsibilities or compatibility layers.
 - `mitase-validation` and `mitase-diagnostics`: structural, semantic, and
   repository validation.
 - `mitase`: the CLI and specification-facing entrypoints.
-- `mitase-work-model`, `mitase-agent`, `mitase-planner`, and Workbench crates:
-  transitional execution-oriented surfaces scheduled for removal or
-  replacement by the re-foundation phases.
+- `mitase-work-model`, `mitase-agent`, `mitase-planner`, and
+  `mitase-delivery`: transitional execution-oriented surfaces scheduled for
+  removal or replacement by the re-foundation phases.
 
 Do not route repository delivery behavior back into Mitase. Repository skills
 may create worktrees, implement and review changes, run commands, coordinate
@@ -73,8 +73,7 @@ repository-specific absolute path.
 The semantic checks are owned by Mise. `.github/workflows/ci.yml` only places
 the parallel `ci:lane:rust-check`, `ci:lane:rust-test`, and `ci:lane:repo`
 tasks, then aggregates them in `ci-required`. The merge group validates its
-synthetic merge commit. CodeQL, release, and the transitional Workbench gate
-remain separate concerns.
+synthetic merge commit. CodeQL and release remain separate concerns.
 
 Rust dependency cache and compiler cache are separate. Shared dependency
 cache writes are limited to the `main` push lane, and sccache is read-only for

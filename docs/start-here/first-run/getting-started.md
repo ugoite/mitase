@@ -20,9 +20,7 @@ The target v1 CLI surface is specification-only:
 - `show`
 - `list`
 
-The current alpha checkout also exposes transitional `work`, `task`, and
-`workbench` commands. They are retained only until the Re-Foundation removal
-phases land; they are not part of the frozen product boundary. See the
+Execution and delivery tooling is external to the Mitase CLI. See the
 [Re-Foundation freeze](../../project/mitase-re-foundation-freeze.md) before
 building new integrations.
 

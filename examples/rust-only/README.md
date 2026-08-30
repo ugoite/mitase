@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/rust-only`
-- `cargo run --quiet -- workbench project --workspace examples/rust-only`
 
 Primary implementation targets:
 - `src/trace.rs` (rust)

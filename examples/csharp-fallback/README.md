@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/csharp-fallback`
-- `cargo run --quiet -- workbench project --workspace examples/csharp-fallback`
 
 Primary implementation targets:
 - `src/OrderSummary.cs` (csharp)

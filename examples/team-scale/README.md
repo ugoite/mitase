@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/team-scale`
-- `cargo run --quiet -- workbench project --workspace examples/team-scale`
 
 Primary implementation targets:
 - `src/auth/login.rs` (rust)

@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/python-only`
-- `cargo run --quiet -- workbench project --workspace examples/python-only`
 
 Primary implementation targets:
 - `python/app.py` (python)

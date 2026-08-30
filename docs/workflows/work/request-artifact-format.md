@@ -45,15 +45,9 @@ Mitase does not own execution-state validation.
 
 `Requirement criterion` is the human-facing semantic meaning of “behavior” in
 this flow. Feature implementation bindings and exact implementation targets
-are also valid Work origins when the server projects them as enabled origin
-capabilities. The browser copies only the projected `origin` and never invents
-targets, criteria, or contracts.
+are also valid Work origins when external repository tooling projects them as
+enabled origin capabilities. Tooling must never invent targets, criteria, or
+contracts.
 
 Use `mitase/work-request/v1` as the current request wire format. Old `summary`,
 `seeds`, and generic identity payloads are intentionally rejected before v1.
-
-Workbench split recovery may add the internal `exact_scope` closure fields to
-the same v1 request when a user selects one proposed slice. Those fields are
-server-owned evidence of the selected Generated targets and contracts; they
-are revalidated against the origin closure before planning and are not a
-second user-editable scope mechanism.

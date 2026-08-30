@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/browser-ui`
-- `cargo run --quiet -- workbench project --workspace examples/browser-ui`
 
 Primary implementation targets:
 - `src/components/Counter.tsx` (typescript)

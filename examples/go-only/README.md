@@ -7,7 +7,6 @@ It demonstrates one requirement and one feature connected through explicit bindi
 Current commands:
 
 - `cargo run --quiet -- validate examples/go-only`
-- `cargo run --quiet -- workbench project --workspace examples/go-only`
 
 Primary implementation targets:
 - `go/app.go` (go)
