@@ -2,6 +2,12 @@
 
 Adopt Mitase one connected capability at a time. The first goal is not repository-wide coverage; it is one implemented criterion with exact implementation ownership, an exact verification target, and current validation evidence.
 
+The repository's Philosophy, Policy, Requirement, Criterion, and Feature
+documents remain the authority for what the repository means. Mitase interprets
+that specification, indexes its relationships, resolves exact Artifact
+targets, and validates the evidence. Adoption does not give Mitase ownership
+of planning, implementation, execution, testing, review, retries, or delivery.
+
 ## 1. Inventory without claiming ownership
 
 Create `mitase.yaml` with the real specification root and only the providers needed for the first capability. Keep readiness off while inspecting inventory:

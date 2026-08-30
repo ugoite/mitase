@@ -4,6 +4,13 @@
 
 The repository root `mitase.yaml` is Mitase's mature self-hosting dogfood profile, not a starter configuration. New repositories should copy the closest checked-in example and adopt one connected capability at a time; the root profile deliberately applies the strictest current v1 validation boundary to itself.
 
+Configuration controls how Mitase interprets and validates the repository-owned
+specification; it does not transfer authority over repository work to Mitase.
+The specification remains the source of declared meaning, while current
+inventory and exact target resolution provide the evidence used for derived
+state. Readiness is therefore a bounded evidence report, not a planning or
+delivery status.
+
 ```yaml
 schema: mitase/config/v1
 workspace:

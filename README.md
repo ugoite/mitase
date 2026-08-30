@@ -12,6 +12,12 @@ diagnostics, and queries that explain how those pieces connect. It is
 repository-native: the specification and its references live with the code
 they describe.
 
+The durable foundation separates repository-owned meaning from Mitase's role as
+interpreter, index, resolver, and validator. Mitase can determine whether
+declared relationships and evidence are structurally satisfied, but it does
+not own planning, implementation, execution, testing, review, retries, or
+delivery.
+
 ## Frozen product boundary
 
 The canonical model is:
