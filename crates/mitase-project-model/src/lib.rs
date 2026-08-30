@@ -40,7 +40,6 @@ pub struct InventoryProfile {
 pub enum ValidationPreset {
     Standard,
     Strict,
-    AgentReady,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -157,7 +156,7 @@ inventory:
   active_profile: default
   profiles: [{ id: default, providers: { rust: {} } }]
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:
@@ -220,5 +219,10 @@ verification: { runners: {} }
                 "retired readiness level must not remain a compatibility alias: {retired_level}"
             );
         }
+        let agent_ready_source = source.replace("preset: strict", "preset: agent-ready");
+        assert!(
+            serde_yaml::from_str::<ProjectConfig>(&agent_ready_source).is_err(),
+            "agent-ready must not remain a compatibility alias"
+        );
     }
 }
