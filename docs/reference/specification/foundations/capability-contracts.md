@@ -334,6 +334,23 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                   - **package**: mitase
                   - **harness**: v1_cli
                   - **test**: generated_spec_reference_covers_every_source_document
+        - **id**: docs-path-helper
+          - **adapter**: rust
+          - **path**: tests/v1_cli.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: generated_spec_path
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.docs-generation
+              - **covers**:
+                - FEAT-DOCS-001#binding.implementation/target.generated-index
+              - **runner**:
+                - **runner**: cargo-test-integration
+                - **arguments**:
+                  - **package**: mitase
+                  - **harness**: v1_cli
+                  - **test**: generated_spec_reference_covers_every_source_document
 - **id**: REQ-CAPABILITY-002
   - **title**: Multi-language inventory
   - **description**: Semantic inventories expose stable, profile-aware artifact identities across supported languages and structured formats.
@@ -656,6 +673,15 @@ requirements:
             adapter: rust
             path: tests/v1_cli.rs
             selector: { kind: symbol, name: generated_spec_reference_covers_every_source_document }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.docs-generation
+                covers: [FEAT-DOCS-001#binding.implementation/target.generated-index]
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
+          - id: docs-path-helper
+            adapter: rust
+            path: tests/v1_cli.rs
+            selector: { kind: symbol, name: generated_spec_path }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.docs-generation
