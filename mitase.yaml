@@ -58,7 +58,7 @@ inventory:
             - docs/reference/specification/index.md
             - docs/reference/specification/capabilities/index.md
             - docs/reference/specification/capabilities/core.md
-            - docs/reference/specification/capabilities/planning.md
+            - docs/reference/specification/capabilities/surfaces.md
             - docs/reference/specification/contracts/index.md
             - docs/reference/specification/contracts/code-diagnostics.md
             - docs/reference/specification/contracts/inventory.md
@@ -77,7 +77,7 @@ inventory:
             - docs/understand/quality/spec-antipatterns.md
             - docs/workflows/integrations/vscode-extension.md
             - docs/mitase/features/capabilities/core.yaml
-            - docs/mitase/features/capabilities/planning.yaml
+            - docs/mitase/features/capabilities/surfaces.yaml
             - docs/mitase/features/public-entrypoints/code-diagnostics.yaml
             - docs/mitase/features/public-entrypoints/inventory.yaml
             - docs/mitase/features/public-entrypoints/spec-model.yaml

@@ -361,24 +361,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **path**: crates/mitase-validation/src/readiness.rs
           - **selector**:
             - **kind**: file
-        - **id**: readiness-absence-obligation
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::current_absence_obligation_matches
-        - **id**: readiness-attempt-digest
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::durable_attempt_digest
-        - **id**: readiness-finalized-absent
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::finalized_absent_targets
         - **id**: readiness-implementation-obligations
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/readiness.rs
@@ -391,30 +373,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: readiness::implemented_feature_subjects
-        - **id**: readiness-json-files
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::json_files_recursive
-        - **id**: readiness-revision-ancestor
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::revision_is_ancestor
-        - **id**: readiness-selector-match
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::selector_matches_resolved_target
-        - **id**: readiness-target-absent
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: readiness::target_is_absent
       - **targets**:
         - **id**: readiness-evaluate
           - **adapter**: rust
@@ -777,18 +735,6 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/readiness.rs
             selector: { kind: file }
-          - id: readiness-absence-obligation
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::current_absence_obligation_matches' }
-          - id: readiness-attempt-digest
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::durable_attempt_digest' }
-          - id: readiness-finalized-absent
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::finalized_absent_targets' }
           - id: readiness-implementation-obligations
             adapter: rust
             path: crates/mitase-validation/src/readiness.rs
@@ -797,22 +743,6 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/readiness.rs
             selector: { kind: module, name: 'readiness::implemented_feature_subjects' }
-          - id: readiness-json-files
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::json_files_recursive' }
-          - id: readiness-revision-ancestor
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::revision_is_ancestor' }
-          - id: readiness-selector-match
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::selector_matches_resolved_target' }
-          - id: readiness-target-absent
-            adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: module, name: 'readiness::target_is_absent' }
         targets:
           - id: readiness-evaluate
             adapter: rust
