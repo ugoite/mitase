@@ -235,8 +235,6 @@ inventory:
             - scripts/ci/quality-gates.sh
             - scripts/ci/workbench-visual.sh
             - scripts/dev/validate-changed.sh
-            - skills/README.md
-            - skills/mitase-maintainer/SKILL.md
             - src/lib.rs
             - tests/v1_cli.rs
             - tests/support/mod.rs
