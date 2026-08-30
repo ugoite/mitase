@@ -522,22 +522,10 @@ fn implemented_criteria(workspace: &SpecWorkspace, index: &SpecIndex) -> Result<
 
 fn implementation_obligations(index: &SpecIndex, criterion: &SpecAnchor) -> Vec<BoundTargetRef> {
     index
-        .all_criteria_to_implementation_targets
+        .criteria_to_implementation_targets
         .get(criterion)
         .into_iter()
         .flatten()
-        .filter(|target| {
-            index.bindings.get(&target.binding).is_some_and(|binding| {
-                index
-                    .item_status
-                    .get(&target.binding.item)
-                    .is_none_or(|status| *status != ItemStatus::Planned)
-                    && binding
-                        .targets
-                        .iter()
-                        .any(|candidate| candidate.id == target.target_id)
-            })
-        })
         .cloned()
         .collect()
 }
@@ -690,13 +678,19 @@ fn verification_subject(
                 runner_ref.runner
             ));
         }
-        if runner_ref
-            .arguments
-            .values()
-            .any(|value| value.contains('{'))
-        {
+        let configured = workspace
+            .config
+            .verification
+            .runners
+            .get(&runner_ref.runner);
+        if configured.is_some_and(|runner| runner.executable.trim().is_empty()) {
             blockers.push(format!(
-                "verification target {verification} has unresolved runner arguments"
+                "verification runner {} has no executable metadata",
+                runner_ref.runner
+            ));
+        } else if !crate::verification_runner_is_complete(&workspace.config, runner_ref) {
+            blockers.push(format!(
+                "verification target {verification} has incomplete runner metadata"
             ));
         }
     }

@@ -100,8 +100,10 @@ source of authority while still making impact and coverage queries cheap.
   adapter.
 - Artifact types are extended through adapters and resolvers rather than by
   adding a new top-level specification kind.
-- Verification Claims identify what proves a Criterion and must resolve to an
-  existing Criterion and target.
+- Verification Claims identify what is designated to prove a Criterion. A
+  current claim requires one existing Criterion, one uniquely resolved current
+  proof target, complete declarative verifier metadata, and exact coverage of
+  current implementation targets for that same Criterion.
 
 ## Validation layers
 
@@ -119,15 +121,20 @@ valid repository contract.
 Status is calculated from repository state whenever possible. A Feature with a
 Binding, a resolvable Artifact, and valid Verification Claims for its required
 Criteria can be reported as `verified`; missing or conflicting evidence is a
-diagnostic rather than a status that a user can hide with a declaration.
+diagnostic rather than a status that a user can hide with a declaration. A
+valid claim designates proof; it does not assert that an external verifier has
+run or passed.
 
 ## Evidence and derived state
 
 Exact selectors and typed Verification Claims are declarations until their
 referenced repository targets resolve. Once resolved, they provide evidence
-for derived ownership, implementation, verification, and coverage state. An
-unresolved or conflicting declaration remains visible as a diagnostic; it is
-never promoted to authoritative evidence by a human status alone.
+for derived ownership, implementation, verification, and coverage state.
+Current indexes include only non-planned, present, uniquely resolved targets;
+planned and absent targets remain available in catalog indexes but never count
+as current proof coverage. An unresolved or conflicting declaration remains
+visible as a diagnostic; it is never promoted to authoritative evidence by a
+human status alone.
 
 ## Library direction
 
