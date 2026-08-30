@@ -69,7 +69,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
         - POL-ADOPTION-001#rule.feature-evidence
     - **id**: readiness-ladder
       - **kind**: quality
-      - **statement**: Readiness advances monotonically through traceable, seedable, work-ready, verifiable, and closed-loop evidence.
+      - **statement**: Readiness advances monotonically through traceable, seedable, and verifiable evidence.
       - **governed_by**:
         - POL-ADOPTION-001#rule.bounded-rollout
     - **id**: change-validation
@@ -519,7 +519,7 @@ requirements:
         governed_by: [POL-ADOPTION-001#rule.active-status, POL-ADOPTION-001#rule.feature-evidence]
       - id: readiness-ladder
         kind: quality
-        statement: Readiness advances monotonically through traceable, seedable, work-ready, verifiable, and closed-loop evidence.
+        statement: Readiness advances monotonically through traceable, seedable, and verifiable evidence.
         governed_by: [POL-ADOPTION-001#rule.bounded-rollout]
       - id: change-validation
         kind: security

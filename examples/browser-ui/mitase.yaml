@@ -10,7 +10,7 @@ inventory:
 validation:
   preset: standard
   readiness:
-    target: closed-loop
+    target: seedable
     limits: { max_ownership_scope_units: 64 }
   changed:
     require_owned_changes: false

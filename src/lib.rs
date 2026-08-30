@@ -158,12 +158,12 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     match format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => println!(
-            "Readiness target: {}\nInventory: {}/{}\nWorkability: {}/{}",
+            "Readiness target: {}\nInventory: {}/{}\nVerification: {}/{}",
             report.target,
             report.inventory.ready,
             report.inventory.required,
-            report.workability.ready,
-            report.workability.required
+            report.verification.ready,
+            report.verification.required
         ),
     }
     Ok(if report.meets_configured(&workspace.config) {

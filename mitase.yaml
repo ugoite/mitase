@@ -171,7 +171,7 @@ validation:
     probes:
       implemented_criteria:
         - criterion: REQ-CAPABILITY-001#criterion.spec-model
-          level: work-ready
+          level: verifiable
       public_entrypoints: { selection: all, level: seedable }
       changed_units: false
     limits: { max_ownership_scope_units: 64 }

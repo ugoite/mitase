@@ -1622,7 +1622,7 @@ mod tests {
                 "validation:\n",
                 "  preset: agent-ready\n",
                 "  readiness:\n",
-                "    target: closed-loop\n",
+                "    target: verifiable\n",
                 "    limits: { max_ownership_scope_units: 64 }\n",
                 "  changed:\n",
                 "    baseline:\n",
