@@ -20,3 +20,7 @@ The [concepts](./concepts.md) page is the compact vocabulary guide. The
 [domain glossary](./domain-glossary.md) provides the complete terms. The
 [architecture](./v1-architecture.md) explains the canonical graph and
 traceability rules behind it.
+
+The [exact ArtifactTarget resolution](./artifact-target-resolution.md) page
+defines the adapter matrix, symbol identity grammar, and four typed resolution
+outcomes.

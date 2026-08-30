@@ -15,7 +15,7 @@ inventory:
             - editors/vscode/src/model.js
             - editors/vscode/test/model.test.js
             - website/src/pages/index.js
-        markdown: { roots: [docs/mitase] }
+        markdown: { roots: [docs/mitase, docs/understand] }
         declared:
           roots:
             - AGENTS.md
