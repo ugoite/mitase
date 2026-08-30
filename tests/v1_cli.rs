@@ -111,11 +111,6 @@ fn generated_spec_path(relative: &Path) -> PathBuf {
         {
             "contracts"
         }
-        [first, second, ..]
-            if first.as_os_str() == "features" && second.as_os_str() == "workbench" =>
-        {
-            "workbench"
-        }
         [first, ..] if first.as_os_str() == "features" => "capabilities",
         _ => panic!("unsupported specification path: {}", relative.display()),
     };
