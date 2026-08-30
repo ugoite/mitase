@@ -130,18 +130,6 @@ pub static RULES: &[RuleMetadata] = &[
     strict_metadata!("MITASE-CHANGE-003"),
     strict_metadata!("MITASE-CHANGE-004"),
     strict_metadata!("MITASE-CHANGE-005"),
-    metadata!("MITASE-WORK-001"),
-    metadata!("MITASE-WORK-002"),
-    fixed_metadata!("MITASE-WORK-003"),
-    metadata!("MITASE-WORK-004"),
-    fixed_metadata!("MITASE-WORK-005"),
-    fixed_metadata!("MITASE-WORK-006"),
-    fixed_metadata!("MITASE-WORK-007"),
-    fixed_metadata!("MITASE-WORK-008"),
-    fixed_metadata!("MITASE-WORK-009"),
-    fixed_metadata!("MITASE-WORK-010"),
-    fixed_metadata!("MITASE-WORK-011"),
-    fixed_metadata!("MITASE-WORK-012"),
     fixed_metadata!("MITASE-READINESS-001"),
     fixed_metadata!("MITASE-VERIFICATION-001"),
     fixed_metadata!("MITASE-VERIFICATION-002"),
@@ -151,8 +139,8 @@ pub static RULES: &[RuleMetadata] = &[
 /// intentionally kept beside the validator so no caller needs to infer
 /// semantics from a rule-id string.
 pub fn phase_for_rule(rule: &str) -> ValidationPhase {
-    if rule.starts_with("MITASE-WORK-") || rule.starts_with("MITASE-READINESS-") {
-        ValidationPhase::Plan
+    if rule.starts_with("MITASE-READINESS-") {
+        ValidationPhase::Readiness
     } else if rule.starts_with("MITASE-CHANGE-") || rule == "MITASE-OPERATION-001" {
         ValidationPhase::Scope
     } else if [
