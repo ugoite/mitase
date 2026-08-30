@@ -1,9 +1,9 @@
 ---
-title: "Mitase functional units / Planning"
-description: "Generated reference for docs/mitase/features/capabilities/planning.yaml"
+title: "Mitase functional units / Surfaces"
+description: "Generated reference for docs/mitase/features/capabilities/surfaces.yaml"
 ---
 
-> Generated from `docs/mitase/features/capabilities/planning.yaml`.
+> Generated from `docs/mitase/features/capabilities/surfaces.yaml`.
 
 ## Parsed content
 
@@ -45,14 +45,14 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
 - **id**: FEAT-CLI-001
-  - **title**: CLI orchestration
-  - **summary**: Orchestrate workspace, readiness, and validation commands.
+  - **title**: CLI entrypoints
+  - **summary**: Expose workspace, readiness, and validation commands.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: cli
-      - **responsibility**: Orchestrate canonical validation and readiness commands.
+      - **responsibility**: Expose canonical validation and readiness commands.
       - **targets**:
         - **id**: cli-run
           - **adapter**: rust
@@ -62,7 +62,7 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
             - **name**: run
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
+              - **criterion**: REQ-CAPABILITY-001#criterion.cli-entrypoints
       - **owns**:
         - **id**: cli-readiness
           - **adapter**: rust
@@ -129,31 +129,6 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
       - **facet**: documentation
       - **responsibility**: Own the pre-v1 documentation tree as a product surface; replace obsolete information architecture outright without legacy routes or aliases.
       - **owns**:
-        - **id**: retired-generated-delivery
-          - **adapter**: declared
-          - **path**: docs/generated/site-spec/delivery.md
-          - **selector**:
-            - **kind**: file
-        - **id**: retired-generated-public-entrypoints
-          - **adapter**: declared
-          - **path**: docs/generated/site-spec/public-entrypoints.md
-          - **selector**:
-            - **kind**: file
-        - **id**: legacy-guide-getting-started
-          - **adapter**: declared
-          - **path**: docs/guide/getting-started.md
-          - **selector**:
-            - **kind**: file
-        - **id**: legacy-generated-documentation-page
-          - **adapter**: declared
-          - **path**: docs/generated/site-spec/features/documentation/docs.md
-          - **selector**:
-            - **kind**: file
-        - **id**: legacy-generated-site-spec-index
-          - **adapter**: declared
-          - **path**: docs/generated/site-spec/index.md
-          - **selector**:
-            - **kind**: file
         - **id**: documentation-contribute
           - **adapter**: declared
           - **path**: docs/contribute
@@ -287,14 +262,14 @@ features:
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.contract-closure }]
 
   - id: FEAT-CLI-001
-    title: CLI orchestration
-    summary: Orchestrate workspace, readiness, and validation commands.
+    title: CLI entrypoints
+    summary: Expose workspace, readiness, and validation commands.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: cli
-        responsibility: Orchestrate canonical validation and readiness commands.
+        responsibility: Expose canonical validation and readiness commands.
         targets:
           - id: cli-run
             adapter: rust
@@ -302,7 +277,7 @@ features:
             selector: { kind: symbol, name: run }
             claims:
               - kind: satisfies
-                criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
+                criterion: REQ-CAPABILITY-001#criterion.cli-entrypoints
         owns:
           - id: cli-readiness
             adapter: rust
@@ -355,11 +330,6 @@ features:
         facet: documentation
         responsibility: Own the pre-v1 documentation tree as a product surface; replace obsolete information architecture outright without legacy routes or aliases.
         owns:
-          - { id: retired-generated-delivery, adapter: declared, path: docs/generated/site-spec/delivery.md, selector: { kind: file } }
-          - { id: retired-generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
-          - { id: legacy-guide-getting-started, adapter: declared, path: docs/guide/getting-started.md, selector: { kind: file } }
-          - { id: legacy-generated-documentation-page, adapter: declared, path: docs/generated/site-spec/features/documentation/docs.md, selector: { kind: file } }
-          - { id: legacy-generated-site-spec-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
           - { id: documentation-contribute, adapter: declared, path: docs/contribute, selector: { kind: path-prefix, value: docs/contribute } }
           - { id: documentation-project, adapter: declared, path: docs/project, selector: { kind: path-prefix, value: docs/project } }
           - { id: documentation-reference, adapter: declared, path: docs/reference, selector: { kind: path-prefix, value: docs/reference } }

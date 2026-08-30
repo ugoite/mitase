@@ -27,8 +27,8 @@ Determine:
    specification-facing, or operational.
 3. Which source of truth and invariant must remain valid.
 4. Which root `mise.toml` task is the smallest useful validation.
-5. Whether the change affects `ci-rust-check`, `ci-rust-test`, `ci-repo`, or
-   the explicitly transitional Workbench gate.
+5. Whether the change affects `ci-rust-check`, `ci-rust-test`, `ci-repo`, or a
+   separate CodeQL or release workflow.
 
 Only root tasks from `mise.toml` are valid. Do not use GitHub Actions command
 snippets as a local command source of truth.
@@ -38,8 +38,8 @@ snippets as a local command source of truth.
 Mitase owns specification description, resolution, and verification. Do not
 route WorkRequest, WorkPlan, agent lifecycle, shell/test execution, retries,
 patch application, workspace mutation, or delivery state back into product
-code. Existing Work and Workbench code is transitional until its scheduled
-removal phase.
+code. The former Work and Workbench runtime surfaces have been removed; do not
+reintroduce them into the product.
 
 ## Worktree preflight
 

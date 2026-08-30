@@ -23,9 +23,9 @@ execution, patch application, agents, retries, delivery state, task queues,
 and workspace mutation belong to external repository tooling.
 
 The [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md)
-is the highest-priority design constraint. The current checkout still contains
-transitional Work surfaces; their existence is not permission to add new
-product responsibilities or compatibility layers.
+is the highest-priority design constraint. The former Work and Workbench
+surfaces have been removed from the current checkout; do not reintroduce them
+as product responsibilities or compatibility layers.
 
 ## Architecture
 
@@ -57,10 +57,9 @@ mise run test
 mise run ci
 ```
 
-`mise run check:repo` currently wraps `cargo run --quiet -- validate workspace .`
-as a transitional validator. When the re-founded `mitase check .` command is
-available, replace that inner command and remove the transitional wording; do
-not make the old Work model a new public contract.
+`mise run check:repo` invokes the specification-only `mitase check .` command,
+the canonical whole-repository validator. Do not make the old Work model a new
+public contract.
 
 `CARGO_TARGET_DIR=target/rust` is the portable repository default. Developers
 who need intermediate build sharing across worktrees may set

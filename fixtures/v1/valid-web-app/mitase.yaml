@@ -6,9 +6,9 @@ inventory:
   active_profile: default
   profiles: [{ id: default, providers: { rust: { mode: test, include_tests: true }, typescript: {}, openapi: { roots: [openapi.yaml] } } }]
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
-    target: closed-loop
+    target: verifiable
     limits: { max_ownership_scope_units: 64 }
   changed:
     baseline:

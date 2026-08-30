@@ -14,10 +14,10 @@ This section is generated from the YAML source under `docs/mitase/`.
 ## Available documents
 
 - [Foundation / Foundation](foundations/foundation.md)
-- [Delivery governance / Delivery](foundations/delivery.md)
+- [Mitase specification governance / Delivery](foundations/delivery.md)
 - [Capability acceptance contracts / Capability Contracts](foundations/capability-contracts.md)
 - [Mitase functional units / Core](capabilities/core.md)
-- [Mitase functional units / Planning](capabilities/planning.md)
+- [Mitase functional units / Surfaces](capabilities/surfaces.md)
 - [Public entrypoint contracts / Code Diagnostics](contracts/code-diagnostics.md)
 - [Public entrypoint contracts / Inventory](contracts/inventory.md)
 - [Public entrypoint contracts / Spec Model](contracts/spec-model.md)

@@ -40,7 +40,6 @@ pub struct InventoryProfile {
 pub enum ValidationPreset {
     Standard,
     Strict,
-    AgentReady,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -55,9 +54,7 @@ pub enum ReadinessLevel {
     Off,
     Traceable,
     Seedable,
-    WorkReady,
     Verifiable,
-    ClosedLoop,
 }
 
 impl fmt::Display for ReadinessLevel {
@@ -66,9 +63,7 @@ impl fmt::Display for ReadinessLevel {
             Self::Off => "off",
             Self::Traceable => "traceable",
             Self::Seedable => "seedable",
-            Self::WorkReady => "work-ready",
             Self::Verifiable => "verifiable",
-            Self::ClosedLoop => "closed-loop",
         };
         formatter.write_str(label)
     }
@@ -161,7 +156,7 @@ inventory:
   active_profile: default
   profiles: [{ id: default, providers: { rust: {} } }]
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:
@@ -215,6 +210,19 @@ verification: { runners: {} }
                 "public_entrypoints: { selection: typo-anything, level: seedable }",
             ))
             .is_err()
+        );
+        for retired_level in ["work-ready", "closed-loop"] {
+            let retired_source =
+                source.replace("target: traceable", &format!("target: {retired_level}"));
+            assert!(
+                serde_yaml::from_str::<ProjectConfig>(&retired_source).is_err(),
+                "retired readiness level must not remain a compatibility alias: {retired_level}"
+            );
+        }
+        let agent_ready_source = source.replace("preset: strict", "preset: agent-ready");
+        assert!(
+            serde_yaml::from_str::<ProjectConfig>(&agent_ready_source).is_err(),
+            "agent-ready must not remain a compatibility alias"
         );
     }
 }

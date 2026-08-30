@@ -51,11 +51,7 @@ macro_rules! metadata {
             title: $id,
             default_error: true,
             override_policy: OverridePolicy::Suppressible,
-            presets: &[
-                ValidationPreset::Standard,
-                ValidationPreset::Strict,
-                ValidationPreset::AgentReady,
-            ],
+            presets: &[ValidationPreset::Standard, ValidationPreset::Strict],
         }
     };
 }
@@ -66,7 +62,7 @@ macro_rules! strict_metadata {
             title: $id,
             default_error: true,
             override_policy: OverridePolicy::Suppressible,
-            presets: &[ValidationPreset::Strict, ValidationPreset::AgentReady],
+            presets: &[ValidationPreset::Strict],
         }
     };
 }
@@ -77,11 +73,7 @@ macro_rules! fixed_metadata {
             title: $id,
             default_error: true,
             override_policy: OverridePolicy::FixedError,
-            presets: &[
-                ValidationPreset::Standard,
-                ValidationPreset::Strict,
-                ValidationPreset::AgentReady,
-            ],
+            presets: &[ValidationPreset::Standard, ValidationPreset::Strict],
         }
     };
 }
@@ -130,18 +122,6 @@ pub static RULES: &[RuleMetadata] = &[
     strict_metadata!("MITASE-CHANGE-003"),
     strict_metadata!("MITASE-CHANGE-004"),
     strict_metadata!("MITASE-CHANGE-005"),
-    metadata!("MITASE-WORK-001"),
-    metadata!("MITASE-WORK-002"),
-    fixed_metadata!("MITASE-WORK-003"),
-    metadata!("MITASE-WORK-004"),
-    fixed_metadata!("MITASE-WORK-005"),
-    fixed_metadata!("MITASE-WORK-006"),
-    fixed_metadata!("MITASE-WORK-007"),
-    fixed_metadata!("MITASE-WORK-008"),
-    fixed_metadata!("MITASE-WORK-009"),
-    fixed_metadata!("MITASE-WORK-010"),
-    fixed_metadata!("MITASE-WORK-011"),
-    fixed_metadata!("MITASE-WORK-012"),
     fixed_metadata!("MITASE-READINESS-001"),
     fixed_metadata!("MITASE-VERIFICATION-001"),
     fixed_metadata!("MITASE-VERIFICATION-002"),
@@ -151,8 +131,8 @@ pub static RULES: &[RuleMetadata] = &[
 /// intentionally kept beside the validator so no caller needs to infer
 /// semantics from a rule-id string.
 pub fn phase_for_rule(rule: &str) -> ValidationPhase {
-    if rule.starts_with("MITASE-WORK-") || rule.starts_with("MITASE-READINESS-") {
-        ValidationPhase::Plan
+    if rule.starts_with("MITASE-READINESS-") {
+        ValidationPhase::Readiness
     } else if rule.starts_with("MITASE-CHANGE-") || rule == "MITASE-OPERATION-001" {
         ValidationPhase::Scope
     } else if [
@@ -618,13 +598,13 @@ fn validate_config(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     if let Some(probe) = &ctx.config.validation.readiness.probes.public_entrypoints
         && matches!(
             probe.level,
-            ReadinessLevel::Traceable | ReadinessLevel::Verifiable | ReadinessLevel::ClosedLoop
+            ReadinessLevel::Traceable | ReadinessLevel::Verifiable
         )
     {
         push(
             out,
             "MITASE-SCHEMA-003",
-            "public entrypoint readiness probes support only off, seedable, or work-ready in v1",
+            "public entrypoint readiness probes support only off or seedable in v1",
             "mitase.yaml",
             None,
         );
@@ -2529,7 +2509,6 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
             if binding.role == BindingRole::Implementation
                 && !selector_supports_editable(&target.selector)
-                && ctx.preset == ValidationPreset::AgentReady
             {
                 push(
                     out,
@@ -3137,7 +3116,7 @@ requirements:
             criterion: "REQ-AUTH-001#criterion.invalid-credentials"
                 .parse()
                 .unwrap(),
-            level: mitase_project_model::ReadinessLevel::WorkReady,
+            level: mitase_project_model::ReadinessLevel::Verifiable,
         }];
         let index = workspace.index().unwrap();
         let report = evaluate_readiness(&workspace, &index, "readiness-test").expect("readiness");

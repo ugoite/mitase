@@ -7,10 +7,10 @@ use std::{
 use tempfile::tempdir;
 
 #[test]
-fn current_workspace_validates_and_reports_configured_readiness() {
+fn current_workspace_checks_and_reports_configured_readiness() {
     Command::cargo_bin("mitase")
         .unwrap()
-        .args(["validate", "workspace", ".", "--range", "HEAD...HEAD"])
+        .args(["check", "."])
         .assert()
         .success();
     let output = Command::cargo_bin("mitase")
@@ -110,11 +110,6 @@ fn generated_spec_path(relative: &Path) -> PathBuf {
             if first.as_os_str() == "features" && second.as_os_str() == "public-entrypoints" =>
         {
             "contracts"
-        }
-        [first, second, ..]
-            if first.as_os_str() == "features" && second.as_os_str() == "workbench" =>
-        {
-            "workbench"
         }
         [first, ..] if first.as_os_str() == "features" => "capabilities",
         _ => panic!("unsupported specification path: {}", relative.display()),

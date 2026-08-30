@@ -12,6 +12,12 @@ diagnostics, and queries that explain how those pieces connect. It is
 repository-native: the specification and its references live with the code
 they describe.
 
+The durable foundation separates repository-owned meaning from Mitase's role as
+interpreter, index, resolver, and validator. Mitase can determine whether
+declared relationships and evidence are structurally satisfied, but it does
+not own planning, implementation, execution, testing, review, retries, or
+delivery.
+
 ## Frozen product boundary
 
 The canonical model is:
@@ -29,15 +35,15 @@ specification kind.
 
 Work requests and plans, execution slices, shell or test execution, patch
 application, agents, retries, delivery state, task queues, and workspace
-mutation are outside Mitase. The current checkout still contains transitional
-implementation surfaces for that earlier direction; they are not part of the
-frozen product boundary and are scheduled for removal in follow-up changes.
+mutation are outside Mitase. The former implementation surfaces for that
+earlier direction have been removed from the current checkout and must not be
+reintroduced into the frozen product boundary.
 
 Read the [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md)
 for the decision, acceptance gates, and follow-up sequence.
 
 ```bash
-cargo run --quiet -- validate workspace .
+mise run check:repo
 ```
 
 The target v1 CLI is intentionally limited to specification operations:

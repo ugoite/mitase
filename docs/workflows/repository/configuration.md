@@ -4,6 +4,13 @@
 
 The repository root `mitase.yaml` is Mitase's mature self-hosting dogfood profile, not a starter configuration. New repositories should copy the closest checked-in example and adopt one connected capability at a time; the root profile deliberately applies the strictest current v1 validation boundary to itself.
 
+Configuration controls how Mitase interprets and validates the repository-owned
+specification; it does not transfer authority over repository work to Mitase.
+The specification remains the source of declared meaning, while current
+inventory and exact target resolution provide the evidence used for derived
+state. Readiness is therefore a bounded evidence report, not a planning or
+delivery status.
+
 ```yaml
 schema: mitase/config/v1
 workspace:
@@ -21,13 +28,13 @@ inventory:
         markdown: { roots: [docs] }
         json-schema: { roots: [schemas] }
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:
       implemented_criteria:
         - criterion: REQ-CAPABILITY-001#criterion.spec-model
-          level: work-ready
+          level: verifiable
       public_entrypoints: { selection: all, level: seedable }
       changed_units: false
     limits: { max_ownership_scope_units: 64 }
@@ -40,6 +47,21 @@ verification:
       executable: cargo
       arguments: [test, -p, "{package}", "{test}", --, --exact]
 ```
+
+## Place the Rust build cache on another volume
+
+Cargo keeps intermediate Rust build artifacts in the configured `build-dir`.
+The repository default uses Cargo's cache-home placeholder, while
+`CARGO_BUILD_BUILD_DIR` can override it when a developer needs another volume.
+Keep that override in the local shell profile (for example, `~/.zprofile` on
+macOS) and keep machine-specific absolute paths out of the repository:
+
+```sh
+export CARGO_BUILD_BUILD_DIR="/path/to/large-disk/syu/cargo-build"
+```
+
+`CARGO_TARGET_DIR` controls final build outputs separately and remains the
+portable repository `target/rust` location.
 
 Key fields:
 

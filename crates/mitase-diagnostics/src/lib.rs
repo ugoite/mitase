@@ -11,8 +11,8 @@ pub enum Severity {
 }
 
 /// The validation engine owns diagnostic categorisation. Consumers such as the
-/// CLI and Workbench must render this value rather than deriving a phase from a
-/// rule identifier.
+/// CLI must render this value rather than deriving a phase from a rule
+/// identifier.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ValidationPhase {
@@ -21,7 +21,7 @@ pub enum ValidationPhase {
     Targets,
     Scope,
     #[default]
-    Plan,
+    Readiness,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

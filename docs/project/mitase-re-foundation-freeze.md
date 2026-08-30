@@ -48,9 +48,9 @@ It does not modify, execute, schedule, retry, or deliver repository work.
 | Agent lifecycle, Codex/Claude session, retries | External agent runtime |
 | Delivery state, execution persistence, task queue | External service |
 
-The current checkout includes transitional implementation surfaces from the
-earlier direction. Their existence is tracked so they can be removed safely;
-it is not permission to extend the frozen boundary.
+The current checkout no longer includes the former execution-oriented runtime
+surfaces. Their removal was a required cutover step; this freeze remains the
+design constraint for the later core, consumer-migration, and browser phases.
 
 ## Canonical domain model
 

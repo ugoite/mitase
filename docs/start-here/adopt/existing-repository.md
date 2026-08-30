@@ -2,6 +2,12 @@
 
 Adopt Mitase one connected capability at a time. The first goal is not repository-wide coverage; it is one implemented criterion with exact implementation ownership, an exact verification target, and current validation evidence.
 
+The repository's Philosophy, Policy, Requirement, Criterion, and Feature
+documents remain the authority for what the repository means. Mitase interprets
+that specification, indexes its relationships, resolves exact Artifact
+targets, and validates the evidence. Adoption does not give Mitase ownership
+of planning, implementation, execution, testing, review, retries, or delivery.
+
 ## 1. Inventory without claiming ownership
 
 Create `mitase.yaml` with the real specification root and only the providers needed for the first capability. Keep readiness off while inspecting inventory:
@@ -18,7 +24,7 @@ inventory:
       providers:
         rust: { mode: test, include_tests: true }
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: off
     limits: { max_ownership_scope_units: 64 }
@@ -50,13 +56,13 @@ Select only the connected criterion and advance its facet deliberately:
 
 ```yaml
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:
       implemented_criteria:
         - criterion: REQ-FIRST-001#criterion.behavior
-          level: work-ready
+          level: verifiable
       changed_units: false
     limits: { max_ownership_scope_units: 64 }
   changed:
@@ -74,7 +80,7 @@ Treat the selected criterion, its exact targets, and its verification as the rea
 
 ## 4. Expand without weakening the boundary
 
-Add the next capability only after the current slice stays green in CI. Move each capability through `traceable` → `seedable` → `work-ready` → `verifiable` → `closed-loop` as its evidence becomes real.
+Add the next capability only after the current slice stays green in CI. Move each capability through `traceable` → `seedable` → `verifiable` as its evidence becomes real.
 
 Enable `public_entrypoints: { selection: all, level: seedable }` only after every currently discovered public entrypoint has one exact owner and exposes a behaviorally verified capability target. Once enabled, a newly exported entrypoint fails canonical workspace validation until it is governed.
 

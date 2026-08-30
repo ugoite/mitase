@@ -35,68 +35,70 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
       - **kind**: behavior
       - **statement**: Canonical specification documents accept the v1 shape and reject obsolete or ambiguous identities.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-AUTHORITY-001#rule.repository-meaning
     - **id**: digest-format
       - **kind**: behavior
       - **statement**: Canonical digests use the sha256 prefix and lowercase hexadecimal representation.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-GRAPH-001#rule.canonical-graph
     - **id**: project-config
       - **kind**: behavior
       - **statement**: Project configuration preserves explicit inventory, readiness, and verification settings while rejecting unknown fields.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-AUTHORITY-001#rule.repository-meaning
     - **id**: inventory-discovery
       - **kind**: behavior
       - **statement**: The active inventory profile discovers and unions configured providers with stable public and support exposure.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-RESOLUTION-001#rule.exact-resolution
     - **id**: exact-identity
       - **kind**: behavior
       - **statement**: An exact selector resolves one artifact identity and rejects ambiguous headings, markers, or symbols.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-RESOLUTION-001#rule.exact-resolution
     - **id**: graph-index
       - **kind**: behavior
       - **statement**: The workspace index loads configured specification roots and derives exact graph and target relations.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-GRAPH-001#rule.canonical-graph
     - **id**: ownership-resolution
       - **kind**: behavior
       - **statement**: Current ownership excludes planned Features and resolves each active governed artifact to one exact owner.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.active-status
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-AUTHORITY-001#rule.repository-meaning
+        - POL-EVIDENCE-001#rule.derived-state
     - **id**: readiness-ladder
       - **kind**: quality
-      - **statement**: Readiness advances monotonically through traceable, seedable, work-ready, verifiable, and closed-loop evidence.
+      - **statement**: Readiness advances monotonically through traceable, seedable, and verifiable evidence.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.bounded-rollout
+        - POL-EVIDENCE-001#rule.derived-state
     - **id**: change-validation
       - **kind**: security
       - **statement**: Changed semantic artifacts are rejected when ownership, lifecycle, or semantic impact is incomplete.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-EVIDENCE-001#rule.derived-state
+        - POL-RELATION-001#rule.typed-proof-path
     - **id**: contract-closure
       - **kind**: behavior
       - **statement**: Contract sources, participants, and guarantees retain exact typed references.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
-    - **id**: cli-orchestration
+        - POL-RELATION-001#rule.typed-proof-path
+    - **id**: cli-entrypoints
       - **kind**: behavior
-      - **statement**: The CLI applies the canonical workspace validator and reports configured readiness through stable commands.
+      - **statement**: The CLI exposes canonical workspace validation and readiness reporting through stable commands.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.bounded-rollout
+        - POL-AUTHORITY-001#rule.repository-meaning
+        - POL-EVIDENCE-001#rule.derived-state
     - **id**: lsp-navigation
       - **kind**: behavior
       - **statement**: Language-server hover resolves each specification layer from the canonical workspace.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-GRAPH-001#rule.canonical-graph
     - **id**: docs-generation
       - **kind**: documentation
       - **statement**: Every canonical specification source has a current generated reference page and index entry.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-013#rule.specification-before-implementation
   - **bindings**:
     - **id**: core-verification
       - **role**: verification
@@ -282,17 +284,17 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
     - **id**: delivery-verification
       - **role**: verification
       - **facet**: capability-verification
-      - **responsibility**: Verify CLI orchestration, LSP navigation, generated documentation, and repository validation.
+      - **responsibility**: Verify CLI entrypoints, LSP navigation, generated documentation, and repository validation.
       - **targets**:
         - **id**: cli-test
           - **adapter**: rust
           - **path**: tests/v1_cli.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: current_workspace_validates_and_reports_configured_readiness
+            - **name**: current_workspace_checks_and_reports_configured_readiness
           - **claims**:
             - **kind**: verifies
-              - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
+              - **criterion**: REQ-CAPABILITY-001#criterion.cli-entrypoints
               - **covers**:
                 - FEAT-CLI-001#binding.implementation/target.cli-run
               - **runner**:
@@ -300,7 +302,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **arguments**:
                   - **package**: mitase
                   - **harness**: v1_cli
-                  - **test**: current_workspace_validates_and_reports_configured_readiness
+                  - **test**: current_workspace_checks_and_reports_configured_readiness
         - **id**: lsp-test
           - **adapter**: rust
           - **path**: src/lsp/handlers.rs
@@ -334,6 +336,23 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                   - **package**: mitase
                   - **harness**: v1_cli
                   - **test**: generated_spec_reference_covers_every_source_document
+        - **id**: docs-path-helper
+          - **adapter**: rust
+          - **path**: tests/v1_cli.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: generated_spec_path
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.docs-generation
+              - **covers**:
+                - FEAT-DOCS-001#binding.implementation/target.generated-index
+              - **runner**:
+                - **runner**: cargo-test-integration
+                - **arguments**:
+                  - **package**: mitase
+                  - **harness**: v1_cli
+                  - **test**: generated_spec_reference_covers_every_source_document
 - **id**: REQ-CAPABILITY-002
   - **title**: Multi-language inventory
   - **description**: Semantic inventories expose stable, profile-aware artifact identities across supported languages and structured formats.
@@ -344,17 +363,17 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
       - **kind**: behavior
       - **statement**: Rust, JavaScript, TypeScript, OpenAPI, Markdown, JSON, YAML, and JSON Schema providers expose language-aware semantic identities from the active inventory profile.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-RESOLUTION-001#rule.exact-resolution
     - **id**: stable-identity
       - **kind**: compatibility
       - **statement**: Semantic identity is independent of source line numbers and remains stable across line movement and formatting.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-GRAPH-001#rule.canonical-graph
     - **id**: semantic-diff
       - **kind**: behavior
       - **statement**: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
       - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-EVIDENCE-001#rule.derived-state
   - **bindings**:
     - **id**: dependency-verification
       - **role**: verification
@@ -475,55 +494,55 @@ requirements:
       - id: spec-model
         kind: behavior
         statement: Canonical specification documents accept the v1 shape and reject obsolete or ambiguous identities.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-AUTHORITY-001#rule.repository-meaning]
       - id: digest-format
         kind: behavior
         statement: Canonical digests use the sha256 prefix and lowercase hexadecimal representation.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-GRAPH-001#rule.canonical-graph]
       - id: project-config
         kind: behavior
         statement: Project configuration preserves explicit inventory, readiness, and verification settings while rejecting unknown fields.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-AUTHORITY-001#rule.repository-meaning]
       - id: inventory-discovery
         kind: behavior
         statement: The active inventory profile discovers and unions configured providers with stable public and support exposure.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-RESOLUTION-001#rule.exact-resolution]
       - id: exact-identity
         kind: behavior
         statement: An exact selector resolves one artifact identity and rejects ambiguous headings, markers, or symbols.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-RESOLUTION-001#rule.exact-resolution]
       - id: graph-index
         kind: behavior
         statement: The workspace index loads configured specification roots and derives exact graph and target relations.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-GRAPH-001#rule.canonical-graph]
       - id: ownership-resolution
         kind: behavior
         statement: Current ownership excludes planned Features and resolves each active governed artifact to one exact owner.
-        governed_by: [POL-ADOPTION-001#rule.active-status, POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-AUTHORITY-001#rule.repository-meaning, POL-EVIDENCE-001#rule.derived-state]
       - id: readiness-ladder
         kind: quality
-        statement: Readiness advances monotonically through traceable, seedable, work-ready, verifiable, and closed-loop evidence.
-        governed_by: [POL-ADOPTION-001#rule.bounded-rollout]
+        statement: Readiness advances monotonically through traceable, seedable, and verifiable evidence.
+        governed_by: [POL-EVIDENCE-001#rule.derived-state]
       - id: change-validation
         kind: security
         statement: Changed semantic artifacts are rejected when ownership, lifecycle, or semantic impact is incomplete.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-EVIDENCE-001#rule.derived-state, POL-RELATION-001#rule.typed-proof-path]
       - id: contract-closure
         kind: behavior
         statement: Contract sources, participants, and guarantees retain exact typed references.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: cli-orchestration
+        governed_by: [POL-RELATION-001#rule.typed-proof-path]
+      - id: cli-entrypoints
         kind: behavior
-        statement: The CLI applies the canonical workspace validator and reports configured readiness through stable commands.
-        governed_by: [POL-ADOPTION-001#rule.bounded-rollout]
+        statement: The CLI exposes canonical workspace validation and readiness reporting through stable commands.
+        governed_by: [POL-AUTHORITY-001#rule.repository-meaning, POL-EVIDENCE-001#rule.derived-state]
       - id: lsp-navigation
         kind: behavior
         statement: Language-server hover resolves each specification layer from the canonical workspace.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-GRAPH-001#rule.canonical-graph]
       - id: docs-generation
         kind: documentation
         statement: Every canonical specification source has a current generated reference page and index entry.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-013#rule.specification-before-implementation]
     bindings:
       - id: core-verification
         role: verification
@@ -632,17 +651,17 @@ requirements:
       - id: delivery-verification
         role: verification
         facet: capability-verification
-        responsibility: Verify CLI orchestration, LSP navigation, generated documentation, and repository validation.
+        responsibility: Verify CLI entrypoints, LSP navigation, generated documentation, and repository validation.
         targets:
           - id: cli-test
             adapter: rust
             path: tests/v1_cli.rs
-            selector: { kind: symbol, name: current_workspace_validates_and_reports_configured_readiness }
+            selector: { kind: symbol, name: current_workspace_checks_and_reports_configured_readiness }
             claims:
               - kind: verifies
-                criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
+                criterion: REQ-CAPABILITY-001#criterion.cli-entrypoints
                 covers: [FEAT-CLI-001#binding.implementation/target.cli-run]
-                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: current_workspace_validates_and_reports_configured_readiness } }
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: current_workspace_checks_and_reports_configured_readiness } }
           - id: lsp-test
             adapter: rust
             path: src/lsp/handlers.rs
@@ -661,6 +680,15 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.docs-generation
                 covers: [FEAT-DOCS-001#binding.implementation/target.generated-index]
                 runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
+          - id: docs-path-helper
+            adapter: rust
+            path: tests/v1_cli.rs
+            selector: { kind: symbol, name: generated_spec_path }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.docs-generation
+                covers: [FEAT-DOCS-001#binding.implementation/target.generated-index]
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
 
   - id: REQ-CAPABILITY-002
     title: Multi-language inventory
@@ -671,15 +699,15 @@ requirements:
       - id: language-aware-inventory
         kind: behavior
         statement: Rust, JavaScript, TypeScript, OpenAPI, Markdown, JSON, YAML, and JSON Schema providers expose language-aware semantic identities from the active inventory profile.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-RESOLUTION-001#rule.exact-resolution]
       - id: stable-identity
         kind: compatibility
         statement: Semantic identity is independent of source line numbers and remains stable across line movement and formatting.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-GRAPH-001#rule.canonical-graph]
       - id: semantic-diff
         kind: behavior
         statement: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+        governed_by: [POL-EVIDENCE-001#rule.derived-state]
     bindings:
       - id: dependency-verification
         role: verification
