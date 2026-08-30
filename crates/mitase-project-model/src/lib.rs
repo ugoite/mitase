@@ -55,9 +55,7 @@ pub enum ReadinessLevel {
     Off,
     Traceable,
     Seedable,
-    WorkReady,
     Verifiable,
-    ClosedLoop,
 }
 
 impl fmt::Display for ReadinessLevel {
@@ -66,9 +64,7 @@ impl fmt::Display for ReadinessLevel {
             Self::Off => "off",
             Self::Traceable => "traceable",
             Self::Seedable => "seedable",
-            Self::WorkReady => "work-ready",
             Self::Verifiable => "verifiable",
-            Self::ClosedLoop => "closed-loop",
         };
         formatter.write_str(label)
     }
@@ -216,5 +212,13 @@ verification: { runners: {} }
             ))
             .is_err()
         );
+        for retired_level in ["work-ready", "closed-loop"] {
+            let retired_source =
+                source.replace("target: traceable", &format!("target: {retired_level}"));
+            assert!(
+                serde_yaml::from_str::<ProjectConfig>(&retired_source).is_err(),
+                "retired readiness level must not remain a compatibility alias: {retired_level}"
+            );
+        }
     }
 }
