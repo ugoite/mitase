@@ -12,4 +12,3 @@ These pages are generated from the canonical YAML under `docs/mitase/`.
 
 - [Mitase functional units / Core](./core.md)
 - [Mitase functional units / Planning](./planning.md)
-- [Work planning / Planner](./planner.md)

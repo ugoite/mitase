@@ -90,6 +90,37 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
       - **role**: implementation
       - **facet**: configuration
       - **responsibility**: Provide the typed project configuration model.
+      - **owns**:
+        - **id**: project-config-change-baseline
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::ChangeBaseline
+        - **id**: project-config-changed
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::ChangedConfig
+        - **id**: project-config-readiness-limits
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::ReadinessLimits
+        - **id**: project-config-verification
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::VerificationConfig
+        - **id**: project-config-tests
+          - **adapter**: rust
+          - **path**: crates/mitase-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: tests[cfg(test)]
       - **targets**:
         - **id**: project-config
           - **adapter**: rust
@@ -100,13 +131,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.project-config
-      - **owns**:
-        - **id**: project-config-tests
-          - **adapter**: rust
-          - **path**: crates/mitase-project-model/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: tests[cfg(test)]
 - **id**: FEAT-INVENTORY-001
   - **title**: Inventory providers
   - **summary**: Discover active artifact units through profile-selected providers.
@@ -206,14 +230,56 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
     - **id**: implementation
       - **role**: implementation
       - **facet**: identity
-      - **responsibility**: Resolve exact targets through the overlay-aware workspace.
+      - **responsibility**: Resolve exact targets through the workspace.
       - **owns**:
-        - **id**: workspace-ownership-fingerprint
+        - **id**: workspace-spec
           - **adapter**: rust
           - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: module
-            - **name**: lib::impl(SpecIndex)::ownership_fingerprint_excluding
+            - **name**: lib::SpecWorkspace
+        - **id**: workspace-matcher
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::WorkspaceMatcher
+        - **id**: workspace-collect-yaml
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::collect_yaml
+        - **id**: workspace-find-root
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::find_root
+        - **id**: workspace-matcher-build
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::impl(WorkspaceMatcher)::build
+        - **id**: workspace-obsolete-config
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::is_obsolete_pre_release_config
+        - **id**: workspace-obsolete-spec
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::is_obsolete_pre_release_spec
+        - **id**: workspace-resolve-content
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib::resolve_target_from_content
         - **id**: workspace-resolve-artifact
           - **adapter**: rust
           - **path**: crates/mitase-workspace/src/lib.rs
@@ -507,17 +573,33 @@ features:
         role: implementation
         facet: configuration
         responsibility: Provide the typed project configuration model.
+        owns:
+          - id: project-config-change-baseline
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'lib::ChangeBaseline' }
+          - id: project-config-changed
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'lib::ChangedConfig' }
+          - id: project-config-readiness-limits
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'lib::ReadinessLimits' }
+          - id: project-config-verification
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'lib::VerificationConfig' }
+          - id: project-config-tests
+            adapter: rust
+            path: crates/mitase-project-model/src/lib.rs
+            selector: { kind: module, name: 'tests[cfg(test)]' }
         targets:
           - id: project-config
             adapter: rust
             path: crates/mitase-project-model/src/lib.rs
             selector: { kind: symbol, name: ProjectConfig }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.project-config }]
-        owns:
-          - id: project-config-tests
-            adapter: rust
-            path: crates/mitase-project-model/src/lib.rs
-            selector: { kind: module, name: 'tests[cfg(test)]' }
 
   - id: FEAT-INVENTORY-001
     title: Inventory providers
@@ -593,12 +675,40 @@ features:
       - id: implementation
         role: implementation
         facet: identity
-        responsibility: Resolve exact targets through the overlay-aware workspace.
+        responsibility: Resolve exact targets through the workspace.
         owns:
-          - id: workspace-ownership-fingerprint
+          - id: workspace-spec
             adapter: rust
             path: crates/mitase-workspace/src/lib.rs
-            selector: { kind: module, name: 'lib::impl(SpecIndex)::ownership_fingerprint_excluding' }
+            selector: { kind: module, name: 'lib::SpecWorkspace' }
+          - id: workspace-matcher
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::WorkspaceMatcher' }
+          - id: workspace-collect-yaml
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::collect_yaml' }
+          - id: workspace-find-root
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::find_root' }
+          - id: workspace-matcher-build
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::impl(WorkspaceMatcher)::build' }
+          - id: workspace-obsolete-config
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::is_obsolete_pre_release_config' }
+          - id: workspace-obsolete-spec
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::is_obsolete_pre_release_spec' }
+          - id: workspace-resolve-content
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: module, name: 'lib::resolve_target_from_content' }
           - id: workspace-resolve-artifact
             adapter: rust
             path: crates/mitase-workspace/src/lib.rs
