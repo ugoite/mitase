@@ -27,7 +27,7 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/wo
 
 - **id**: FEAT-PUBLIC-WORKSPACE-RESOLUTION-001
   - **title**: Workspace resolution
-  - **summary**: Govern selector resolution and stable workspace fingerprints.
+  - **summary**: Govern exact selector resolution in the workspace.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-069
@@ -69,20 +69,6 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/wo
           - **selector**:
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_spec
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-    - **id**: public-api-074
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-      - **targets**:
-        - **id**: entrypoint-079-rust-crates-mitase-workspace-src-lib-rs-specworkspace-try
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: SpecWorkspace::try_fingerprint
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
@@ -128,48 +114,6 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/wo
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-    - **id**: public-api-resolve-indexed-target
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-      - **targets**:
-        - **id**: entrypoint-resolve-indexed-target
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: resolve_indexed_target
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-    - **id**: public-api-ownership-fingerprint
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Govern ownership graph fingerprints.
-      - **targets**:
-        - **id**: entrypoint-ownership-fingerprint
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: ownership_fingerprint
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-    - **id**: public-api-spec-fingerprint
-      - **role**: implementation
-      - **facet**: public
-      - **responsibility**: Govern specification graph fingerprints.
-      - **targets**:
-        - **id**: entrypoint-spec-fingerprint
-          - **adapter**: rust
-          - **path**: crates/mitase-workspace/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: spec_fingerprint
-          - **claims**:
-            - **kind**: exposes
-              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
 
 ## Source YAML
 
@@ -181,7 +125,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-WORKSPACE-RESOLUTION-001
   title: Workspace resolution
-  summary: Govern selector resolution and stable workspace fingerprints.
+  summary: Govern exact selector resolution in the workspace.
   status: implemented
   bindings:
   - id: public-api-069
@@ -226,20 +170,6 @@ features:
       claims:
       - kind: exposes
         target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-  - id: public-api-074
-    role: implementation
-    facet: public
-    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-    targets:
-    - id: entrypoint-079-rust-crates-mitase-workspace-src-lib-rs-specworkspace-try
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: SpecWorkspace::try_fingerprint
-      claims:
-      - kind: exposes
-        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-075
     role: implementation
     facet: public
@@ -279,48 +209,6 @@ features:
       selector:
         kind: symbol
         name: selector_supports_editable
-      claims:
-      - kind: exposes
-        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-  - id: public-api-resolve-indexed-target
-    role: implementation
-    facet: public
-    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
-    targets:
-    - id: entrypoint-resolve-indexed-target
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: resolve_indexed_target
-      claims:
-      - kind: exposes
-        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-  - id: public-api-ownership-fingerprint
-    role: implementation
-    facet: public
-    responsibility: Govern ownership graph fingerprints.
-    targets:
-    - id: entrypoint-ownership-fingerprint
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: ownership_fingerprint
-      claims:
-      - kind: exposes
-        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
-  - id: public-api-spec-fingerprint
-    role: implementation
-    facet: public
-    responsibility: Govern specification graph fingerprints.
-    targets:
-    - id: entrypoint-spec-fingerprint
-      adapter: rust
-      path: crates/mitase-workspace/src/lib.rs
-      selector:
-        kind: symbol
-        name: spec_fingerprint
       claims:
       - kind: exposes
         target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver

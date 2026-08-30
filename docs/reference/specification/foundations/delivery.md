@@ -26,13 +26,13 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
 ### Policies
 
 - **id**: POL-DELIVERY-001
-  - **title**: Exact executable work
-  - **summary**: Executable work is derived only from explicit bindings.
-  - **description**: The shared validator rejects incomplete graph and work scope.
+  - **title**: Exact repository validation
+  - **summary**: Repository validation is derived only from explicit specification bindings.
+  - **description**: The shared validator rejects incomplete graph, ownership, and semantic change impact.
   - **rules**:
     - **id**: exact-ownership
       - **level**: must
-      - **statement**: Executable targets must have one explicit specification owner.
+      - **statement**: Current governed targets must have one explicit specification owner.
       - **governed_by**:
         - PHIL-001#principle.exact-intent
       - **applies_to**:
@@ -43,7 +43,7 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
     - **id**: shared-validator
       - **role**: enforcement
       - **facet**: tooling
-      - **responsibility**: Enforce graph integrity, exact targets, and plan scope through one validation engine.
+      - **responsibility**: Enforce graph integrity, exact targets, and semantic change impact through one validation engine.
       - **targets**:
         - **id**: validation-entry
           - **adapter**: rust
@@ -128,20 +128,20 @@ namespace: delivery
 category: Delivery governance
 policies:
   - id: POL-DELIVERY-001
-    title: Exact executable work
-    summary: Executable work is derived only from explicit bindings.
-    description: The shared validator rejects incomplete graph and work scope.
+    title: Exact repository validation
+    summary: Repository validation is derived only from explicit specification bindings.
+    description: The shared validator rejects incomplete graph, ownership, and semantic change impact.
     rules:
       - id: exact-ownership
         level: must
-        statement: Executable targets must have one explicit specification owner.
+        statement: Current governed targets must have one explicit specification owner.
         governed_by: [PHIL-001#principle.exact-intent]
         applies_to: { roles: [implementation, verification] }
     bindings:
       - id: shared-validator
         role: enforcement
         facet: tooling
-        responsibility: Enforce graph integrity, exact targets, and plan scope through one validation engine.
+        responsibility: Enforce graph integrity, exact targets, and semantic change impact through one validation engine.
         targets:
           - id: validation-entry
             adapter: rust
