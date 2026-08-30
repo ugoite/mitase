@@ -4,18 +4,14 @@ mod lsp;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use mitase_inventory::{InventoryContext, InventoryRegistry};
-use mitase_planner::validate_work_request;
 use mitase_project_model::{ChangeBaseline, GitRef};
 use mitase_spec_model::RepoPath;
 use mitase_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
-use mitase_work_model::WorkRequest;
-use mitase_workbench_server::project as project_workbench;
 use mitase_workspace::SpecWorkspace;
 use std::{
     fs,
-    net::IpAddr,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -37,7 +33,6 @@ struct Cli {
 enum CommandKind {
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
-    Workbench(WorkbenchArgs),
     Lsp,
 }
 #[derive(Debug, Args)]
@@ -77,75 +72,16 @@ struct ValidateOptions {
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
 }
-#[derive(Debug, Args)]
-#[command(
-    about = "Run the Workbench server or print its canonical projection",
-    after_help = "Serve options: --bind <IP> --port <PORT> --allow-remote-bind --show-log"
-)]
-struct WorkbenchArgs {
-    #[command(subcommand)]
-    command: Option<WorkbenchCommand>,
-    #[arg(long, default_value = ".")]
-    workspace: PathBuf,
-    #[arg(long)]
-    request: Option<PathBuf>,
-    #[arg(long, default_value = "127.0.0.1")]
-    bind: IpAddr,
-    #[arg(long, default_value_t = 7737)]
-    port: u16,
-    #[arg(long)]
-    allow_remote_bind: bool,
-    #[arg(long)]
-    session_token: Option<String>,
-    #[arg(long)]
-    no_open: bool,
-}
-#[derive(Debug, Subcommand)]
-enum WorkbenchCommand {
-    Project {
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        request: Option<PathBuf>,
-        #[arg(long, value_enum, default_value = "json")]
-        format: WorkbenchFormat,
-    },
-    /// Serve the canonical Workbench browser UI.
-    Serve {
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        request: Option<PathBuf>,
-        #[arg(long, default_value = "127.0.0.1")]
-        bind: IpAddr,
-        #[arg(long, default_value_t = 7737)]
-        port: u16,
-        #[arg(long)]
-        allow_remote_bind: bool,
-        #[arg(long)]
-        session_token: Option<String>,
-        #[arg(long)]
-        show_log: bool,
-        #[arg(long)]
-        no_open: bool,
-    },
-}
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Format {
     Text,
     Json,
-}
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum WorkbenchFormat {
-    Json,
-    Yaml,
 }
 
 pub fn run() -> Result<i32> {
     match Cli::parse().command {
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
-        CommandKind::Workbench(args) => run_workbench(args),
         CommandKind::Lsp => {
             lsp::run_lsp_server()?;
             Ok(0)
@@ -266,93 +202,6 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
     Ok(if result.is_valid() { 0 } else { 1 })
 }
 
-fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
-    let command = args.command.unwrap_or(WorkbenchCommand::Serve {
-        workspace: args.workspace,
-        request: args.request,
-        bind: args.bind,
-        port: args.port,
-        allow_remote_bind: args.allow_remote_bind,
-        session_token: args.session_token,
-        show_log: false,
-        no_open: args.no_open,
-    });
-    match command {
-        WorkbenchCommand::Project {
-            workspace,
-            request,
-            format,
-        } => {
-            let workspace = SpecWorkspace::load(workspace)?;
-            let index = workspace.index()?;
-            let request = request
-                .as_ref()
-                .map(|path| read_yaml::<WorkRequest>(path))
-                .transpose()?;
-            if let Some(request) = &request {
-                validate_work_request(&index, request)
-                    .context("workbench projection request is outside its exact origin")?;
-            }
-            let projection =
-                project_workbench(&workspace, request.as_ref(), &revision(&workspace.root)?)?;
-            match format {
-                WorkbenchFormat::Json => {
-                    println!("{}", serde_json::to_string_pretty(&projection)?);
-                }
-                WorkbenchFormat::Yaml => {
-                    print!("{}", serde_yaml::to_string(&projection)?);
-                }
-            }
-            Ok(0)
-        }
-        WorkbenchCommand::Serve {
-            workspace,
-            request,
-            bind,
-            port,
-            allow_remote_bind,
-            session_token,
-            show_log,
-            no_open,
-        } => {
-            if !bind.is_loopback() && !allow_remote_bind {
-                bail!("remote --bind requires --allow-remote-bind");
-            }
-            if !bind.is_loopback() && session_token.as_deref().is_none_or(str::is_empty) {
-                bail!("remote --bind requires --session-token");
-            }
-            let workspace = SpecWorkspace::load(workspace)?;
-            let request = request
-                .as_ref()
-                .map(|path| read_yaml::<WorkRequest>(path))
-                .transpose()?;
-            if show_log {
-                println!("Workbench request logging is handled by the server runtime");
-            }
-            let server = mitase_workbench_server::WorkbenchServer::new(workspace.root.clone())
-                .with_launch(mitase_workbench_server::WorkbenchLaunchConfig {
-                    workspace_root: workspace.root,
-                    bind,
-                    port,
-                    session_token,
-                    no_open,
-                });
-            if let Some(request) = request {
-                server.with_request(request)?.run()?;
-            } else {
-                server.run()?;
-            }
-            Ok(0)
-        }
-    }
-}
-
-fn read_yaml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
-    serde_yaml::from_str(
-        &fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?,
-    )
-    .with_context(|| format!("strict parse {}", path.display()))
-}
 fn revision(root: &Path) -> Result<String> {
     let output = Command::new("git")
         .args(["rev-parse", "HEAD"])
