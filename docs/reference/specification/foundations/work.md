@@ -79,32 +79,6 @@ description: "Generated reference for docs/mitase/requirements/work.yaml"
                 - **arguments**:
                   - **package**: mitase-planner
                   - **test**: tests::explicit_add_transition_plans_missing_target_as_ensure_present
-- **id**: REQ-WORK-002
-  - **title**: Durable completion delivery
-  - **description**: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
-  - **priority**: critical
-  - **status**: implemented
-  - **criteria**:
-    - **id**: store-boundary
-      - **kind**: behavior
-      - **statement**: Delivery data stays outside the worktree in a stable repository-local store with explicit approval and attempt paths.
-      - **governed_by**:
-        - POL-DELIVERY-001#rule.exact-ownership
-    - **id**: immutable-attempt
-      - **kind**: behavior
-      - **statement**: Failed and successful verification attempts are digest-checked, immutable, and queryable without widening their approved scope.
-      - **governed_by**:
-        - POL-DELIVERY-001#rule.exact-ownership
-    - **id**: approval-scope
-      - **kind**: behavior
-      - **statement**: An approval and its stored plan preserve the reviewed workspace, targets, and status transition without hidden expansion.
-      - **governed_by**:
-        - POL-DELIVERY-001#rule.exact-ownership
-    - **id**: finalization-handoff
-      - **kind**: behavior
-      - **statement**: A complete attempt can promote only its exact planned specification items after a fresh overlay validation.
-      - **governed_by**:
-        - POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -152,26 +126,4 @@ requirements:
                 criterion: REQ-WORK-001#criterion.exact-slice
                 covers: [FEAT-PLANNER-001#binding.implementation/target.lifecycle-plan]
                 runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::explicit_add_transition_plans_missing_target_as_ensure_present } }
-  - id: REQ-WORK-002
-    title: Durable completion delivery
-    description: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
-    priority: critical
-    status: implemented
-    criteria:
-      - id: store-boundary
-        kind: behavior
-        statement: Delivery data stays outside the worktree in a stable repository-local store with explicit approval and attempt paths.
-        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
-      - id: immutable-attempt
-        kind: behavior
-        statement: Failed and successful verification attempts are digest-checked, immutable, and queryable without widening their approved scope.
-        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
-      - id: approval-scope
-        kind: behavior
-        statement: An approval and its stored plan preserve the reviewed workspace, targets, and status transition without hidden expansion.
-        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
-      - id: finalization-handoff
-        kind: behavior
-        statement: A complete attempt can promote only its exact planned specification items after a fresh overlay validation.
-        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```
