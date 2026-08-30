@@ -2105,6 +2105,13 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             if unit.path.as_path() == Path::new("build.rs") {
                 continue;
             }
+            if matches!(file.status, ChangeStatus::Deleted) && from_baseline && owned.is_empty() {
+                // Removing an unowned semantic artifact cannot introduce an
+                // unowned implementation. This permits retiring orphaned
+                // transitional code while preserving ownership checks for
+                // deleted artifacts that are still part of the specification.
+                continue;
+            }
             if ctx.config.validation.changed.require_owned_changes
                 && owners.is_some_and(|owners| requires_change_ownership(&unit, owners))
             {
@@ -5662,6 +5669,54 @@ requirements:
                     && diagnostic.message.contains("no ownership binding")
             }),
             "deleted baseline-owned artifact was rejected: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn deleted_unowned_semantic_artifact_does_not_require_new_ownership() {
+        let repository = tempdir().expect("temporary repository");
+        copy_dir(&fixture_root(), repository.path());
+        fs::write(
+            repository.path().join("api/orphan.rs"),
+            "pub fn transitional_orphan() {}\n",
+        )
+        .expect("orphan artifact");
+        let baseline = init_git_repo(repository.path());
+        fs::remove_file(repository.path().join("api/orphan.rs")).expect("delete artifact");
+
+        let workspace = SpecWorkspace::load(repository.path()).expect("current workspace");
+        let index = workspace.index().expect("current index");
+        let changed_files = vec![ChangedFile {
+            status: ChangeStatus::Deleted,
+            old_path: Some(RepoPath::new("api/orphan.rs").unwrap()),
+            new_path: None,
+            hunks: vec![ChangedRange {
+                old_start: 1,
+                old_end: 1,
+                new_start: 0,
+                new_end: 0,
+            }],
+        }];
+        let result = validate(&ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: Some(&changed_files),
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: Some(&baseline),
+        });
+        assert!(
+            !result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.rule_id == "MITASE-CHANGE-001"
+                    && diagnostic.message.contains("no ownership binding")
+            }),
+            "deleted unowned semantic artifact was rejected: {:?}",
             result.diagnostics
         );
     }

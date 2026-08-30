@@ -330,16 +330,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs2"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "futures-channel"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -713,23 +703,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mitase-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "mitase-delivery",
- "mitase-inventory",
- "mitase-planner",
- "mitase-spec-model",
- "mitase-validation",
- "mitase-work-model",
- "mitase-workspace",
- "serde",
- "sha2",
- "tempfile",
-]
-
-[[package]]
 name = "mitase-code-intel"
 version = "0.1.0"
 dependencies = [
@@ -738,25 +711,6 @@ dependencies = [
  "proc-macro2",
  "sha2",
  "syn 3.0.3",
-]
-
-[[package]]
-name = "mitase-delivery"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fs2",
- "mitase-planner",
- "mitase-spec-model",
- "mitase-validation",
- "mitase-work-model",
- "mitase-workspace",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "uuid",
 ]
 
 [[package]]
@@ -1451,28 +1405,6 @@ checksum = "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
 dependencies = [
  "unicode-ident",
 ]
-
-[[package]]
-name = "winapi"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
-dependencies = [
- "winapi-i686-pc-windows-gnu",
- "winapi-x86_64-pc-windows-gnu",
-]
-
-[[package]]
-name = "winapi-i686-pc-windows-gnu"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
-
-[[package]]
-name = "winapi-x86_64-pc-windows-gnu"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows-link"
