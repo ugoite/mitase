@@ -7,10 +7,10 @@ use std::{
 use tempfile::tempdir;
 
 #[test]
-fn current_workspace_validates_and_reports_configured_readiness() {
+fn current_workspace_checks_and_reports_configured_readiness() {
     Command::cargo_bin("mitase")
         .unwrap()
-        .args(["validate", "workspace", ".", "--range", "HEAD...HEAD"])
+        .args(["check", "."])
         .assert()
         .success();
     let output = Command::cargo_bin("mitase")

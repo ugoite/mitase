@@ -28,9 +28,17 @@ struct Cli {
 }
 #[derive(Debug, Subcommand)]
 enum CommandKind {
+    Check(CheckArgs),
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
     Lsp,
+}
+#[derive(Debug, Args)]
+struct CheckArgs {
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    #[arg(long, value_enum, default_value = "text")]
+    format: Format,
 }
 #[derive(Debug, Args)]
 struct ReadinessArgs {
@@ -77,6 +85,7 @@ enum Format {
 
 pub fn run() -> Result<i32> {
     match Cli::parse().command {
+        CommandKind::Check(args) => run_check(args),
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
         CommandKind::Lsp => {
@@ -84,6 +93,35 @@ pub fn run() -> Result<i32> {
             Ok(0)
         }
     }
+}
+fn run_check(args: CheckArgs) -> Result<i32> {
+    let workspace = SpecWorkspace::load(args.workspace)?;
+    let index = workspace.index()?;
+    let revision = revision(&workspace.root)?;
+    let context = ValidationContext {
+        config: &workspace.config,
+        workspace: &workspace,
+        index: &index,
+        changed_files: None,
+        reported_changed_files: None,
+        preset: workspace.config.validation.preset,
+        revision: Some(&revision),
+        change_base_revision: None,
+    };
+    let result = mitase_validation::validate_workspace(&context);
+    match args.format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Text => {
+            for d in &result.diagnostics {
+                println!(
+                    "{:?} {} {}: {}",
+                    d.severity, d.rule_id, d.primary.path, d.message
+                );
+            }
+            println!("{} diagnostic(s)", result.diagnostics.len());
+        }
+    }
+    Ok(if result.is_valid() { 0 } else { 1 })
 }
 fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     let ReadinessCommand::Report { workspace, format } = args.command;
