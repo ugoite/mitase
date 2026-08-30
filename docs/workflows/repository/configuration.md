@@ -21,7 +21,7 @@ inventory:
         markdown: { roots: [docs] }
         json-schema: { roots: [schemas] }
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:

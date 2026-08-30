@@ -51,11 +51,7 @@ macro_rules! metadata {
             title: $id,
             default_error: true,
             override_policy: OverridePolicy::Suppressible,
-            presets: &[
-                ValidationPreset::Standard,
-                ValidationPreset::Strict,
-                ValidationPreset::AgentReady,
-            ],
+            presets: &[ValidationPreset::Standard, ValidationPreset::Strict],
         }
     };
 }
@@ -66,7 +62,7 @@ macro_rules! strict_metadata {
             title: $id,
             default_error: true,
             override_policy: OverridePolicy::Suppressible,
-            presets: &[ValidationPreset::Strict, ValidationPreset::AgentReady],
+            presets: &[ValidationPreset::Strict],
         }
     };
 }
@@ -77,11 +73,7 @@ macro_rules! fixed_metadata {
             title: $id,
             default_error: true,
             override_policy: OverridePolicy::FixedError,
-            presets: &[
-                ValidationPreset::Standard,
-                ValidationPreset::Strict,
-                ValidationPreset::AgentReady,
-            ],
+            presets: &[ValidationPreset::Standard, ValidationPreset::Strict],
         }
     };
 }
@@ -2517,7 +2509,6 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
             if binding.role == BindingRole::Implementation
                 && !selector_supports_editable(&target.selector)
-                && ctx.preset == ValidationPreset::AgentReady
             {
                 push(
                     out,
