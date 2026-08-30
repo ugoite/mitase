@@ -11,6 +11,5 @@ The functional units that turn requirements into implemented repository behavior
 These pages are generated from the canonical YAML under `docs/mitase/`.
 
 - [Mitase functional units / Core](./core.md)
-- [Mitase functional units / Delivery](./delivery.md)
 - [Mitase functional units / Planning](./planning.md)
 - [Work planning / Planner](./planner.md)

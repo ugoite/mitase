@@ -46,8 +46,6 @@ inventory:
             - crates/mitase-code-intel/Cargo.toml
             - crates/mitase-code-intel/src/lib.rs
             - crates/mitase-diagnostics/Cargo.toml
-            - crates/mitase-delivery/Cargo.toml
-            - crates/mitase-agent/Cargo.toml
             - crates/mitase-diagnostics/src/lib.rs
             - crates/mitase-inventory/Cargo.toml
             - crates/mitase-inventory/src/lib.rs

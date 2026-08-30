@@ -35,9 +35,8 @@ product responsibilities or compatibility layers.
 - `mitase-validation` and `mitase-diagnostics`: structural, semantic, and
   repository validation.
 - `mitase`: the CLI and specification-facing entrypoints.
-- `mitase-work-model`, `mitase-agent`, `mitase-planner`, and
-  `mitase-delivery`: transitional execution-oriented surfaces scheduled for
-  removal or replacement by the re-foundation phases.
+- `mitase-work-model` and `mitase-planner`: transitional execution-oriented
+  surfaces scheduled for removal or replacement by the re-foundation phases.
 
 Do not route repository delivery behavior back into Mitase. Repository skills
 may create worktrees, implement and review changes, run commands, coordinate

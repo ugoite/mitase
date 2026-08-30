@@ -18,7 +18,6 @@ This section is generated from the YAML source under `docs/mitase/`.
 - [Capability acceptance contracts / Capability Contracts](foundations/capability-contracts.md)
 - [Work planning / Work](foundations/work.md)
 - [Mitase functional units / Core](capabilities/core.md)
-- [Mitase functional units / Delivery](capabilities/delivery.md)
 - [Mitase functional units / Planning](capabilities/planning.md)
 - [Work planning / Planner](capabilities/planner.md)
 - [Public entrypoint contracts / Code Diagnostics](contracts/code-diagnostics.md)
