@@ -14,7 +14,6 @@ pub struct ProjectConfig {
     pub validation: ValidationConfig,
     #[serde(default)]
     pub verification: VerificationConfig,
-    pub work: WorkConfig,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -115,8 +114,6 @@ pub struct ReadinessSelectionProbe {
 #[serde(deny_unknown_fields)]
 pub struct ReadinessLimits {
     pub max_ownership_scope_units: usize,
-    pub max_targets_per_binding: usize,
-    pub max_slices_per_origin: usize,
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -137,8 +134,6 @@ pub struct ChangedConfig {
     #[serde(default)]
     pub baseline: Option<ChangeBaseline>,
     pub require_owned_changes: bool,
-    #[serde(default)]
-    pub require_plan: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "strategy", rename_all = "kebab-case", deny_unknown_fields)]
@@ -153,21 +148,6 @@ pub struct GitRef(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RepoPathPattern(pub String);
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkConfig {
-    pub slicing: SliceLimits,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SliceLimits {
-    pub max_editable_files: usize,
-    pub max_editable_symbols: usize,
-    pub max_verification_targets: usize,
-    pub max_readonly_targets: usize,
-    pub max_total_bytes: usize,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,27 +165,24 @@ validation:
   readiness:
     target: traceable
     probes:
-      implemented_criteria:
-        - criterion: REQ-WORK-001#criterion.exact-slice
-          level: work-ready
       public_entrypoints: { selection: all, level: seedable }
       changed_units: false
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
-  changed: { require_owned_changes: true, require_plan: true }
+    limits: { max_ownership_scope_units: 64 }
+  changed: { require_owned_changes: true }
 verification: { runners: {} }
-work:
-  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 8, max_readonly_targets: 12, max_total_bytes: 120000 }
 "#;
         let config: ProjectConfig = serde_yaml::from_str(source).expect("project config");
         assert_eq!(
             config.validation.readiness.target,
             ReadinessLevel::Traceable
         );
-        assert_eq!(
-            config.validation.readiness.probes.implemented_criteria[0]
-                .criterion
-                .to_string(),
-            "REQ-WORK-001#criterion.exact-slice"
+        assert!(
+            config
+                .validation
+                .readiness
+                .probes
+                .implemented_criteria
+                .is_empty()
         );
         assert_eq!(
             config
@@ -227,18 +204,6 @@ work:
             root_config.validation.readiness.limits,
             ReadinessLimits {
                 max_ownership_scope_units: 64,
-                max_targets_per_binding: 12,
-                max_slices_per_origin: 4,
-            }
-        );
-        assert_eq!(
-            root_config.work.slicing,
-            SliceLimits {
-                max_editable_files: 4,
-                max_editable_symbols: 8,
-                max_verification_targets: 8,
-                max_readonly_targets: 12,
-                max_total_bytes: 160_000,
             }
         );
         assert!(

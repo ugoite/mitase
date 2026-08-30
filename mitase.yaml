@@ -1,7 +1,7 @@
 schema: mitase/config/v1
 workspace:
   spec_roots: [docs/mitase]
-  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, fixtures/v1/valid-web-app/work.yaml, website/package-lock.json, website/package.json, .github/workflows/maintenance.yml]
+  excludes: [target/**, node_modules/**, website/package-lock.json, website/package.json, .github/workflows/maintenance.yml]
 inventory:
   active_profile: default
   profiles:
@@ -49,35 +49,31 @@ inventory:
             - crates/mitase-diagnostics/src/lib.rs
             - crates/mitase-inventory/Cargo.toml
             - crates/mitase-inventory/src/lib.rs
-            - crates/mitase-planner/Cargo.toml
-            - crates/mitase-planner/src/lib.rs
             - crates/mitase-project-model/Cargo.toml
             - crates/mitase-project-model/src/lib.rs
             - crates/mitase-spec-model/src/lib.rs
             - crates/mitase-validation/Cargo.toml
             - crates/mitase-validation/src/lib.rs
             - crates/mitase-validation/src/readiness.rs
-            - crates/mitase-work-model/src/lib.rs
             - crates/mitase-workspace/Cargo.toml
             - crates/mitase-workspace/src/lib.rs
             - docs/reference/specification/index.md
+            - docs/reference/specification/capabilities/index.md
             - docs/reference/specification/capabilities/core.md
             - docs/reference/specification/capabilities/delivery.md
             - docs/reference/specification/capabilities/planning.md
-            - docs/reference/specification/capabilities/planner.md
+            - docs/reference/specification/contracts/index.md
             - docs/reference/specification/contracts/agent-delivery.md
             - docs/reference/specification/contracts/code-diagnostics.md
             - docs/reference/specification/contracts/inventory.md
             - docs/reference/specification/contracts/spec-model.md
             - docs/reference/specification/contracts/validation.md
-            - docs/reference/specification/contracts/work-planning.md
             - docs/reference/specification/contracts/workspace-loading.md
             - docs/reference/specification/contracts/workspace-resolution.md
+            - docs/reference/specification/foundations/index.md
             - docs/reference/specification/foundations/foundation.md
             - docs/reference/specification/foundations/delivery.md
             - docs/reference/specification/foundations/capability-contracts.md
-            - docs/reference/specification/foundations/work.md
-            - docs/workflows/work/command-card.md
             - docs/workflows/repository/configuration.md
             - docs/start-here/adopt/examples-and-templates.md
             - docs/start-here/adopt/existing-repository.md
@@ -87,19 +83,16 @@ inventory:
             - docs/mitase/features/capabilities/core.yaml
             - docs/mitase/features/capabilities/delivery.yaml
             - docs/mitase/features/capabilities/planning.yaml
-            - docs/mitase/features/planner.yaml
             - docs/mitase/features/public-entrypoints/agent-delivery.yaml
             - docs/mitase/features/public-entrypoints/code-diagnostics.yaml
             - docs/mitase/features/public-entrypoints/inventory.yaml
             - docs/mitase/features/public-entrypoints/spec-model.yaml
             - docs/mitase/features/public-entrypoints/validation.yaml
-            - docs/mitase/features/public-entrypoints/work-planning.yaml
             - docs/mitase/features/public-entrypoints/workspace-loading.yaml
             - docs/mitase/features/public-entrypoints/workspace-resolution.yaml
             - docs/mitase/philosophies/foundation.yaml
             - docs/mitase/policies/delivery.yaml
             - docs/mitase/requirements/capability-contracts.yaml
-            - docs/mitase/requirements/work.yaml
             - editors/vscode/README.md
             - editors/vscode/src/model.js
             - editors/vscode/test/model.test.js
@@ -184,15 +177,14 @@ validation:
     target: traceable
     probes:
       implemented_criteria:
-        - criterion: REQ-WORK-001#criterion.exact-slice
+        - criterion: REQ-CAPABILITY-001#criterion.spec-model
           level: work-ready
       public_entrypoints: { selection: all, level: seedable }
       changed_units: false
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
+    limits: { max_ownership_scope_units: 64 }
   changed:
     baseline: { strategy: parent }
     require_owned_changes: true
-    require_plan: true
 verification:
   runners:
     cargo-test:
@@ -204,12 +196,3 @@ verification:
     shell:
       executable: bash
       arguments: ["{script}"]
-work:
-  slicing:
-    max_editable_files: 4
-    max_editable_symbols: 8
-    max_verification_targets: 8
-    max_readonly_targets: 12
-    # Measured envelope for the detail workspace context pack, including
-    # declared trace/evidence and the existing public Work context.
-    max_total_bytes: 160000

@@ -2,6 +2,7 @@
 mod readiness;
 use anyhow::{Context, Result, bail};
 use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
+use mitase_inventory::ArtifactUnitKind;
 use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use mitase_spec_model::{
     ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
@@ -721,7 +722,9 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                             hunk.old_start,
                             hunk.old_end,
                             (unit.span.line_start, unit.span.line_end),
-                        )
+                        ) || (matches!(unit.kind, ArtifactUnitKind::File)
+                            && hunk.new_start == 0
+                            && hunk.new_end == 0)
                     })
             })
             .cloned()
@@ -874,7 +877,12 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             if unit.path.as_path() == Path::new("build.rs") {
                 continue;
             }
-            if matches!(file.status, ChangeStatus::Deleted) && from_baseline && owned.is_empty() {
+            let still_present = ctx
+                .index
+                .artifact_units
+                .iter()
+                .any(|current| current.identity == unit.identity);
+            if from_baseline && owned.is_empty() && !still_present {
                 // Removing an unowned semantic artifact cannot introduce an
                 // unowned implementation. This permits retiring orphaned
                 // transitional code while preserving ownership checks for
@@ -1257,14 +1265,18 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
     let mitase_config = git_show(root, revision, Path::new("mitase.yaml"))
         .map_err(anyhow::Error::msg)
         .context("read baseline mitase.yaml")?;
-    let config = serde_yaml::from_str::<ProjectConfig>(&mitase_config)
-        .context("parse v1 baseline mitase.yaml")?;
+    // A pre-v1 cutover may remove configuration fields in the same change as
+    // the implementation that stopped using them. Normalize only this
+    // historical baseline snapshot; the current product parser remains
+    // strict and does not accept the retired shape.
+    let config = parse_baseline_config(&mitase_config)?;
+    let normalized_config = serde_yaml::to_string(&config).context("serialize baseline config")?;
     let tempdir = tempfile::Builder::new()
         .prefix("mitase-baseline-")
         .tempdir()
         .context("create baseline workspace")?;
     let workspace_dir = tempdir.path();
-    fs::write(workspace_dir.join("mitase.yaml"), mitase_config)
+    fs::write(workspace_dir.join("mitase.yaml"), normalized_config)
         .context("write normalized baseline config")?;
     let files = git_ls_tree(root, revision)
         .map_err(anyhow::Error::msg)
@@ -1302,6 +1314,33 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
         workspace,
         index,
     })
+}
+
+fn parse_baseline_config(source: &str) -> Result<ProjectConfig> {
+    let mut value: serde_yaml::Value =
+        serde_yaml::from_str(source).context("parse baseline mitase.yaml as YAML")?;
+    let Some(root) = value.as_mapping_mut() else {
+        bail!("baseline mitase.yaml must be a mapping");
+    };
+    root.remove(serde_yaml::Value::String("work".into()));
+    if let Some(serde_yaml::Value::Mapping(validation)) =
+        root.get_mut(serde_yaml::Value::String("validation".into()))
+    {
+        if let Some(serde_yaml::Value::Mapping(readiness)) =
+            validation.get_mut(serde_yaml::Value::String("readiness".into()))
+            && let Some(serde_yaml::Value::Mapping(limits)) =
+                readiness.get_mut(serde_yaml::Value::String("limits".into()))
+        {
+            limits.remove(serde_yaml::Value::String("max_targets_per_binding".into()));
+            limits.remove(serde_yaml::Value::String("max_slices_per_origin".into()));
+        }
+        if let Some(serde_yaml::Value::Mapping(changed)) =
+            validation.get_mut(serde_yaml::Value::String("changed".into()))
+        {
+            changed.remove(serde_yaml::Value::String("require_plan".into()));
+        }
+    }
+    serde_yaml::from_value(value).context("parse v1 baseline mitase.yaml")
 }
 
 fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, String> {
@@ -2737,18 +2776,10 @@ mod tests {
                 "  preset: standard\n",
                 "  readiness:\n",
                 "    target: off\n",
-                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
                 "  changed:\n",
                 "    require_owned_changes: false\n",
-                "    require_plan: false\n",
                 "verification: { runners: {} }\n",
-                "work:\n",
-                "  slicing:\n",
-                "    max_editable_files: 2\n",
-                "    max_editable_symbols: 4\n",
-                "    max_verification_targets: 2\n",
-                "    max_readonly_targets: 2\n",
-                "    max_total_bytes: 4096\n",
             ),
         )
         .expect("config");
@@ -3223,13 +3254,10 @@ requirements:
                 "  preset: standard\n",
                 "  readiness:\n",
                 "    target: off\n",
-                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
                 "  changed:\n",
                 "    require_owned_changes: true\n",
-                "    require_plan: false\n",
                 "verification: { runners: {} }\n",
-                "work:\n",
-                "  slicing: { max_editable_files: 2, max_editable_symbols: 4, max_verification_targets: 2, max_readonly_targets: 2, max_total_bytes: 4096 }\n",
             ),
         )
         .expect("config");

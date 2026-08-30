@@ -11,7 +11,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
 };
 
 #[derive(Debug, Clone)]
@@ -24,10 +23,7 @@ pub struct SpecWorkspace {
     pub root: PathBuf,
     pub config: ProjectConfig,
     pub documents: Vec<LoadedDocument>,
-    /// Candidate bytes used by every overlay-aware reader.
-    pub overlays: BTreeMap<PathBuf, Vec<u8>>,
     matcher: WorkspaceMatcher,
-    fingerprint_cache: Arc<OnceLock<Result<String, String>>>,
 }
 #[derive(Debug, Clone)]
 struct WorkspaceMatcher {
@@ -97,37 +93,6 @@ pub enum AnchorValue {
 }
 
 impl SpecWorkspace {
-    pub fn overlay_document(&self, path: &Path, document: SpecDocument) -> Result<Self> {
-        let mut overlay = self.clone();
-        overlay.fingerprint_cache = Arc::new(OnceLock::new());
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let loaded = overlay
-            .documents
-            .iter_mut()
-            .find(|loaded| loaded.path == canonical)
-            .ok_or_else(|| anyhow::anyhow!("overlay path is not a loaded specification"))?;
-        loaded.document = document;
-        let bytes = serde_yaml::to_string(&loaded.document)?.into_bytes();
-        overlay.overlays.insert(canonical.clone(), bytes.clone());
-        if let Ok(relative) = canonical.strip_prefix(&overlay.root) {
-            overlay.overlays.insert(relative.to_path_buf(), bytes);
-        }
-        Ok(overlay)
-    }
-
-    pub fn overlay_config(&self, config: ProjectConfig) -> Result<Self> {
-        let mut overlay = self.clone();
-        overlay.fingerprint_cache = Arc::new(OnceLock::new());
-        overlay.matcher = WorkspaceMatcher::build(&config)?;
-        overlay.config = config;
-        let bytes = serde_yaml::to_string(&overlay.config)?.into_bytes();
-        let path = overlay.root.join("mitase.yaml");
-        let canonical = path.canonicalize().unwrap_or(path);
-        overlay.overlays.insert(canonical, bytes.clone());
-        overlay.overlays.insert(PathBuf::from("mitase.yaml"), bytes);
-        Ok(overlay)
-    }
-
     pub fn load(start: impl AsRef<Path>) -> Result<Self> {
         let root = find_root(start.as_ref())?;
         let config_path = root.join("mitase.yaml");
@@ -170,110 +135,14 @@ impl SpecWorkspace {
             root,
             config,
             documents,
-            overlays: BTreeMap::new(),
             matcher,
-            fingerprint_cache: Arc::new(OnceLock::new()),
         })
     }
     pub fn index(&self) -> Result<SpecIndex> {
         SpecIndex::build(self)
     }
-    pub fn try_fingerprint(&self) -> Result<String> {
-        self.fingerprint_cache
-            .get_or_init(|| {
-                self.compute_fingerprint()
-                    .map_err(|error| error.to_string())
-            })
-            .clone()
-            .map_err(anyhow::Error::msg)
-    }
-
-    fn compute_fingerprint(&self) -> Result<String> {
-        let mut hash = Sha256::new();
-        hash.update(serde_yaml::to_string(&self.config)?.as_bytes());
-        for doc in &self.documents {
-            if let Ok(relative) = doc.path.strip_prefix(&self.root) {
-                hash.update(relative.to_string_lossy().as_bytes());
-            }
-            hash.update(self.read_bytes(&doc.path)?);
-        }
-        if let Some(profile) = self
-            .config
-            .inventory
-            .profiles
-            .iter()
-            .find(|profile| profile.id == self.config.inventory.active_profile)
-        {
-            hash.update(b"inventory-profile:v1");
-            hash.update(profile.id.as_bytes());
-            if let Ok(value) = serde_yaml::to_string(profile) {
-                hash.update(value.as_bytes());
-            }
-            let units = InventoryRegistry::discover(
-                &InventoryContext {
-                    workspace_root: self.root.clone(),
-                    profile: profile.id.clone(),
-                    settings: serde_yaml::Value::Null,
-                    excludes: self
-                        .config
-                        .workspace
-                        .excludes
-                        .iter()
-                        .map(|p| p.0.clone())
-                        .collect(),
-                    overlays: self.overlays.clone(),
-                },
-                profile,
-            )?;
-            for unit in units {
-                hash.update(unit.identity.as_bytes());
-                hash.update(unit.digest.as_bytes());
-            }
-        }
-        for (runner, definition) in &self.config.verification.runners {
-            hash.update(runner.as_bytes());
-            hash.update(definition.executable.as_bytes());
-            for argument in &definition.arguments {
-                hash.update(argument.as_bytes());
-            }
-        }
-        Ok(format_sha256(hash.finalize()))
-    }
-
-    /// Snapshots may still be rendered for an invalid workspace. Execution
-    /// bases use `try_fingerprint` and therefore reject inventory failures.
-    /// Fingerprints are unavailable when any enabled inventory provider
-    /// fails. Callers must propagate this error instead of manufacturing an
-    /// invalid-but-plausible execution basis.
-    pub fn fingerprint(&self) -> Result<String> {
-        self.try_fingerprint()
-    }
-
-    /// Fingerprint only the specification/configuration inputs. Inventory
-    /// artifact bytes are intentionally excluded so an editable source change
-    /// does not make an otherwise valid work plan stale.
-    pub fn spec_fingerprint(&self) -> Result<String> {
-        let mut hash = Sha256::new();
-        hash.update(serde_yaml::to_string(&self.config)?.as_bytes());
-        for document in &self.documents {
-            if let Ok(relative) = document.path.strip_prefix(&self.root) {
-                hash.update(relative.to_string_lossy().as_bytes());
-            }
-            hash.update(self.read_bytes(&document.path)?);
-        }
-        Ok(format_sha256(hash.finalize()))
-    }
 
     pub fn read_bytes(&self, path: &Path) -> Result<Vec<u8>> {
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        if let Some(bytes) = self.overlays.get(&canonical) {
-            return Ok(bytes.clone());
-        }
-        if let Ok(relative) = canonical.strip_prefix(&self.root)
-            && let Some(bytes) = self.overlays.get(relative)
-        {
-            return Ok(bytes.clone());
-        }
         Ok(fs::read(path)?)
     }
 
@@ -474,7 +343,7 @@ impl SpecIndex {
                     .iter()
                     .map(|p| p.0.clone())
                     .collect(),
-                overlays: workspace.overlays.clone(),
+                overlays: BTreeMap::new(),
             },
             profile,
         ) {
@@ -696,62 +565,6 @@ impl SpecIndex {
         Ok(out)
     }
 
-    /// Fingerprint graph ownership without including mutable artifact bytes.
-    /// This detects changes to bindings, exact targets, and reverse ownership
-    /// relationships while allowing an editable target's implementation body
-    /// to change after planning.
-    pub fn ownership_fingerprint(&self) -> String {
-        self.ownership_fingerprint_excluding(&BTreeSet::new())
-    }
-
-    /// Fingerprint the ownership basis while excluding exact lifecycle targets
-    /// that an approved plan is allowed to create or remove. This keeps those
-    /// transitions from invalidating their own approval without concealing
-    /// ownership changes anywhere else in the workspace.
-    pub fn ownership_fingerprint_excluding(
-        &self,
-        lifecycle_targets: &BTreeSet<BoundTargetRef>,
-    ) -> String {
-        let mut hash = Sha256::new();
-        for (anchor, binding) in &self.bindings {
-            hash.update(anchor.to_string().as_bytes());
-            hash.update(
-                serde_json::to_vec(binding).expect("artifact binding serializes for fingerprint"),
-            );
-        }
-        for (target, identity) in &self.target_to_artifact {
-            if lifecycle_targets.contains(target) {
-                continue;
-            }
-            hash.update(target.to_string().as_bytes());
-            hash.update(identity.as_bytes());
-        }
-        for (identity, owners) in &self.artifact_owners {
-            let retained = owners
-                .iter()
-                .filter(|owner| {
-                    owner.target_id.as_ref().is_none_or(|target_id| {
-                        !lifecycle_targets.contains(&BoundTargetRef {
-                            binding: owner.binding.clone(),
-                            target_id: target_id.clone(),
-                        })
-                    })
-                })
-                .collect::<Vec<_>>();
-            if retained.is_empty() {
-                continue;
-            }
-            hash.update(identity.as_bytes());
-            for owner in retained {
-                hash.update(owner.binding.to_string().as_bytes());
-                hash.update(owner.scope_id.to_string().as_bytes());
-                if let Some(target_id) = &owner.target_id {
-                    hash.update(target_id.to_string().as_bytes());
-                }
-            }
-        }
-        format_sha256(hash.finalize())
-    }
     fn insert(
         &mut self,
         item: SpecId,
@@ -1034,65 +847,10 @@ pub fn resolve_target_in_workspace(
     resolve_target_from_content(&workspace.root, target, content)
 }
 
-/// Resolve a target from the exact semantic span already produced by the
-/// active inventory. This is used by planning and post-state validation so a
-/// canonical plan and its later validation share the same candidate-overlay
-/// source of truth without reparsing every source file.
-pub fn resolve_indexed_target(
-    workspace: &SpecWorkspace,
-    target: &ArtifactTarget,
-    unit: &ArtifactUnit,
-) -> Result<Option<ResolvedTarget>> {
-    if unit.adapter != target.adapter
-        || unit.path != target.path
-        || !matches!(
-            unit.reachability,
-            mitase_inventory::ArtifactReachability::Active
-        )
-        || unit.span.byte_end <= unit.span.byte_start
-    {
-        return Ok(None);
-    }
-    match (&target.selector, &unit.kind) {
-        (ExactSelector::Symbol { .. }, ArtifactUnitKind::Symbol)
-        | (ExactSelector::Heading { .. }, ArtifactUnitKind::Heading)
-        | (ExactSelector::Marker { .. }, ArtifactUnitKind::Marker)
-        | (ExactSelector::File, ArtifactUnitKind::File) => {}
-        _ => return Ok(None),
-    }
-    let content = workspace.read_bytes(&workspace.root.join(unit.path.as_path()))?;
-    let text = std::str::from_utf8(&content)
-        .map_err(|error| anyhow::anyhow!("inventory target source is not UTF-8: {error}"))?;
-    let Some(excerpt) = text.get(unit.span.byte_start..unit.span.byte_end) else {
-        return Ok(None);
-    };
-    let (description, symbols) = match &target.selector {
-        ExactSelector::File => ("file".into(), vec![]),
-        ExactSelector::Symbol { name } => (format!("symbol {name}"), vec![name.clone()]),
-        ExactSelector::Heading { value } => (format!("heading {value}"), vec![]),
-        ExactSelector::Marker { value } => (format!("marker {value}"), vec![]),
-        ExactSelector::Operation { .. } | ExactSelector::JsonPointer { .. } => return Ok(None),
-    };
-    Ok(Some(ResolvedTarget {
-        path: unit.path.as_path().to_path_buf(),
-        description,
-        symbols,
-        content_hash: hash_bytes(&content),
-        bytes: content.len(),
-        byte_start: unit.span.byte_start,
-        byte_end: unit.span.byte_end,
-        line_start: unit.span.line_start,
-        line_end: unit.span.line_end,
-        excerpt: excerpt.to_owned(),
-        excerpt_hash: hash_bytes(excerpt.as_bytes()),
-    }))
-}
-
-/// Resolve an active semantic inventory unit to its exact source range.  The
-/// inventory deliberately keeps some coarse spans (notably OpenAPI operations
-/// and JSON pointer nodes), so callers that turn a semantic identity into an
-/// executable scope must come through this resolver rather than copying the
-/// inventory span.
+/// Resolve an active semantic inventory unit to its exact source range. The
+/// inventory may keep coarse spans (notably OpenAPI operations and JSON
+/// pointer nodes), so callers receive the exact source range rather than a
+/// coarse inventory span.
 pub fn resolve_artifact_unit(
     workspace: &SpecWorkspace,
     unit: &ArtifactUnit,
@@ -1865,16 +1623,13 @@ mod tests {
                 "  preset: agent-ready\n",
                 "  readiness:\n",
                 "    target: closed-loop\n",
-            "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
                 "  changed:\n",
                 "    baseline:\n",
                 "      strategy: merge-base\n",
                 "      against: origin/main\n",
                 "    require_owned_changes: true\n",
-                "    require_plan: true\n",
                 "verification: { runners: {} }\n",
-                "work:\n",
-                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }\n",
             ),
         )
         .expect("config");
@@ -1923,11 +1678,9 @@ mod tests {
                 "  preset: agent-ready\n",
                 "  readiness:\n",
                 "    target: 'off'\n",
-            "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }\n",
-                "  changed: { require_owned_changes: false, require_plan: false }\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
+                "  changed: { require_owned_changes: false }\n",
                 "verification: { runners: {} }\n",
-                "work:\n",
-                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 8, max_readonly_targets: 12, max_total_bytes: 120000 }\n",
             ),
         )
         .expect("config");

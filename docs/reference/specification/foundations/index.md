@@ -13,4 +13,3 @@ These pages are generated from the canonical YAML under `docs/mitase/`.
 - [Foundation / Foundation](./foundation.md)
 - [Delivery governance / Delivery](./delivery.md)
 - [Capability acceptance contracts / Capability Contracts](./capability-contracts.md)
-- [Work planning / Work](./work.md)

@@ -743,25 +743,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mitase-planner"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "globset",
- "mitase-diagnostics",
- "mitase-inventory",
- "mitase-project-model",
- "mitase-spec-model",
- "mitase-work-model",
- "mitase-workspace",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
-]
-
-[[package]]
 name = "mitase-project-model"
 version = "0.1.0"
 dependencies = [
@@ -792,17 +773,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
-]
-
-[[package]]
-name = "mitase-work-model"
-version = "0.1.0"
-dependencies = [
- "mitase-diagnostics",
- "mitase-spec-model",
- "serde",
- "serde_json",
- "sha2",
 ]
 
 [[package]]
