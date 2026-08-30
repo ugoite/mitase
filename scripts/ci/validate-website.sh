@@ -9,7 +9,7 @@ validate_website() {
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$repo_root"
 
-  bash scripts/ci/quality-gates.sh
+  mise run ci
   bash scripts/ci/install-docs-site-deps.sh
   npm --prefix website run build
 }
