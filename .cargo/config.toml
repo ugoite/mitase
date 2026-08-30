@@ -1,0 +1,5 @@
+[build]
+# CARGO_BUILD_BUILD_DIR may override this machine-local default from a shell
+# profile when intermediate artifacts should live on another volume.
+build-dir = "{cargo-cache-home}/syu/build"
+min_version = "2025.11.3"

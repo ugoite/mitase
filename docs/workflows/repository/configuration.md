@@ -41,6 +41,21 @@ verification:
       arguments: [test, -p, "{package}", "{test}", --, --exact]
 ```
 
+## Place the Rust build cache on another volume
+
+Cargo keeps intermediate Rust build artifacts in the configured `build-dir`.
+The repository default uses Cargo's cache-home placeholder, while
+`CARGO_BUILD_BUILD_DIR` can override it when a developer needs another volume.
+Keep that override in the local shell profile (for example, `~/.zprofile` on
+macOS) and keep machine-specific absolute paths out of the repository:
+
+```sh
+export CARGO_BUILD_BUILD_DIR="/path/to/large-disk/syu/cargo-build"
+```
+
+`CARGO_TARGET_DIR` controls final build outputs separately and remains the
+portable repository `target/rust` location.
+
 Key fields:
 
 - `workspace.spec_roots`: canonical v1 specification roots.
