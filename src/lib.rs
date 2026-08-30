@@ -118,12 +118,8 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     if let Err(error) = inventory_result {
         bail!("inventory readiness failed: {error}");
     }
-    let report = mitase_validation::evaluate_readiness(
-        &workspace,
-        &index,
-        &revision(&workspace.root)?,
-        true,
-    )?;
+    let report =
+        mitase_validation::evaluate_readiness(&workspace, &index, &revision(&workspace.root)?)?;
     match format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => println!(

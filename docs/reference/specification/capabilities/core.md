@@ -392,12 +392,6 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: lib::editable_add_target_matches_file
-        - **id**: validation-implementation-digest
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::implementation_digest_for_receipt
         - **id**: validation-lifecycle-fingerprint
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
@@ -428,42 +422,12 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **selector**:
             - **kind**: module
             - **name**: lib::run_only_target_is_post_state_add
-        - **id**: validation-basis-inventory-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::canonical_execution_rejects_basis_with_unbuildable_inventory
-        - **id**: validation-basis-config-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::canonical_execution_rejects_basis_with_unrestorable_config
-        - **id**: validation-basis-revision-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::canonical_execution_rejects_missing_basis_revision
         - **id**: validation-deleted-anchor-test
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: module
             - **name**: lib::tests::changed_anchors_include_deleted_baseline_anchor_by_repo_path
-        - **id**: validation-completion-close-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::completion_report_closes_verified_slice
-        - **id**: validation-completion-missing-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: lib::tests::completion_report_explains_missing_receipt_execution
         - **id**: validation-self-verify-test
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
@@ -848,10 +812,6 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::editable_add_target_matches_file' }
-          - id: validation-implementation-digest
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::implementation_digest_for_receipt' }
           - id: validation-lifecycle-fingerprint
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
@@ -872,30 +832,10 @@ features:
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::run_only_target_is_post_state_add' }
-          - id: validation-basis-inventory-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::canonical_execution_rejects_basis_with_unbuildable_inventory' }
-          - id: validation-basis-config-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::canonical_execution_rejects_basis_with_unrestorable_config' }
-          - id: validation-basis-revision-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::canonical_execution_rejects_missing_basis_revision' }
           - id: validation-deleted-anchor-test
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: module, name: 'lib::tests::changed_anchors_include_deleted_baseline_anchor_by_repo_path' }
-          - id: validation-completion-close-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::completion_report_closes_verified_slice' }
-          - id: validation-completion-missing-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: module, name: 'lib::tests::completion_report_explains_missing_receipt_execution' }
           - id: validation-self-verify-test
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
