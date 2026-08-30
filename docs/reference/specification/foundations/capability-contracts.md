@@ -74,7 +74,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
         - POL-ADOPTION-001#rule.bounded-rollout
     - **id**: change-validation
       - **kind**: security
-      - **statement**: Changed semantic artifacts are rejected when ownership, lifecycle, or approved plan scope is incomplete.
+      - **statement**: Changed semantic artifacts are rejected when ownership, lifecycle, or semantic impact is incomplete.
       - **governed_by**:
         - POL-ADOPTION-001#rule.feature-evidence
     - **id**: context-export
@@ -257,7 +257,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
           - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: tests::hunkless_changes_require_file_scope_for_editable_targets
+            - **name**: tests::validate_reports_deleted_criterion_without_artifact_update
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-CAPABILITY-001#criterion.change-validation
@@ -267,7 +267,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **runner**: cargo-test
                 - **arguments**:
                   - **package**: mitase-validation
-                  - **test**: tests::hunkless_changes_require_file_scope_for_editable_targets
+                  - **test**: tests::validate_reports_deleted_criterion_without_artifact_update
         - **id**: context-test
           - **adapter**: rust
           - **path**: crates/mitase-planner/src/lib.rs
@@ -303,7 +303,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
     - **id**: delivery-verification
       - **role**: verification
       - **facet**: capability-verification
-      - **responsibility**: Verify exact execution, basis reconstruction, receipt closure, CLI orchestration, LSP navigation, and generated documentation.
+      - **responsibility**: Verify CLI orchestration, LSP navigation, generated documentation, and repository validation.
       - **targets**:
         - **id**: cli-test
           - **adapter**: rust
@@ -386,11 +386,6 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
       - **statement**: Generated artifacts are derived context of exact source targets and cannot be directly editable.
       - **governed_by**:
         - POL-ADOPTION-001#rule.feature-evidence
-    - **id**: generated-change-scope
-      - **kind**: security
-      - **statement**: A generated artifact may change in result scope only when one of its exact generated-from sources is editable and changed in the same slice.
-      - **governed_by**:
-        - POL-ADOPTION-001#rule.feature-evidence
     - **id**: semantic-diff
       - **kind**: behavior
       - **statement**: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
@@ -450,22 +445,6 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **arguments**:
                   - **package**: mitase-workspace
                   - **test**: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span
-        - **id**: json-openapi-scope-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
-              - **covers**:
-                - FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: mitase-validation
-                  - **test**: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change
         - **id**: stable-identity-test
           - **adapter**: rust
           - **path**: crates/mitase-inventory/src/lib.rs
@@ -530,22 +509,6 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **arguments**:
                   - **package**: mitase-planner
                   - **test**: tests::generated_outputs_are_derived_context_and_never_directly_editable
-        - **id**: generated-change-scope-test
-          - **adapter**: rust
-          - **path**: crates/mitase-validation/src/lib.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::generated_scope_requires_a_changed_exact_source
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-CAPABILITY-002#criterion.generated-change-scope
-              - **covers**:
-                - FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: mitase-validation
-                  - **test**: tests::generated_scope_requires_a_changed_exact_source
         - **id**: semantic-diff-test
           - **adapter**: rust
           - **path**: crates/mitase-inventory/src/lib.rs
@@ -627,7 +590,7 @@ requirements:
         governed_by: [POL-ADOPTION-001#rule.bounded-rollout]
       - id: change-validation
         kind: security
-        statement: Changed semantic artifacts are rejected when ownership, lifecycle, or approved plan scope is incomplete.
+        statement: Changed semantic artifacts are rejected when ownership, lifecycle, or semantic impact is incomplete.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: context-export
         kind: behavior
@@ -739,12 +702,12 @@ requirements:
           - id: change-validation-test
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: tests::hunkless_changes_require_file_scope_for_editable_targets }
+            selector: { kind: symbol, name: tests::validate_reports_deleted_criterion_without_artifact_update }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.change-validation
                 covers: [FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate]
-                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::hunkless_changes_require_file_scope_for_editable_targets } }
+                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::validate_reports_deleted_criterion_without_artifact_update } }
           - id: context-test
             adapter: rust
             path: crates/mitase-planner/src/lib.rs
@@ -766,7 +729,7 @@ requirements:
       - id: delivery-verification
         role: verification
         facet: capability-verification
-        responsibility: Verify exact execution, basis reconstruction, receipt closure, CLI orchestration, LSP navigation, and generated documentation.
+        responsibility: Verify CLI orchestration, LSP navigation, generated documentation, and repository validation.
         targets:
           - id: cli-test
             adapter: rust
@@ -822,10 +785,6 @@ requirements:
         kind: security
         statement: Generated artifacts are derived context of exact source targets and cannot be directly editable.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: generated-change-scope
-        kind: security
-        statement: A generated artifact may change in result scope only when one of its exact generated-from sources is editable and changed in the same slice.
-        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: semantic-diff
         kind: behavior
         statement: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
@@ -863,15 +822,6 @@ requirements:
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
                 runner: { runner: cargo-test, arguments: { package: mitase-workspace, test: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span } }
-          - id: json-openapi-scope-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change }
-            claims:
-              - kind: verifies
-                criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
-                covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change } }
           - id: stable-identity-test
             adapter: rust
             path: crates/mitase-inventory/src/lib.rs
@@ -908,15 +858,6 @@ requirements:
                 criterion: REQ-CAPABILITY-002#criterion.generated-source
                 covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
                 runner: { runner: cargo-test, arguments: { package: mitase-planner, test: tests::generated_outputs_are_derived_context_and_never_directly_editable } }
-          - id: generated-change-scope-test
-            adapter: rust
-            path: crates/mitase-validation/src/lib.rs
-            selector: { kind: symbol, name: tests::generated_scope_requires_a_changed_exact_source }
-            claims:
-              - kind: verifies
-                criterion: REQ-CAPABILITY-002#criterion.generated-change-scope
-                covers: [FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate]
-                runner: { runner: cargo-test, arguments: { package: mitase-validation, test: tests::generated_scope_requires_a_changed_exact_source } }
           - id: semantic-diff-test
             adapter: rust
             path: crates/mitase-inventory/src/lib.rs
