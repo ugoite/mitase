@@ -73,7 +73,10 @@ Key fields:
 - `validation.readiness.probes.public_entrypoints`: set `selection: all` and the required `level` to govern every discovered public entrypoint with one exact owner and one capability exposure.
 - `validation.readiness.probes.changed_units`: include changed artifact ownership in readiness when enabled.
 - `validation.changed.baseline`: optional Git baseline for change and readiness comparison.
-- `verification.runners`: runner identities referenced by exact verification claims. Readiness inspects their configuration but does not execute them.
+- `verification.runners`: declarative verifier identities referenced by exact
+  Verification Claims. Their executable and argument templates describe the
+  external runner contract; readiness and validation inspect completeness but
+  never execute a verifier or infer a pass result.
 
 Probe identity and required level are one typed configuration unit. Advance a capability only when its acceptance and behavioral verification are present; do not add catch-all ownership or planned targets to make a readiness count pass.
 
