@@ -6,9 +6,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use mitase_inventory::{InventoryContext, InventoryRegistry};
 use mitase_project_model::{ChangeBaseline, GitRef};
 use mitase_spec_model::RepoPath;
-use mitase_validation::{
-    ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
-};
+use mitase_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationContext, validate};
 use mitase_workspace::SpecWorkspace;
 use std::{
     fs,
@@ -20,7 +18,6 @@ struct ValidationInputs {
     changed_files: Option<Vec<ChangedFile>>,
     reported_changed_files: Option<Vec<ChangedFile>>,
     change_base_revision: Option<String>,
-    plan_mode: PlanValidationMode,
 }
 
 #[derive(Debug, Parser)]
@@ -171,9 +168,6 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         index: &index,
         changed_files: validation_inputs.changed_files.as_deref(),
         reported_changed_files: validation_inputs.reported_changed_files.as_deref(),
-        work_plan: None,
-        selected_slice: None,
-        plan_mode: validation_inputs.plan_mode,
         preset: workspace.config.validation.preset,
         revision: revision.as_deref(),
         change_base_revision: validation_inputs.change_base_revision.as_deref(),
@@ -254,7 +248,6 @@ fn validation_inputs_for_cli(
             changed_files: None,
             reported_changed_files: None,
             change_base_revision: None,
-            plan_mode: PlanValidationMode::PreState,
         });
     }
     let reported_changed_files = changed_files_for_validation(workspace, args)?;
@@ -274,7 +267,6 @@ fn validation_inputs_for_cli(
         changed_files: reported_changed_files,
         reported_changed_files: None,
         change_base_revision,
-        plan_mode: PlanValidationMode::PreState,
     })
 }
 

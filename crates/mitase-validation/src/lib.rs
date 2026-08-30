@@ -2,21 +2,15 @@
 mod readiness;
 use anyhow::{Context, Result, bail};
 use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
-use mitase_planner::plan as canonical_plan;
 use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use mitase_spec_model::{
     ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
     LocalAnchorKind, OwnershipSelector, RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument,
     TargetClaim, VerificationRunnerRef,
 };
-use mitase_work_model::{
-    ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
-    TargetTransition, VerificationClaimRef, WORK_PLAN_SCHEMA, WorkPlan,
-    readonly_targets_fingerprint_for_execution, work_plan_digest,
-};
 use mitase_workspace::{
-    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
-    resolve_indexed_target, resolve_target_in_workspace, selector_supports_editable,
+    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_target_in_workspace,
+    selector_supports_editable,
 };
 pub use readiness::{
     ReadinessAxis, ReadinessAxisId, ReadinessReport, ReadinessSubject,
@@ -28,6 +22,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VerificationClaimRef {
+    pub target: BoundTargetRef,
+    pub criterion: SpecAnchor,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum OverridePolicy {
@@ -439,21 +439,12 @@ fn parse_diff_span(span: &str) -> Result<(usize, usize)> {
     Ok((start, start + len - 1))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlanValidationMode {
-    PreState,
-    PostState,
-}
-
 pub struct ValidationContext<'a> {
     pub config: &'a ProjectConfig,
     pub workspace: &'a SpecWorkspace,
     pub index: &'a SpecIndex,
     pub changed_files: Option<&'a [ChangedFile]>,
     pub reported_changed_files: Option<&'a [ChangedFile]>,
-    pub work_plan: Option<&'a WorkPlan>,
-    pub selected_slice: Option<&'a ExecutionSlice>,
-    pub plan_mode: PlanValidationMode,
     pub preset: ValidationPreset,
     pub revision: Option<&'a str>,
     pub change_base_revision: Option<&'a str>,
@@ -465,15 +456,10 @@ pub trait ValidationRule {
 }
 
 pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
-    // Workspace validation is a structural operation. External verification
-    // is an explicit POST/readiness action and must never be reached through
-    // preview, overlay, or ordinary plan validation.
     validate_inner(ctx, false)
 }
 
 /// Validate a canonical workspace and enforce its configured readiness target.
-/// This is the explicit CLI workspace command; Workbench previews continue to
-/// use `validate_without_readiness` so previews never execute external tests.
 pub fn validate_workspace(ctx: &ValidationContext<'_>) -> ValidationResult {
     validate_inner(ctx, true)
 }
@@ -482,103 +468,8 @@ pub fn validate_without_readiness(ctx: &ValidationContext<'_>) -> ValidationResu
     validate_inner(ctx, false)
 }
 
-fn lifecycle_ownership_fingerprint(index: &SpecIndex, plan: &WorkPlan) -> String {
-    index.ownership_fingerprint_excluding(
-        &plan
-            .slices
-            .iter()
-            .flat_map(|slice| slice.editable_targets.iter())
-            .filter(|target| {
-                matches!(
-                    target.transition,
-                    TargetTransition::Add | TargetTransition::Remove
-                )
-            })
-            .map(|target| target.reference.clone())
-            .collect(),
-    )
-}
-
-fn plan_has_lifecycle_transition(plan: &WorkPlan) -> bool {
-    plan.slices
-        .iter()
-        .flat_map(|slice| &slice.editable_targets)
-        .any(|target| {
-            matches!(
-                target.transition,
-                TargetTransition::Add | TargetTransition::Remove
-            )
-        })
-}
-
-fn current_readonly_fingerprint(
-    workspace: &SpecWorkspace,
-    index: &SpecIndex,
-    plan: &WorkPlan,
-) -> String {
-    let mut slices = plan.slices.clone();
-    for slice in &mut slices {
-        for target in slice
-            .verification_targets
-            .iter_mut()
-            .chain(slice.readonly_context.iter_mut())
-            .filter(|target| {
-                matches!(
-                    target.access,
-                    TargetAccessMode::Readonly | TargetAccessMode::RunOnly
-                )
-            })
-        {
-            match resolve_planned_target_for_workspace(workspace, index, target) {
-                Some(resolved) => {
-                    target.resolved_path = resolved.path.to_string_lossy().into_owned();
-                    target.resolved_selector.description = resolved.description;
-                    target.resolved_selector.symbols = resolved.symbols;
-                    target.content_hash = resolved.content_hash;
-                    target.excerpt_hash = resolved.excerpt_hash;
-                }
-                None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
-                None if target.access == mitase_work_model::TargetAccessMode::RunOnly
-                    && target.transition == mitase_work_model::TargetTransition::Add
-                    && index.item_status.get(&target.reference.binding.item)
-                        == Some(&mitase_spec_model::ItemStatus::Planned) => {}
-                None => {
-                    target.content_hash = "missing".into();
-                    target.excerpt_hash = "missing".into();
-                }
-            }
-        }
-    }
-    readonly_targets_fingerprint_for_execution(&slices)
-}
-
-pub(crate) fn resolve_planned_target_for_workspace(
-    workspace: &SpecWorkspace,
-    index: &SpecIndex,
-    target: &mitase_work_model::PlannedTarget,
-) -> Option<ResolvedTarget> {
-    if let Some(identity) = &target.artifact_identity {
-        let unit = index
-            .artifact_units
-            .iter()
-            .find(|unit| &unit.identity == identity)?;
-        return resolve_artifact_unit(workspace, unit).ok();
-    }
-    let declared = index.target(&target.reference)?;
-    if let Some(identity) = index.target_to_artifact.get(&target.reference)
-        && let Some(unit) = index
-            .artifact_units
-            .iter()
-            .find(|unit| &unit.identity == identity)
-        && let Ok(Some(resolved)) = resolve_indexed_target(workspace, declared, unit)
-    {
-        return Some(resolved);
-    }
-    resolve_target_in_workspace(workspace, declared).ok()
-}
-
-/// Resolve the one claim selected by a plan or receipt. A verification target
-/// may serve several criteria, but every execution must name precisely one.
+/// Resolve one configured verification claim. A verification target may serve
+/// several criteria, so readiness inspection names precisely one criterion.
 pub(crate) fn resolve_verification_claim<'a>(
     index: &'a SpecIndex,
     claim: &VerificationClaimRef,
@@ -642,11 +533,6 @@ fn validate_inner(ctx: &ValidationContext<'_>, include_readiness: bool) -> Valid
     let start = diagnostics.len();
     validate_changes(ctx, &mut diagnostics);
     set_phase(&mut diagnostics[start..], ValidationPhase::Scope);
-    if let Some(plan) = ctx.work_plan {
-        let start = diagnostics.len();
-        validate_plan(ctx, plan, &mut diagnostics);
-        set_phase(&mut diagnostics[start..], ValidationPhase::Plan);
-    }
     diagnostics.retain_mut(|diagnostic| {
         if !is_fixed_error_rule(&diagnostic.rule_id)
             && rule_metadata(&diagnostic.rule_id)
@@ -1701,6 +1587,12 @@ fn changed_file_impacts_target(
     })
 }
 
+#[derive(Debug, Clone, Copy)]
+enum TargetRangeSide {
+    Old,
+    New,
+}
+
 fn changed_anchor_path(
     anchor: &SpecAnchor,
     baseline_workspace: Option<&SpecWorkspace>,
@@ -2471,8 +2363,8 @@ fn check_kind(
 
 fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     // Planned items are an advisory catalog, not current ownership. Their
-    // exact targets can intentionally be absent until an approved Add plan
-    // creates them; result validation later proves the planned lifecycle.
+    // exact targets can intentionally be absent until a later implementation
+    // change creates them.
     let advisory_absent_targets = ctx
         .index
         .bindings
@@ -2484,20 +2376,6 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 target_id: target.id.clone(),
             })
         })
-        .collect::<BTreeSet<_>>();
-    let allowed_absent_targets = ctx
-        .work_plan
-        .into_iter()
-        .flat_map(|plan| plan.slices.iter())
-        .flat_map(|slice| {
-            slice
-                .editable_targets
-                .iter()
-                .chain(&slice.verification_targets)
-                .chain(&slice.readonly_context)
-        })
-        .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
-        .map(|target| target.reference.clone())
         .collect::<BTreeSet<_>>();
     let known_facets = BTreeSet::<String>::new();
     for (anchor, binding) in &ctx.index.bindings {
@@ -2637,11 +2515,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                Err(e)
-                    if target.lifecycle == ArtifactTargetLifecycle::Present
-                        && !allowed_absent_targets.contains(&target_ref)
-                        && !advisory =>
-                {
+                Err(e) if target.lifecycle == ArtifactTargetLifecycle::Present && !advisory => {
                     push(
                         out,
                         "MITASE-TARGET-002",
@@ -2782,893 +2656,6 @@ fn validate_contracts(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Diagnostic>) {
-    if plan.schema != WORK_PLAN_SCHEMA {
-        push(
-            out,
-            "MITASE-SCHEMA-001",
-            format!("plan schema must be {WORK_PLAN_SCHEMA}"),
-            "work-plan",
-            None,
-        );
-    }
-    let allow_post_state = ctx.plan_mode == PlanValidationMode::PostState;
-    if !allow_post_state
-        && ctx
-            .revision
-            .is_some_and(|revision| plan.basis.revision != revision)
-    {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "plan basis revision is stale",
-            "work-plan",
-            None,
-        );
-    }
-    let basis_workspace = load_workspace_at_revision(&ctx.workspace.root, &plan.basis.revision);
-    if plan.basis.spec_fingerprint != ctx.workspace.spec_fingerprint().unwrap_or_default() {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "plan specification basis is stale",
-            "work-plan",
-            None,
-        );
-    }
-    if plan.basis.ownership_fingerprint != lifecycle_ownership_fingerprint(ctx.index, plan) {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "plan ownership basis is stale",
-            "work-plan",
-            None,
-        );
-    }
-    if plan.basis.readonly_fingerprint
-        != current_readonly_fingerprint(ctx.workspace, ctx.index, plan)
-    {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "plan readonly or run-only target basis is stale",
-            "work-plan",
-            None,
-        );
-    }
-    // A Workbench plan may be created against the current working tree while
-    // its revision still names HEAD.  Prefer the live indexed workspace when
-    // its fingerprint is the submitted basis; reconstructing HEAD here would
-    // incorrectly compare a valid dirty-tree plan with an older filesystem.
-    let current_workspace_is_basis = plan.basis.workspace_fingerprint
-        == ctx.workspace.try_fingerprint().unwrap_or_default()
-        && !plan_has_lifecycle_transition(plan);
-    if basis_workspace.is_none() && !current_workspace_is_basis && !allow_post_state {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "plan basis revision cannot be reconstructed",
-            "work-plan",
-            None,
-        );
-    }
-    if plan.canonical_digest != work_plan_digest(plan) {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "plan canonical digest is tampered",
-            "work-plan",
-            None,
-        );
-    }
-    let canonical_basis = if current_workspace_is_basis {
-        Some((ctx.workspace, ctx.index))
-    } else {
-        basis_workspace
-            .as_ref()
-            .map(|basis| (&basis.workspace, &basis.index))
-    };
-    if let Some((basis_workspace, basis_index)) = canonical_basis {
-        match canonical_plan(
-            &plan.request,
-            basis_workspace,
-            basis_index,
-            &plan.basis.revision,
-        ) {
-            Ok(mut canonical) => {
-                canonical.basis = plan.basis.clone();
-                canonical.canonical_digest = work_plan_digest(&canonical);
-                let structures_match = canonical.status == plan.status
-                    && canonical.slices == plan.slices
-                    && canonical.diagnostics == plan.diagnostics
-                    && canonical.canonical_digest == plan.canonical_digest;
-                if !structures_match {
-                    push(
-                        out,
-                        "MITASE-WORK-009",
-                        "plan structure does not match the canonical planner output",
-                        "work-plan",
-                        None,
-                    );
-                }
-            }
-            Err(error) => push(
-                out,
-                "MITASE-WORK-009",
-                format!("plan request no longer replans cleanly: {error:#}"),
-                "work-plan",
-                None,
-            ),
-        }
-    }
-    if plan.execution != PlanExecution::IsolatedSlices {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "work plan execution mode must be isolated-slices",
-            "work-plan",
-            None,
-        );
-    }
-    if allow_post_state && plan.slices.len() > 1 && ctx.selected_slice.is_none() {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "post-state validation requires --slice-id when a plan has multiple slices",
-            "work-plan",
-            None,
-        );
-    }
-    if allow_post_state
-        && let (Some(actual), Some(reported)) = (ctx.changed_files, ctx.reported_changed_files)
-        && !reported_change_set_covers(actual, reported)
-    {
-        push(
-            out,
-            "MITASE-WORK-009",
-            "reported range does not cover all actual post-state changes from the plan basis",
-            "work-plan",
-            None,
-        );
-    }
-    let mut slice_ids = BTreeSet::new();
-    let slices: Vec<&ExecutionSlice> = ctx
-        .selected_slice
-        .map_or_else(|| plan.slices.iter().collect(), |s| vec![s]);
-    for slice in slices {
-        if !slice_ids.insert(slice.id.as_str()) {
-            push(
-                out,
-                "MITASE-WORK-009",
-                format!("duplicate slice id: {}", slice.id),
-                "work-plan",
-                None,
-            );
-        }
-        if slice.completion.is_empty() {
-            push(
-                out,
-                "MITASE-WORK-011",
-                "slice has no completion check",
-                "work-plan",
-                None,
-            );
-        }
-        if slice.confidence == PlanConfidence::Low && !slice.editable_targets.is_empty() {
-            push(
-                out,
-                "MITASE-WORK-010",
-                "low-confidence target cannot be executable",
-                "work-plan",
-                None,
-            );
-        }
-        let limits = &ctx.config.work.slicing;
-        let all_targets = slice
-            .editable_targets
-            .iter()
-            .chain(&slice.verification_targets)
-            .chain(&slice.readonly_context);
-        let actual_bytes: usize = all_targets.clone().map(target_budget_bytes).sum();
-        let actual_files = slice
-            .editable_targets
-            .iter()
-            .chain(&slice.verification_targets)
-            .filter(|target| target.access == mitase_work_model::TargetAccessMode::Editable)
-            .map(|target| target.resolved_path.as_str())
-            .collect::<BTreeSet<_>>()
-            .len();
-        let actual_symbols: usize = slice
-            .editable_targets
-            .iter()
-            .chain(&slice.verification_targets)
-            .filter(|target| target.access == mitase_work_model::TargetAccessMode::Editable)
-            .map(|target| target.resolved_selector.symbols.len())
-            .sum();
-        if slice.budget.editable_files != actual_files
-            || slice.budget.editable_symbols != actual_symbols
-            || slice.budget.verification_targets != slice.verification_targets.len()
-            || slice.budget.readonly_targets != slice.readonly_context.len()
-            || slice.budget.total_bytes != actual_bytes
-        {
-            push(
-                out,
-                "MITASE-WORK-009",
-                "plan budget snapshot is tampered",
-                "work-plan",
-                None,
-            );
-        }
-        if slice.budget.editable_files > limits.max_editable_files
-            || slice.budget.editable_symbols > limits.max_editable_symbols
-            || slice.budget.verification_targets > limits.max_verification_targets
-            || slice.budget.readonly_targets > limits.max_readonly_targets
-            || slice.budget.total_bytes > limits.max_total_bytes
-        {
-            push(
-                out,
-                "MITASE-WORK-003",
-                "slice exceeds configured budget",
-                "work-plan",
-                None,
-            );
-        }
-        for target in slice
-            .editable_targets
-            .iter()
-            .chain(&slice.verification_targets)
-            .chain(&slice.readonly_context)
-        {
-            match resolve_planned_target(ctx, target) {
-                Some(resolved)
-                    if target.lifecycle == TargetLifecycle::EnsurePresent
-                        && resolved.path.to_string_lossy() == target.resolved_path
-                        && resolved.description == target.resolved_selector.description
-                        && resolved.symbols == target.resolved_selector.symbols
-                        && planned_target_metadata_matches(ctx, target) =>
-                {
-                    if ensure_present_target_exceeds_budget(target, &resolved) {
-                        push(
-                            out,
-                            "MITASE-WORK-003",
-                            format!(
-                                "ensure-present target exceeds planned post-state budget: {}",
-                                target.reference
-                            ),
-                            &target.resolved_path,
-                            Some(target.reference.binding.clone()),
-                        );
-                    }
-                }
-                None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
-                Some(resolved)
-                    if allow_post_state
-                        && target.lifecycle == TargetLifecycle::Stable
-                        && target.access == mitase_work_model::TargetAccessMode::Editable
-                        && resolved.path.to_string_lossy() == target.resolved_path
-                        && resolved.description == target.resolved_selector.description
-                        && resolved.symbols == target.resolved_selector.symbols
-                        && planned_target_metadata_matches(ctx, target) => {}
-                Some(resolved)
-                    if allow_post_state
-                        && target.lifecycle == TargetLifecycle::Stable
-                        && matches!(
-                            target.access,
-                            mitase_work_model::TargetAccessMode::Readonly
-                                | mitase_work_model::TargetAccessMode::RunOnly
-                        )
-                        && lifecycle_transition_shares_path(slice, target)
-                        && (resolved.excerpt_hash == target.excerpt_hash
-                            || (target.access == mitase_work_model::TargetAccessMode::RunOnly
-                                && target.content_hash.is_empty()
-                                && target.excerpt_hash.is_empty()))
-                        && resolved.path.to_string_lossy() == target.resolved_path
-                        && resolved.description == target.resolved_selector.description
-                        && resolved.symbols == target.resolved_selector.symbols
-                        && planned_target_metadata_matches(ctx, target) => {}
-                Some(resolved)
-                    if allow_post_state
-                        && target.lifecycle == TargetLifecycle::Stable
-                        && target.access == mitase_work_model::TargetAccessMode::Generated
-                        && ctx.changed_files.is_some_and(|files| {
-                            generated_target_has_changed_source(ctx, slice, target, files)
-                        })
-                        && resolved.path.to_string_lossy() == target.resolved_path
-                        && resolved.description == target.resolved_selector.description
-                        && resolved.symbols == target.resolved_selector.symbols
-                        && planned_target_metadata_matches(ctx, target) => {}
-                Some(resolved)
-                    if resolved.content_hash == target.content_hash
-                        && resolved.excerpt_hash == target.excerpt_hash
-                        && resolved.path.to_string_lossy() == target.resolved_path
-                        && resolved.description == target.resolved_selector.description
-                        && resolved.symbols == target.resolved_selector.symbols
-                        && resolved.byte_start == target.byte_start
-                        && resolved.byte_end == target.byte_end
-                        && resolved.line_start == target.line_start
-                        && resolved.line_end == target.line_end
-                        && planned_target_metadata_matches(ctx, target) => {}
-                _ => push(
-                    out,
-                    "MITASE-WORK-009",
-                    format!("target snapshot is stale: {}", target.reference),
-                    &target.resolved_path,
-                    Some(target.reference.binding.clone()),
-                ),
-            }
-        }
-        if allow_post_state && let Some(changed_files) = ctx.changed_files {
-            for target in slice
-                .editable_targets
-                .iter()
-                .filter(|target| target.transition == mitase_work_model::TargetTransition::Modify)
-            {
-                if !planned_target_changed(ctx, target, changed_files) {
-                    push(
-                        out,
-                        "MITASE-WORK-011",
-                        format!(
-                            "expected modified target is unchanged: {}",
-                            target.reference
-                        ),
-                        &target.resolved_path,
-                        Some(target.reference.binding.clone()),
-                    );
-                }
-            }
-        }
-        for completion in &slice.completion {
-            match completion {
-                mitase_work_model::CompletionCheck::TargetExists { target } => {
-                    if ctx
-                        .index
-                        .target(target)
-                        .and_then(|declared| {
-                            resolve_target_in_workspace(ctx.workspace, declared).ok()
-                        })
-                        .is_none()
-                    {
-                        push(
-                            out,
-                            "MITASE-WORK-011",
-                            format!("expected target is still missing: {target}"),
-                            "work-plan",
-                            Some(target.binding.clone()),
-                        );
-                    }
-                }
-                mitase_work_model::CompletionCheck::TargetAbsent { target }
-                    if ctx
-                        .index
-                        .target(target)
-                        .and_then(|declared| {
-                            resolve_target_in_workspace(ctx.workspace, declared).ok()
-                        })
-                        .is_some() =>
-                {
-                    push(
-                        out,
-                        "MITASE-WORK-011",
-                        format!("expected removed target still exists: {target}"),
-                        "work-plan",
-                        Some(target.binding.clone()),
-                    );
-                }
-                _ => {}
-            }
-        }
-        for required in slice
-            .acceptance
-            .iter()
-            .filter_map(|a| ctx.index.criteria_to_verifications.get(&a.anchor))
-            .flatten()
-        {
-            if !slice
-                .verification_targets
-                .iter()
-                .any(|target| &target.reference.binding == required)
-            {
-                push(
-                    out,
-                    "MITASE-WORK-007",
-                    format!("required verification binding is missing: {required}"),
-                    "work-plan",
-                    Some(required.clone()),
-                );
-            }
-        }
-        for contract_anchor in &slice.contracts {
-            if let Some(contract) = ctx.index.contracts.get(contract_anchor) {
-                for participant in &contract.participants {
-                    if !slice.anchors.contains(&participant.target.binding)
-                        && !slice
-                            .readonly_context
-                            .iter()
-                            .any(|target| target.reference == participant.target)
-                        && !slice
-                            .verification_targets
-                            .iter()
-                            .any(|target| target.reference == participant.target)
-                    {
-                        push(
-                            out,
-                            "MITASE-WORK-008",
-                            format!("contract counterpart is absent: {}", participant.target),
-                            "work-plan",
-                            Some(contract_anchor.clone()),
-                        );
-                    }
-                }
-            }
-        }
-        if let Some(files) = ctx.changed_files {
-            validate_slice_scope(ctx, files, slice, out);
-        }
-        for acceptance in &slice.acceptance {
-            if let Some(AnchorValue::Criterion(c)) = ctx.index.anchor(&acceptance.anchor)
-                && c.statement != acceptance.statement
-            {
-                push(
-                    out,
-                    "MITASE-WORK-012",
-                    "acceptance statement differs from criterion",
-                    "work-plan",
-                    Some(acceptance.anchor.clone()),
-                );
-            }
-        }
-    }
-}
-
-fn lifecycle_transition_shares_path(
-    slice: &ExecutionSlice,
-    target: &mitase_work_model::PlannedTarget,
-) -> bool {
-    slice.editable_targets.iter().any(|editable| {
-        matches!(
-            editable.transition,
-            TargetTransition::Add | TargetTransition::Remove
-        ) && editable.resolved_path == target.resolved_path
-    })
-}
-
-fn run_only_target_is_post_state_add(
-    slice: &ExecutionSlice,
-    target: &mitase_work_model::PlannedTarget,
-) -> bool {
-    target.access == mitase_work_model::TargetAccessMode::RunOnly
-        && target.content_hash.is_empty()
-        && target.excerpt_hash.is_empty()
-        && lifecycle_transition_shares_path(slice, target)
-}
-
-fn target_budget_bytes(target: &mitase_work_model::PlannedTarget) -> usize {
-    target
-        .budget_bytes
-        .max(target.byte_end.saturating_sub(target.byte_start))
-}
-
-fn validate_slice_scope(
-    ctx: &ValidationContext<'_>,
-    files: &[ChangedFile],
-    slice: &ExecutionSlice,
-    out: &mut Vec<Diagnostic>,
-) {
-    let editable_targets = slice
-        .editable_targets
-        .iter()
-        .chain(&slice.verification_targets)
-        .filter(|target| target.access == mitase_work_model::TargetAccessMode::Editable)
-        .collect::<Vec<_>>();
-    let guarded_targets = slice
-        .verification_targets
-        .iter()
-        .filter(|target| {
-            target.access == mitase_work_model::TargetAccessMode::RunOnly
-                && !run_only_target_is_post_state_add(slice, target)
-        })
-        .chain(
-            slice
-                .readonly_context
-                .iter()
-                .filter(|target| target.access != mitase_work_model::TargetAccessMode::Generated),
-        )
-        .collect::<Vec<_>>();
-    let generated_targets = slice
-        .readonly_context
-        .iter()
-        .filter(|target| target.access == mitase_work_model::TargetAccessMode::Generated)
-        .collect::<Vec<_>>();
-    for file in files {
-        let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
-            continue;
-        };
-        if !ctx.workspace.path_is_artifact(path.as_path())
-            || ctx.workspace.path_is_excluded(path.as_path())
-        {
-            continue;
-        }
-        if file.hunks.is_empty() {
-            let readonly_hit = guarded_targets
-                .iter()
-                .any(|target| target_matches_changed_file_path(ctx, target, file));
-            let editable_hit = editable_targets.iter().any(|target| {
-                editable_target_matches_hunkless_change(ctx, target, file)
-                    || editable_add_target_matches_file(ctx, target, file)
-            });
-            let generated_hit = generated_targets.iter().any(|target| {
-                target_matches_changed_file_path(ctx, target, file)
-                    && generated_target_has_changed_source(ctx, slice, target, files)
-            });
-            let unbacked_generated_hit = generated_targets
-                .iter()
-                .any(|target| target_matches_changed_file_path(ctx, target, file))
-                && !generated_hit;
-            if readonly_hit || unbacked_generated_hit {
-                push(
-                    out,
-                    "MITASE-WORK-005",
-                    format!("readonly or run-only target changed: {}", path.display()),
-                    path.to_string_lossy(),
-                    None,
-                );
-            } else if !editable_hit && !generated_hit {
-                push(
-                    out,
-                    "MITASE-WORK-006",
-                    format!("change is outside editable scope: {}", path.display()),
-                    path.to_string_lossy(),
-                    None,
-                );
-            }
-            continue;
-        }
-        let hunks = file.hunks.clone();
-        for hunk in hunks {
-            let readonly_hit = guarded_targets
-                .iter()
-                .any(|target| target_overlaps_change(ctx, target, file, &hunk));
-            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
-            let generated_hit = generated_targets.iter().any(|target| {
-                target_overlaps_change(ctx, target, file, &hunk)
-                    && generated_target_has_changed_source(ctx, slice, target, files)
-            });
-            let unbacked_generated_hit = generated_targets
-                .iter()
-                .any(|target| target_overlaps_change(ctx, target, file, &hunk))
-                && !generated_hit;
-            if readonly_hit || unbacked_generated_hit {
-                push(
-                    out,
-                    "MITASE-WORK-005",
-                    format!("readonly or run-only target changed: {}", path.display()),
-                    path.to_string_lossy(),
-                    None,
-                );
-            } else if !editable_hit && !generated_hit {
-                push(
-                    out,
-                    "MITASE-WORK-006",
-                    format!("change is outside editable scope: {}", path.display()),
-                    path.to_string_lossy(),
-                    None,
-                );
-            }
-        }
-    }
-}
-
-fn generated_target_has_changed_source(
-    ctx: &ValidationContext<'_>,
-    slice: &ExecutionSlice,
-    generated: &mitase_work_model::PlannedTarget,
-    files: &[ChangedFile],
-) -> bool {
-    ctx.index
-        .generated_from
-        .get(&generated.reference)
-        .into_iter()
-        .flatten()
-        .any(|source| {
-            slice
-                .editable_targets
-                .iter()
-                .find(|target| {
-                    target.reference == *source
-                        && target.access == mitase_work_model::TargetAccessMode::Editable
-                })
-                .is_some_and(|target| planned_target_changed(ctx, target, files))
-        })
-}
-
-fn editable_add_target_matches_file(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-    file: &ChangedFile,
-) -> bool {
-    target.transition == mitase_work_model::TargetTransition::Add
-        && target.content_hash.is_empty()
-        && target.excerpt_hash.is_empty()
-        && target_selector_is_file(target)
-        && target_matches_changed_file_path(ctx, target, file)
-}
-
-fn target_matches_changed_file_path(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-    file: &ChangedFile,
-) -> bool {
-    file.old_path
-        .as_ref()
-        .and_then(|path| target_line_range(ctx, target, TargetRangeSide::Old, path))
-        .is_some()
-        || file
-            .new_path
-            .as_ref()
-            .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
-            .is_some()
-}
-
-fn planned_target_changed(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-    changed_files: &[ChangedFile],
-) -> bool {
-    changed_files.iter().any(|file| {
-        if file.hunks.is_empty() {
-            target_matches_changed_file_path(ctx, target, file)
-        } else {
-            file.hunks
-                .iter()
-                .any(|hunk| target_overlaps_change(ctx, target, file, hunk))
-        }
-    })
-}
-
-fn editable_target_matches_hunkless_change(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-    file: &ChangedFile,
-) -> bool {
-    target_selector_is_file(target) && target_matches_changed_file_path(ctx, target, file)
-}
-
-fn change_is_within_editable_scope(
-    ctx: &ValidationContext<'_>,
-    editable_targets: &[&mitase_work_model::PlannedTarget],
-    file: &ChangedFile,
-    hunk: &ChangedRange,
-) -> bool {
-    let old_ok = match file.old_path.as_ref() {
-        Some(path) => changed_side_is_fully_covered(
-            hunk.old_start,
-            hunk.old_end,
-            editable_targets
-                .iter()
-                .filter_map(|target| target_line_range(ctx, target, TargetRangeSide::Old, path)),
-        ),
-        None => true,
-    };
-    let new_ok = match file.new_path.as_ref() {
-        Some(path) => {
-            changed_side_is_fully_covered(
-                hunk.new_start,
-                hunk.new_end,
-                editable_targets.iter().filter_map(|target| {
-                    target_line_range(ctx, target, TargetRangeSide::New, path)
-                }),
-            ) || editable_targets.iter().any(|target| {
-                target.transition == TargetTransition::Add
-                    && target.container_content_hash.is_some()
-                    && hunk.old_start == hunk.old_end
-                    && target_line_range(ctx, target, TargetRangeSide::New, path).is_some_and(
-                        |range| changed_side_overlaps(hunk.new_start, hunk.new_end, range),
-                    )
-            })
-        }
-        None => true,
-    };
-    old_ok && new_ok
-}
-
-fn changed_side_is_fully_covered(
-    changed_start: usize,
-    changed_end: usize,
-    ranges: impl Iterator<Item = (usize, usize)>,
-) -> bool {
-    if changed_start == 0 && changed_end == 0 {
-        return true;
-    }
-    let mut ranges = ranges.collect::<Vec<_>>();
-    if ranges.is_empty() {
-        return false;
-    }
-    if ranges
-        .iter()
-        .any(|range| range.0 == 0 && range.1 == usize::MAX)
-    {
-        return true;
-    }
-    ranges.sort_unstable_by_key(|range| range.0);
-    let changed_end = normalize_end(changed_start, changed_end);
-    let mut covered_until = changed_start.saturating_sub(1);
-    for (start, end) in ranges {
-        let end = normalize_end(start, end);
-        if start > covered_until.saturating_add(1) {
-            continue;
-        }
-        covered_until = covered_until.max(end);
-        if covered_until >= changed_end {
-            return true;
-        }
-    }
-    false
-}
-
-fn target_overlaps_change(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-    file: &ChangedFile,
-    hunk: &ChangedRange,
-) -> bool {
-    file.old_path
-        .as_ref()
-        .and_then(|path| target_line_range(ctx, target, TargetRangeSide::Old, path))
-        .is_some_and(|range| changed_side_overlaps(hunk.old_start, hunk.old_end, range))
-        || file
-            .new_path
-            .as_ref()
-            .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
-            .is_some_and(|range| changed_side_overlaps(hunk.new_start, hunk.new_end, range))
-}
-
-#[derive(Debug, Clone, Copy)]
-enum TargetRangeSide {
-    Old,
-    New,
-}
-
-fn target_line_range(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-    side: TargetRangeSide,
-    changed_path: &RepoPath,
-) -> Option<(usize, usize)> {
-    if let Some(identity) = &target.artifact_identity {
-        // The plan is the pre-state authority.  The identity can be absent or
-        // moved after a rename/deletion, so never use the post-state inventory
-        // to judge an old-side hunk.
-        if matches!(side, TargetRangeSide::Old) {
-            return (target.resolved_path == changed_path.to_string_lossy())
-                .then_some((target.line_start, target.line_end));
-        }
-        let unit = ctx
-            .index
-            .artifact_units
-            .iter()
-            .find(|unit| &unit.identity == identity)?;
-        let resolved = resolve_artifact_unit(ctx.workspace, unit).ok()?;
-        return (resolved.path.to_string_lossy() == changed_path.to_string_lossy())
-            .then_some((resolved.line_start, resolved.line_end));
-    }
-    let current = if matches!(
-        target.lifecycle,
-        TargetLifecycle::Stable | TargetLifecycle::EnsurePresent
-    ) {
-        ctx.index
-            .target(&target.reference)
-            .and_then(|declared| resolve_target_in_workspace(ctx.workspace, declared).ok())
-    } else {
-        None
-    };
-    let current_path = current
-        .as_ref()
-        .map(|resolved| resolved.path.to_string_lossy().into_owned());
-    let path_matches = match side {
-        TargetRangeSide::Old => target.resolved_path == changed_path.to_string_lossy(),
-        TargetRangeSide::New => {
-            current_path.as_deref().unwrap_or(&target.resolved_path)
-                == changed_path.to_string_lossy()
-        }
-    };
-    if !path_matches {
-        return None;
-    }
-    let description = current
-        .as_ref()
-        .map(|resolved| resolved.description.as_str())
-        .unwrap_or(target.resolved_selector.description.as_str());
-    if description == "file" {
-        return Some((0, usize::MAX));
-    }
-    Some(match side {
-        TargetRangeSide::Old => (target.line_start, target.line_end),
-        TargetRangeSide::New => current
-            .as_ref()
-            .map(|resolved| (resolved.line_start, resolved.line_end))
-            .unwrap_or((target.line_start, target.line_end)),
-    })
-}
-
-fn resolve_planned_target(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-) -> Option<ResolvedTarget> {
-    if let Some(identity) = &target.artifact_identity {
-        let unit = ctx
-            .index
-            .artifact_units
-            .iter()
-            .find(|unit| &unit.identity == identity)?;
-        return resolve_artifact_unit(ctx.workspace, unit).ok();
-    }
-    let declared = ctx.index.target(&target.reference)?;
-    if let Some(identity) = ctx.index.target_to_artifact.get(&target.reference)
-        && let Some(unit) = ctx
-            .index
-            .artifact_units
-            .iter()
-            .find(|unit| &unit.identity == identity)
-        && let Ok(Some(resolved)) = resolve_indexed_target(ctx.workspace, declared, unit)
-    {
-        return Some(resolved);
-    }
-    resolve_target_in_workspace(ctx.workspace, declared).ok()
-}
-
-fn planned_target_metadata_matches(
-    ctx: &ValidationContext<'_>,
-    target: &mitase_work_model::PlannedTarget,
-) -> bool {
-    let Some(binding) = ctx.index.bindings.get(&target.reference.binding) else {
-        return false;
-    };
-    let Some(declared) = ctx.index.target(&target.reference) else {
-        return false;
-    };
-    if binding.facet != target.facet
-        || binding.role != target.role
-        || declared.adapter != target.adapter
-    {
-        return false;
-    }
-    target.artifact_identity.as_ref().is_none_or(|identity| {
-        ctx.index
-            .artifact_owners
-            .get(identity)
-            .is_some_and(|owners| {
-                owners
-                    .iter()
-                    .any(|owner| owner.binding == target.reference.binding)
-            })
-    })
-}
-
-fn target_selector_is_file(target: &mitase_work_model::PlannedTarget) -> bool {
-    target.resolved_selector.description == "file"
-}
-
-fn ensure_present_target_exceeds_budget(
-    target: &mitase_work_model::PlannedTarget,
-    resolved: &ResolvedTarget,
-) -> bool {
-    let actual_bytes = resolved.byte_end.saturating_sub(resolved.byte_start);
-    if actual_bytes > target.budget_bytes {
-        return true;
-    }
-    let planned_lines = target.budget_lines.unwrap_or_else(|| {
-        target
-            .line_end
-            .saturating_sub(target.line_start)
-            .saturating_add(1)
-    });
-    let actual_lines = resolved
-        .line_end
-        .saturating_sub(resolved.line_start)
-        .saturating_add(1);
-    actual_lines > planned_lines
-}
-
 fn changed_side_overlaps(changed_start: usize, changed_end: usize, target: (usize, usize)) -> bool {
     if changed_start == 0 && changed_end == 0 {
         return false;
@@ -3682,61 +2669,9 @@ fn normalize_end(start: usize, end: usize) -> usize {
     if end == 0 { start } else { end }
 }
 
-fn reported_change_set_covers(actual: &[ChangedFile], reported: &[ChangedFile]) -> bool {
-    actual.iter().all(|actual_file| {
-        reported.iter().any(|reported_file| {
-            same_changed_file_identity(actual_file, reported_file)
-                && (actual_file.hunks.is_empty()
-                    || reported_file.hunks.is_empty()
-                    || actual_file.hunks.iter().all(|actual_hunk| {
-                        reported_file
-                            .hunks
-                            .iter()
-                            .any(|reported_hunk| changed_range_covers(actual_hunk, reported_hunk))
-                    }))
-        })
-    })
-}
-
-fn same_changed_file_identity(left: &ChangedFile, right: &ChangedFile) -> bool {
-    left.old_path == right.old_path && left.new_path == right.new_path
-}
-
-fn changed_range_covers(actual: &ChangedRange, reported: &ChangedRange) -> bool {
-    changed_side_covers(
-        actual.old_start,
-        actual.old_end,
-        reported.old_start,
-        reported.old_end,
-    ) && changed_side_covers(
-        actual.new_start,
-        actual.new_end,
-        reported.new_start,
-        reported.new_end,
-    )
-}
-
-fn changed_side_covers(
-    actual_start: usize,
-    actual_end: usize,
-    reported_start: usize,
-    reported_end: usize,
-) -> bool {
-    if actual_start == 0 && actual_end == 0 {
-        return true;
-    }
-    if reported_start == 0 && reported_end == 0 {
-        return false;
-    }
-    let actual_end = normalize_end(actual_start, actual_end);
-    let reported_end = normalize_end(reported_start, reported_end);
-    reported_start <= actual_start && reported_end >= actual_end
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mitase_work_model::{CompletionCheck, TargetTransition};
     use std::fs;
     use std::process::Command;
     use tempfile::tempdir;
@@ -3746,13 +2681,6 @@ mod tests {
             .join("../../fixtures/v1/valid-web-app")
             .canonicalize()
             .expect("fixture root")
-    }
-
-    fn workbench_fixture_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/v1/valid-workbench-flow")
-            .canonicalize()
-            .expect("Workbench fixture root")
     }
 
     fn copy_dir(from: &Path, to: &Path) {
@@ -3784,9 +2712,6 @@ mod tests {
             index,
             changed_files: None,
             reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PreState,
             preset: workspace.config.validation.preset,
             revision: None,
             change_base_revision: None,
@@ -3986,43 +2911,6 @@ mod tests {
             mitase_project_model::CONFIG_SCHEMA,
             &files,
         ));
-    }
-
-    fn sample_target(
-        path: &str,
-        description: &str,
-        lines: (usize, usize),
-    ) -> mitase_work_model::PlannedTarget {
-        mitase_work_model::PlannedTarget {
-            reference: "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap(),
-            verification_claim: None,
-            artifact_identity: None,
-            transition: TargetTransition::Add,
-            lifecycle: TargetLifecycle::EnsurePresent,
-            access: mitase_work_model::TargetAccessMode::Editable,
-            resolved_path: path.to_string(),
-            resolved_selector: mitase_work_model::ResolvedSelector {
-                description: description.to_string(),
-                symbols: if description == "file" {
-                    Vec::new()
-                } else {
-                    vec!["requested_function".to_string()]
-                },
-            },
-            content_hash: "sha256:0".to_string(),
-            excerpt_hash: "sha256:0".to_string(),
-            container_content_hash: None,
-            adapter: "rust".to_string(),
-            facet: "ui".to_string(),
-            role: BindingRole::Implementation,
-            byte_start: 0,
-            byte_end: 32,
-            line_start: lines.0,
-            line_end: lines.1,
-            budget_bytes: 32,
-            budget_lines: None,
-            reason: "test".to_string(),
-        }
     }
 
     #[test]
@@ -4235,7 +3123,8 @@ requirements:
     #[test]
     fn language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject() {
         let tempdir = tempdir().unwrap();
-        copy_dir(&workbench_fixture_root(), tempdir.path());
+        copy_dir(&fixture_root(), tempdir.path());
+        fs::create_dir_all(tempdir.path().join("src")).unwrap();
         fs::write(
             tempdir.path().join("src/lib.rs"),
             "mod removable;\n\npub fn behavior() -> bool {\n    true\n}\n\npub fn ungoverned() {}\n",
@@ -4300,9 +3189,6 @@ requirements:
             index: &index,
             changed_files: Some(&changed_files),
             reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PreState,
             preset: workspace.config.validation.preset,
             revision: None,
             change_base_revision: Some(&baseline),
@@ -4396,9 +3282,6 @@ requirements:
             index: &index,
             changed_files: Some(&changed_files),
             reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PreState,
             preset: workspace.config.validation.preset,
             revision: None,
             change_base_revision: Some(&baseline),
@@ -4444,9 +3327,6 @@ requirements:
             index: &index,
             changed_files: Some(&changed_files),
             reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PreState,
             preset: workspace.config.validation.preset,
             revision: None,
             change_base_revision: Some(&baseline),
@@ -4462,231 +3342,6 @@ requirements:
     }
 
     #[test]
-    fn hunkless_changes_require_file_scope_for_editable_targets() {
-        let (_tempdir, workspace, index) = load_fixture_workspace();
-        let changed = ChangedFile {
-            status: ChangeStatus::Untracked,
-            old_path: None,
-            new_path: Some(RepoPath::new("web/new.ts").unwrap()),
-            hunks: vec![],
-        };
-        let ctx = ValidationContext {
-            config: &workspace.config,
-            workspace: &workspace,
-            index: &index,
-            changed_files: None,
-            reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PreState,
-            preset: workspace.config.validation.preset,
-            revision: None,
-            change_base_revision: None,
-        };
-        assert!(!editable_target_matches_hunkless_change(
-            &ctx,
-            &sample_target("web/new.ts", "symbols requested_function", (1, 1)),
-            &changed,
-        ));
-        assert!(editable_target_matches_hunkless_change(
-            &ctx,
-            &sample_target("web/new.ts", "file", (1, 1)),
-            &changed,
-        ));
-    }
-
-    #[test]
-    fn json_openapi_operation_scope_rejects_a_sibling_operation_change() {
-        let tempdir = tempdir().expect("tempdir");
-        fs::write(
-            tempdir.path().join("openapi.json"),
-            concat!(
-                "{\n",
-                "  \"paths\": {\n",
-                "    \"/users\": {\n",
-                "      \"get\": { \"summary\": \"read\" },\n",
-                "      \"post\": { \"summary\": \"create\" }\n",
-                "    }\n",
-                "  }\n",
-                "}\n",
-            ),
-        )
-        .expect("openapi");
-        let declared = mitase_spec_model::ArtifactTarget {
-            id: "get-users".into(),
-            adapter: "openapi".into(),
-            path: RepoPath::new("openapi.json").unwrap(),
-            selector: Selector::Operation {
-                method: "get".into(),
-                path: "/users".into(),
-            },
-            lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
-            claims: vec![],
-        };
-        let resolved = mitase_workspace::resolve_target(tempdir.path(), &declared).unwrap();
-        let (_fixture, workspace, index) = load_fixture_workspace();
-        let ctx = ValidationContext {
-            config: &workspace.config,
-            workspace: &workspace,
-            index: &index,
-            changed_files: None,
-            reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PostState,
-            preset: workspace.config.validation.preset,
-            revision: None,
-            change_base_revision: None,
-        };
-        let mut target = sample_target(
-            "openapi.json",
-            "operation GET /users",
-            (resolved.line_start, resolved.line_end),
-        );
-        target.adapter = "openapi".into();
-        target.lifecycle = TargetLifecycle::Stable;
-        let sibling_change = ChangedFile {
-            status: ChangeStatus::Modified,
-            old_path: Some(RepoPath::new("openapi.json").unwrap()),
-            new_path: Some(RepoPath::new("openapi.json").unwrap()),
-            hunks: vec![ChangedRange {
-                old_start: 5,
-                old_end: 5,
-                new_start: 5,
-                new_end: 5,
-            }],
-        };
-        assert!(!change_is_within_editable_scope(
-            &ctx,
-            &[&target],
-            &sibling_change,
-            &sibling_change.hunks[0],
-        ));
-        let slice = ExecutionSlice {
-            id: "json-openapi-scope".into(),
-            goal: "Change only GET /users".into(),
-            anchors: vec![],
-            editable_targets: vec![target],
-            verification_targets: vec![],
-            readonly_context: vec![],
-            acceptance: vec![],
-            contracts: vec![],
-            non_goals: vec![],
-            completion: vec![CompletionCheck::DiffWithinScope],
-            budget: Default::default(),
-            confidence: PlanConfidence::Exact,
-            blockers: vec![],
-        };
-        let mut diagnostics = Vec::new();
-        validate_slice_scope(&ctx, &[sibling_change], &slice, &mut diagnostics);
-        assert!(
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.rule_id == "MITASE-WORK-006")
-        );
-    }
-
-    #[test]
-    fn add_to_existing_file_scope_rejects_a_sibling_change() {
-        let (tempdir, _, _) = load_fixture_workspace();
-        fs::write(
-            tempdir.path().join("web/login.ts"),
-            "export function submitLogin() { return fetch('/sessions', { method: 'POST' }); }\nexport function sibling() {}\n",
-        )
-        .expect("post-state source");
-        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
-        let index = workspace.index().expect("workspace index");
-        let reference: BoundTargetRef = "FEAT-AUTH-001#binding.ui/target.submit".parse().unwrap();
-        let declared = index.target(&reference).expect("declared target");
-        let resolved = resolve_target_in_workspace(&workspace, declared).expect("target");
-        let mut target = sample_target(
-            "web/login.ts",
-            &resolved.description,
-            (resolved.line_start, resolved.line_end),
-        );
-        target.reference = reference;
-        target.resolved_selector.symbols = resolved.symbols.clone();
-        target.content_hash.clear();
-        target.excerpt_hash.clear();
-        target.byte_start = resolved.byte_start;
-        target.byte_end = resolved.byte_end;
-
-        let ctx = ValidationContext {
-            config: &workspace.config,
-            workspace: &workspace,
-            index: &index,
-            changed_files: None,
-            reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PostState,
-            preset: workspace.config.validation.preset,
-            revision: None,
-            change_base_revision: None,
-        };
-        let sibling_change = ChangedFile {
-            status: ChangeStatus::Modified,
-            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
-            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
-            hunks: vec![ChangedRange {
-                old_start: 2,
-                old_end: 2,
-                new_start: 2,
-                new_end: 2,
-            }],
-        };
-        assert!(!editable_add_target_matches_file(
-            &ctx,
-            &target,
-            &sibling_change
-        ));
-        assert!(!change_is_within_editable_scope(
-            &ctx,
-            &[&target],
-            &sibling_change,
-            &sibling_change.hunks[0],
-        ));
-        let target_and_sibling_change = ChangedFile {
-            hunks: vec![ChangedRange {
-                old_start: 1,
-                old_end: 1,
-                new_start: 1,
-                new_end: 2,
-            }],
-            ..sibling_change.clone()
-        };
-        assert!(!change_is_within_editable_scope(
-            &ctx,
-            &[&target],
-            &target_and_sibling_change,
-            &target_and_sibling_change.hunks[0],
-        ));
-
-        let slice = ExecutionSlice {
-            id: "add-existing-file-scope".into(),
-            goal: "Add only the approved target".into(),
-            anchors: vec![],
-            editable_targets: vec![target],
-            verification_targets: vec![],
-            readonly_context: vec![],
-            acceptance: vec![],
-            contracts: vec![],
-            non_goals: vec![],
-            completion: vec![CompletionCheck::DiffWithinScope],
-            budget: Default::default(),
-            confidence: PlanConfidence::Exact,
-            blockers: vec![],
-        };
-        let mut diagnostics = Vec::new();
-        validate_slice_scope(&ctx, &[sibling_change], &slice, &mut diagnostics);
-        assert!(
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.rule_id == "MITASE-WORK-006")
-        );
-    }
-
-    #[test]
     fn generated_binding_without_source_is_rejected() {
         let tempdir = tempdir().expect("tempdir");
         write_generated_binding_workspace(tempdir.path());
@@ -4698,9 +3353,6 @@ requirements:
             index: &index,
             changed_files: None,
             reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PreState,
             preset: workspace.config.validation.preset,
             revision: None,
             change_base_revision: None,
@@ -4768,115 +3420,6 @@ requirements:
             diagnostic.rule_id == "MITASE-GENERATED-001"
                 && diagnostic.message.contains("generated-a")
         }));
-    }
-
-    #[test]
-    fn generated_scope_requires_a_changed_exact_source() {
-        let (_tempdir, workspace, mut index) = load_fixture_workspace();
-        let source_ref: BoundTargetRef =
-            "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap();
-        let generated_ref: BoundTargetRef =
-            "FEAT-AUTH-001#binding.ui/target.generated".parse().unwrap();
-        index
-            .generated_from
-            .insert(generated_ref.clone(), vec![source_ref.clone()]);
-
-        let mut source = sample_target("web/login.ts", "symbol requested_function", (1, 1));
-        source.reference = source_ref;
-        source.transition = TargetTransition::Modify;
-        source.lifecycle = TargetLifecycle::Stable;
-        let mut generated = sample_target("web/generated.ts", "symbol requested_function", (1, 1));
-        generated.reference = generated_ref;
-        generated.transition = TargetTransition::Readonly;
-        generated.lifecycle = TargetLifecycle::Stable;
-        generated.access = TargetAccessMode::Generated;
-        generated.role = BindingRole::Generated;
-
-        let slice = ExecutionSlice {
-            id: "generated-scope".into(),
-            goal: "Generate output from source".into(),
-            anchors: vec![],
-            editable_targets: vec![source],
-            verification_targets: vec![],
-            readonly_context: vec![generated],
-            acceptance: vec![],
-            contracts: vec![],
-            non_goals: vec![],
-            completion: vec![CompletionCheck::DiffWithinScope],
-            budget: Default::default(),
-            confidence: PlanConfidence::Exact,
-            blockers: vec![],
-        };
-        let source_change = ChangedFile {
-            status: ChangeStatus::Modified,
-            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
-            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
-            hunks: vec![ChangedRange {
-                old_start: 1,
-                old_end: 1,
-                new_start: 1,
-                new_end: 1,
-            }],
-        };
-        let generated_change = ChangedFile {
-            status: ChangeStatus::Modified,
-            old_path: Some(RepoPath::new("web/generated.ts").unwrap()),
-            new_path: Some(RepoPath::new("web/generated.ts").unwrap()),
-            hunks: vec![ChangedRange {
-                old_start: 1,
-                old_end: 1,
-                new_start: 1,
-                new_end: 1,
-            }],
-        };
-        let ctx = ValidationContext {
-            config: &workspace.config,
-            workspace: &workspace,
-            index: &index,
-            changed_files: None,
-            reported_changed_files: None,
-            work_plan: None,
-            selected_slice: None,
-            plan_mode: PlanValidationMode::PostState,
-            preset: workspace.config.validation.preset,
-            revision: None,
-            change_base_revision: None,
-        };
-
-        let mut diagnostics = Vec::new();
-        validate_slice_scope(
-            &ctx,
-            &[source_change.clone(), generated_change.clone()],
-            &slice,
-            &mut diagnostics,
-        );
-        assert!(diagnostics.is_empty(), "{diagnostics:?}");
-
-        validate_slice_scope(&ctx, &[generated_change], &slice, &mut diagnostics);
-        assert!(
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.rule_id == "MITASE-WORK-005")
-        );
-    }
-
-    #[test]
-    fn ensure_present_targets_use_actual_post_state_budget() {
-        let target = sample_target("web/new.ts", "symbols requested_function", (1, 1));
-        let resolved = ResolvedTarget {
-            path: PathBuf::from("web/new.ts"),
-            description: "symbols requested_function".to_string(),
-            symbols: vec!["requested_function".to_string()],
-            content_hash: "sha256:1".to_string(),
-            bytes: 80,
-            byte_start: 0,
-            byte_end: 80,
-            line_start: 1,
-            line_end: 4,
-            excerpt: "fn requested_function() {}\nfn extra() {}\n".to_string(),
-            excerpt_hash: "sha256:1".to_string(),
-        };
-        assert!(ensure_present_target_exceeds_budget(&target, &resolved));
     }
 
     #[test]
