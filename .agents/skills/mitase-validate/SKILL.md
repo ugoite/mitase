@@ -21,10 +21,10 @@ mise run ci
 mise run ci:merge
 ```
 
-`mise run check:repo` currently invokes the transitional
-`cargo run --quiet -- validate workspace .` validator. Do not turn that
-transitional command into a replacement for the target `mitase check .`
-contract.
+`mise run check:repo` invokes the specification-only `mitase check .` command,
+the canonical whole-repository validator. Keep `mitase validate workspace` as
+the detailed public validation command; it is not a replacement for the root
+Mise task contract.
 
 ## Validation order
 
@@ -43,5 +43,5 @@ Docker, browser, or network work.
 
 `ci-rust-check`, `ci-rust-test`, and `ci-repo` run in parallel and
 `ci-required` aggregates them. The merge-group run validates the synthetic
-merge commit. The Workbench job is explicitly transitional and is not a
-dependency of the canonical product task graph.
+merge commit. CodeQL and release workflows remain separate from the canonical
+product task graph.
