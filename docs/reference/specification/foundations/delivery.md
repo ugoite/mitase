@@ -1,5 +1,5 @@
 ---
-title: "Delivery governance / Delivery"
+title: "Mitase specification governance / Delivery"
 description: "Generated reference for docs/mitase/policies/delivery.yaml"
 ---
 
@@ -17,33 +17,34 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
 
 ### Namespace
 
-- delivery
+- governance
 
 ### Category
 
-- Delivery governance
+- Mitase specification governance
 
 ### Policies
 
-- **id**: POL-DELIVERY-001
-  - **title**: Exact repository validation
-  - **summary**: Repository validation is derived only from explicit specification bindings.
-  - **description**: The shared validator rejects incomplete graph, ownership, and semantic change impact.
+- **id**: POL-AUTHORITY-001
+  - **title**: Repository-Owned Specification Authority
+  - **summary**: The repository owns the meaning that Mitase interprets and validates.
+  - **description**: Mitase may report whether repository-owned declarations and evidence agree, but it does not become the authority for repository work.
   - **rules**:
-    - **id**: exact-ownership
+    - **id**: repository-meaning
       - **level**: must
-      - **statement**: Current governed targets must have one explicit specification owner.
+      - **statement**: The repository-owned specification is authoritative for declared meaning; Mitase interprets, indexes, resolves, validates, and reports that meaning without owning repository work.
       - **governed_by**:
-        - PHIL-001#principle.exact-intent
+        - PHIL-005#principle.authority-without-workflow-ownership
       - **applies_to**:
         - **roles**:
-          - implementation
+          - configuration
+          - documentation
           - verification
   - **bindings**:
-    - **id**: shared-validator
+    - **id**: specification-validator
       - **role**: enforcement
-      - **facet**: tooling
-      - **responsibility**: Enforce graph integrity, exact targets, and semantic change impact through one validation engine.
+      - **facet**: authority
+      - **responsibility**: Enforce the repository-owned specification boundary through the canonical validation engine.
       - **targets**:
         - **id**: validation-entry
           - **adapter**: rust
@@ -53,47 +54,89 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
             - **name**: validate
           - **claims**:
             - **kind**: enforces
-              - **rule**: POL-DELIVERY-001#rule.exact-ownership
-- **id**: POL-ADOPTION-001
-  - **title**: Capability-bounded self-hosting
-  - **summary**: Adopt repository governance only when one coherent capability has exact intent, ownership, and evidence.
-  - **description**: Readiness is earned capability by capability; catalog size and planned work never substitute for current evidence.
+              - **rule**: POL-AUTHORITY-001#rule.repository-meaning
+- **id**: POL-RESOLUTION-001
+  - **title**: Exact Resolution Before Authority
+  - **summary**: A relationship is authoritative only when its exact repository target resolves.
+  - **description**: Criteria, implementation relationships, and verification claims remain declarations until their typed targets resolve in the current repository.
   - **rules**:
-    - **id**: active-status
+    - **id**: exact-resolution
       - **level**: must
-      - **statement**: Planned Features must not own active artifacts or satisfy the current readiness denominator.
+      - **statement**: A declared implementation or verification relationship becomes authoritative only after its exact repository targets resolve; unresolved declarations are diagnostics, not evidence.
       - **governed_by**:
-        - PHIL-001#principle.exact-intent
+        - PHIL-005#principle.authority-without-workflow-ownership
+        - PHIL-006#principle.resolved-evidence
       - **applies_to**:
         - **roles**:
           - implementation
           - verification
-    - **id**: feature-evidence
-      - **level**: must
-      - **statement**: Every implemented Feature target must satisfy an implemented acceptance criterion and have exact configured verification covering that target.
-      - **governed_by**:
-        - PHIL-001#principle.exact-intent
-      - **applies_to**:
-        - **roles**:
-          - implementation
-          - verification
-    - **id**: bounded-rollout
-      - **level**: must
-      - **statement**: Repository adoption advances explicit capability and public-entrypoint probes without repository-wide catch-all ownership.
-      - **governed_by**:
-        - PHIL-001#principle.exact-intent
-      - **applies_to**:
-        - **roles**:
-          - implementation
-          - verification
-          - configuration
   - **bindings**:
-    - **id**: feature-governance
+    - **id**: target-resolution
       - **role**: enforcement
-      - **facet**: self-hosting
-      - **responsibility**: Reject planned ownership and implemented Features without exact acceptance and verification closure.
+      - **facet**: resolution
+      - **responsibility**: Enforce exact Artifact target resolution before implementation or verification relationships are accepted.
       - **targets**:
-        - **id**: feature-shape-validation
+        - **id**: resolve-target
+          - **adapter**: rust
+          - **path**: crates/mitase-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: resolve_target
+          - **claims**:
+            - **kind**: enforces
+              - **rule**: POL-RESOLUTION-001#rule.exact-resolution
+- **id**: POL-EVIDENCE-001
+  - **title**: Evidence-Derived Repository State
+  - **summary**: Repository state is derived from current resolvable evidence rather than declarations alone.
+  - **description**: Implemented and verified status must remain explainable from the repository evidence that the configured specification targets resolve to.
+  - **rules**:
+    - **id**: derived-state
+      - **level**: must
+      - **statement**: Implemented or verified status is derived from resolvable repository evidence; a human declaration that disagrees with that evidence is a diagnostic.
+      - **governed_by**:
+        - PHIL-005#principle.authority-without-workflow-ownership
+        - PHIL-006#principle.resolved-evidence
+      - **applies_to**:
+        - **roles**:
+          - implementation
+          - verification
+  - **bindings**:
+    - **id**: evidence-validation
+      - **role**: enforcement
+      - **facet**: evidence
+      - **responsibility**: Derive repository state and diagnostics from current specification and repository evidence.
+      - **targets**:
+        - **id**: workspace-validation
+          - **adapter**: rust
+          - **path**: crates/mitase-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: validate_workspace
+          - **claims**:
+            - **kind**: enforces
+              - **rule**: POL-EVIDENCE-001#rule.derived-state
+- **id**: POL-RELATION-001
+  - **title**: Explicit Implementation and Verification Relations
+  - **summary**: Implementation ownership and verification proof remain explicit typed relationships.
+  - **description**: A Feature owns an exact implementation target and each Criterion connects to its proof through an explicit Verification Claim.
+  - **rules**:
+    - **id**: typed-proof-path
+      - **level**: must
+      - **statement**: Every implemented Feature owns an exact Binding, and each Criterion connects to proof through a Verification Claim; implementation and verification responsibilities remain explicit.
+      - **governed_by**:
+        - PHIL-003#principle.durable-rules
+        - PHIL-005#principle.authority-without-workflow-ownership
+      - **applies_to**:
+        - **roles**:
+          - implementation
+          - verification
+  - **bindings**:
+    - **id**: relation-validation
+      - **role**: enforcement
+      - **facet**: relations
+      - **responsibility**: Enforce explicit implementation ownership and Verification Claim relationships.
+      - **targets**:
+        - **id**: document-shapes
           - **adapter**: rust
           - **path**: crates/mitase-validation/src/lib.rs
           - **selector**:
@@ -101,47 +144,122 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
             - **name**: validate_document_shapes
           - **claims**:
             - **kind**: enforces
-              - **rule**: POL-ADOPTION-001#rule.active-status
-            - **kind**: enforces
-              - **rule**: POL-ADOPTION-001#rule.feature-evidence
-    - **id**: readiness-governance
+              - **rule**: POL-RELATION-001#rule.typed-proof-path
+- **id**: POL-GRAPH-001
+  - **title**: One Canonical Semantic Graph
+  - **summary**: Persist one forward specification graph and derive its reverse relationships.
+  - **description**: The specification has one canonical semantic graph; reverse relations are indexed from authored-forward relationships rather than stored as competing authority.
+  - **rules**:
+    - **id**: canonical-graph
+      - **level**: must
+      - **statement**: Persist forward specification relations once and derive reverse relations from one canonical semantic graph.
+      - **governed_by**:
+        - PHIL-003#principle.durable-rules
+      - **applies_to**:
+        - **roles**:
+          - configuration
+          - documentation
+          - implementation
+          - verification
+  - **bindings**:
+    - **id**: graph-index
       - **role**: enforcement
-      - **facet**: self-hosting
-      - **responsibility**: Evaluate only explicit capability and public-entrypoint readiness subjects.
+      - **facet**: graph
+      - **responsibility**: Build the canonical semantic graph and derive reverse relations from it.
       - **targets**:
-        - **id**: public-readiness
+        - **id**: specification-index
           - **adapter**: rust
-          - **path**: crates/mitase-validation/src/readiness.rs
+          - **path**: crates/mitase-workspace/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: public_entrypoint_subjects
+            - **name**: SpecIndex
           - **claims**:
             - **kind**: enforces
-              - **rule**: POL-ADOPTION-001#rule.bounded-rollout
+              - **rule**: POL-GRAPH-001#rule.canonical-graph
+- **id**: POL-013
+  - **title**: Spec-Driven Product Iteration
+  - **summary**: Evolve product behavior through explicit specifications before implementation drift.
+  - **description**: This policy requires product evolution to move through explicit specs and shared documentation before implementation fragments into local decisions. It keeps iteration aligned with reusable rules so behavior changes remain reviewable, explainable, and continuously validated.
+  - **rules**:
+    - **id**: specification-before-implementation
+      - **level**: must
+      - **statement**: This policy requires product evolution to move through explicit specs and shared documentation before implementation fragments into local decisions. It keeps iteration aligned with reusable rules so behavior changes remain reviewable, explainable, and continuously validated.
+      - **governed_by**:
+        - PHIL-003#principle.durable-rules
+      - **applies_to**:
+        - **roles**:
+          - configuration
+          - documentation
+          - implementation
+      - **enforcement**: external repository tooling
+  - **bindings**:
+    - **id**: iteration-documentation
+      - **role**: documentation
+      - **facet**: iteration
+      - **responsibility**: Keep the specification-first iteration rule visible in the architecture and adoption guidance.
+      - **targets**:
+        - **id**: architecture
+          - **adapter**: markdown
+          - **path**: docs/understand/model/v1-architecture.md
+          - **selector**:
+            - **kind**: heading
+            - **value**: Foundation hierarchy
+          - **claims**:
+            - **kind**: documents
+              - **anchor**: POL-013#rule.specification-before-implementation
+- **id**: POL-009
+  - **title**: Quality Gates Before Integration
+  - **summary**: Apply strict linting, typing, and regression gates before merging and release.
+  - **description**: This policy enforces pre-integration quality gates so regressions are caught before they become shared product behavior. It operationalizes rule-based development and trusted constraints by making type checks, lint rules, and regression suites mandatory for change integration.
+  - **rules**:
+    - **id**: validated-before-integration
+      - **level**: must
+      - **statement**: This policy enforces pre-integration quality gates so regressions are caught before they become shared product behavior. It operationalizes rule-based development and trusted constraints by making type checks, lint rules, and regression suites mandatory for change integration.
+      - **governed_by**:
+        - PHIL-003#principle.reusable-validation
+      - **applies_to**:
+        - **roles**:
+          - configuration
+          - verification
+      - **enforcement**: external repository tooling
+  - **bindings**:
+    - **id**: quality-gate-evidence
+      - **role**: evidence
+      - **facet**: integration
+      - **responsibility**: Record the external quality gate as repository evidence without making Mitase execute it.
+      - **targets**:
+        - **id**: ci-workflow
+          - **adapter**: declared
+          - **path**: .github/workflows/ci.yml
+          - **selector**:
+            - **kind**: file
+          - **claims**:
+            - **kind**: evidences
+              - **anchor**: POL-009#rule.validated-before-integration
 
 ## Source YAML
 
 ```yaml
 schema: mitase/spec/v1
 kind: policies
-namespace: delivery
-category: Delivery governance
+namespace: governance
+category: Mitase specification governance
 policies:
-  - id: POL-DELIVERY-001
-    title: Exact repository validation
-    summary: Repository validation is derived only from explicit specification bindings.
-    description: The shared validator rejects incomplete graph, ownership, and semantic change impact.
+  - id: POL-AUTHORITY-001
+    title: Repository-Owned Specification Authority
+    summary: The repository owns the meaning that Mitase interprets and validates.
+    description: Mitase may report whether repository-owned declarations and evidence agree, but it does not become the authority for repository work.
     rules:
-      - id: exact-ownership
+      - id: repository-meaning
         level: must
-        statement: Current governed targets must have one explicit specification owner.
-        governed_by: [PHIL-001#principle.exact-intent]
-        applies_to: { roles: [implementation, verification] }
+        statement: The repository-owned specification is authoritative for declared meaning; Mitase interprets, indexes, resolves, validates, and reports that meaning without owning repository work.
+        governed_by: [PHIL-005#principle.authority-without-workflow-ownership]
+        applies_to: { roles: [configuration, documentation, verification] }
     bindings:
-      - id: shared-validator
+      - id: specification-validator
         role: enforcement
-        facet: tooling
-        responsibility: Enforce graph integrity, exact targets, and semantic change impact through one validation engine.
+        facet: authority
+        responsibility: Enforce the repository-owned specification boundary through the canonical validation engine.
         targets:
           - id: validation-entry
             adapter: rust
@@ -149,53 +267,151 @@ policies:
             selector: { kind: symbol, name: validate }
             claims:
               - kind: enforces
-                rule: POL-DELIVERY-001#rule.exact-ownership
+                rule: POL-AUTHORITY-001#rule.repository-meaning
 
-  - id: POL-ADOPTION-001
-    title: Capability-bounded self-hosting
-    summary: Adopt repository governance only when one coherent capability has exact intent, ownership, and evidence.
-    description: Readiness is earned capability by capability; catalog size and planned work never substitute for current evidence.
+  - id: POL-RESOLUTION-001
+    title: Exact Resolution Before Authority
+    summary: A relationship is authoritative only when its exact repository target resolves.
+    description: Criteria, implementation relationships, and verification claims remain declarations until their typed targets resolve in the current repository.
     rules:
-      - id: active-status
+      - id: exact-resolution
         level: must
-        statement: Planned Features must not own active artifacts or satisfy the current readiness denominator.
-        governed_by: [PHIL-001#principle.exact-intent]
+        statement: A declared implementation or verification relationship becomes authoritative only after its exact repository targets resolve; unresolved declarations are diagnostics, not evidence.
+        governed_by: [PHIL-005#principle.authority-without-workflow-ownership, PHIL-006#principle.resolved-evidence]
         applies_to: { roles: [implementation, verification] }
-      - id: feature-evidence
-        level: must
-        statement: Every implemented Feature target must satisfy an implemented acceptance criterion and have exact configured verification covering that target.
-        governed_by: [PHIL-001#principle.exact-intent]
-        applies_to: { roles: [implementation, verification] }
-      - id: bounded-rollout
-        level: must
-        statement: Repository adoption advances explicit capability and public-entrypoint probes without repository-wide catch-all ownership.
-        governed_by: [PHIL-001#principle.exact-intent]
-        applies_to: { roles: [implementation, verification, configuration] }
     bindings:
-      - id: feature-governance
+      - id: target-resolution
         role: enforcement
-        facet: self-hosting
-        responsibility: Reject planned ownership and implemented Features without exact acceptance and verification closure.
+        facet: resolution
+        responsibility: Enforce exact Artifact target resolution before implementation or verification relationships are accepted.
         targets:
-          - id: feature-shape-validation
+          - id: resolve-target
+            adapter: rust
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: symbol, name: resolve_target }
+            claims:
+              - kind: enforces
+                rule: POL-RESOLUTION-001#rule.exact-resolution
+
+  - id: POL-EVIDENCE-001
+    title: Evidence-Derived Repository State
+    summary: Repository state is derived from current resolvable evidence rather than declarations alone.
+    description: Implemented and verified status must remain explainable from the repository evidence that the configured specification targets resolve to.
+    rules:
+      - id: derived-state
+        level: must
+        statement: Implemented or verified status is derived from resolvable repository evidence; a human declaration that disagrees with that evidence is a diagnostic.
+        governed_by: [PHIL-005#principle.authority-without-workflow-ownership, PHIL-006#principle.resolved-evidence]
+        applies_to: { roles: [implementation, verification] }
+    bindings:
+      - id: evidence-validation
+        role: enforcement
+        facet: evidence
+        responsibility: Derive repository state and diagnostics from current specification and repository evidence.
+        targets:
+          - id: workspace-validation
+            adapter: rust
+            path: crates/mitase-validation/src/lib.rs
+            selector: { kind: symbol, name: validate_workspace }
+            claims:
+              - kind: enforces
+                rule: POL-EVIDENCE-001#rule.derived-state
+
+  - id: POL-RELATION-001
+    title: Explicit Implementation and Verification Relations
+    summary: Implementation ownership and verification proof remain explicit typed relationships.
+    description: A Feature owns an exact implementation target and each Criterion connects to its proof through an explicit Verification Claim.
+    rules:
+      - id: typed-proof-path
+        level: must
+        statement: Every implemented Feature owns an exact Binding, and each Criterion connects to proof through a Verification Claim; implementation and verification responsibilities remain explicit.
+        governed_by: [PHIL-003#principle.durable-rules, PHIL-005#principle.authority-without-workflow-ownership]
+        applies_to: { roles: [implementation, verification] }
+    bindings:
+      - id: relation-validation
+        role: enforcement
+        facet: relations
+        responsibility: Enforce explicit implementation ownership and Verification Claim relationships.
+        targets:
+          - id: document-shapes
             adapter: rust
             path: crates/mitase-validation/src/lib.rs
             selector: { kind: symbol, name: validate_document_shapes }
             claims:
               - kind: enforces
-                rule: POL-ADOPTION-001#rule.active-status
-              - kind: enforces
-                rule: POL-ADOPTION-001#rule.feature-evidence
-      - id: readiness-governance
+                rule: POL-RELATION-001#rule.typed-proof-path
+
+  - id: POL-GRAPH-001
+    title: One Canonical Semantic Graph
+    summary: Persist one forward specification graph and derive its reverse relationships.
+    description: The specification has one canonical semantic graph; reverse relations are indexed from authored-forward relationships rather than stored as competing authority.
+    rules:
+      - id: canonical-graph
+        level: must
+        statement: Persist forward specification relations once and derive reverse relations from one canonical semantic graph.
+        governed_by: [PHIL-003#principle.durable-rules]
+        applies_to: { roles: [configuration, documentation, implementation, verification] }
+    bindings:
+      - id: graph-index
         role: enforcement
-        facet: self-hosting
-        responsibility: Evaluate only explicit capability and public-entrypoint readiness subjects.
+        facet: graph
+        responsibility: Build the canonical semantic graph and derive reverse relations from it.
         targets:
-          - id: public-readiness
+          - id: specification-index
             adapter: rust
-            path: crates/mitase-validation/src/readiness.rs
-            selector: { kind: symbol, name: public_entrypoint_subjects }
+            path: crates/mitase-workspace/src/lib.rs
+            selector: { kind: symbol, name: SpecIndex }
             claims:
               - kind: enforces
-                rule: POL-ADOPTION-001#rule.bounded-rollout
+                rule: POL-GRAPH-001#rule.canonical-graph
+
+  - id: POL-013
+    title: Spec-Driven Product Iteration
+    summary: Evolve product behavior through explicit specifications before implementation drift.
+    description: This policy requires product evolution to move through explicit specs and shared documentation before implementation fragments into local decisions. It keeps iteration aligned with reusable rules so behavior changes remain reviewable, explainable, and continuously validated.
+    rules:
+      - id: specification-before-implementation
+        level: must
+        statement: This policy requires product evolution to move through explicit specs and shared documentation before implementation fragments into local decisions. It keeps iteration aligned with reusable rules so behavior changes remain reviewable, explainable, and continuously validated.
+        governed_by: [PHIL-003#principle.durable-rules]
+        applies_to: { roles: [configuration, documentation, implementation] }
+        enforcement: external repository tooling
+    bindings:
+      - id: iteration-documentation
+        role: documentation
+        facet: iteration
+        responsibility: Keep the specification-first iteration rule visible in the architecture and adoption guidance.
+        targets:
+          - id: architecture
+            adapter: markdown
+            path: docs/understand/model/v1-architecture.md
+            selector: { kind: heading, value: Foundation hierarchy }
+            claims:
+              - kind: documents
+                anchor: POL-013#rule.specification-before-implementation
+
+  - id: POL-009
+    title: Quality Gates Before Integration
+    summary: Apply strict linting, typing, and regression gates before merging and release.
+    description: This policy enforces pre-integration quality gates so regressions are caught before they become shared product behavior. It operationalizes rule-based development and trusted constraints by making type checks, lint rules, and regression suites mandatory for change integration.
+    rules:
+      - id: validated-before-integration
+        level: must
+        statement: This policy enforces pre-integration quality gates so regressions are caught before they become shared product behavior. It operationalizes rule-based development and trusted constraints by making type checks, lint rules, and regression suites mandatory for change integration.
+        governed_by: [PHIL-003#principle.reusable-validation]
+        applies_to: { roles: [configuration, verification] }
+        enforcement: external repository tooling
+    bindings:
+      - id: quality-gate-evidence
+        role: evidence
+        facet: integration
+        responsibility: Record the external quality gate as repository evidence without making Mitase execute it.
+        targets:
+          - id: ci-workflow
+            adapter: declared
+            path: .github/workflows/ci.yml
+            selector: { kind: file }
+            claims:
+              - kind: evidences
+                anchor: POL-009#rule.validated-before-integration
 ```

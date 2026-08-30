@@ -591,7 +591,7 @@ mod tests {
     #[test]
     fn anchors_roundtrip() {
         for text in [
-            "PHIL-001#principle.intent-before-code",
+            "PHIL-005#principle.authority-without-workflow-ownership",
             "POL-1#rule.bounded-work",
             "REQ-1#criterion.result",
             "FEAT-1#binding.backend",

@@ -24,6 +24,41 @@ The table is a product boundary, not a claim that every row is already
 implemented in the current checkout. Transitional execution surfaces are
 follow-up removal work, not a reason to expand the frozen core.
 
+## Foundation hierarchy
+
+The durable foundation is intentionally split by level. `PHIL-003 — Build
+Rules, Not Disposable Artifacts` preserves the general ideal that product
+behavior is encoded as reusable rules and continuously verifiable evidence.
+`PHIL-005 — Authority Without Workflow Ownership` defines Mitase's specific
+boundary, and `PHIL-006 — Evidence Before Authority` makes exact resolution a
+condition for trusting a declared relationship.
+
+The matching policies decompose that foundation into repository-owned rules:
+authority, exact resolution, evidence-derived state, explicit implementation
+and verification relations, and one canonical semantic graph. `POL-013 —
+Spec-Driven Product Iteration` and `POL-009 — Quality Gates Before Integration`
+retain their generic shared meanings. Their actual iteration, test, lint, and
+integration gates remain the responsibility of repository tooling; Mitase
+describes and validates the declared evidence but does not execute those gates.
+
+This hierarchy deliberately does not adopt storage/provider portability,
+serverless topology, or AI workflow philosophies from another product. A
+shared identifier is used only when its meaning remains independent of that
+product's architecture and operational assumptions.
+
+## Authority boundary
+
+The repository-owned specification is the authority for the repository's
+declared meaning. Mitase is authoritative about interpreting that meaning,
+indexing its exact relationships, resolving its Artifact targets, and
+validating whether its declared evidence is structurally satisfied. That
+interpretive authority does not extend to planning, implementing, executing,
+testing, reviewing, retrying, or delivering repository work.
+
+The distinction is intentional: an external tool may change the repository,
+while Mitase reports whether the resulting repository still agrees with its
+specification. Neither side silently becomes the other's source of truth.
+
 ## Canonical model
 
 ```text
@@ -85,6 +120,14 @@ Status is calculated from repository state whenever possible. A Feature with a
 Binding, a resolvable Artifact, and valid Verification Claims for its required
 Criteria can be reported as `verified`; missing or conflicting evidence is a
 diagnostic rather than a status that a user can hide with a declaration.
+
+## Evidence and derived state
+
+Exact selectors and typed Verification Claims are declarations until their
+referenced repository targets resolve. Once resolved, they provide evidence
+for derived ownership, implementation, verification, and coverage state. An
+unresolved or conflicting declaration remains visible as a diagnostic; it is
+never promoted to authoritative evidence by a human status alone.
 
 ## Library direction
 

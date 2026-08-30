@@ -11,5 +11,5 @@ The principles, policies, and requirements that make the repository's intent exp
 These pages are generated from the canonical YAML under `docs/mitase/`.
 
 - [Foundation / Foundation](./foundation.md)
-- [Delivery governance / Delivery](./delivery.md)
+- [Mitase specification governance / Delivery](./delivery.md)
 - [Capability acceptance contracts / Capability Contracts](./capability-contracts.md)
