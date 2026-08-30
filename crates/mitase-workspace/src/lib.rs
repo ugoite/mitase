@@ -44,6 +44,9 @@ pub struct SpecIndex {
     pub criteria_to_verifications: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub criteria_to_rules: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub rules_to_principles: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
+    /// Reverse governance relations derived from authored Rule `governed_by`
+    /// anchors. Source documents must not duplicate this relation.
+    pub principles_to_rules: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub binding_to_contracts: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub item_anchors: BTreeMap<SpecId, Vec<SpecAnchor>>,
     pub item_paths: BTreeMap<SpecId, PathBuf>,
@@ -321,6 +324,18 @@ impl SpecIndex {
             .chain(out.criteria_to_verifications.values_mut())
             .chain(out.binding_to_contracts.values_mut())
         {
+            values.sort();
+            values.dedup();
+        }
+        for (rule, principles) in &out.rules_to_principles {
+            for principle in principles {
+                out.principles_to_rules
+                    .entry(principle.clone())
+                    .or_default()
+                    .push(rule.clone());
+            }
+        }
+        for values in out.principles_to_rules.values_mut() {
             values.sort();
             values.dedup();
         }
