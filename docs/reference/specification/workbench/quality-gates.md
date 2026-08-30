@@ -104,6 +104,16 @@ description: "Generated reference for docs/mitase/features/workbench/quality-gat
           - **selector**:
             - **kind**: path-prefix
             - **value**: .agents/skills
+        - **id**: legacy-skills-readme-removal
+          - **adapter**: declared
+          - **path**: skills/README.md
+          - **selector**:
+            - **kind**: file
+        - **id**: legacy-maintainer-skill-removal
+          - **adapter**: declared
+          - **path**: skills/mitase-maintainer/SKILL.md
+          - **selector**:
+            - **kind**: file
         - **id**: ci-workflow
           - **adapter**: declared
           - **path**: .github/workflows/ci.yml
@@ -308,6 +318,14 @@ features:
       adapter: declared
       path: .agents/skills
       selector: { kind: path-prefix, value: .agents/skills }
+    - id: legacy-skills-readme-removal
+      adapter: declared
+      path: skills/README.md
+      selector: { kind: file }
+    - id: legacy-maintainer-skill-removal
+      adapter: declared
+      path: skills/mitase-maintainer/SKILL.md
+      selector: { kind: file }
     - id: ci-workflow
       adapter: declared
       path: .github/workflows/ci.yml
