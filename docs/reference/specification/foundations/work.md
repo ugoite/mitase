@@ -36,11 +36,6 @@ description: "Generated reference for docs/mitase/requirements/work.yaml"
       - **statement**: An exact Requirement criterion or validated Feature implementation origin produces explicit editable, verification, and readonly targets with one typed semantic identity.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
-    - **id**: completion-evidence
-      - **kind**: behavior
-      - **statement**: A verified slice reports exactly which acceptance criteria and completion checks are demonstrated.
-      - **governed_by**:
-        - POL-DELIVERY-001#rule.exact-ownership
   - **bindings**:
     - **id**: planner-test
       - **role**: verification
@@ -97,10 +92,6 @@ requirements:
       - id: exact-slice
         kind: behavior
         statement: An exact Requirement criterion or validated Feature implementation origin produces explicit editable, verification, and readonly targets with one typed semantic identity.
-        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
-      - id: completion-evidence
-        kind: behavior
-        statement: A verified slice reports exactly which acceptance criteria and completion checks are demonstrated.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
     bindings:
       - id: planner-test
