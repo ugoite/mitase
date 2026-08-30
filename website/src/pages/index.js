@@ -107,12 +107,6 @@ const journeys = [
     to: '/docs/start-here/first-run/getting-started'
   },
   {
-    title: 'Keep a command card open',
-    description:
-      'Use one compact docs-site page for the core install, init, validate, browse, and reviewer commands.',
-    to: '/docs/workflows/work/command-card'
-  },
-  {
     title: 'Follow a full tutorial',
     description: 'Build a realistic four-layer example from scratch when you want the full repository story.',
     to: '/docs/start-here/first-run/tutorial'
