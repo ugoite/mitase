@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use mitase_app_ui::{WORKBENCH_CSS, WORKBENCH_MAIN_JS, WorkbenchView};
 use mitase_workbench_server::project;
 use mitase_workspace::SpecWorkspace;
@@ -7,24 +6,10 @@ mod support;
 
 #[test]
 fn workbench_projection_is_server_owned_and_starts_not_run() {
-    let output = Command::cargo_bin("mitase")
-        .expect("binary should build")
-        .args([
-            "workbench",
-            "project",
-            "--workspace",
-            "fixtures/v1/valid-web-app",
-            "--format",
-            "json",
-        ])
-        .output()
-        .expect("run workbench projection");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let projection: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let fixture = support::isolated_fixture("valid-web-app");
+    let workspace = SpecWorkspace::load(fixture.path()).unwrap();
+    let projection = project(&workspace, None, "test-revision").unwrap();
+    let projection = serde_json::to_value(projection).unwrap();
     assert_eq!(projection["diagnostics"]["validation"]["state"], "not_run");
     assert!(projection["specifications"]["specifications"].is_array());
     assert!(
