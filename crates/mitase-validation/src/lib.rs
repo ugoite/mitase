@@ -606,13 +606,13 @@ fn validate_config(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     if let Some(probe) = &ctx.config.validation.readiness.probes.public_entrypoints
         && matches!(
             probe.level,
-            ReadinessLevel::Traceable | ReadinessLevel::Verifiable | ReadinessLevel::ClosedLoop
+            ReadinessLevel::Traceable | ReadinessLevel::Verifiable
         )
     {
         push(
             out,
             "MITASE-SCHEMA-003",
-            "public entrypoint readiness probes support only off, seedable, or work-ready in v1",
+            "public entrypoint readiness probes support only off or seedable in v1",
             "mitase.yaml",
             None,
         );
@@ -3125,7 +3125,7 @@ requirements:
             criterion: "REQ-AUTH-001#criterion.invalid-credentials"
                 .parse()
                 .unwrap(),
-            level: mitase_project_model::ReadinessLevel::WorkReady,
+            level: mitase_project_model::ReadinessLevel::Verifiable,
         }];
         let index = workspace.index().unwrap();
         let report = evaluate_readiness(&workspace, &index, "readiness-test").expect("readiness");

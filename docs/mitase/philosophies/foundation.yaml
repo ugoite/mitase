@@ -9,7 +9,7 @@ philosophies:
     principles:
       - id: exact-intent
         statement: Durable behavior must connect exact intent to exact implementation and evidence.
-        applies_to: [product, code, work]
+        applies_to: [product, code]
     bindings:
       - id: architecture-guide
         role: documentation

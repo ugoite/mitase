@@ -26,7 +26,7 @@ wire and CLI shapes. There are no compatibility aliases:
 | Generic Work summaries/seeds and implicit behavior selection | Specification documents plus repository tooling | Keep work requests, planning, execution, retry, finalization, and execution-artifact validation outside Mitase. |
 | `mitase work` / `mitase task` execution lifecycle | External repository tooling; the former Mitase command groups are removed | The former `validate plan` and `validate result` commands are also removed. |
 | `validation.changed.require_plan`, `work.slicing`, and plan-scope limits | Removed from `mitase/config/v1` | Rewrite the configuration without compatibility aliases; repository tooling owns delivery planning and bounded implementation scope. |
-| Legacy `ReadinessLevel` public-entrypoint combinations | v1 public-entrypoint probes support only `off`, `seedable`, or `work-ready` | Change unsupported probe levels; they are rejected by configuration validation. |
+| Legacy `ReadinessLevel` public-entrypoint combinations | v1 public-entrypoint probes support only `off` or `seedable` | Change unsupported probe levels; they are rejected by configuration validation. |
 
 Recreate stale plan, approval, receipt, and context artifacts after migration;
 their canonical digests and execution identities are intentionally not
