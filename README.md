@@ -37,7 +37,7 @@ Read the [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.
 for the decision, acceptance gates, and follow-up sequence.
 
 ```bash
-cargo run --quiet -- validate workspace .
+cargo run --quiet -- check .
 ```
 
 The target v1 CLI is intentionally limited to specification operations:

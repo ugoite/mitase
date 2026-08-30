@@ -41,8 +41,8 @@ description = "Compile-check the Rust workspace"
 run = "cargo check --workspace --all-targets"
 
 [tasks."check:repo"]
-description = "Run the transitional repository validator"
-run = "cargo run --locked --quiet -- validate workspace ."
+description = "Run the canonical repository validator"
+run = "cargo run --locked --quiet -- check ."
 
 [tasks.check]
 description = "Run Rust and repository checks"
