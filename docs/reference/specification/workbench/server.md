@@ -35,11 +35,22 @@ description: "Generated reference for docs/mitase/features/workbench/server.yaml
       - **facet**: server
       - **responsibility**: Serve canonical Workbench HTTP routes and mutation guards.
       - **owns**:
+        - **id**: server-manifest
+          - **adapter**: declared
+          - **path**: crates/mitase-workbench-server/Cargo.toml
+          - **selector**:
+            - **kind**: file
         - **id**: server-file
           - **adapter**: rust
           - **path**: crates/mitase-workbench-server/src/lib.rs
           - **selector**:
             - **kind**: file
+        - **id**: server-transitional-cli
+          - **adapter**: rust
+          - **path**: crates/mitase-workbench-server/src/bin/mitase-workbench.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
         - **id**: server-ci-owned-001
           - **adapter**: rust
           - **path**: crates/mitase-workbench-server/src/lib.rs
@@ -1314,10 +1325,18 @@ features:
     facet: server
     responsibility: Serve canonical Workbench HTTP routes and mutation guards.
     owns:
+    - id: server-manifest
+      adapter: declared
+      path: crates/mitase-workbench-server/Cargo.toml
+      selector: { kind: file }
     - id: server-file
       adapter: rust
       path: crates/mitase-workbench-server/src/lib.rs
       selector: { kind: file }
+    - id: server-transitional-cli
+      adapter: rust
+      path: crates/mitase-workbench-server/src/bin/mitase-workbench.rs
+      selector: { kind: module, name: '*' }
     - id: server-ci-owned-001
       adapter: rust
       path: crates/mitase-workbench-server/src/lib.rs
