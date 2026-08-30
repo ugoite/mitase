@@ -8,7 +8,7 @@ inventory:
 validation:
   preset: agent-ready
   readiness:
-    target: closed-loop
+    target: verifiable
     limits: { max_ownership_scope_units: 64 }
   changed:
     baseline:

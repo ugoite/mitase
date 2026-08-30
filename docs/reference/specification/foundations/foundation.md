@@ -34,7 +34,6 @@ description: "Generated reference for docs/mitase/philosophies/foundation.yaml"
       - **applies_to**:
         - product
         - code
-        - work
   - **bindings**:
     - **id**: architecture-guide
       - **role**: documentation
@@ -65,7 +64,7 @@ philosophies:
     principles:
       - id: exact-intent
         statement: Durable behavior must connect exact intent to exact implementation and evidence.
-        applies_to: [product, code, work]
+        applies_to: [product, code]
     bindings:
       - id: architecture-guide
         role: documentation
