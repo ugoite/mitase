@@ -45,14 +45,14 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
 - **id**: FEAT-CLI-001
-  - **title**: CLI orchestration
-  - **summary**: Orchestrate workspace, readiness, and validation commands.
+  - **title**: CLI entrypoints
+  - **summary**: Expose workspace, readiness, and validation commands.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: cli
-      - **responsibility**: Orchestrate canonical validation and readiness commands.
+      - **responsibility**: Expose canonical validation and readiness commands.
       - **targets**:
         - **id**: cli-run
           - **adapter**: rust
@@ -62,7 +62,7 @@ description: "Generated reference for docs/mitase/features/capabilities/planning
             - **name**: run
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
+              - **criterion**: REQ-CAPABILITY-001#criterion.cli-entrypoints
       - **owns**:
         - **id**: cli-readiness
           - **adapter**: rust
@@ -262,14 +262,14 @@ features:
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.contract-closure }]
 
   - id: FEAT-CLI-001
-    title: CLI orchestration
-    summary: Orchestrate workspace, readiness, and validation commands.
+    title: CLI entrypoints
+    summary: Expose workspace, readiness, and validation commands.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: cli
-        responsibility: Orchestrate canonical validation and readiness commands.
+        responsibility: Expose canonical validation and readiness commands.
         targets:
           - id: cli-run
             adapter: rust
@@ -277,7 +277,7 @@ features:
             selector: { kind: symbol, name: run }
             claims:
               - kind: satisfies
-                criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
+                criterion: REQ-CAPABILITY-001#criterion.cli-entrypoints
         owns:
           - id: cli-readiness
             adapter: rust

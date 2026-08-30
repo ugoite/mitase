@@ -82,9 +82,9 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
       - **statement**: Contract sources, participants, and guarantees retain exact typed references.
       - **governed_by**:
         - POL-ADOPTION-001#rule.feature-evidence
-    - **id**: cli-orchestration
+    - **id**: cli-entrypoints
       - **kind**: behavior
-      - **statement**: The CLI applies the canonical workspace validator and reports configured readiness through stable commands.
+      - **statement**: The CLI exposes canonical workspace validation and readiness reporting through stable commands.
       - **governed_by**:
         - POL-ADOPTION-001#rule.bounded-rollout
     - **id**: lsp-navigation
@@ -282,7 +282,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
     - **id**: delivery-verification
       - **role**: verification
       - **facet**: capability-verification
-      - **responsibility**: Verify CLI orchestration, LSP navigation, generated documentation, and repository validation.
+      - **responsibility**: Verify CLI entrypoints, LSP navigation, generated documentation, and repository validation.
       - **targets**:
         - **id**: cli-test
           - **adapter**: rust
@@ -292,7 +292,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
             - **name**: current_workspace_checks_and_reports_configured_readiness
           - **claims**:
             - **kind**: verifies
-              - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
+              - **criterion**: REQ-CAPABILITY-001#criterion.cli-entrypoints
               - **covers**:
                 - FEAT-CLI-001#binding.implementation/target.cli-run
               - **runner**:
@@ -529,9 +529,9 @@ requirements:
         kind: behavior
         statement: Contract sources, participants, and guarantees retain exact typed references.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
-      - id: cli-orchestration
+      - id: cli-entrypoints
         kind: behavior
-        statement: The CLI applies the canonical workspace validator and reports configured readiness through stable commands.
+        statement: The CLI exposes canonical workspace validation and readiness reporting through stable commands.
         governed_by: [POL-ADOPTION-001#rule.bounded-rollout]
       - id: lsp-navigation
         kind: behavior
@@ -649,7 +649,7 @@ requirements:
       - id: delivery-verification
         role: verification
         facet: capability-verification
-        responsibility: Verify CLI orchestration, LSP navigation, generated documentation, and repository validation.
+        responsibility: Verify CLI entrypoints, LSP navigation, generated documentation, and repository validation.
         targets:
           - id: cli-test
             adapter: rust
@@ -657,7 +657,7 @@ requirements:
             selector: { kind: symbol, name: current_workspace_checks_and_reports_configured_readiness }
             claims:
               - kind: verifies
-                criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
+                criterion: REQ-CAPABILITY-001#criterion.cli-entrypoints
                 covers: [FEAT-CLI-001#binding.implementation/target.cli-run]
                 runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: current_workspace_checks_and_reports_configured_readiness } }
           - id: lsp-test
