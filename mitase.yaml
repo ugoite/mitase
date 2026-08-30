@@ -158,7 +158,6 @@ inventory:
             - fixtures/v1/valid-web-app/spec/requirement.yaml
             - fixtures/v1/valid-web-app/mitase.yaml
             - scripts/ci/installed-binary-smoke.sh
-            - scripts/ci/quality-gates.sh
             - scripts/dev/validate-changed.sh
             - src/lib.rs
             - tests/v1_cli.rs
