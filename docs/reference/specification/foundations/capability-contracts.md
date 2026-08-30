@@ -289,7 +289,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
           - **path**: tests/v1_cli.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: current_workspace_validates_and_reports_configured_readiness
+            - **name**: current_workspace_checks_and_reports_configured_readiness
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
@@ -300,7 +300,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **arguments**:
                   - **package**: mitase
                   - **harness**: v1_cli
-                  - **test**: current_workspace_validates_and_reports_configured_readiness
+                  - **test**: current_workspace_checks_and_reports_configured_readiness
         - **id**: lsp-test
           - **adapter**: rust
           - **path**: src/lsp/handlers.rs
@@ -654,12 +654,12 @@ requirements:
           - id: cli-test
             adapter: rust
             path: tests/v1_cli.rs
-            selector: { kind: symbol, name: current_workspace_validates_and_reports_configured_readiness }
+            selector: { kind: symbol, name: current_workspace_checks_and_reports_configured_readiness }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
                 covers: [FEAT-CLI-001#binding.implementation/target.cli-run]
-                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: current_workspace_validates_and_reports_configured_readiness } }
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: current_workspace_checks_and_reports_configured_readiness } }
           - id: lsp-test
             adapter: rust
             path: src/lsp/handlers.rs
