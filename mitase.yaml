@@ -165,7 +165,7 @@ inventory:
             - website/src/pages/index.js
             - mitase.yaml
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:

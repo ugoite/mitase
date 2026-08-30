@@ -18,7 +18,7 @@ inventory:
       providers:
         rust: { mode: test, include_tests: true }
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: off
     limits: { max_ownership_scope_units: 64 }
@@ -50,7 +50,7 @@ Select only the connected criterion and advance its facet deliberately:
 
 ```yaml
 validation:
-  preset: agent-ready
+  preset: strict
   readiness:
     target: traceable
     probes:
