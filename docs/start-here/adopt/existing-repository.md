@@ -1,6 +1,6 @@
 # Existing repository
 
-Adopt Mitase one connected capability at a time. The first goal is not repository-wide coverage; it is one implemented criterion with exact implementation ownership, an exact verification target, and a ready canonical plan.
+Adopt Mitase one connected capability at a time. The first goal is not repository-wide coverage; it is one implemented criterion with exact implementation ownership, an exact verification target, and current validation evidence.
 
 ## 1. Inventory without claiming ownership
 
@@ -21,28 +21,26 @@ validation:
   preset: agent-ready
   readiness:
     target: off
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
-  changed: { require_owned_changes: false, require_plan: false }
+    limits: { max_ownership_scope_units: 64 }
+  changed: { require_owned_changes: false }
 verification:
   runners:
     cargo-test:
       executable: cargo
       arguments: [test, -p, "{package}", "{test}", --, --exact]
-work:
-  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 4, max_readonly_targets: 8, max_total_bytes: 16384 }
 ```
 
 Run `mitase readiness report . --format json` and use the inventory subjects as discovery evidence only. Do not create a planned Feature that owns the repository, a source tree, or every discovered file.
 
-## 2. Connect one implemented slice
+## 2. Connect one implemented capability
 
-Add one Philosophy → Policy → Requirement → Feature chain. The slice is current only when all of these are true:
+Add one Philosophy → Policy → Requirement → Feature chain. The capability is current only when all of these are true:
 
 - the Requirement and Feature are `implemented`;
 - each implementation target satisfies a specific implemented criterion;
 - each implementation target has exact configured verification whose `covers` list names that target;
 - ownership is exact or a bounded capability-level module/file scope;
-- the criterion produces a ready canonical plan within the configured slice budgets.
+- the criterion has current exact target and verification evidence.
 
 A planned Feature can describe future intent, but it must not declare active ownership. Promote its status only with the implementation and verification evidence in the same reviewed change.
 
@@ -60,10 +58,9 @@ validation:
         - criterion: REQ-FIRST-001#criterion.behavior
           level: work-ready
       changed_units: false
-    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_origin: 4 }
+    limits: { max_ownership_scope_units: 64 }
   changed:
     require_owned_changes: true
-    require_plan: true
 ```
 
 Run:
@@ -79,6 +76,6 @@ Treat the selected criterion, its exact targets, and its verification as the rea
 
 Add the next capability only after the current slice stays green in CI. Move each capability through `traceable` → `seedable` → `work-ready` → `verifiable` → `closed-loop` as its evidence becomes real.
 
-Enable `public_entrypoints: { selection: all, level: seedable }` only after every currently discovered public entrypoint has one exact owner, exposes a behaviorally verified capability target, and has a ready target-specific plan. Once enabled, a newly exported entrypoint fails canonical workspace validation until it is governed.
+Enable `public_entrypoints: { selection: all, level: seedable }` only after every currently discovered public entrypoint has one exact owner and exposes a behaviorally verified capability target. Once enabled, a newly exported entrypoint fails canonical workspace validation until it is governed.
 
 Import and suggestion automation remains follow-up work. This path is intentionally manual, bounded, and evidence-preserving; it does not claim that an existing repository is self-hosted after its first slice.
