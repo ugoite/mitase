@@ -54,22 +54,29 @@ pub struct SpecIndex {
     pub criterion_status: BTreeMap<SpecAnchor, ItemStatus>,
     pub artifact_units: Vec<ArtifactUnit>,
     pub artifact_owners: BTreeMap<String, Vec<OwnershipRef>>,
-    /// Historical exact target identities, including targets whose lifecycle
-    /// is absent. This is evidence context, not current executable scope.
+    /// Authored exact target identities, including planned items and targets
+    /// whose lifecycle is absent. This is catalog context, not current proof
+    /// evidence.
     pub all_target_to_artifact: BTreeMap<BoundTargetRef, String>,
+    /// Current exact target identities from non-planned, present, uniquely
+    /// resolved targets.
     pub target_to_artifact: BTreeMap<BoundTargetRef, String>,
-    /// Current implementation claims from non-planned specification items.
+    /// Current implementation claims from non-planned, present, and uniquely
+    /// resolved targets.
     pub criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
-    /// Current verification claims from non-planned specification items.
+    /// Current verification claims from non-planned, present, and uniquely
+    /// resolved targets.
     pub criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
     /// Full implementation graph, including planned catalog entries.
     pub all_criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
     /// Full verification graph, including planned catalog entries.
     pub all_criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
     pub contracts_by_target: BTreeMap<BoundTargetRef, Vec<SpecAnchor>>,
-    /// Current exact verification coverage from non-planned items.
+    /// Current exact verification coverage from non-planned, present, and
+    /// uniquely resolved implementation and verification targets.
     pub verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
-    /// Full exact verification coverage, including planned catalog entries.
+    /// Full authored verification coverage, including planned and absent
+    /// catalog entries. These relations are not current proof evidence.
     pub all_verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
     /// Generated target -> exact source targets.
     pub generated_from: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
@@ -299,16 +306,14 @@ impl SpecIndex {
                         binding: anchor.clone(),
                         target_id: target.id.clone(),
                     });
-            }
-            for target in &binding.targets {
                 for claim in &target.claims {
-                    match claim {
-                        TargetClaim::Satisfies { criterion } => out
+                    match (binding.role, claim) {
+                        (BindingRole::Implementation, TargetClaim::Satisfies { criterion }) => out
                             .criteria_to_implementations
                             .entry(criterion.clone())
                             .or_default()
                             .push(anchor.clone()),
-                        TargetClaim::Verifies { criterion, .. } => out
+                        (BindingRole::Verification, TargetClaim::Verifies { criterion, .. }) => out
                             .criteria_to_verifications
                             .entry(criterion.clone())
                             .or_default()
@@ -365,6 +370,41 @@ impl SpecIndex {
             Ok(units) => out.artifact_units = units,
             Err(error) => out.inventory_error = Some(error.to_string()),
         }
+        // A current relation is evidence only when both its owner and its
+        // exact ArtifactTarget are current. Keep the authored relation maps
+        // separate so planned and retired targets remain queryable without
+        // accidentally becoming current proof coverage.
+        let mut current_target_refs = BTreeSet::new();
+        let mut current_implementation_target_refs = BTreeSet::new();
+        let mut current_verification_target_refs = BTreeSet::new();
+        for (binding_anchor, binding) in &out.bindings {
+            let active_binding = !matches!(
+                out.item_status.get(&binding_anchor.item),
+                Some(ItemStatus::Planned)
+            );
+            for target in &binding.targets {
+                if !active_binding || target.lifecycle == ArtifactTargetLifecycle::Absent {
+                    continue;
+                }
+                let target_ref = BoundTargetRef {
+                    binding: binding_anchor.clone(),
+                    target_id: target.id.clone(),
+                };
+                if artifact_identities_for_target(&out.artifact_units, target).len() != 1 {
+                    continue;
+                }
+                current_target_refs.insert(target_ref.clone());
+                match binding.role {
+                    BindingRole::Implementation => {
+                        current_implementation_target_refs.insert(target_ref);
+                    }
+                    BindingRole::Verification => {
+                        current_verification_target_refs.insert(target_ref);
+                    }
+                    _ => {}
+                }
+            }
+        }
         for (binding_anchor, binding) in &out.bindings {
             let active_binding = !matches!(
                 out.item_status.get(&binding_anchor.item),
@@ -381,9 +421,19 @@ impl SpecIndex {
                     let identity = &identities[0];
                     out.all_target_to_artifact
                         .insert(target_ref.clone(), identity.clone());
-                    if current_target {
+                    if active_binding && current_target {
                         out.target_to_artifact
                             .insert(target_ref.clone(), identity.clone());
+                        current_target_refs.insert(target_ref.clone());
+                        match binding.role {
+                            BindingRole::Implementation => {
+                                current_implementation_target_refs.insert(target_ref.clone());
+                            }
+                            BindingRole::Verification => {
+                                current_verification_target_refs.insert(target_ref.clone());
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 if identities.len() == 1
@@ -408,22 +458,25 @@ impl SpecIndex {
                         });
                 }
                 for claim in &target.claims {
-                    match claim {
-                        TargetClaim::Satisfies { criterion } => {
+                    match (binding.role, claim) {
+                        (BindingRole::Implementation, TargetClaim::Satisfies { criterion }) => {
                             out.all_criteria_to_implementation_targets
                                 .entry(criterion.clone())
                                 .or_default()
                                 .push(target_ref.clone());
-                            if active_binding && current_target {
+                            if current_implementation_target_refs.contains(&target_ref) {
                                 out.criteria_to_implementation_targets
                                     .entry(criterion.clone())
                                     .or_default()
                                     .push(target_ref.clone());
                             }
                         }
-                        TargetClaim::Verifies {
-                            criterion, covers, ..
-                        } => {
+                        (
+                            BindingRole::Verification,
+                            TargetClaim::Verifies {
+                                criterion, covers, ..
+                            },
+                        ) => {
                             out.all_criteria_to_verification_targets
                                 .entry(criterion.clone())
                                 .or_default()
@@ -434,25 +487,51 @@ impl SpecIndex {
                                     .or_default()
                                     .push(target_ref.clone());
                             }
-                            if active_binding && current_target {
+                            if active_binding
+                                && current_verification_target_refs.contains(&target_ref)
+                            {
                                 out.criteria_to_verification_targets
                                     .entry(criterion.clone())
                                     .or_default()
                                     .push(target_ref.clone());
                                 for covered in covers {
-                                    out.verification_by_target
-                                        .entry(covered.clone())
-                                        .or_default()
-                                        .push(target_ref.clone());
+                                    let covered_satisfies_criterion =
+                                        out.target(covered).is_some_and(|covered_target| {
+                                            covered_target.claims.iter().any(|claim| {
+                                                matches!(
+                                                    claim,
+                                                    TargetClaim::Satisfies {
+                                                        criterion: actual
+                                                    } if actual == criterion
+                                                )
+                                            })
+                                        });
+                                    if current_implementation_target_refs.contains(covered)
+                                        && covered_satisfies_criterion
+                                        && matches!(
+                                            out.anchors.get(criterion),
+                                            Some(AnchorValue::Criterion(_))
+                                        )
+                                    {
+                                        out.verification_by_target
+                                            .entry(covered.clone())
+                                            .or_default()
+                                            .push(target_ref.clone());
+                                    }
                                 }
                             }
                         }
-                        TargetClaim::Exposes { target } if active_binding && current_target => {
+                        _ => {}
+                    }
+                    match claim {
+                        TargetClaim::Exposes { target }
+                            if active_binding && current_target_refs.contains(&target_ref) =>
+                        {
                             out.exposes_by_target
                                 .insert(target_ref.clone(), target.clone());
                         }
                         TargetClaim::GeneratedFrom { targets }
-                            if active_binding && current_target =>
+                            if active_binding && current_target_refs.contains(&target_ref) =>
                         {
                             out.generated_from
                                 .entry(target_ref.clone())
@@ -516,20 +595,6 @@ impl SpecIndex {
                     .push(contract_anchor.clone());
             }
         }
-        let current_target_refs = out
-            .bindings
-            .iter()
-            .flat_map(|(binding_anchor, binding)| {
-                binding
-                    .targets
-                    .iter()
-                    .filter(|target| target.lifecycle != ArtifactTargetLifecycle::Absent)
-                    .map(|target| BoundTargetRef {
-                        binding: binding_anchor.clone(),
-                        target_id: target.id.clone(),
-                    })
-            })
-            .collect::<BTreeSet<_>>();
         for values in out
             .criteria_to_implementation_targets
             .values_mut()

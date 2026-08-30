@@ -58,9 +58,12 @@ a more stable selector exists.
 
 ## Verification Claim
 
-A declaration that a Criterion is proved by a particular Verifier, Test, or
-Artifact. A claim is valid only when its Criterion exists and its target
-resolves according to the repository validation rules.
+A declaration that a Criterion is designated to be proved by a particular
+Verifier, Test, or Artifact. A current claim is valid only when its Criterion
+exists, its proof target resolves exactly, its verifier metadata is complete,
+and every covered target is a current implementation target that satisfies the
+same Criterion. A valid claim describes a proof relationship; it does not
+mean that an external verifier has run or passed.
 
 ## SpecIndex
 
@@ -83,8 +86,11 @@ top-level specification kinds for every tool or file format.
 ## Coverage
 
 The calculated relationship between Requirements, Criteria, Features, Bindings,
-Artifacts, and Verification Claims. Coverage reports what is connected and
-what remains unverified; it does not make an unowned artifact owned.
+Artifacts, and Verification Claims. Current coverage includes only
+non-planned, present, uniquely resolved targets. Planned and absent targets
+remain in catalog/history views for context but are excluded from current proof
+coverage. Coverage reports what is connected and what remains unverified; it
+does not make an unowned artifact owned.
 
 ## Drift
 
