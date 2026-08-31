@@ -51,6 +51,6 @@ translation:
   policy_rule:
     id: governance
     level: should
-  reverse_relation: SpecIndex.rules_to_principles
+  reverse_relation: SpecIndex.principles_to_rules
 decision:
   generic_mitase_schema_extension: none
