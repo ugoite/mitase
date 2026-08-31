@@ -240,6 +240,93 @@ fn public_cli_does_not_expose_transitional_validation_commands() {
 }
 
 #[test]
+fn show_and_list_expose_deterministic_semantic_read_models() {
+    let first = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["list", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(first.status.success());
+    let second = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["list", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(second.status.success());
+    assert_eq!(first.stdout, second.stdout);
+
+    let list: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(list["items"][0]["kind"], "feature");
+    assert_eq!(list["items"][0]["id"], "FEAT-CHANGE-VALIDATION-001");
+
+    let filtered = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "list",
+            ".",
+            "--kind",
+            "requirement",
+            "--status",
+            "implemented",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(filtered.status.success());
+    let filtered: serde_json::Value = serde_json::from_slice(&filtered.stdout).unwrap();
+    assert!(
+        filtered["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| { item["kind"] == "requirement" && item["status"] == "implemented" })
+    );
+
+    let show = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-CAPABILITY-001", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(show.status.success());
+    let show: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(show["id"], "REQ-CAPABILITY-001");
+    assert_eq!(show["kind"], "requirement");
+    assert!(
+        show["authored_relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|relation| { relation["relation"] == "governed-by" })
+    );
+    assert!(
+        show["derived_relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|relation| { relation["relation"] == "implementation-targets" })
+    );
+    assert!(
+        show["verification_claims"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|claim| { claim["assessment"]["status"] == "valid" })
+    );
+}
+
+#[test]
+fn show_reports_missing_specifications_with_nonzero_exit() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-DOES-NOT-EXIST"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("was not found"));
+}
+
+#[test]
 fn generated_spec_reference_covers_every_source_document() {
     let index =
         fs::read_to_string("docs/reference/specification/index.md").expect("generated index");

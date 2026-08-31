@@ -24,6 +24,19 @@ Execution and delivery tooling is external to the Mitase CLI. See the
 [Re-Foundation freeze](../../project/mitase-re-foundation-freeze.md) before
 building new integrations.
 
+Use the read-only discovery commands to inspect the canonical graph:
+
+```bash
+mitase list .
+mitase list . --kind requirement --status implemented --format json
+mitase show REQ-CAPABILITY-001 . --format json
+```
+
+`list` returns stable ID, kind, title, status, and source fields. `show`
+includes authored relations, derived reverse relations, exact binding targets,
+and execution-free verification assessments. It does not run tests or other
+configured runners.
+
 A new workspace needs:
 
 - `mitase.yaml`

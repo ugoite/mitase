@@ -46,13 +46,13 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
               - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
 - **id**: FEAT-CLI-001
   - **title**: CLI entrypoints
-  - **summary**: Expose workspace, readiness, and validation commands.
+  - **summary**: Expose workspace validation, readiness, and deterministic read-only specification discovery.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: cli
-      - **responsibility**: Expose canonical validation and readiness commands.
+      - **responsibility**: Expose canonical validation, readiness, show, and list commands.
       - **targets**:
         - **id**: cli-run
           - **adapter**: rust
@@ -263,13 +263,13 @@ features:
 
   - id: FEAT-CLI-001
     title: CLI entrypoints
-    summary: Expose workspace, readiness, and validation commands.
+    summary: Expose workspace validation, readiness, and deterministic read-only specification discovery.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: cli
-        responsibility: Expose canonical validation and readiness commands.
+        responsibility: Expose canonical validation, readiness, show, and list commands.
         targets:
           - id: cli-run
             adapter: rust
