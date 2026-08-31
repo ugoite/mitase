@@ -30,6 +30,52 @@ pub(crate) struct VerificationClaimRef {
     pub criterion: SpecAnchor,
 }
 
+/// The semantic status of a declared verification relationship.
+///
+/// This is deliberately separate from `SpecIndex::verification_by_target`:
+/// the index records exact relationship candidates, while this assessment
+/// also checks current lifecycle, target role, criterion coverage, and
+/// declarative runner metadata. It never executes the runner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerificationAssessmentStatus {
+    Valid,
+    Invalid,
+    CatalogOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerificationAssessmentReason {
+    TargetNotFound,
+    NotVerificationBinding,
+    CatalogPlanned,
+    CatalogAbsent,
+    NotCurrentExactTarget,
+    CriterionNotFound,
+    MissingCriterionClaim,
+    MultipleCriterionClaims,
+    NoCoveredTargets,
+    UnresolvedCoveredTarget,
+    CoveredTargetNotCurrentImplementation,
+    CoveredTargetDoesNotSatisfyCriterion,
+    RunnerNotConfigured,
+    RunnerMetadataIncomplete,
+}
+
+/// Execution-free semantic assessment for one declared Verification Claim.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationAssessment {
+    pub status: VerificationAssessmentStatus,
+    pub verification: BoundTargetRef,
+    pub criterion: SpecAnchor,
+    #[serde(default)]
+    pub covers: Vec<BoundTargetRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<VerificationAssessmentReason>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum OverridePolicy {
     FixedError,
@@ -2429,8 +2475,20 @@ fn target_satisfies(
     reference: &BoundTargetRef,
     criterion: &SpecAnchor,
 ) -> bool {
-    is_current_exact_target(ctx, reference, BindingRole::Implementation)
-        && ctx.index.target(reference).is_some_and(|target| {
+    target_satisfies_index(ctx.index, reference, criterion)
+}
+
+fn target_satisfies_index(
+    index: &SpecIndex,
+    reference: &BoundTargetRef,
+    criterion: &SpecAnchor,
+) -> bool {
+    index.target_to_artifact.contains_key(reference)
+        && index
+            .bindings
+            .get(&reference.binding)
+            .is_some_and(|binding| binding.role == BindingRole::Implementation)
+        && index.target(reference).is_some_and(|target| {
             target.claims.iter().any(|claim| {
                 matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
             })
@@ -2515,14 +2573,78 @@ fn current_verification_covers(
     criterion: &SpecAnchor,
     implementation: &BoundTargetRef,
 ) -> bool {
-    if !is_current_exact_target(ctx, verification, BindingRole::Verification)
-        || !target_satisfies(ctx, implementation, criterion)
-    {
-        return false;
-    }
-    let Some(target) = ctx.index.target(verification) else {
-        return false;
+    let assessment = assess_verification_claim(ctx.config, ctx.index, verification, criterion);
+    assessment.status == VerificationAssessmentStatus::Valid
+        && assessment.covers.contains(implementation)
+}
+
+/// Assess one declared verification claim without running its configured
+/// runner. Catalog-only claims remain visible for planned or absent items,
+/// while invalid claims describe why a current relationship is not trusted.
+pub fn assess_verification_claim(
+    config: &ProjectConfig,
+    index: &SpecIndex,
+    verification: &BoundTargetRef,
+    criterion: &SpecAnchor,
+) -> VerificationAssessment {
+    let base = |status, reason, covers| VerificationAssessment {
+        status,
+        verification: verification.clone(),
+        criterion: criterion.clone(),
+        covers,
+        reason,
     };
+
+    let Some(binding) = index.bindings.get(&verification.binding) else {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::TargetNotFound),
+            Vec::new(),
+        );
+    };
+    if binding.role != BindingRole::Verification {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::NotVerificationBinding),
+            Vec::new(),
+        );
+    }
+    let Some(target) = index.target(verification) else {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::TargetNotFound),
+            Vec::new(),
+        );
+    };
+    if index.item_status.get(&verification.binding.item) == Some(&ItemStatus::Planned) {
+        return base(
+            VerificationAssessmentStatus::CatalogOnly,
+            Some(VerificationAssessmentReason::CatalogPlanned),
+            Vec::new(),
+        );
+    }
+    if target.lifecycle == ArtifactTargetLifecycle::Absent {
+        return base(
+            VerificationAssessmentStatus::CatalogOnly,
+            Some(VerificationAssessmentReason::CatalogAbsent),
+            Vec::new(),
+        );
+    }
+    if !matches!(index.anchor(criterion), Some(AnchorValue::Criterion(_))) {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::CriterionNotFound),
+            Vec::new(),
+        );
+    }
+    if !index.target_to_artifact.contains_key(verification) {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::NotCurrentExactTarget),
+            Vec::new(),
+        );
+    }
+
     let mut claims = target.claims.iter().filter_map(|claim| match claim {
         TargetClaim::Verifies {
             criterion: actual,
@@ -2532,11 +2654,69 @@ fn current_verification_covers(
         _ => None,
     });
     let Some((covers, runner)) = claims.next() else {
-        return false;
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::MissingCriterionClaim),
+            Vec::new(),
+        );
     };
-    claims.next().is_none()
-        && covers.contains(implementation)
-        && verification_runner_is_complete(ctx.config, runner)
+    if claims.next().is_some() {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::MultipleCriterionClaims),
+            covers.clone(),
+        );
+    }
+    if covers.is_empty() {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::NoCoveredTargets),
+            Vec::new(),
+        );
+    }
+    for covered in covers {
+        if index.target(covered).is_none() {
+            return base(
+                VerificationAssessmentStatus::Invalid,
+                Some(VerificationAssessmentReason::UnresolvedCoveredTarget),
+                covers.clone(),
+            );
+        }
+        if !index.target_to_artifact.contains_key(covered)
+            || !index
+                .bindings
+                .get(&covered.binding)
+                .is_some_and(|binding| binding.role == BindingRole::Implementation)
+        {
+            return base(
+                VerificationAssessmentStatus::Invalid,
+                Some(VerificationAssessmentReason::CoveredTargetNotCurrentImplementation),
+                covers.clone(),
+            );
+        }
+        if !target_satisfies_index(index, covered, criterion) {
+            return base(
+                VerificationAssessmentStatus::Invalid,
+                Some(VerificationAssessmentReason::CoveredTargetDoesNotSatisfyCriterion),
+                covers.clone(),
+            );
+        }
+    }
+    if !config.verification.runners.contains_key(&runner.runner) {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::RunnerNotConfigured),
+            covers.clone(),
+        );
+    }
+    if !verification_runner_is_complete(config, runner) {
+        return base(
+            VerificationAssessmentStatus::Invalid,
+            Some(VerificationAssessmentReason::RunnerMetadataIncomplete),
+            covers.clone(),
+        );
+    }
+    base(VerificationAssessmentStatus::Valid, None, covers.clone())
 }
 
 fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
@@ -3394,6 +3574,14 @@ features:
                 .verification_by_target
                 .contains_key(&implementation)
         );
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.acceptance"
+            .parse()
+            .expect("criterion");
+        assert_eq!(
+            assess_verification_claim(&_workspace.config, &planned_index, &proof, &criterion,)
+                .status,
+            VerificationAssessmentStatus::CatalogOnly
+        );
 
         let (_tempdir, _workspace, absent_index, absent_result) = verification_fixture(
             "implemented",
@@ -3413,6 +3601,11 @@ features:
                 .criteria_to_verification_targets
                 .get(&"REQ-TEST-001#criterion.acceptance".parse().unwrap())
                 .is_none_or(Vec::is_empty)
+        );
+        assert_eq!(
+            assess_verification_claim(&_workspace.config, &absent_index, &proof, &criterion,)
+                .status,
+            VerificationAssessmentStatus::CatalogOnly
         );
     }
 

@@ -85,7 +85,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
         - POL-RELATION-001#rule.typed-proof-path
     - **id**: cli-entrypoints
       - **kind**: behavior
-      - **statement**: The CLI exposes canonical workspace validation and readiness reporting through stable commands.
+      - **statement**: The CLI exposes canonical workspace validation, readiness reporting, and deterministic read-only specification discovery through stable commands.
       - **governed_by**:
         - POL-AUTHORITY-001#rule.repository-meaning
         - POL-EVIDENCE-001#rule.derived-state
@@ -533,7 +533,7 @@ requirements:
         governed_by: [POL-RELATION-001#rule.typed-proof-path]
       - id: cli-entrypoints
         kind: behavior
-        statement: The CLI exposes canonical workspace validation and readiness reporting through stable commands.
+        statement: The CLI exposes canonical workspace validation, readiness reporting, and deterministic read-only specification discovery through stable commands.
         governed_by: [POL-AUTHORITY-001#rule.repository-meaning, POL-EVIDENCE-001#rule.derived-state]
       - id: lsp-navigation
         kind: behavior

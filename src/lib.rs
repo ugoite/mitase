@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod lsp;
+pub mod query;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -31,6 +32,8 @@ enum CommandKind {
     Check(CheckArgs),
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
+    Show(ShowArgs),
+    List(ListArgs),
     Lsp,
 }
 #[derive(Debug, Args)]
@@ -44,6 +47,25 @@ struct CheckArgs {
 struct ReadinessArgs {
     #[command(subcommand)]
     command: ReadinessCommand,
+}
+#[derive(Debug, Args)]
+struct ShowArgs {
+    id: String,
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    #[arg(long, value_enum, default_value = "text")]
+    format: Format,
+}
+#[derive(Debug, Args)]
+struct ListArgs {
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    #[arg(long, value_enum)]
+    kind: Option<query::SpecKind>,
+    #[arg(long, value_enum)]
+    status: Option<query::StatusFilter>,
+    #[arg(long, value_enum, default_value = "text")]
+    format: Format,
 }
 #[derive(Debug, Subcommand)]
 enum ReadinessCommand {
@@ -88,11 +110,33 @@ pub fn run() -> Result<i32> {
         CommandKind::Check(args) => run_check(args),
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
+        CommandKind::Show(args) => run_show(args),
+        CommandKind::List(args) => run_list(args),
         CommandKind::Lsp => {
             lsp::run_lsp_server()?;
             Ok(0)
         }
     }
+}
+fn run_show(args: ShowArgs) -> Result<i32> {
+    let workspace = SpecWorkspace::load(args.workspace)?;
+    let index = workspace.index()?;
+    let result = query::show(&workspace, &index, &args.id)?;
+    match args.format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Text => print!("{}", query::render_show_text(&result)),
+    }
+    Ok(0)
+}
+fn run_list(args: ListArgs) -> Result<i32> {
+    let workspace = SpecWorkspace::load(args.workspace)?;
+    let index = workspace.index()?;
+    let result = query::list(&workspace, &index, args.kind, args.status);
+    match args.format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Text => print!("{}", query::render_list_text(&result)),
+    }
+    Ok(0)
 }
 fn run_check(args: CheckArgs) -> Result<i32> {
     let workspace = SpecWorkspace::load(args.workspace)?;
