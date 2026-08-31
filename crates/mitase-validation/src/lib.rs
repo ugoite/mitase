@@ -2437,14 +2437,47 @@ fn target_satisfies(
         })
 }
 
-fn runner_argument_placeholders(argument: &str) -> Vec<&str> {
-    argument
-        .match_indices('{')
-        .filter_map(|(start, _)| {
-            let end = argument[start + 1..].find('}')? + start + 1;
-            Some(&argument[start + 1..end])
-        })
-        .collect()
+fn runner_argument_placeholders(argument: &str) -> Option<Vec<&str>> {
+    let mut placeholders = Vec::new();
+    let mut names = BTreeSet::new();
+    let mut cursor = 0;
+    while cursor < argument.len() {
+        let remainder = &argument[cursor..];
+        let Some(offset) = remainder.find(['{', '}']) else {
+            break;
+        };
+        let start = cursor + offset;
+        match argument.as_bytes()[start] {
+            b'}' => return None,
+            b'{' => {
+                let name_start = start + 1;
+                let remainder = &argument[name_start..];
+                let end_offset = remainder.find(['{', '}'])?;
+                let end = name_start + end_offset;
+                if argument.as_bytes()[end] != b'}' {
+                    return None;
+                }
+                let name = &argument[name_start..end];
+                let mut chars = name.chars();
+                let valid = chars
+                    .next()
+                    .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+                    && chars.all(|character| {
+                        character.is_ascii_alphanumeric() || character == '_' || character == '-'
+                    });
+                if !valid {
+                    return None;
+                }
+                if !names.insert(name) {
+                    return None;
+                }
+                placeholders.push(name);
+                cursor = end + 1;
+            }
+            _ => unreachable!("placeholder scan only finds braces"),
+        }
+    }
+    Some(placeholders)
 }
 
 pub(crate) fn verification_runner_is_complete(
@@ -2454,14 +2487,20 @@ pub(crate) fn verification_runner_is_complete(
     let Some(configured) = config.verification.runners.get(&runner.runner) else {
         return false;
     };
+    let mut placeholder_names = BTreeSet::new();
     !configured.executable.trim().is_empty()
         && configured.arguments.iter().all(|argument| {
             !argument.trim().is_empty()
-                && runner_argument_placeholders(argument).iter().all(|key| {
-                    runner
-                        .arguments
-                        .get(*key)
-                        .is_some_and(|value| !value.is_empty())
+                && runner_argument_placeholders(argument).is_some_and(|placeholders| {
+                    placeholders
+                        .iter()
+                        .all(|key| placeholder_names.insert(*key))
+                        && placeholders.iter().all(|key| {
+                            runner
+                                .arguments
+                                .get(*key)
+                                .is_some_and(|value| !value.is_empty())
+                        })
                 })
         })
         && runner
@@ -2803,8 +2842,35 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
+                let mut placeholder_names = BTreeSet::new();
                 for argument in &configured.arguments {
-                    let placeholders = runner_argument_placeholders(argument);
+                    let Some(placeholders) = runner_argument_placeholders(argument) else {
+                        push(
+                            out,
+                            "MITASE-VERIFICATION-002",
+                            format!(
+                                "verification runner argument has invalid placeholder syntax: {argument}"
+                            ),
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                        continue;
+                    };
+                    if placeholders
+                        .iter()
+                        .any(|key| !placeholder_names.insert(*key))
+                    {
+                        push(
+                            out,
+                            "MITASE-VERIFICATION-002",
+                            format!(
+                                "verification runner argument has duplicate placeholder names: {argument}"
+                            ),
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                        continue;
+                    }
                     if placeholders
                         .iter()
                         .any(|key| runner.arguments.get(*key).is_none_or(String::is_empty))
@@ -3103,6 +3169,90 @@ features:
             .iter()
             .filter(|diagnostic| diagnostic.rule_id.starts_with("MITASE-VERIFICATION-"))
             .collect()
+    }
+
+    #[test]
+    fn runner_argument_placeholders_require_deterministic_named_syntax() {
+        assert_eq!(
+            runner_argument_placeholders("cargo {package} {test}"),
+            Some(vec!["package", "test"])
+        );
+        for malformed in [
+            "{",
+            "}",
+            "{}",
+            "{test",
+            "test}",
+            "{test\ntest}",
+            "{test} {test}",
+        ] {
+            assert_eq!(
+                runner_argument_placeholders(malformed),
+                None,
+                "{malformed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_runner_placeholder_is_not_complete_metadata() {
+        let (tempdir, _, _, _) = verification_fixture(
+            "implemented",
+            None,
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+            false,
+        );
+        let config_path = tempdir.path().join("mitase.yaml");
+        let config = fs::read_to_string(&config_path)
+            .expect("config")
+            .replace("arguments: [\"{test}\"]", "arguments: [\"{}\"]");
+        fs::write(config_path, config).expect("malformed config");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| { diagnostic.message.contains("invalid placeholder syntax") })
+        );
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| { diagnostic.message.contains("not covered") })
+        );
+    }
+
+    #[test]
+    fn duplicate_runner_placeholder_across_arguments_is_not_complete_metadata() {
+        let (tempdir, _, _, _) = verification_fixture(
+            "implemented",
+            None,
+            None,
+            "REQ-TEST-001#criterion.acceptance",
+            "# Proof\n",
+            false,
+        );
+        let config_path = tempdir.path().join("mitase.yaml");
+        let config = fs::read_to_string(&config_path).expect("config").replace(
+            "arguments: [\"{test}\"]",
+            "arguments: [\"{test}\", \"{test}\"]",
+        );
+        fs::write(config_path, config).expect("duplicate config");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| { diagnostic.message.contains("duplicate placeholder names") })
+        );
+        assert!(
+            verification_diagnostics(&result)
+                .iter()
+                .any(|diagnostic| { diagnostic.message.contains("not covered") })
+        );
     }
 
     #[test]
