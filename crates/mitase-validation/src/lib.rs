@@ -2439,6 +2439,7 @@ fn target_satisfies(
 
 fn runner_argument_placeholders(argument: &str) -> Option<Vec<&str>> {
     let mut placeholders = Vec::new();
+    let mut names = BTreeSet::new();
     let mut cursor = 0;
     while cursor < argument.len() {
         let remainder = &argument[cursor..];
@@ -2465,6 +2466,9 @@ fn runner_argument_placeholders(argument: &str) -> Option<Vec<&str>> {
                         character.is_ascii_alphanumeric() || character == '_' || character == '-'
                     });
                 if !valid {
+                    return None;
+                }
+                if !names.insert(name) {
                     return None;
                 }
                 placeholders.push(name);
@@ -3153,11 +3157,15 @@ features:
             runner_argument_placeholders("cargo {package} {test}"),
             Some(vec!["package", "test"])
         );
-        assert_eq!(
-            runner_argument_placeholders("{test} {test}"),
-            Some(vec!["test", "test"])
-        );
-        for malformed in ["{", "}", "{}", "{test", "test}", "{test\ntest}"] {
+        for malformed in [
+            "{",
+            "}",
+            "{}",
+            "{test",
+            "test}",
+            "{test\ntest}",
+            "{test} {test}",
+        ] {
             assert_eq!(
                 runner_argument_placeholders(malformed),
                 None,
