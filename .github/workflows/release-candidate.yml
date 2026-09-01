@@ -171,13 +171,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          source = Path("scripts/install-mitase.sh").read_text(encoding="utf-8")
-          rendered = source.replace("__MITASE_RELEASE_TAG__", "${{ needs.preflight.outputs.version }}")
-          Path("release-artifacts/install-mitase.sh").write_text(rendered, encoding="utf-8")
-          PY
+          cp scripts/install-mitase.sh release-artifacts/install-mitase.sh
 
       - name: Generate release checksums
         shell: bash
