@@ -10,6 +10,11 @@ Mitase release artifacts are promoted from a candidate, not rebuilt from an
 incidental branch or tag. A candidate records the exact source revision and
 the exact bytes selected for publication.
 
+The repository's public version authority is the `version` in the Cargo
+workspace package section of [Cargo.toml](../../Cargo.toml). The current
+Foundation Release is `v0.1.0`; the candidate workflow reads that version from
+the exact source revision it checks out.
+
 ## Manifest
 
 The candidate manifest uses the `mitase/release-candidate/v1` schema:
