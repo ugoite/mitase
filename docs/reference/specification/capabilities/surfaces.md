@@ -222,11 +222,6 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
           - **selector**:
             - **kind**: module
             - **name**: *
-        - **id**: release-please-configuration
-          - **adapter**: declared
-          - **path**: release-please-config.json
-          - **selector**:
-            - **kind**: file
       - **targets**:
         - **id**: generated-index
           - **adapter**: declared
@@ -347,7 +342,6 @@ features:
           - { id: repository-readme, adapter: declared, path: README.md, selector: { kind: file } }
           - { id: vscode-readme, adapter: declared, path: editors/vscode/README.md, selector: { kind: file } }
           - { id: docs-site-homepage, adapter: javascript, path: website/src/pages/index.js, selector: { kind: module, name: "*" } }
-          - { id: release-please-configuration, adapter: declared, path: release-please-config.json, selector: { kind: file } }
         targets:
           - id: generated-index
             adapter: declared

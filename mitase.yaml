@@ -35,7 +35,6 @@ inventory:
             - Cargo.toml
             - README.md
             - editors/vscode/README.md
-            - release-please-config.json
             - docs
             - mise.toml
             - scripts

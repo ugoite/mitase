@@ -5,9 +5,7 @@ Install a release build or run the binary from source, then create a v1 workspac
 ## Quick start commands
 
 ```bash
-# x-release-please-start-version
 RELEASE="$(gh release view --json tagName -q .tagName --repo ugoite/mitase)"
-# x-release-please-end
 curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/install-mitase.sh" | env MITASE_VERSION=alpha bash
 cargo run --quiet -- validate .
 ```
