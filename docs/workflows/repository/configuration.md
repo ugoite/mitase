@@ -55,6 +55,8 @@ The repository default uses Cargo's cache-home placeholder, while
 `CARGO_BUILD_BUILD_DIR` can override it when a developer needs another volume.
 Keep that override in the local shell profile (for example, `~/.zprofile` on
 macOS) and keep machine-specific absolute paths out of the repository:
+The directory name below is only an example; choose any suitable local cache
+location for the machine running the build.
 
 ```sh
 export CARGO_BUILD_BUILD_DIR="/path/to/large-disk/mitase/cargo-build"
