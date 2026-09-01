@@ -57,7 +57,7 @@ Keep that override in the local shell profile (for example, `~/.zprofile` on
 macOS) and keep machine-specific absolute paths out of the repository:
 
 ```sh
-export CARGO_BUILD_BUILD_DIR="/path/to/large-disk/syu/cargo-build"
+export CARGO_BUILD_BUILD_DIR="/path/to/large-disk/mitase/cargo-build"
 ```
 
 `CARGO_TARGET_DIR` controls final build outputs separately and remains the
