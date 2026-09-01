@@ -401,6 +401,11 @@ pub struct Principle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RuleLevel {
+    /// The source did not declare a normative strength for this rule.
+    ///
+    /// This preserves source meaning during migration without treating an
+    /// inferred default as a governance decision.
+    Unspecified,
     Must,
     Should,
     May,
@@ -652,6 +657,19 @@ mod tests {
         )
         .expect("absent lifecycle target");
         assert_eq!(absent.lifecycle, ArtifactTargetLifecycle::Absent);
+    }
+
+    #[test]
+    fn unspecified_rule_level_round_trips_without_becoming_enforceable() {
+        let rule: Rule = serde_yaml::from_str(
+            "id: governance\nlevel: unspecified\nstatement: Preserve source meaning.\ngoverned_by: [PHIL-001#principle.source]\n",
+        )
+        .expect("unspecified rule level");
+        assert_eq!(rule.level, RuleLevel::Unspecified);
+        assert_eq!(
+            serde_yaml::to_string(&rule).expect("serialize rule"),
+            "id: governance\nlevel: unspecified\nstatement: Preserve source meaning.\ngoverned_by:\n- PHIL-001#principle.source\napplies_to:\n  roles: []\nenforcement: null\n"
+        );
     }
 
     #[test]
