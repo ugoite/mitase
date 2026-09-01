@@ -1,0 +1,327 @@
+name: release-candidate
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CARGO_TARGET_DIR: target/rust
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact commit to build and verify
+        required: true
+        type: string
+
+concurrency:
+  group: release-candidate-${{ inputs.source_sha }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      source_short: ${{ steps.resolve.outputs.source_short }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact source and release version
+        id: resolve
+        env:
+          INPUT_SOURCE_SHA: ${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$INPUT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_sha must be exactly 40 lowercase hexadecimal characters" >&2
+            exit 1
+          fi
+
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$INPUT_SOURCE_SHA" ]]; then
+            echo "checkout did not resolve the requested source SHA" >&2
+            exit 1
+          fi
+
+          version="$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          contents = Path("Cargo.toml").read_text(encoding="utf-8")
+          section = re.search(r"(?ms)^\[workspace\.package\]\s+(.*?)(?=^\[|\Z)", contents)
+          if section is None:
+              raise SystemExit("workspace package section is missing")
+          match = re.search(r'^version\s*=\s*"([^\"]+)"\s*$', section.group(1), re.MULTILINE)
+          if match is None:
+              raise SystemExit("workspace package version is missing")
+          version = match.group(1)
+          if not re.fullmatch(r"\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?", version):
+              raise SystemExit(f"unsupported release version: {version}")
+          print(f"v{version}")
+          PY
+          )"
+
+          {
+            echo "source_sha=$actual_sha"
+            echo "source_short=${actual_sha:0:12}"
+            echo "version=$version"
+          } >>"$GITHUB_OUTPUT"
+
+  build-artifacts:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            binary: mitase
+          - runner: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            binary: mitase
+            cross_compile: true
+            linker: aarch64-linux-gnu-gcc
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: mitase
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            binary: mitase
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: mitase.exe
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: 1.88.0
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-targets: "false"
+          cache-bin: "false"
+          shared-key: "release-candidate-cargo-deps"
+          add-job-id-key: "true"
+          save-if: "false"
+
+      - name: Install cross-compilation toolchain (aarch64-linux-gnu)
+        if: matrix.cross_compile == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+
+      - name: Build release binary (cross-compile aarch64 linux)
+        if: matrix.cross_compile == true
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Verify Linux glibc compatibility baseline
+        if: matrix.cross_compile == true
+        shell: bash
+        run: |
+          binary="target/rust/${{ matrix.target }}/release/${{ matrix.binary }}"
+          required_glibc="$(readelf --version-info "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sort -V | tail -1)"
+          baseline_glibc="GLIBC_2.36"
+
+          if [[ -z "$required_glibc" ]]; then
+            echo "failed to determine the GLIBC baseline for $binary" >&2
+            exit 1
+          fi
+
+          if [[ "$(printf '%s\n%s\n' "$baseline_glibc" "$required_glibc" | sort -V | tail -1)" != "$baseline_glibc" ]]; then
+            echo "aarch64 release binary requires $required_glibc, which is newer than Debian 12's $baseline_glibc" >&2
+            exit 1
+          fi
+
+      - name: Build release binary
+        if: matrix.cross_compile != true
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Package release artifact
+        shell: bash
+        run: |
+          scripts/ci/package-release.sh \
+            "${{ matrix.target }}" \
+            "target/rust/${{ matrix.target }}/release/${{ matrix.binary }}" \
+            release-artifacts
+
+      - name: Include release installer
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path("scripts/install-mitase.sh").read_text(encoding="utf-8")
+          rendered = source.replace("__MITASE_RELEASE_TAG__", "${{ needs.preflight.outputs.version }}")
+          Path("release-artifacts/install-mitase.sh").write_text(rendered, encoding="utf-8")
+          PY
+
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          cd release-artifacts
+          files=()
+          for file in *; do
+            if [[ "$file" != "checksums.sha256" ]]; then
+              files+=("$file")
+            fi
+          done
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${files[@]}" > checksums.sha256
+          else
+            shasum -a 256 "${files[@]}" > checksums.sha256
+          fi
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-artifacts/*
+
+      - name: Upload candidate artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: candidate-${{ matrix.target }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+
+  release-grade:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          install: true
+          cache: true
+
+      - name: Run release-grade repository gate
+        run: mise run ci
+
+  assemble-candidate:
+    needs:
+      - preflight
+      - build-artifacts
+      - release-grade
+    if: always() && needs.build-artifacts.result == 'success' && needs.release-grade.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      candidate_id: ${{ steps.manifest.outputs.candidate_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: candidate-*
+          path: ${{ runner.temp }}/candidate-input
+
+      - name: Stage exact candidate files
+        env:
+          CANDIDATE_INPUT: ${{ runner.temp }}/candidate-input
+        run: |
+          set -euo pipefail
+          rm -rf target/candidate-artifacts target/candidate-bundle
+          mkdir -p target/candidate-artifacts target/candidate-bundle/artifacts
+          CANDIDATE_INPUT="$CANDIDATE_INPUT" python3 - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+
+          source_root = Path(os.environ["CANDIDATE_INPUT"])
+          destination_root = Path("target/candidate-artifacts")
+          seen = set()
+          for source in sorted(path for path in source_root.rglob("*") if path.is_file()):
+              name = source.name
+              if name in seen:
+                  raise SystemExit(f"duplicate candidate artifact: {name}")
+              seen.add(name)
+              shutil.copy2(source, destination_root / name)
+
+          if not seen:
+              raise SystemExit("candidate artifact downloads are empty")
+          PY
+
+      - name: Write and verify candidate manifest
+        id: manifest
+        env:
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_args=()
+          while IFS= read -r artifact; do
+            artifact_args+=(--artifact "$(basename "$artifact")=$artifact")
+          done < <(find target/candidate-artifacts -maxdepth 1 -type f -print | sort)
+
+          python3 scripts/ci/release_candidate.py build \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repository . \
+            --output target/candidate-manifest.json \
+            "${artifact_args[@]}"
+          python3 scripts/ci/release_candidate.py validate \
+            --manifest target/candidate-manifest.json \
+            --artifact-root target/candidate-artifacts
+
+          candidate_id="$(python3 -c 'import json; print(json.load(open("target/candidate-manifest.json"))["candidate_id"])')"
+          echo "candidate_id=$candidate_id" >>"$GITHUB_OUTPUT"
+          {
+            echo "### Mitase release candidate"
+            echo "- version: `$VERSION`"
+            echo "- source SHA: `$SOURCE_SHA`"
+            echo "- candidate ID: `$candidate_id`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Assemble candidate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp target/candidate-manifest.json target/candidate-bundle/candidate-manifest.json
+          cp target/candidate-artifacts/* target/candidate-bundle/artifacts/
+          sha256sum target/candidate-bundle/candidate-manifest.json \
+            > target/candidate-bundle/candidate-manifest.json.sha256
+
+      - name: Upload immutable candidate bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mitase-release-candidate
+          path: target/candidate-bundle/*
+          if-no-files-found: error
+          compression-level: 0
