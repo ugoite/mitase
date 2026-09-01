@@ -25,7 +25,8 @@ inventory:
             - .github/pull_request_template.md
             - .github/workflows/ci.yml
             - .github/workflows/pr-require-close-issue.yml
-            - .github/workflows/release-artifacts.yml
+            - .github/workflows/release-candidate.yml
+            - .github/workflows/release-publish.yml
             - .pre-commit-config.yaml
             - .pre-commit-ci.yaml
             - build.rs

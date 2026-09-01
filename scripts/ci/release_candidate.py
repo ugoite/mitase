@@ -142,6 +142,23 @@ def validate_manifest(manifest: object) -> dict[str, object]:
     return manifest
 
 
+def validate_artifact_bytes(manifest: dict[str, object], artifact_root: Path) -> None:
+    artifacts = manifest["artifacts"]
+    assert isinstance(artifacts, list)
+    for artifact in artifacts:
+        assert isinstance(artifact, dict)
+        name = artifact["name"]
+        digest = artifact["sha256"]
+        assert isinstance(name, str)
+        assert isinstance(digest, str)
+        actual_digest = digest_file(artifact_root / name)
+        if actual_digest != digest:
+            raise CandidateError(
+                f"artifact digest does not match manifest for {name}: "
+                f"expected {digest}, got {actual_digest}"
+            )
+
+
 def build_manifest(
     version: str, source_sha: str, repository: Path, artifact_arguments: list[str]
 ) -> dict[str, object]:
@@ -190,6 +207,10 @@ def validate_command(arguments: argparse.Namespace) -> None:
     validate_manifest(manifest)
     if raw_manifest != canonical_bytes(manifest):
         raise CandidateError("candidate manifest is not in canonical encoding")
+    if arguments.candidate_id is not None and manifest["candidate_id"] != arguments.candidate_id:
+        raise CandidateError("candidate_id does not match the requested candidate")
+    if arguments.artifact_root is not None:
+        validate_artifact_bytes(manifest, arguments.artifact_root)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -206,6 +227,12 @@ def parser() -> argparse.ArgumentParser:
 
     validate = commands.add_parser("validate", help="validate a candidate manifest")
     validate.add_argument("--manifest", type=Path, required=True)
+    validate.add_argument("--candidate-id")
+    validate.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="directory containing files named by the manifest artifacts",
+    )
     validate.set_defaults(handler=validate_command)
     return command_parser
 
