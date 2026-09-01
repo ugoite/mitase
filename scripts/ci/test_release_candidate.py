@@ -166,6 +166,24 @@ class ReleaseCandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(CandidateError, "does not match"):
             validate_manifest(manifest)
 
+    def test_noncanonical_manifest_encoding_is_rejected(self) -> None:
+        identity = {
+            "schema": "mitase/release-candidate/v1",
+            "version": "v0.1.0",
+            "source_sha": self.source_sha,
+            "artifacts": [
+                {"name": "a.tar.gz", "sha256": "sha256:" + "a" * 64},
+                {"name": "b.tar.gz", "sha256": "sha256:" + "b" * 64},
+            ],
+        }
+        manifest = {**identity, "candidate_id": candidate_id(identity)}
+        manifest["artifacts"] = list(reversed(manifest["artifacts"]))
+        path = self.repository / "candidate.json"
+        path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        result = self.run_cli("validate", "--manifest", str(path))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not in canonical encoding", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -183,10 +183,13 @@ def build_command(arguments: argparse.Namespace) -> None:
 
 def validate_command(arguments: argparse.Namespace) -> None:
     try:
-        manifest = json.loads(arguments.manifest.read_text(encoding="utf-8"))
+        raw_manifest = arguments.manifest.read_bytes()
+        manifest = json.loads(raw_manifest.decode("utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise CandidateError(f"unable to read candidate manifest: {error}") from error
     validate_manifest(manifest)
+    if raw_manifest != canonical_bytes(manifest):
+        raise CandidateError("candidate manifest is not in canonical encoding")
 
 
 def parser() -> argparse.ArgumentParser:
