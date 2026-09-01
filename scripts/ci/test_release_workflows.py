@@ -17,6 +17,17 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertTrue(CANDIDATE.is_file())
         self.assertTrue(PUBLISH.is_file())
 
+    def test_old_release_authorities_are_removed(self) -> None:
+        self.assertFalse((ROOT / ".github/workflows/release-please.yml").exists())
+        self.assertFalse((ROOT / ".release-please-manifest.json").exists())
+        self.assertFalse((ROOT / "release-please-config.json").exists())
+        installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.1.0"', installer)
+        self.assertNotIn("__MITASE_RELEASE_TAG__", installer)
+        candidate = CANDIDATE.read_text(encoding="utf-8")
+        self.assertIn('Path("Cargo.toml")', candidate)
+        self.assertIn(r"\[workspace\.package\]", candidate)
+
     def test_candidate_requires_source_sha_and_builds_manifest_after_packaging(self) -> None:
         workflow = CANDIDATE.read_text(encoding="utf-8")
         for required in (
@@ -31,6 +42,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             self.assertIn(required, workflow)
         self.assertNotIn("gh release create", workflow)
         self.assertNotIn("oras push", workflow)
+        self.assertNotIn("__MITASE_RELEASE_TAG__", workflow)
 
     def test_promotion_downloads_by_run_id_and_never_builds(self) -> None:
         workflow = PUBLISH.read_text(encoding="utf-8")

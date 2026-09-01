@@ -6,7 +6,7 @@ set -euo pipefail
 DEFAULT_REPOSITORY="ugoite/mitase"
 DEFAULT_PACKAGE_HOST="ghcr.io"
 DEFAULT_PACKAGE_SCHEME="https"
-DEFAULT_VERSION_SELECTOR="__MITASE_RELEASE_TAG__"
+DEFAULT_VERSION_SELECTOR="v0.1.0"
 tmp_dir=""
 
 cleanup_tmp_dir() {
@@ -90,7 +90,7 @@ normalize_version_selector() {
 resolve_default_release_tag() {
   local script_dir repo_cargo_toml version
 
-  if [[ "$DEFAULT_VERSION_SELECTOR" != "__MITASE_RELEASE_TAG__" ]]; then
+  if [[ -n "$DEFAULT_VERSION_SELECTOR" ]]; then
     printf '%s\n' "$DEFAULT_VERSION_SELECTOR"
     return 0
   fi
