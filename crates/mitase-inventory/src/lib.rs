@@ -415,7 +415,11 @@ fn javascript_string_value(literal: &str) -> Result<String> {
                     }
                 }
             }
-            other => bail!("unsupported test title escape \\{other}"),
+            // ECMAScript's NonEscapeCharacter sequence evaluates to the
+            // character itself (for example, `\a` evaluates to `a`). It is
+            // still distinct from malformed hexadecimal/Unicode escapes,
+            // which are rejected by the branches above.
+            other => value.push(other),
         }
     }
     Ok(value)
@@ -3694,6 +3698,11 @@ mod tests {
         let resolved = resolve_test("javascript", surrogate, "surrogate 😀")
             .expect("surrogate pair test title escape");
         assert_eq!(resolved.identity, "surrogate 😀");
+
+        let non_escape = r#"it("non-escape \a \z \&", () => {});"#;
+        let resolved = resolve_test("javascript", non_escape, "non-escape a z &")
+            .expect("ECMAScript non-escape title");
+        assert_eq!(resolved.identity, "non-escape a z &");
     }
 
     #[test]
