@@ -3205,6 +3205,28 @@ mod tests {
         })
     }
 
+    #[test]
+    fn unspecified_rule_level_does_not_require_enforcement_evidence() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let policy_path = tempdir.path().join("spec/policy.yaml");
+        let policy = fs::read_to_string(&policy_path)
+            .expect("policy fixture")
+            .replace("level: must", "level: unspecified");
+        fs::write(policy_path, policy).expect("updated policy fixture");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.rule_id != "MITASE-POLICY-003"),
+            "unspecified rules must not be treated as must rules: {:?}",
+            result.diagnostics
+        );
+    }
+
     fn verification_fixture(
         feature_status: &str,
         implementation_lifecycle: Option<&str>,
