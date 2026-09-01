@@ -219,6 +219,9 @@ jobs:
           install: true
           cache: true
 
+      - name: Install Rust CI components
+        run: rustup component add rustfmt clippy
+
       - name: Run release-grade repository gate
         run: mise run ci
 
