@@ -184,6 +184,59 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not in canonical encoding", result.stderr)
 
+    def test_candidate_id_and_artifact_bytes_are_verified(self) -> None:
+        artifact = self.repository / "artifact.tar.gz"
+        artifact.write_bytes(b"candidate-bytes\n")
+        manifest_path = self.repository / "candidate.json"
+        build_result = self.run_cli(
+            "build",
+            "--version",
+            "v0.1.0",
+            "--source-sha",
+            self.source_sha,
+            "--repository",
+            str(self.repository),
+            "--output",
+            str(manifest_path),
+            "--artifact",
+            "artifact.tar.gz=" + str(artifact),
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        candidate = manifest["candidate_id"]
+
+        valid = self.run_cli(
+            "validate",
+            "--manifest",
+            str(manifest_path),
+            "--candidate-id",
+            candidate,
+            "--artifact-root",
+            str(self.repository),
+        )
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+
+        mismatch = self.run_cli(
+            "validate",
+            "--manifest",
+            str(manifest_path),
+            "--candidate-id",
+            "sha256:" + "0" * 64,
+        )
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn("requested candidate", mismatch.stderr)
+
+        artifact.write_bytes(b"tampered\n")
+        tampered = self.run_cli(
+            "validate",
+            "--manifest",
+            str(manifest_path),
+            "--artifact-root",
+            str(self.repository),
+        )
+        self.assertNotEqual(tampered.returncode, 0)
+        self.assertIn("does not match manifest", tampered.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
