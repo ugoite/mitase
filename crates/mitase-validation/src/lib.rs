@@ -2779,6 +2779,15 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         );
                     }
                 }
+                Selector::Test { name } if name.trim().is_empty() => {
+                    push(
+                        out,
+                        "MITASE-TARGET-001",
+                        "test selector must not be empty",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
                 Selector::Heading { value } if value.trim().is_empty() => {
                     push(
                         out,

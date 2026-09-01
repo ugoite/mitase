@@ -275,6 +275,7 @@ pub enum OwnershipSelector {
 pub enum ExactSelector {
     File,
     Symbol { name: String },
+    Test { name: String },
     Operation { method: String, path: String },
     Heading { value: String },
     JsonPointer { value: String },
@@ -642,6 +643,10 @@ mod tests {
             serde_yaml::from_str::<ExactSelector>("kind: symbol\nname: one\nextra: true\n")
                 .is_err()
         );
+        assert!(matches!(
+            serde_yaml::from_str::<ExactSelector>("kind: test\nname: keyword-first\n").unwrap(),
+            ExactSelector::Test { name } if name == "keyword-first"
+        ));
     }
 
     #[test]
