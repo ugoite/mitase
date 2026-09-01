@@ -55,6 +55,17 @@ class ReleaseWorkflowTests(unittest.TestCase):
             workflow.index("name: Publish exact package archives"),
         )
 
+    def test_candidate_manifest_checksum_is_relative_to_bundle_root(self) -> None:
+        workflow = CANDIDATE.read_text(encoding="utf-8")
+        self.assertIn(
+            "sha256sum candidate-manifest.json > candidate-manifest.json.sha256",
+            workflow,
+        )
+        self.assertNotIn(
+            "sha256sum target/candidate-bundle/candidate-manifest.json",
+            workflow,
+        )
+
     def test_new_workflow_actions_are_commit_pinned(self) -> None:
         for workflow_path in (CANDIDATE, PUBLISH):
             for line in workflow_path.read_text(encoding="utf-8").splitlines():
