@@ -45,6 +45,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("oras push", workflow)
         self.assertNotIn("__MITASE_RELEASE_TAG__", workflow)
 
+    def test_candidate_checksum_artifacts_are_unique_per_target(self) -> None:
+        workflow = CANDIDATE.read_text(encoding="utf-8")
+        self.assertIn('checksum_file="checksums-${{ matrix.target }}.sha256"', workflow)
+        self.assertNotIn("> checksums.sha256", workflow)
+
     def test_promotion_downloads_by_run_id_and_never_builds(self) -> None:
         workflow = PUBLISH.read_text(encoding="utf-8")
         for required in (

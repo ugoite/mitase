@@ -177,16 +177,17 @@ jobs:
         shell: bash
         run: |
           cd release-artifacts
+          checksum_file="checksums-${{ matrix.target }}.sha256"
           files=()
           for file in *; do
-            if [[ "$file" != "checksums.sha256" ]]; then
+            if [[ "$file" != "$checksum_file" ]]; then
               files+=("$file")
             fi
           done
           if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${files[@]}" > checksums.sha256
+            sha256sum "${files[@]}" > "$checksum_file"
           else
-            shasum -a 256 "${files[@]}" > checksums.sha256
+            shasum -a 256 "${files[@]}" > "$checksum_file"
           fi
 
       - name: Attest release artifacts
