@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail};
 use mitase_project_model::InventoryProfile;
 use mitase_spec_model::{RepoPath, format_sha256};
+use proc_macro2::LineColumn;
 use quote::ToTokens;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -89,6 +90,359 @@ pub struct SourceSpan {
     pub byte_end: usize,
     pub line_start: usize,
     pub line_end: usize,
+}
+
+/// An execution-free identity and source range for one native test.
+///
+/// Inventory exposes these identities so a verification target can name an
+/// existing test without requiring the repository to reshape its test code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestResolution {
+    pub identity: String,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub line_start: usize,
+    pub line_end: usize,
+}
+
+/// Discover native test identities for a supported source adapter.
+pub fn discover_tests(adapter: &str, source: &str) -> Result<Vec<TestResolution>> {
+    match adapter {
+        "rust" => discover_rust_tests(source),
+        "typescript" | "javascript" => discover_javascript_tests(adapter, source),
+        _ => bail!("adapter {adapter} does not support test selectors"),
+    }
+}
+
+fn discover_tests_for_path(
+    adapter: &str,
+    path: &RepoPath,
+    source: &str,
+) -> Result<Vec<TestResolution>> {
+    match adapter {
+        "rust" => discover_rust_tests(source),
+        "typescript" | "javascript" => discover_javascript_tests_for_path(adapter, path, source),
+        _ => bail!("adapter {adapter} does not support test selectors"),
+    }
+}
+
+/// Resolve one unique native test identity without executing the test.
+pub fn resolve_test(adapter: &str, source: &str, name: &str) -> Result<TestResolution> {
+    resolve_test_from_tests(discover_tests(adapter, source)?, name)
+}
+
+/// Resolve one native test using the source path to select the language
+/// grammar, including JSX/TSX files.
+pub fn resolve_test_in_path(
+    adapter: &str,
+    path: &RepoPath,
+    source: &str,
+    name: &str,
+) -> Result<TestResolution> {
+    resolve_test_from_tests(discover_tests_for_path(adapter, path, source)?, name)
+}
+
+fn resolve_test_from_tests(tests: Vec<TestResolution>, name: &str) -> Result<TestResolution> {
+    if name.trim().is_empty() {
+        bail!("test selector must not be empty");
+    }
+    let matches = tests
+        .into_iter()
+        .filter(|test| test.identity == name)
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => bail!("test {name} not found"),
+        [test] => Ok(test.clone()),
+        _ => bail!("test {name} is ambiguous"),
+    }
+}
+
+fn has_test_attribute(attributes: &[syn::Attribute]) -> bool {
+    attributes.iter().any(|attribute| {
+        attribute
+            .path()
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "test")
+    })
+}
+
+fn test_reachability(active: bool, profile: &str, attributes: &[String]) -> ArtifactReachability {
+    if active {
+        ArtifactReachability::Active
+    } else {
+        ArtifactReachability::Conditional {
+            profile: if attributes.is_empty() {
+                profile.to_owned()
+            } else {
+                attributes.join(",")
+            },
+        }
+    }
+}
+
+fn discover_rust_tests(source: &str) -> Result<Vec<TestResolution>> {
+    let syntax = syn::parse_file(source)?;
+    let offsets = line_offsets(source);
+    struct Visitor<'a> {
+        source: &'a str,
+        offsets: Vec<usize>,
+        modules: Vec<String>,
+        tests: Vec<TestResolution>,
+    }
+
+    impl<'ast> Visit<'ast> for Visitor<'_> {
+        fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+            self.modules.push(item.ident.to_string());
+            syn::visit::visit_item_mod(self, item);
+            self.modules.pop();
+        }
+
+        fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+            if !has_test_attribute(&item.attrs) {
+                return;
+            }
+            let start = item.span().start();
+            let end = item.span().end();
+            let byte_start = line_column_to_byte(self.source, &self.offsets, start);
+            let byte_end = line_column_to_byte(self.source, &self.offsets, end);
+            let identity = self
+                .modules
+                .iter()
+                .chain(std::iter::once(&item.sig.ident.to_string()))
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("::");
+            self.tests.push(TestResolution {
+                identity,
+                byte_start,
+                byte_end,
+                line_start: start.line.max(1),
+                line_end: end.line.max(start.line.max(1)),
+            });
+        }
+    }
+
+    let mut visitor = Visitor {
+        source,
+        offsets,
+        modules: Vec::new(),
+        tests: Vec::new(),
+    };
+    visitor.visit_file(&syntax);
+    Ok(visitor.tests)
+}
+
+fn discover_javascript_tests(adapter: &str, source: &str) -> Result<Vec<TestResolution>> {
+    discover_javascript_tests_with_language(adapter, source, false)
+}
+
+fn discover_javascript_tests_for_path(
+    adapter: &str,
+    path: &RepoPath,
+    source: &str,
+) -> Result<Vec<TestResolution>> {
+    let path = path.to_string_lossy();
+    let tsx = matches!(
+        (
+            adapter,
+            path.rsplit_once('.').map(|(_, extension)| extension)
+        ),
+        ("javascript" | "typescript", Some("jsx" | "tsx"))
+    );
+    discover_javascript_tests_with_language(adapter, source, tsx)
+}
+
+fn discover_javascript_tests_with_language(
+    adapter: &str,
+    source: &str,
+    tsx: bool,
+) -> Result<Vec<TestResolution>> {
+    let mut parser = TsParser::new();
+    parser
+        .set_language(&javascript_language(adapter, tsx))
+        .map_err(|error| anyhow::anyhow!("load JavaScript/TypeScript grammar: {error}"))?;
+    let tree = parser
+        .parse(source, None)
+        .context("parse JavaScript/TypeScript tests")?;
+    if tree.root_node().has_error() {
+        bail!(
+            "JavaScript/TypeScript source has syntax errors; refusing approximate test inventory"
+        );
+    }
+
+    fn visit(node: Node<'_>, source: &str, tests: &mut Vec<TestResolution>) -> Result<()> {
+        if node.kind() == "call_expression"
+            && let Some(function) = node.child_by_field_name("function")
+            && function.kind() == "identifier"
+            && matches!(&source[function.byte_range()], "it" | "test")
+            && let Some(arguments) = node.child_by_field_name("arguments")
+            && let Some(title) = arguments.named_child(0)
+            && title.kind() == "string"
+        {
+            let name = javascript_string_value(&source[title.byte_range()])?;
+            if name.trim().is_empty() {
+                bail!("test title must not be empty");
+            }
+            tests.push(TestResolution {
+                identity: name,
+                byte_start: node.start_byte(),
+                byte_end: node.end_byte(),
+                line_start: node.start_position().row + 1,
+                line_end: node.end_position().row + 1,
+            });
+        }
+        for child in node.named_children(&mut node.walk()) {
+            visit(child, source, tests)?;
+        }
+        Ok(())
+    }
+
+    let mut tests = Vec::new();
+    visit(tree.root_node(), source, &mut tests)?;
+    Ok(tests)
+}
+
+fn javascript_language(adapter: &str, tsx: bool) -> tree_sitter::Language {
+    if adapter == "javascript" {
+        if tsx {
+            tree_sitter_typescript::LANGUAGE_TSX.into()
+        } else {
+            tree_sitter_javascript::LANGUAGE.into()
+        }
+    } else if tsx {
+        tree_sitter_typescript::LANGUAGE_TSX.into()
+    } else {
+        tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+    }
+}
+
+fn javascript_string_value(literal: &str) -> Result<String> {
+    let Some(quote @ ('\'' | '"')) = literal.chars().next() else {
+        bail!("test title must be a quoted string");
+    };
+    if !literal.ends_with(quote) {
+        bail!("test title string is unterminated");
+    }
+    let characters = literal[quote.len_utf8()..literal.len() - quote.len_utf8()]
+        .chars()
+        .collect::<Vec<_>>();
+    let mut value = String::new();
+    let mut index = 0;
+    while index < characters.len() {
+        let character = characters[index];
+        index += 1;
+        if character != '\\' {
+            value.push(character);
+            continue;
+        }
+        let escape = characters
+            .get(index)
+            .copied()
+            .context("test title string has an incomplete escape")?;
+        index += 1;
+        match escape {
+            'n' => value.push('\n'),
+            'r' => value.push('\r'),
+            't' => value.push('\t'),
+            'b' => value.push('\u{0008}'),
+            'f' => value.push('\u{000c}'),
+            'v' => value.push('\u{000b}'),
+            '0' if !characters
+                .get(index)
+                .is_some_and(|character| character.is_ascii_digit()) =>
+            {
+                value.push('\0')
+            }
+            '\n' => {}
+            '\r' => {
+                if characters.get(index) == Some(&'\n') {
+                    index += 1;
+                }
+            }
+            '\\' | '\'' | '"' => value.push(escape),
+            'x' => value.push(
+                char::from_u32(parse_javascript_hex(&characters, &mut index, 2)?)
+                    .context("test title string has an invalid escape code point")?,
+            ),
+            'u' => {
+                if characters.get(index) == Some(&'{') {
+                    index += 1;
+                    let start = index;
+                    while characters
+                        .get(index)
+                        .is_some_and(|character| *character != '}')
+                    {
+                        index += 1;
+                    }
+                    if characters.get(index) != Some(&'}') || start == index || index - start > 6 {
+                        bail!("test title string has an invalid Unicode code-point escape");
+                    }
+                    let code_point = characters[start..index]
+                        .iter()
+                        .try_fold(0u32, |value, character| {
+                            character.to_digit(16).map(|digit| value * 16 + digit)
+                        })
+                        .context("test title string has an invalid Unicode code-point escape")?;
+                    index += 1;
+                    value.push(
+                        char::from_u32(code_point)
+                            .context("test title string has an invalid Unicode code point")?,
+                    );
+                } else {
+                    let code_unit = parse_javascript_hex(&characters, &mut index, 4)?;
+                    if (0xD800..=0xDBFF).contains(&code_unit) {
+                        if characters.get(index..index + 2) != Some(&['\\', 'u']) {
+                            bail!("test title string has an unpaired Unicode surrogate");
+                        }
+                        index += 2;
+                        let low = parse_javascript_hex(&characters, &mut index, 4)?;
+                        if !(0xDC00..=0xDFFF).contains(&low) {
+                            bail!("test title string has an invalid Unicode surrogate pair");
+                        }
+                        let code_point = 0x1_0000 + ((code_unit - 0xD800) << 10) + (low - 0xDC00);
+                        value.push(
+                            char::from_u32(code_point)
+                                .context("test title string has an invalid Unicode code point")?,
+                        );
+                    } else if (0xDC00..=0xDFFF).contains(&code_unit) {
+                        bail!("test title string has an unpaired Unicode surrogate");
+                    } else {
+                        value.push(
+                            char::from_u32(code_unit)
+                                .context("test title string has an invalid escape code point")?,
+                        );
+                    }
+                }
+            }
+            other => bail!("unsupported test title escape \\{other}"),
+        }
+    }
+    Ok(value)
+}
+
+fn parse_javascript_hex(characters: &[char], index: &mut usize, length: usize) -> Result<u32> {
+    let end = index.saturating_add(length);
+    let digits = characters
+        .get(*index..end)
+        .context("test title string has an incomplete hexadecimal escape")?;
+    let value = digits
+        .iter()
+        .try_fold(0u32, |value, character| {
+            character.to_digit(16).map(|digit| value * 16 + digit)
+        })
+        .context("test title string has an invalid hexadecimal escape")?;
+    *index = end;
+    Ok(value)
+}
+
+fn line_column_to_byte(source: &str, offsets: &[usize], location: LineColumn) -> usize {
+    offsets
+        .get(location.line.saturating_sub(1))
+        .copied()
+        .unwrap_or(source.len())
+        .saturating_add(location.column)
+        .min(source.len())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -909,6 +1263,15 @@ fn source_symbol_units(
             }
         }
     }
+    for test in discover_javascript_tests_for_path(adapter, &repo_path, &source)? {
+        units.push(test_unit(
+            adapter,
+            repo_path.clone(),
+            &source,
+            test,
+            ArtifactReachability::Active,
+        ));
+    }
     for child in star_reexports {
         {
             // Star re-exports cannot be expanded without following another
@@ -1093,6 +1456,36 @@ fn line_start_offset(source: &str, line_index: usize) -> usize {
         .sum()
 }
 
+fn test_unit(
+    adapter: &str,
+    path: RepoPath,
+    source: &str,
+    test: TestResolution,
+    reachability: ArtifactReachability,
+) -> ArtifactUnit {
+    let excerpt = &source[test.byte_start..test.byte_end];
+    ArtifactUnit {
+        adapter: adapter.into(),
+        path: path.clone(),
+        identity: format!(
+            "{adapter}:{}::test::{}",
+            path.to_string_lossy(),
+            test.identity
+        ),
+        kind: ArtifactUnitKind::Symbol,
+        exposure: ArtifactExposure::Test,
+        reachability,
+        span: SourceSpan {
+            byte_start: test.byte_start,
+            byte_end: test.byte_end,
+            line_start: test.line_start,
+            line_end: test.line_end,
+        },
+        digest: digest(excerpt.as_bytes()),
+        structural_digest: structural_digest(excerpt, &test.identity),
+    }
+}
+
 fn javascript_declaration_names(
     source: &str,
     declaration: Node<'_>,
@@ -1249,7 +1642,7 @@ fn discover_rust(
         });
         let mut visitor = RustVisitor {
             adapter: "rust".into(),
-            path: repo_path,
+            path: repo_path.clone(),
             source: &source,
             offsets: line_offsets(&source),
             units: Vec::new(),
@@ -1325,6 +1718,25 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
+        if has_test_attribute(&item.attrs) {
+            let start = item.span().start();
+            let end = item.span().end();
+            let mut identity = self.module_path.iter().skip(1).cloned().collect::<Vec<_>>();
+            identity.push(item.sig.ident.to_string());
+            self.units.push(test_unit(
+                "rust",
+                self.path.clone(),
+                self.source,
+                TestResolution {
+                    identity: identity.join("::"),
+                    byte_start: line_column_to_byte(self.source, &self.offsets, start),
+                    byte_end: line_column_to_byte(self.source, &self.offsets, end),
+                    line_start: start.line.max(1),
+                    line_end: end.line.max(start.line.max(1)),
+                },
+                test_reachability(active, self.profile, &self.attributes),
+            ));
+        }
         // Function bodies can contain local items (for example `const KNOWN`
         // helper tables). They are not module-level semantic targets and
         // would otherwise collide with an item in a different function.
@@ -2938,6 +3350,9 @@ mod tests {
                 "pub mod external;\n",
                 "#[cfg(feature = \"enterprise\")]\n",
                 "pub mod inline { pub fn nested() {} }\n",
+                "#[cfg(feature = \"enterprise\")]\n",
+                "#[test]\n",
+                "fn enterprise_test() {}\n",
                 "pub fn active() {}\n",
             ),
         )
@@ -2983,6 +3398,10 @@ mod tests {
         }
         assert!(units.iter().any(|unit| {
             unit.identity.ends_with("::active") && unit.reachability == ArtifactReachability::Active
+        }));
+        assert!(units.iter().any(|unit| {
+            unit.identity.ends_with("::test::enterprise_test")
+                && matches!(unit.reachability, ArtifactReachability::Conditional { .. })
         }));
     }
 
@@ -3225,6 +3644,48 @@ mod tests {
             unit.identity == "go:tests/service_test.go::TestService"
                 && unit.exposure == ArtifactExposure::Test
         }));
+    }
+
+    #[test]
+    fn native_test_identity_resolution_preserves_titles_and_rejects_duplicates() {
+        let source = concat!(
+            "it(\"keyword-first\", async () => {\n",
+            "  expect(true).toBe(true);\n",
+            "});\n",
+            "test(\"other\", () => {});\n",
+        );
+        let tests = discover_tests("typescript", source).expect("tests");
+        assert_eq!(
+            tests
+                .iter()
+                .map(|test| test.identity.as_str())
+                .collect::<Vec<_>>(),
+            ["keyword-first", "other"]
+        );
+        assert!(tests[0].byte_end > tests[0].byte_start);
+        assert_eq!(tests[0].line_start, 1);
+        assert_eq!(tests[0].line_end, 3);
+
+        let rust = "#[test]\nfn exact_test() {}\nfn helper() {}\n";
+        let resolved = resolve_test("rust", rust, "exact_test").expect("Rust test");
+        assert_eq!(resolved.identity, "exact_test");
+        assert_eq!(resolved.line_start, 1);
+        assert_eq!(resolved.line_end, 2);
+
+        let duplicate = r#"it("duplicate", () => {}); it("duplicate", () => {});"#;
+        let error = resolve_test("javascript", duplicate, "duplicate")
+            .expect_err("duplicate titles must not resolve");
+        assert!(error.to_string().contains("ambiguous"));
+
+        let escaped = r#"it("unicode \u{1f600}", () => {});"#;
+        let resolved =
+            resolve_test("javascript", escaped, "unicode 😀").expect("Unicode test title escape");
+        assert_eq!(resolved.identity, "unicode 😀");
+
+        let surrogate = r#"it("surrogate \uD83D\uDE00", () => {});"#;
+        let resolved = resolve_test("javascript", surrogate, "surrogate 😀")
+            .expect("surrogate pair test title escape");
+        assert_eq!(resolved.identity, "surrogate 😀");
     }
 
     #[test]

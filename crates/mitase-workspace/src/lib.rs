@@ -2,7 +2,9 @@
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use mitase_code_intel::resolve_symbol;
-use mitase_inventory::{ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry};
+use mitase_inventory::{
+    ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry, resolve_test_in_path,
+};
 use mitase_project_model::{CONFIG_SCHEMA, ProjectConfig};
 use mitase_spec_model::format_sha256;
 use mitase_spec_model::*;
@@ -713,7 +715,14 @@ fn artifact_unit_matches_selector(unit: &ArtifactUnit, selector: &Selector) -> b
     match selector {
         Selector::File => unreachable!("file selectors return before semantic identity parsing"),
         Selector::Symbol { name } => {
-            unit.kind == ArtifactUnitKind::Symbol && symbol_identity_matches(identity, name)
+            unit.kind == ArtifactUnitKind::Symbol
+                && !identity.starts_with("test::")
+                && symbol_identity_matches(identity, name)
+        }
+        Selector::Test { name } => {
+            unit.kind == ArtifactUnitKind::Symbol
+                && unit.exposure == mitase_inventory::ArtifactExposure::Test
+                && identity.strip_prefix("test::") == Some(name.as_str())
         }
         Selector::Operation { method, path } => {
             unit.kind == ArtifactUnitKind::Operation
@@ -912,6 +921,7 @@ fn compile_excludes(patterns: &[mitase_project_model::RepoPathPattern]) -> Resul
 pub enum SelectorKind {
     File,
     Symbol,
+    Test,
     Operation,
     Heading,
     JsonPointer,
@@ -923,6 +933,7 @@ impl SelectorKind {
         match self {
             Self::File => "file",
             Self::Symbol => "symbol",
+            Self::Test => "test",
             Self::Operation => "operation",
             Self::Heading => "heading",
             Self::JsonPointer => "json-pointer",
@@ -935,6 +946,7 @@ pub fn selector_kind(selector: &Selector) -> SelectorKind {
     match selector {
         Selector::File => SelectorKind::File,
         Selector::Symbol { .. } => SelectorKind::Symbol,
+        Selector::Test { .. } => SelectorKind::Test,
         Selector::Operation { .. } => SelectorKind::Operation,
         Selector::Heading { .. } => SelectorKind::Heading,
         Selector::JsonPointer { .. } => SelectorKind::JsonPointer,
@@ -944,6 +956,8 @@ pub fn selector_kind(selector: &Selector) -> SelectorKind {
 
 const FILE_SELECTORS: &[SelectorKind] = &[SelectorKind::File];
 const SYMBOL_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Symbol];
+const TEST_SELECTORS: &[SelectorKind] =
+    &[SelectorKind::File, SelectorKind::Symbol, SelectorKind::Test];
 const MARKDOWN_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Heading];
 const OPENAPI_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Operation];
 const STRUCTURED_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::JsonPointer];
@@ -952,7 +966,8 @@ const HTML_SELECTORS: &[SelectorKind] = &[SelectorKind::File, SelectorKind::Mark
 /// The authoritative adapter × exact-selector compatibility matrix.
 pub fn supported_selector_kinds(adapter: &str) -> &'static [SelectorKind] {
     match adapter {
-        "rust" | "typescript" | "javascript" | "shell" | "python" | "go" => SYMBOL_SELECTORS,
+        "rust" | "typescript" | "javascript" => TEST_SELECTORS,
+        "shell" | "python" | "go" => SYMBOL_SELECTORS,
         "markdown" => MARKDOWN_SELECTORS,
         "openapi" => OPENAPI_SELECTORS,
         "json" | "json-schema" => STRUCTURED_SELECTORS,
@@ -1158,6 +1173,9 @@ pub fn resolve_artifact_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> 
             candidates: vec![],
         });
     }
+    if unit.identity.contains("::test::") {
+        return resolve_test_unit(workspace, unit);
+    }
     if unit.kind == ArtifactUnitKind::Symbol
         && matches!(unit.adapter.as_str(), "python" | "go" | "shell")
     {
@@ -1307,6 +1325,47 @@ pub fn resolve_artifact_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> 
         Err(error) => {
             ArtifactResolution::Unresolved(failure_for_unit(unit, error.to_string(), vec![]))
         }
+    }
+}
+
+fn resolve_test_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> ArtifactResolution {
+    let name =
+        match unit_semantic_identity(unit).and_then(|identity| identity.strip_prefix("test::")) {
+            Some(name) if !name.is_empty() => name,
+            _ => {
+                return ArtifactResolution::Unresolved(failure_for_unit(
+                    unit,
+                    format!("test identity is malformed: {}", unit.identity),
+                    vec![],
+                ));
+            }
+        };
+    let content = match workspace.read_bytes(&workspace.root.join(unit.path.as_path())) {
+        Ok(content) => content,
+        Err(error) => {
+            return ArtifactResolution::Unresolved(failure_for_unit(
+                unit,
+                format!("read inventory target source: {error}"),
+                vec![],
+            ));
+        }
+    };
+    let target = ArtifactTarget {
+        id: LocalId::from("semantic-test"),
+        adapter: unit.adapter.clone(),
+        path: unit.path.clone(),
+        selector: Selector::Test {
+            name: name.to_owned(),
+        },
+        lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
+        claims: vec![],
+    };
+    match resolve_target_from_content(&target, content) {
+        Ok(mut resolved) => {
+            resolved.identity = unit.identity.clone();
+            ArtifactResolution::Resolved(resolved)
+        }
+        Err(error) => classify_content_error(&target, error),
     }
 }
 
@@ -1517,6 +1576,22 @@ fn resolve_target_from_content(
                     hash_bytes(excerpt.as_bytes()),
                 )
             }
+            Selector::Test { name } => {
+                let resolved = resolve_test_in_path(&target.adapter, &target.path, &text, name)?;
+                let start = resolved.byte_start;
+                let end = resolved.byte_end;
+                let excerpt = text[start..end].to_string();
+                (
+                    format!("test {name}"),
+                    vec![name.clone()],
+                    start,
+                    end,
+                    resolved.line_start,
+                    resolved.line_end,
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
+            }
             Selector::Operation { method, path } => {
                 if method.trim().is_empty() || path.trim().is_empty() {
                     bail!("operation selector must not be empty");
@@ -1688,7 +1763,11 @@ fn failure_for_unit(
 ) -> ResolutionFailure {
     ResolutionFailure {
         adapter: unit.adapter.clone(),
-        selector: artifact_unit_kind_selector(&unit.kind),
+        selector: if unit.identity.contains("::test::") {
+            SelectorKind::Test
+        } else {
+            artifact_unit_kind_selector(&unit.kind)
+        },
         message,
         candidates,
     }
@@ -1708,6 +1787,7 @@ fn artifact_unit_kind_selector(kind: &ArtifactUnitKind) -> SelectorKind {
 fn unresolved_message(target: &ArtifactTarget) -> String {
     match &target.selector {
         Selector::Symbol { name } => format!("symbol {name} not found"),
+        Selector::Test { name } => format!("test {name} not found"),
         Selector::Operation { method, path } => {
             format!("operation {} {path} not found", method.to_ascii_uppercase())
         }
@@ -1721,6 +1801,7 @@ fn unresolved_message(target: &ArtifactTarget) -> String {
 fn ambiguous_message(target: &ArtifactTarget, matches: usize) -> String {
     let subject = match &target.selector {
         Selector::Symbol { name } => format!("symbol {name}"),
+        Selector::Test { name } => format!("test {name}"),
         Selector::Operation { method, path } => {
             format!("operation {} {path}", method.to_ascii_uppercase())
         }
@@ -1746,6 +1827,7 @@ fn target_identity(target: &ArtifactTarget, text: &str, byte_start: usize) -> St
     match &target.selector {
         Selector::File => format!("{}:{path}", target.adapter),
         Selector::Symbol { name } => format!("{}:{path}::{name}", target.adapter),
+        Selector::Test { name } => format!("{}:{path}::test::{name}", target.adapter),
         Selector::Operation {
             method,
             path: route,
@@ -2286,6 +2368,18 @@ mod tests {
                 value: "Overview".into(),
             }
         ));
+        assert!(selector_supports_adapter(
+            "typescript",
+            &Selector::Test {
+                name: "keyword-first".into(),
+            }
+        ));
+        assert!(!selector_supports_adapter(
+            "markdown",
+            &Selector::Test {
+                name: "keyword-first".into(),
+            }
+        ));
 
         let tempdir = tempdir().expect("tempdir");
         fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
@@ -2354,6 +2448,51 @@ mod tests {
             &["openapi".into()],
         );
         assert!(matches!(unsupported, ArtifactResolution::Unsupported(_)));
+    }
+
+    #[test]
+    fn test_selectors_resolve_native_javascript_tests_without_helper_symbols() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
+        fs::write(
+            tempdir.path().join("src/search.test.tsx"),
+            "it(\"keyword-first\", async () => {\n  expect(true).toBe(true);\n});\nit(\"suite::keyword-first\", () => {});\nconst View = () => <main />;\n",
+        )
+        .expect("test source");
+
+        let resolved = resolve_target(
+            tempdir.path(),
+            &target(
+                "typescript",
+                "src/search.test.tsx",
+                Selector::Test {
+                    name: "keyword-first".into(),
+                },
+            ),
+        );
+        let resolved = resolved.resolved().expect("native test resolves");
+        assert_eq!(
+            resolved.identity,
+            "typescript:src/search.test.tsx::test::keyword-first"
+        );
+        assert!(resolved.excerpt.contains("expect(true).toBe(true)"));
+
+        fs::write(
+            tempdir.path().join("src/search.test.tsx"),
+            "it(\"duplicate\", () => {});\nit(\"duplicate\", () => {});\n",
+        )
+        .expect("duplicate test source");
+        let ambiguous = resolve_target(
+            tempdir.path(),
+            &target(
+                "typescript",
+                "src/search.test.tsx",
+                Selector::Test {
+                    name: "duplicate".into(),
+                },
+            ),
+        );
+        assert!(matches!(ambiguous, ArtifactResolution::Ambiguous(_)));
     }
 
     #[test]
