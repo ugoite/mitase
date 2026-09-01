@@ -1263,13 +1263,18 @@ fn source_symbol_units(
             }
         }
     }
+    let mut test_occurrences = BTreeMap::<String, usize>::new();
     for test in discover_javascript_tests_for_path(adapter, &repo_path, &source)? {
+        let occurrence = test_occurrences.entry(test.identity.clone()).or_insert(0);
+        let identity_occurrence = *occurrence;
+        *occurrence += 1;
         units.push(test_unit(
             adapter,
             repo_path.clone(),
             &source,
             test,
             ArtifactReachability::Active,
+            identity_occurrence,
         ));
     }
     for child in star_reexports {
@@ -1462,16 +1467,18 @@ fn test_unit(
     source: &str,
     test: TestResolution,
     reachability: ArtifactReachability,
+    occurrence: usize,
 ) -> ArtifactUnit {
     let excerpt = &source[test.byte_start..test.byte_end];
+    let identity = format!(
+        "{adapter}:{}::test::{}@{occurrence}",
+        path.to_string_lossy(),
+        test.identity,
+    );
     ArtifactUnit {
         adapter: adapter.into(),
         path: path.clone(),
-        identity: format!(
-            "{adapter}:{}::test::{}",
-            path.to_string_lossy(),
-            test.identity
-        ),
+        identity,
         kind: ArtifactUnitKind::Symbol,
         exposure: ArtifactExposure::Test,
         reachability,
@@ -1735,6 +1742,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
                     line_end: end.line.max(start.line.max(1)),
                 },
                 test_reachability(active, self.profile, &self.attributes),
+                0,
             ));
         }
         // Function bodies can contain local items (for example `const KNOWN`
@@ -3400,7 +3408,7 @@ mod tests {
             unit.identity.ends_with("::active") && unit.reachability == ArtifactReachability::Active
         }));
         assert!(units.iter().any(|unit| {
-            unit.identity.ends_with("::test::enterprise_test")
+            unit.identity.ends_with("::test::enterprise_test@0")
                 && matches!(unit.reachability, ArtifactReachability::Conditional { .. })
         }));
     }
@@ -3686,6 +3694,34 @@ mod tests {
         let resolved = resolve_test("javascript", surrogate, "surrogate 😀")
             .expect("surrogate pair test title escape");
         assert_eq!(resolved.identity, "surrogate 😀");
+    }
+
+    #[test]
+    fn javascript_inventory_keeps_duplicate_test_titles_as_distinct_units() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("search.test.ts");
+        fs::write(
+            &path,
+            "it(\"duplicate\", () => {});\nit(\"duplicate\", () => {});\n",
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+
+        let tests = source_symbol_units(&context, path, "typescript")
+            .unwrap()
+            .into_iter()
+            .filter(|unit| unit.exposure == ArtifactExposure::Test)
+            .collect::<Vec<_>>();
+        assert_eq!(tests.len(), 2);
+        assert_ne!(tests[0].identity, tests[1].identity);
+        assert!(tests[0].identity.ends_with("::test::duplicate@0"));
+        assert!(tests[1].identity.ends_with("::test::duplicate@1"));
     }
 
     #[test]

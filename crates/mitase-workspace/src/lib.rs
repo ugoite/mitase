@@ -722,7 +722,7 @@ fn artifact_unit_matches_selector(unit: &ArtifactUnit, selector: &Selector) -> b
         Selector::Test { name } => {
             unit.kind == ArtifactUnitKind::Symbol
                 && unit.exposure == mitase_inventory::ArtifactExposure::Test
-                && identity.strip_prefix("test::") == Some(name.as_str())
+                && structured_identity_matches(identity, "test::", name)
         }
         Selector::Operation { method, path } => {
             unit.kind == ArtifactUnitKind::Operation
@@ -1329,7 +1329,7 @@ pub fn resolve_artifact_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> 
 }
 
 fn resolve_test_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> ArtifactResolution {
-    let name =
+    let raw_name =
         match unit_semantic_identity(unit).and_then(|identity| identity.strip_prefix("test::")) {
             Some(name) if !name.is_empty() => name,
             _ => {
@@ -1350,6 +1350,12 @@ fn resolve_test_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> Artifact
             ));
         }
     };
+    let name = raw_name
+        .rsplit_once('@')
+        .filter(|(_, occurrence)| {
+            !occurrence.is_empty() && occurrence.chars().all(|c| c.is_ascii_digit())
+        })
+        .map_or(raw_name, |(base, _)| base);
     let target = ArtifactTarget {
         id: LocalId::from("semantic-test"),
         adapter: unit.adapter.clone(),
