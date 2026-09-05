@@ -678,7 +678,7 @@ dependencies = [
 
 [[package]]
 name = "mitase"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -704,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-code-intel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "mitase-spec-model",
@@ -715,7 +715,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-diagnostics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mitase-spec-model",
  "serde",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-inventory"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "mitase-project-model",
@@ -744,7 +744,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-project-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mitase-spec-model",
  "serde",
@@ -753,7 +753,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-spec-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-validation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "mitase-diagnostics",
@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "mitase-workspace"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "globset",
