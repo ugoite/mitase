@@ -22,7 +22,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse((ROOT / ".release-please-manifest.json").exists())
         self.assertFalse((ROOT / "release-please-config.json").exists())
         installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
-        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.1.0"', installer)
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.1.1"', installer)
         self.assertNotIn("__MITASE_RELEASE_TAG__", installer)
         candidate = CANDIDATE.read_text(encoding="utf-8")
         self.assertIn('Path("Cargo.toml")', candidate)
