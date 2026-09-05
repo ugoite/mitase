@@ -253,6 +253,22 @@ fn discover_javascript_tests_for_path(
     discover_javascript_tests_with_language(adapter, source, tsx)
 }
 
+fn is_javascript_test_function(function: Node<'_>, source: &str) -> bool {
+    if function.kind() == "identifier" {
+        return matches!(&source[function.byte_range()], "it" | "test");
+    }
+    if function.kind() != "member_expression" {
+        return false;
+    }
+    let Some(object) = function.child_by_field_name("object") else {
+        return false;
+    };
+    let Some(property) = function.child_by_field_name("property") else {
+        return false;
+    };
+    &source[object.byte_range()] == "Deno" && &source[property.byte_range()] == "test"
+}
+
 fn discover_javascript_tests_with_language(
     adapter: &str,
     source: &str,
@@ -274,8 +290,7 @@ fn discover_javascript_tests_with_language(
     fn visit(node: Node<'_>, source: &str, tests: &mut Vec<TestResolution>) -> Result<()> {
         if node.kind() == "call_expression"
             && let Some(function) = node.child_by_field_name("function")
-            && function.kind() == "identifier"
-            && matches!(&source[function.byte_range()], "it" | "test")
+            && is_javascript_test_function(function, source)
             && let Some(arguments) = node.child_by_field_name("arguments")
             && let Some(title) = arguments.named_child(0)
             && title.kind() == "string"
@@ -3665,6 +3680,7 @@ mod tests {
             "  expect(true).toBe(true);\n",
             "});\n",
             "test(\"other\", () => {});\n",
+            "Deno.test(\"deno-native\", () => {});\n",
         );
         let tests = discover_tests("typescript", source).expect("tests");
         assert_eq!(
@@ -3672,7 +3688,7 @@ mod tests {
                 .iter()
                 .map(|test| test.identity.as_str())
                 .collect::<Vec<_>>(),
-            ["keyword-first", "other"]
+            ["keyword-first", "other", "deno-native"]
         );
         assert!(tests[0].byte_end > tests[0].byte_start);
         assert_eq!(tests[0].line_start, 1);
@@ -3687,6 +3703,12 @@ mod tests {
         let duplicate = r#"it("duplicate", () => {}); it("duplicate", () => {});"#;
         let error = resolve_test("javascript", duplicate, "duplicate")
             .expect_err("duplicate titles must not resolve");
+        assert!(error.to_string().contains("ambiguous"));
+
+        let duplicate_deno =
+            r#"Deno.test("duplicate", () => {}); Deno.test("duplicate", () => {});"#;
+        let error = resolve_test("typescript", duplicate_deno, "duplicate")
+            .expect_err("duplicate Deno.test titles must not resolve");
         assert!(error.to_string().contains("ambiguous"));
 
         let escaped = r#"it("unicode \u{1f600}", () => {});"#;
