@@ -100,7 +100,7 @@ Validation is three layered:
 3. **Repository:** files, symbols, tests, structured selectors, and other
    Artifact targets resolve in the current checkout.
 
-The target v1 CLI is correspondingly specification-only:
+The normal v1 CLI is correspondingly specification-only:
 
 ```text
 mitase check
@@ -112,7 +112,10 @@ mitase list
 
 `mitase check` is the CI-facing whole-repository gate. `mitase show` exposes a
 specification's forward relations and derived reverse relations. The CLI does
-not run tests or apply changes.
+not run tests or apply changes. The explicit read-only
+`mitase migrate <source> --stdout` transition converts a canonical v1
+document into v0.2 authoring syntax; it is not a compatibility alias and does
+not write to the workspace.
 
 ## Dogfood acceptance
 
@@ -160,7 +163,9 @@ the other way around.
 Mitase is pre-v1. Breaking changes are allowed and preferred when they remove a
 wrong product boundary. The project will not add compatibility aliases,
 deprecated internal formats, migration commands, or a compatibility parser for
-the former Work schemas unless a future request explicitly requires one.
+the former Work schemas unless a future request explicitly requires one. The
+v0.1-to-v0.2 authoring transition is an explicitly requested, read-only
+canonical transformation and does not restore the former Work formats.
 
 `mitase.yaml` and the `mitase/*` specification namespace are canonical. The
 former Work schema identifiers are removed as part of the Work runtime cutover;

@@ -12,6 +12,80 @@ use std::{collections::BTreeMap, error::Error, fmt};
 /// Schema identifier for the human-facing v0.2 authoring contract.
 pub const AUTHORING_SCHEMA: &str = "mitase/authoring/v2";
 
+/// Convert one current canonical document into explicit v0.2 authoring
+/// syntax. This is an opt-in transformation; normal canonical loading never
+/// calls it.
+pub fn migrate_v1_to_v2(source: &str) -> Result<AuthoringDocument, MigrationError> {
+    let canonical: SpecDocument = serde_yaml::from_str(source)
+        .map_err(|error| MigrationError::InvalidSource(error.to_string()))?;
+    migrate_v1_document(&canonical)
+}
+
+/// Convert a parsed canonical document and prove that the v0.2 result
+/// normalizes back to the exact source graph.
+pub fn migrate_v1_document(canonical: &SpecDocument) -> Result<AuthoringDocument, MigrationError> {
+    if canonical.schema() != SPEC_SCHEMA {
+        return Err(MigrationError::WrongSourceSchema {
+            expected: SPEC_SCHEMA.into(),
+            actual: canonical.schema().into(),
+        });
+    }
+
+    let authoring = match canonical {
+        SpecDocument::Philosophies {
+            namespace,
+            category,
+            philosophies,
+            ..
+        } => AuthoringDocument::Philosophies {
+            schema: AUTHORING_SCHEMA.into(),
+            namespace: namespace.clone(),
+            category: category.clone(),
+            philosophies: philosophies.clone(),
+        },
+        SpecDocument::Policies {
+            namespace,
+            category,
+            policies,
+            ..
+        } => AuthoringDocument::Policies {
+            schema: AUTHORING_SCHEMA.into(),
+            namespace: namespace.clone(),
+            category: category.clone(),
+            policies: policies.clone(),
+        },
+        SpecDocument::Requirements {
+            namespace,
+            category,
+            requirements,
+            ..
+        } => AuthoringDocument::Requirements {
+            schema: AUTHORING_SCHEMA.into(),
+            namespace: namespace.clone(),
+            category: category.clone(),
+            requirements: requirements.clone(),
+        },
+        SpecDocument::Features {
+            namespace,
+            category,
+            features,
+            ..
+        } => AuthoringDocument::Features {
+            schema: AUTHORING_SCHEMA.into(),
+            namespace: namespace.clone(),
+            category: category.clone(),
+            features: features.clone(),
+        },
+    };
+    let normalized = authoring
+        .normalize()
+        .map_err(MigrationError::NormalizationFailed)?;
+    if &normalized.document != canonical {
+        return Err(MigrationError::SemanticMismatch);
+    }
+    Ok(authoring)
+}
+
 /// A strict, typed authoring document. Its semantic payload uses the
 /// canonical domain types, while the schema boundary stays separate so
 /// shorthand and inference can be added without weakening those types.
@@ -532,6 +606,42 @@ impl fmt::Display for NormalizationError {
 
 impl Error for NormalizationError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MigrationError {
+    InvalidSource(String),
+    WrongSourceSchema { expected: String, actual: String },
+    NormalizationFailed(NormalizationError),
+    SemanticMismatch,
+}
+
+impl fmt::Display for MigrationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidSource(message) => {
+                write!(formatter, "invalid migration source: {message}")
+            }
+            Self::WrongSourceSchema { expected, actual } => write!(
+                formatter,
+                "migration source schema must be {expected}, got {actual}"
+            ),
+            Self::NormalizationFailed(error) => {
+                write!(
+                    formatter,
+                    "migrated authoring document does not normalize: {error}"
+                )
+            }
+            Self::SemanticMismatch => {
+                write!(
+                    formatter,
+                    "migration changed the canonical semantic document"
+                )
+            }
+        }
+    }
+}
+
+impl Error for MigrationError {}
+
 struct NormalizedShortRequirement {
     requirement: CanonicalRequirement,
     applied_defaults: Vec<String>,
@@ -788,5 +898,37 @@ requirement:
             AuthoringDocument::parse(&DOCUMENTS[0].replace(AUTHORING_SCHEMA, SPEC_SCHEMA,))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn migration_preserves_every_canonical_document_kind() {
+        for source in DOCUMENTS.map(|document| document.replace(AUTHORING_SCHEMA, SPEC_SCHEMA)) {
+            let canonical: SpecDocument = serde_yaml::from_str(&source).expect("canonical source");
+            let migrated = migrate_v1_document(&canonical).expect("migration");
+            let normalized = migrated.normalize().expect("normalization");
+            assert_eq!(normalized.document, canonical);
+            assert_eq!(migrated.schema(), AUTHORING_SCHEMA);
+        }
+    }
+
+    #[test]
+    fn migration_is_deterministic_and_rejects_noncanonical_sources() {
+        let source = DOCUMENTS[3].replace(AUTHORING_SCHEMA, SPEC_SCHEMA);
+        let first = migrate_v1_to_v2(&source).expect("migration");
+        let second = migrate_v1_to_v2(&source).expect("migration");
+        assert_eq!(
+            serde_yaml::to_string(&first).expect("serialize migration"),
+            serde_yaml::to_string(&second).expect("serialize migration")
+        );
+
+        let wrong_schema = source.replace(SPEC_SCHEMA, AUTHORING_SCHEMA);
+        assert!(matches!(
+            migrate_v1_to_v2(&wrong_schema),
+            Err(MigrationError::WrongSourceSchema { .. })
+        ));
+        assert!(matches!(
+            migrate_v1_to_v2("not: valid"),
+            Err(MigrationError::InvalidSource(_))
+        ));
     }
 }

@@ -4,6 +4,7 @@ pub mod query;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use mitase_authoring::migrate_v1_to_v2;
 use mitase_inventory::{InventoryContext, InventoryRegistry};
 use mitase_project_model::{ChangeBaseline, GitRef};
 use mitase_spec_model::RepoPath;
@@ -32,6 +33,7 @@ enum CommandKind {
     Check(CheckArgs),
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
+    Migrate(MigrateArgs),
     Query(QueryArgs),
     Show(ShowArgs),
     List(ListArgs),
@@ -43,6 +45,14 @@ struct CheckArgs {
     workspace: PathBuf,
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
+}
+#[derive(Debug, Args)]
+struct MigrateArgs {
+    /// A canonical v1 document to convert.
+    source: PathBuf,
+    /// Migration is deliberately read-only; output is written only to stdout.
+    #[arg(long)]
+    stdout: bool,
 }
 #[derive(Debug, Args)]
 struct ReadinessArgs {
@@ -122,6 +132,7 @@ pub fn run() -> Result<i32> {
         CommandKind::Check(args) => run_check(args),
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
+        CommandKind::Migrate(args) => run_migrate(args),
         CommandKind::Query(args) => run_query(args),
         CommandKind::Show(args) => run_show(args),
         CommandKind::List(args) => run_list(args),
@@ -130,6 +141,18 @@ pub fn run() -> Result<i32> {
             Ok(0)
         }
     }
+}
+fn run_migrate(args: MigrateArgs) -> Result<i32> {
+    if !args.stdout {
+        bail!("migration is read-only; pass --stdout to write the v0.2 document to stdout");
+    }
+    let source = fs::read_to_string(&args.source)
+        .with_context(|| format!("read migration source {}", args.source.display()))?;
+    let document = migrate_v1_to_v2(&source).map_err(|error| {
+        anyhow::anyhow!("migration failed for {}: {error}", args.source.display())
+    })?;
+    print!("{}", serde_yaml::to_string(&document)?);
+    Ok(0)
 }
 fn run_query(args: QueryArgs) -> Result<i32> {
     let workspace = SpecWorkspace::load(args.workspace)?;
