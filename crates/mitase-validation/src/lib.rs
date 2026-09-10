@@ -1925,7 +1925,9 @@ fn push(
     anchor: Option<SpecAnchor>,
 ) {
     let mut d = Diagnostic::error(rule, msg, path);
-    d.anchor = anchor;
+    if let Some(anchor) = anchor.as_ref() {
+        d.set_subject_anchor(anchor);
+    }
     out.push(d);
 }
 
@@ -1937,7 +1939,10 @@ fn push_resolution(
     anchor: Option<SpecAnchor>,
 ) {
     let mut diagnostic = Diagnostic::error(rule, &failure.message, path);
-    diagnostic.anchor = anchor;
+    if let Some(anchor) = anchor.as_ref() {
+        diagnostic.set_subject_anchor(anchor);
+    }
+    diagnostic.candidates = failure.candidates.clone();
     diagnostic.evidence.push(Evidence {
         kind: "resolution-status".into(),
         value: resolution_status(rule, failure).into(),
@@ -3732,6 +3737,7 @@ features:
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.rule_id == "MITASE-TARGET-002"
                 && diagnostic.message.contains("heading Shared is ambiguous")
+                && !diagnostic.candidates.is_empty()
         }));
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.rule_id == "MITASE-TARGET-005"

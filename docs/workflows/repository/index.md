@@ -16,4 +16,6 @@ real repository, and where to look when the graph is blocked.
   incremental adoption path.
 - [Troubleshooting](./troubleshooting.md) — repair validation and traceability
   failures.
+- [Structured diagnostics](./diagnostics.md) — inspect the shared diagnostic
+  contract used by validation and integrations.
 - [Migration](./migration.md) — breaking changes between pre-v1 alpha releases.
