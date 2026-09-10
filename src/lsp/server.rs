@@ -33,7 +33,7 @@ impl LspServer {
 
             match self.read_message(&mut stdin)? {
                 Some(msg) => {
-                    if let Some(response) = self.handle_message(msg)? {
+                    for response in self.handle_message(msg)? {
                         self.write_message(&mut stdout, &response)?;
                     }
                 }
@@ -84,14 +84,11 @@ impl LspServer {
         Ok(())
     }
 
-    fn handle_message(&mut self, message: Message) -> Result<Option<Message>> {
+    fn handle_message(&mut self, message: Message) -> Result<Vec<Message>> {
         match message {
-            Message::Request(req) => Ok(Some(Message::Response(self.handle_request(req)?))),
-            Message::Notification(notif) => {
-                self.handle_notification(notif)?;
-                Ok(None)
-            }
-            Message::Response(_) => Ok(None),
+            Message::Request(req) => Ok(vec![Message::Response(self.handle_request(req)?)]),
+            Message::Notification(notif) => self.handle_notification(notif),
+            Message::Response(_) => Ok(Vec::new()),
         }
     }
 
@@ -130,15 +127,20 @@ impl LspServer {
         }
     }
 
-    fn handle_notification(&mut self, notification: Notification) -> Result<()> {
+    fn handle_notification(&mut self, notification: Notification) -> Result<Vec<Message>> {
         match notification.method.as_str() {
-            "initialized" => self.handlers.handle_initialized()?,
+            "initialized" => Ok(self
+                .handlers
+                .handle_initialized()?
+                .into_iter()
+                .map(Message::Notification)
+                .collect()),
             "exit" => {
                 self.should_exit = true;
+                Ok(Vec::new())
             }
-            _ => {}
+            _ => Ok(Vec::new()),
         }
-        Ok(())
     }
 }
 
@@ -243,7 +245,7 @@ mod tests {
             server
                 .handle_message(response)
                 .expect("response handling")
-                .is_none()
+                .is_empty()
         );
     }
 
@@ -368,39 +370,74 @@ mod tests {
     #[test]
     fn handle_notification_updates_server_exit_state() {
         let mut server = LspServer::new();
-        server
+        let messages = server
             .handle_notification(Notification {
                 jsonrpc: "2.0".to_string(),
                 method: "exit".to_string(),
                 params: None,
             })
             .expect("exit notification");
+        assert!(messages.is_empty());
         assert!(server.should_exit);
     }
 
     #[test]
     fn handle_notification_accepts_initialized() {
         let mut server = LspServer::new();
-        server
+        let messages = server
             .handle_notification(Notification {
                 jsonrpc: "2.0".to_string(),
                 method: "initialized".to_string(),
                 params: Some(json!({})),
             })
             .expect("initialized notification");
+        assert!(messages.is_empty());
         assert!(!server.should_exit);
+    }
+
+    #[test]
+    fn handle_initialized_returns_publish_diagnostics_notifications() {
+        let mut server = LspServer::new();
+        server
+            .handle_request(Request {
+                jsonrpc: "2.0".to_string(),
+                id: super::super::protocol::RequestId::Number(1),
+                method: "initialize".to_string(),
+                params: Some(json!({
+                    "rootUri": format!("file://{}", fixture_path("valid-web-app").display())
+                })),
+            })
+            .expect("initialize response");
+
+        let messages = server
+            .handle_message(Message::Notification(Notification {
+                jsonrpc: "2.0".to_string(),
+                method: "initialized".to_string(),
+                params: None,
+            }))
+            .expect("initialized notification");
+
+        assert!(!messages.is_empty());
+        assert!(messages.iter().all(|message| {
+            matches!(
+                message,
+                Message::Notification(Notification { method, params: Some(_), .. })
+                    if method == "textDocument/publishDiagnostics"
+            )
+        }));
     }
 
     #[test]
     fn handle_notification_ignores_unknown_methods() {
         let mut server = LspServer::new();
-        server
+        let messages = server
             .handle_notification(Notification {
                 jsonrpc: "2.0".to_string(),
                 method: "workspace/didChangeConfiguration".to_string(),
                 params: None,
             })
             .expect("unknown notification should be ignored");
+        assert!(messages.is_empty());
         assert!(!server.should_exit);
     }
 

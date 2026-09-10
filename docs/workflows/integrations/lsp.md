@@ -10,12 +10,12 @@ Today `mitase lsp` is intentionally small and explicit:
 
 - transport is **JSON-RPC 2.0 over stdio**
 - the server supports the standard lifecycle requests and notifications
-- the only editor feature exposed today is **hover for `PHIL-*`, `POL-*`,
-  `REQ-*`, and `FEAT-*` IDs**
+- the editor features exposed today are **workspace validation diagnostics**
+  and **hover for `PHIL-*`, `POL-*`, `REQ-*`, and `FEAT-*` IDs**
 
 That narrow scope is deliberate. The server is already usable for editor
 experiments, while the CLI and checked-in YAML remain the broader integration
-surface for diagnostics and richer repository workflows.
+surface for repository workflows.
 
 ## Start the server
 
@@ -65,12 +65,16 @@ At the moment the server advertises:
 
 - `hoverProvider: true`
 
+The server sends validation diagnostics after the `initialized` notification.
+This is the push-based LSP flow; the server does not advertise or implement a
+separate pull-diagnostics request.
+
 The current request / notification surface is:
 
 | Method | Support | Notes |
 | --- | --- | --- |
 | `initialize` | yes | loads the `mitase` workspace from `rootUri` or the current directory |
-| `initialized` | yes | marks the session ready for later requests |
+| `initialized` | yes | marks the session ready and publishes current workspace diagnostics |
 | `textDocument/hover` | yes | returns Markdown hover content for spec IDs under the cursor |
 | `shutdown` | yes | resets server state and returns `null` |
 | `exit` | yes | terminates the process cleanly |
@@ -82,8 +86,14 @@ Hover content currently resolves only checked-in spec IDs:
 - `REQ-*`
 - `FEAT-*`
 
-The server does not yet publish validation diagnostics, go-to-definition,
-completion, document symbols, or workspace symbols.
+The server does not yet provide go-to-definition, completion, document symbols,
+or workspace symbols.
+
+Diagnostics use the shared `mitase-diagnostics` validation result. Each LSP
+diagnostic carries the canonical rule code, reason, severity, exact primary
+range when available, and the full canonical diagnostic in `data`. A known
+workspace document receives an empty diagnostic array when it has no current
+diagnostics, which clears stale editor state.
 
 ## Minimal client example
 

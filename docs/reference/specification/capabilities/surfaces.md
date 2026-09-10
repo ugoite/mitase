@@ -102,13 +102,13 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
             - **name**: lib::validation_inputs_for_cli
 - **id**: FEAT-LSP-001
   - **title**: LSP
-  - **summary**: Serve canonical specification navigation and hover information.
+  - **summary**: Serve canonical specification diagnostics, navigation, and hover information.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: lsp
-      - **responsibility**: Serve canonical specification language-server state.
+      - **responsibility**: Serve canonical specification language-server state and shared validation diagnostics.
       - **targets**:
         - **id**: lsp-server
           - **adapter**: rust
@@ -301,13 +301,13 @@ features:
 
   - id: FEAT-LSP-001
     title: LSP
-    summary: Serve canonical specification navigation and hover information.
+    summary: Serve canonical specification diagnostics, navigation, and hover information.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: lsp
-        responsibility: Serve canonical specification language-server state.
+        responsibility: Serve canonical specification language-server state and shared validation diagnostics.
         targets:
           - id: lsp-server
             adapter: rust
