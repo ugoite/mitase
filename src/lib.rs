@@ -103,6 +103,12 @@ struct ListArgs {
     kind: Option<query::SpecKind>,
     #[arg(long, value_enum)]
     status: Option<query::StatusFilter>,
+    #[arg(long)]
+    namespace: Option<String>,
+    #[arg(long)]
+    category: Option<String>,
+    #[arg(long)]
+    unverified_criteria: bool,
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
 }
@@ -233,7 +239,15 @@ fn run_show(args: ShowArgs) -> Result<i32> {
 fn run_list(args: ListArgs) -> Result<i32> {
     let workspace = SpecWorkspace::load(args.workspace)?;
     let index = workspace.index()?;
-    let result = query::list(&workspace, &index, args.kind, args.status);
+    let result = query::list(
+        &workspace,
+        &index,
+        args.kind,
+        args.status,
+        args.namespace.as_deref(),
+        args.category.as_deref(),
+        args.unverified_criteria,
+    );
     match args.format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
         Format::Text => print!("{}", query::render_list_text(&result)),
