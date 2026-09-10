@@ -387,6 +387,40 @@ requirements: []
 }
 
 #[test]
+fn config_effective_reports_resolved_conventions_without_loading_or_mutating_specs() {
+    let temp = tempdir().unwrap();
+    fs::write(
+        temp.path().join("mitase.yaml"),
+        "schema: mitase/config/v1\n",
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["config", "effective"])
+        .arg(temp.path())
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["schema"], "mitase/config/v1");
+    assert_eq!(report["workspace"]["spec_roots"][0], "docs/mitase");
+    assert_eq!(report["inventory"]["active_profile"], "default");
+    assert!(
+        report["applied_conventions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|convention| convention == "workspace.spec_roots=docs/mitase")
+    );
+    assert_eq!(
+        fs::read_to_string(temp.path().join("mitase.yaml")).unwrap(),
+        "schema: mitase/config/v1\n"
+    );
+}
+
+#[test]
 fn tutorial_yaml_examples_parse_as_canonical_spec_documents() {
     let tutorial = fs::read_to_string("docs/start-here/first-run/tutorial.md").expect("tutorial");
     let mut blocks = Vec::new();

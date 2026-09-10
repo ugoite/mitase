@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use mitase_authoring::migrate_v1_to_v2;
 use mitase_inventory::{InventoryContext, InventoryRegistry};
-use mitase_project_model::{ChangeBaseline, GitRef};
+use mitase_project_model::{ChangeBaseline, EffectiveProjectConfig, GitRef};
 use mitase_spec_model::RepoPath;
 use mitase_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationContext, validate};
 use mitase_workspace::SpecWorkspace;
@@ -33,6 +33,7 @@ enum CommandKind {
     Check(CheckArgs),
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
+    Config(ConfigArgs),
     Migrate(MigrateArgs),
     Query(QueryArgs),
     Show(ShowArgs),
@@ -45,6 +46,22 @@ struct CheckArgs {
     workspace: PathBuf,
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
+}
+#[derive(Debug, Args)]
+struct ConfigArgs {
+    #[command(subcommand)]
+    command: ConfigCommand,
+}
+#[derive(Debug, Subcommand)]
+enum ConfigCommand {
+    Effective(ConfigEffectiveArgs),
+}
+#[derive(Debug, Args)]
+struct ConfigEffectiveArgs {
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    #[arg(long, value_enum, default_value = "yaml")]
+    format: ConfigFormat,
 }
 #[derive(Debug, Args)]
 struct MigrateArgs {
@@ -126,12 +143,18 @@ enum Format {
     Text,
     Json,
 }
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ConfigFormat {
+    Yaml,
+    Json,
+}
 
 pub fn run() -> Result<i32> {
     match Cli::parse().command {
         CommandKind::Check(args) => run_check(args),
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
+        CommandKind::Config(args) => run_config(args),
         CommandKind::Migrate(args) => run_migrate(args),
         CommandKind::Query(args) => run_query(args),
         CommandKind::Show(args) => run_show(args),
@@ -141,6 +164,20 @@ pub fn run() -> Result<i32> {
             Ok(0)
         }
     }
+}
+fn run_config(args: ConfigArgs) -> Result<i32> {
+    let ConfigCommand::Effective(args) = args.command;
+    let root = config_root(&args.workspace)?;
+    let config_path = root.join("mitase.yaml");
+    let source = fs::read_to_string(&config_path)
+        .with_context(|| format!("read {}", config_path.display()))?;
+    let effective = EffectiveProjectConfig::from_source(&root, &source)
+        .map_err(|error| anyhow::anyhow!("parse mitase/config/v1: {error}"))?;
+    match args.format {
+        ConfigFormat::Yaml => print!("{}", serde_yaml::to_string(&effective)?),
+        ConfigFormat::Json => println!("{}", serde_json::to_string_pretty(&effective)?),
+    }
+    Ok(0)
 }
 fn run_migrate(args: MigrateArgs) -> Result<i32> {
     if !args.stdout {
@@ -153,6 +190,25 @@ fn run_migrate(args: MigrateArgs) -> Result<i32> {
     })?;
     print!("{}", serde_yaml::to_string(&document)?);
     Ok(0)
+}
+
+fn config_root(start: &Path) -> Result<PathBuf> {
+    let mut current = if start.is_file() {
+        start.parent().unwrap_or(start).to_path_buf()
+    } else {
+        start.to_path_buf()
+    };
+    if current.is_relative() {
+        current = std::env::current_dir()?.join(current);
+    }
+    loop {
+        if current.join("mitase.yaml").is_file() {
+            return Ok(current);
+        }
+        if !current.pop() {
+            bail!("could not find mitase.yaml");
+        }
+    }
 }
 fn run_query(args: QueryArgs) -> Result<i32> {
     let workspace = SpecWorkspace::load(args.workspace)?;

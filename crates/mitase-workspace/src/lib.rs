@@ -5,7 +5,7 @@ use mitase_code_intel::resolve_symbol;
 use mitase_inventory::{
     ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry, resolve_test_in_path,
 };
-use mitase_project_model::{CONFIG_SCHEMA, ProjectConfig};
+use mitase_project_model::{CONFIG_SCHEMA, EffectiveProjectConfig, ProjectConfig};
 use mitase_spec_model::format_sha256;
 use mitase_spec_model::*;
 use sha2::{Digest, Sha256};
@@ -23,7 +23,7 @@ pub struct LoadedDocument {
 #[derive(Clone)]
 pub struct SpecWorkspace {
     pub root: PathBuf,
-    pub config: ProjectConfig,
+    pub config: EffectiveProjectConfig,
     pub documents: Vec<LoadedDocument>,
     matcher: WorkspaceMatcher,
 }
@@ -110,19 +110,19 @@ impl SpecWorkspace {
         let config_path = root.join("mitase.yaml");
         let config_source = fs::read_to_string(&config_path)
             .with_context(|| format!("read {}", config_path.display()))?;
-        let config: ProjectConfig = match serde_yaml::from_str(&config_source) {
+        let effective_config = match EffectiveProjectConfig::from_source(&root, &config_source) {
             Ok(config) => config,
             Err(_) if is_obsolete_pre_release_config(&config_source) => bail!(
                 "The document uses an obsolete pre-release mitase/config/v1 shape.\nRewrite it using the current mitase/config/v1 model."
             ),
-            Err(error) => return Err(error).context("parse mitase/config/v1"),
+            Err(error) => return Err(anyhow::anyhow!(error)).context("parse mitase/config/v1"),
         };
-        if config.schema != CONFIG_SCHEMA {
+        if effective_config.schema != CONFIG_SCHEMA {
             bail!("config schema must be {CONFIG_SCHEMA}");
         }
-        let matcher = WorkspaceMatcher::build(&config)?;
+        let matcher = WorkspaceMatcher::build(&effective_config.config)?;
         let mut paths = Vec::new();
-        for spec_root in &config.workspace.spec_roots {
+        for spec_root in &effective_config.workspace.spec_roots {
             collect_yaml(&root, spec_root.as_path(), &mut paths)?;
         }
         paths.sort();
@@ -145,7 +145,7 @@ impl SpecWorkspace {
         }
         Ok(Self {
             root,
-            config,
+            config: effective_config,
             documents,
             matcher,
         })
