@@ -2,7 +2,7 @@
 use mitase_spec_model::{RepoPath, SpecAnchor};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     ops::{Deref, DerefMut},
     path::Path,
@@ -232,6 +232,15 @@ fn resolve_inventory(
                     })
                 })
                 .collect::<Result<Vec<_>, String>>()?;
+            let mut profile_ids = BTreeSet::new();
+            for profile in &profiles {
+                if !profile_ids.insert(profile.id.clone()) {
+                    return Err(format!(
+                        "inventory.profiles contains duplicate id: {}",
+                        profile.id
+                    ));
+                }
+            }
             let active = match input.active_profile {
                 Some(active) => active,
                 None if profiles.len() == 1 => {
@@ -734,6 +743,21 @@ inventory:
                 "schema: mitase/config/v1\nextra: true\n"
             )
             .is_err()
+        );
+        let duplicate_ids = r#"
+schema: mitase/config/v1
+inventory:
+  active_profile: default
+  profiles:
+    - id: default
+      providers: { rust: {} }
+    - id: default
+      providers: { typescript: {} }
+"#;
+        assert!(
+            EffectiveProjectConfig::from_source(root.as_path(), duplicate_ids)
+                .unwrap_err()
+                .contains("duplicate id")
         );
     }
 }
