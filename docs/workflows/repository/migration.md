@@ -24,7 +24,7 @@ source, run the explicit read-only migration command for each document:
 
 ```bash
 mitase migrate docs/mitase/requirements/example.yaml --stdout \
-  > docs/mitase/requirements/example.v2.yaml
+  > docs/mitase-authoring/requirements/example.yaml
 ```
 
 The source must declare `schema: mitase/spec/v1`. The output declares
@@ -36,7 +36,9 @@ overwrites the source or writes to the workspace itself.
 Migration is not a compatibility alias: normal `check` and `validate` do not
 accept the source as v0.2 authoring input. The migration must be requested
 explicitly, and the generated full authoring form can then be simplified using
-the documented v0.2 short contract.
+the documented v0.2 short contract. Keep generated authoring documents outside
+the configured canonical `spec_roots` until the v0.2 authoring loader is
+introduced.
 
 ## Current pre-v1 cutover
 

@@ -10,7 +10,7 @@ curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/instal
 cargo run --quiet -- validate workspace .
 ```
 
-The target v1 CLI surface is specification-only:
+The normal v1 CLI surface is specification-only:
 
 - `validate`
 - `check`
@@ -21,6 +21,10 @@ The target v1 CLI surface is specification-only:
 Execution and delivery tooling is external to the Mitase CLI. See the
 [Re-Foundation freeze](../../project/mitase-re-foundation-freeze.md) before
 building new integrations.
+
+The explicit `migrate <source> --stdout` helper is a read-only v0.1 to v0.2
+authoring transition. It is separate from normal workspace loading; see the
+[migration guide](../../workflows/repository/migration.md).
 
 Use the read-only discovery commands to inspect the canonical graph:
 

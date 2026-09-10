@@ -46,9 +46,14 @@ for the decision, acceptance gates, and follow-up sequence.
 mise run check:repo
 ```
 
-The target v1 CLI is intentionally limited to specification operations:
+The normal v1 CLI is intentionally limited to specification operations:
 `mitase check`, `mitase validate`, `mitase query`, `mitase show`, and
 `mitase list`. The re-foundation removes execution commands rather than
 replacing them with compatibility aliases.
+
+The explicit `mitase migrate <source> --stdout` helper is a read-only v0.1 to
+v0.2 authoring transition. It is not part of normal `check` or `validate`
+loading and never writes to a workspace; see the
+[migration guide](docs/workflows/repository/migration.md).
 
 See [the v1 architecture](docs/understand/model/v1-architecture.md).
