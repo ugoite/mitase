@@ -11,6 +11,27 @@ inventory and exact target resolution provide the evidence used for derived
 state. Readiness is therefore a bounded evidence report, not a planning or
 delivery status.
 
+The input contract remains strict about unknown fields, while the effective
+configuration may supply a small set of explicit repository conventions. A
+minimal input is valid:
+
+```yaml
+schema: mitase/config/v1
+```
+
+Inspect the complete resolved configuration without changing the workspace:
+
+```bash
+mitase config effective . --format yaml
+mitase config effective . --format json
+```
+
+The output includes `applied_conventions`. Explicit values always win over
+conventions. The initial conventions cover the standard spec root and
+excludes, one default inventory profile, Rust/JavaScript/TypeScript source and
+test discovery, validation defaults, and repository-specific common runner
+presets.
+
 ```yaml
 schema: mitase/config/v1
 workspace:
