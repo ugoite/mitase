@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use mitase_authoring::AuthoringDocument;
 use mitase_spec_model::{LocalAnchorKind, SpecDocument};
 use mitase_workspace::SpecWorkspace;
 use serde::Deserialize;
@@ -345,6 +346,44 @@ fn query_reports_unknown_sources_with_nonzero_exit() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("query source"));
+}
+
+#[test]
+fn migrate_is_explicit_read_only_and_preserves_the_canonical_document() {
+    let temp = tempdir().unwrap();
+    let source_path = temp.path().join("requirement.yaml");
+    let source = r#"
+schema: mitase/spec/v1
+kind: requirements
+namespace: demo
+category: Demo
+requirements: []
+"#;
+    fs::write(&source_path, source).unwrap();
+
+    let without_stdout = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["migrate"])
+        .arg(&source_path)
+        .output()
+        .unwrap();
+    assert!(!without_stdout.status.success());
+    assert!(String::from_utf8_lossy(&without_stdout.stderr).contains("--stdout"));
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["migrate"])
+        .arg(&source_path)
+        .arg("--stdout")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
+    let migrated = AuthoringDocument::parse(&String::from_utf8(output.stdout).unwrap())
+        .expect("v0.2 migration output");
+    let canonical: SpecDocument = serde_yaml::from_str(source).unwrap();
+    assert_eq!(migrated.normalize().unwrap().document, canonical);
 }
 
 #[test]
