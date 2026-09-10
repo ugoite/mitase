@@ -259,10 +259,7 @@ fn run_check(args: CheckArgs) -> Result<i32> {
         Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
         Format::Text => {
             for d in &result.diagnostics {
-                println!(
-                    "{:?} {} {}: {}",
-                    d.severity, d.rule_id, d.primary.path, d.message
-                );
+                println!("{}", d.render_text());
             }
             println!("{} diagnostic(s)", result.diagnostics.len());
         }
@@ -365,10 +362,7 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
         Format::Text => {
             for d in &result.diagnostics {
-                println!(
-                    "{:?} {} {}: {}",
-                    d.severity, d.rule_id, d.primary.path, d.message
-                );
+                println!("{}", d.render_text());
             }
             println!("{} diagnostic(s)", result.diagnostics.len());
         }
