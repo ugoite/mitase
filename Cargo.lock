@@ -684,6 +684,7 @@ dependencies = [
  "assert_cmd",
  "axum",
  "clap",
+ "mitase-authoring",
  "mitase-code-intel",
  "mitase-diagnostics",
  "mitase-inventory",
@@ -700,6 +701,15 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "mitase-authoring"
+version = "0.1.0"
+dependencies = [
+ "mitase-spec-model",
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]

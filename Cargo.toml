@@ -2,6 +2,7 @@
 members = [
   ".",
   "crates/mitase-spec-model",
+  "crates/mitase-authoring",
   "crates/mitase-project-model",
   "crates/mitase-diagnostics",
   "crates/mitase-workspace",
@@ -53,6 +54,7 @@ sha2.workspace = true
 uuid.workspace = true
 url = "2.5.7"
 mitase-diagnostics = { path = "crates/mitase-diagnostics" }
+mitase-authoring = { path = "crates/mitase-authoring" }
 mitase-inventory = { path = "crates/mitase-inventory" }
 mitase-code-intel = { path = "crates/mitase-code-intel" }
 mitase-project-model = { path = "crates/mitase-project-model" }

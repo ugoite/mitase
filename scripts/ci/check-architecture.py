@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # not a list of incidental imports from individual source files.
 ALLOWED_INTERNAL_DEPENDENCIES = {
     "mitase": {
+        "mitase-authoring",
         "mitase-code-intel",
         "mitase-diagnostics",
         "mitase-inventory",
@@ -25,6 +26,7 @@ ALLOWED_INTERNAL_DEPENDENCIES = {
         "mitase-workspace",
     },
     "mitase-code-intel": {"mitase-spec-model"},
+    "mitase-authoring": {"mitase-spec-model"},
     "mitase-diagnostics": {"mitase-spec-model"},
     "mitase-inventory": {"mitase-project-model", "mitase-spec-model"},
     "mitase-project-model": {"mitase-spec-model"},

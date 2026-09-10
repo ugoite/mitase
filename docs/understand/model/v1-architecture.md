@@ -141,7 +141,7 @@ human status alone.
 The intended dependency direction is:
 
 ```text
-spec-model → project-model → workspace / inventory → validation → CLI
+spec-model → authoring / project-model → workspace / inventory → validation → CLI
                                   ↘ code-intel
 ```
 
@@ -150,6 +150,7 @@ The production crates have one canonical responsibility each:
 | Crate | Canonical responsibility | Allowed internal dependencies |
 | --- | --- | --- |
 | `mitase-spec-model` | Typed Philosophy, Policy, Requirement, Criterion, Feature, Binding, Artifact, and claim model | none |
+| `mitase-authoring` | Strict v0.2 authoring AST and normalization into the canonical spec model | `mitase-spec-model` |
 | `mitase-project-model` | Typed `mitase/config/v1` project configuration | `mitase-spec-model` |
 | `mitase-code-intel` | Language-aware symbol resolution supporting artifact adapters | `mitase-spec-model` |
 | `mitase-inventory` | Repository artifact inventory and semantic comparison | `mitase-project-model`, `mitase-spec-model` |
