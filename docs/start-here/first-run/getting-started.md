@@ -7,7 +7,7 @@ Install a release build or run the binary from source, then create a v1 workspac
 ```bash
 RELEASE="$(gh release view --json tagName -q .tagName --repo ugoite/mitase)"
 curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/install-mitase.sh" | env MITASE_VERSION=alpha bash
-cargo run --quiet -- validate .
+cargo run --quiet -- validate workspace .
 ```
 
 The target v1 CLI surface is specification-only:
