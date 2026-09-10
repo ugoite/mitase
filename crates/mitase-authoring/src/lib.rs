@@ -453,16 +453,25 @@ fn adapter_from_path(
         .to_ascii_lowercase();
     let candidates = match extension.as_str() {
         "rs" => vec![("rust".into(), "rust".into())],
-        "ts" | "tsx" => vec![("typescript".into(), "typescript".into())],
-        "js" | "jsx" => vec![("javascript".into(), "javascript".into())],
+        "ts" | "tsx" | "mts" | "cts" => vec![("typescript".into(), "typescript".into())],
+        "js" | "jsx" | "mjs" | "cjs" => vec![("javascript".into(), "javascript".into())],
         "py" => vec![("python".into(), "python".into())],
         "go" => vec![("go".into(), "go".into())],
-        "sh" => vec![("shell".into(), "shell".into())],
-        "md" => vec![("markdown".into(), "markdown".into())],
-        "json" => vec![("json".into(), "json".into())],
-        "jsonschema" => vec![("json-schema".into(), "json-schema".into())],
-        "yaml" | "yml" => vec![("yaml".into(), "yaml".into())],
-        "html" | "htm" => vec![("html".into(), "html".into())],
+        "sh" | "bash" | "zsh" => vec![("shell".into(), "shell".into())],
+        "md" | "mdx" => vec![
+            ("documentation".into(), "documentation".into()),
+            ("markdown".into(), "markdown".into()),
+        ],
+        "json" => vec![
+            ("json".into(), "json".into()),
+            ("json-schema".into(), "json-schema".into()),
+            ("openapi".into(), "openapi".into()),
+        ],
+        "yaml" | "yml" => vec![
+            ("openapi".into(), "openapi".into()),
+            ("yaml".into(), "yaml".into()),
+        ],
+        "html" => vec![("html".into(), "html".into())],
         _ => Vec::new(),
     };
     let (candidate, adapter) = resolve_unique(field, candidates)?;
@@ -756,6 +765,18 @@ requirement:
             authoring.normalize(),
             Err(NormalizationError::NoCandidates { field })
                 if field == "requirement.implementation.target.adapter"
+        ));
+    }
+
+    #[test]
+    fn short_contract_fails_closed_when_extension_has_multiple_adapters() {
+        let source = SHORT_DOCUMENT.replace("src/example.rs", "src/example.json");
+        let authoring = AuthoringDocument::parse(&source).expect("short document");
+        assert!(matches!(
+            authoring.normalize(),
+            Err(NormalizationError::Ambiguous { field, candidates })
+                if field == "requirement.implementation.target.adapter"
+                    && candidates == vec!["json", "json-schema", "openapi"]
         ));
     }
 

@@ -52,5 +52,7 @@ verification runner are explicit. The normalizer may only infer mechanics:
   exactly one candidate.
 
 Inference is fail-closed: zero candidates and multiple candidates are errors.
+For example, JSON, YAML, and Markdown extensions overlap multiple inventory
+adapters and therefore require an explicit adapter.
 The normalized result exposes `applied_defaults` and `inferred` provenance so
 the authoring result is fully inspectable.
