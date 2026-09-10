@@ -7,8 +7,9 @@ sidebar_position: 3
 # Structured diagnostics
 
 `mitase-diagnostics` is the shared diagnostic API for validation consumers.
-The CLI's JSON output and future editor integrations consume the same
-structured value; they do not reinterpret rule messages independently.
+The CLI's JSON output and the LSP `textDocument/publishDiagnostics` output
+consume the same structured value; they do not reinterpret rule messages
+independently.
 
 Run a validation command with `--format json` to inspect the contract:
 

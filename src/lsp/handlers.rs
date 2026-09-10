@@ -1,17 +1,23 @@
 // FEAT-LSP-001
 // REQ-CORE-001
 
+use mitase_diagnostics::{Diagnostic as CanonicalDiagnostic, Location, Severity};
 use mitase_spec_model::SpecDocument;
 use mitase_workspace::SpecWorkspace;
 use regex::Regex;
 use serde_json::Value;
-use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+    process::Command,
+};
 use url::Url;
 
 use super::protocol::{
-    Hover, InitializeParams, InitializeResult, LspError, MarkupContent, ServerCapabilities,
-    TextDocumentPositionParams,
+    DiagnosticLocation, DiagnosticRelatedInformation, Hover, InitializeParams, InitializeResult,
+    LspDiagnostic, LspError, MarkupContent, Notification, Position, PublishDiagnosticsParams,
+    Range, ServerCapabilities, TextDocumentPositionParams,
 };
 
 pub(crate) struct LspHandlers {
@@ -51,9 +57,12 @@ impl LspHandlers {
         serde_json::to_value(result).map_err(|error| LspError::internal(error.to_string()))
     }
 
-    pub(crate) fn handle_initialized(&mut self) -> Result<(), LspError> {
+    pub(crate) fn handle_initialized(&mut self) -> Result<Vec<Notification>, LspError> {
         self.initialized = true;
-        Ok(())
+        match &self.workspace {
+            Some(_) => self.publish_diagnostics(),
+            None => Ok(Vec::new()),
+        }
     }
 
     pub(crate) fn handle_shutdown(&mut self) -> Result<Value, LspError> {
@@ -91,6 +100,177 @@ impl LspHandlers {
         }
 
         Ok(None)
+    }
+
+    fn publish_diagnostics(&self) -> Result<Vec<Notification>, LspError> {
+        let workspace = self
+            .workspace
+            .as_ref()
+            .ok_or_else(|| LspError::internal("workspace not initialized"))?;
+        let index = workspace
+            .index()
+            .map_err(|error| LspError::internal(error.to_string()))?;
+        let revision = current_revision(&workspace.root);
+        let context = mitase_validation::ValidationContext {
+            config: &workspace.config,
+            workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            preset: workspace.config.validation.preset,
+            revision: revision.as_deref(),
+            change_base_revision: None,
+        };
+        let result = mitase_validation::validate_workspace(&context);
+
+        let mut diagnostics_by_uri = BTreeMap::<String, Vec<LspDiagnostic>>::new();
+        let mut known_uris = BTreeSet::new();
+        known_uris.insert(path_to_uri(&workspace.root.join("mitase.yaml"))?);
+        for document in &workspace.documents {
+            known_uris.insert(path_to_uri(&document.path)?);
+        }
+
+        for diagnostic in &result.diagnostics {
+            let path = diagnostic_path(&workspace.root, &diagnostic.primary.path);
+            let uri = path_to_uri(&path)?;
+            known_uris.insert(uri.clone());
+            diagnostics_by_uri
+                .entry(uri)
+                .or_default()
+                .push(to_lsp_diagnostic(&workspace.root, diagnostic)?);
+        }
+        for diagnostics in diagnostics_by_uri.values_mut() {
+            diagnostics.sort_by(|left, right| {
+                (
+                    &left.code,
+                    &left.message,
+                    left.range.start.line,
+                    left.range.start.character,
+                    left.range.end.line,
+                    left.range.end.character,
+                )
+                    .cmp(&(
+                        &right.code,
+                        &right.message,
+                        right.range.start.line,
+                        right.range.start.character,
+                        right.range.end.line,
+                        right.range.end.character,
+                    ))
+            });
+        }
+
+        known_uris
+            .into_iter()
+            .map(|uri| {
+                let diagnostics = diagnostics_by_uri.remove(&uri).unwrap_or_default();
+                let params = PublishDiagnosticsParams { uri, diagnostics };
+                Ok(Notification {
+                    jsonrpc: "2.0".to_string(),
+                    method: "textDocument/publishDiagnostics".to_string(),
+                    params: Some(
+                        serde_json::to_value(params)
+                            .map_err(|error| LspError::internal(error.to_string()))?,
+                    ),
+                })
+            })
+            .collect()
+    }
+}
+
+fn diagnostic_path(root: &Path, path: &str) -> PathBuf {
+    if path.is_empty() || path == "workspace" {
+        return root.join("mitase.yaml");
+    }
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    }
+}
+
+fn path_to_uri(path: &Path) -> Result<String, LspError> {
+    Url::from_file_path(path)
+        .map(|uri| uri.to_string())
+        .map_err(|()| {
+            LspError::internal(format!(
+                "cannot convert path to file URI: {}",
+                path.display()
+            ))
+        })
+}
+
+fn current_revision(root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let revision = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    (!revision.is_empty()).then_some(revision)
+}
+
+fn to_lsp_diagnostic(
+    root: &Path,
+    diagnostic: &CanonicalDiagnostic,
+) -> Result<LspDiagnostic, LspError> {
+    let related_information = if diagnostic.related.is_empty() {
+        None
+    } else {
+        Some(
+            diagnostic
+                .related
+                .iter()
+                .map(|related| {
+                    Ok(DiagnosticRelatedInformation {
+                        location: DiagnosticLocation {
+                            uri: path_to_uri(&diagnostic_path(root, &related.location.path))?,
+                            range: lsp_range(&related.location),
+                        },
+                        message: related.message.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>, LspError>>()?,
+        )
+    };
+
+    Ok(LspDiagnostic {
+        range: lsp_range(&diagnostic.primary),
+        severity: Some(match diagnostic.severity {
+            Severity::Error => 1,
+            Severity::Warning => 2,
+            Severity::Info => 3,
+        }),
+        code: Some(diagnostic.rule_id.clone()),
+        source: Some("mitase".to_string()),
+        message: diagnostic.message.clone(),
+        related_information,
+        data: Some(
+            serde_json::to_value(diagnostic)
+                .map_err(|error| LspError::internal(error.to_string()))?,
+        ),
+    })
+}
+
+fn lsp_range(location: &Location) -> Range {
+    Range {
+        start: lsp_position(location.line, location.column),
+        end: lsp_position(
+            location.end_line.or(location.line),
+            location.end_column.or(location.column),
+        ),
+    }
+}
+
+fn lsp_position(line: Option<u32>, character: Option<u32>) -> Position {
+    Position {
+        line: line.map_or(0, |line| line.saturating_sub(1)),
+        character: character.map_or(0, |character| character.saturating_sub(1)),
     }
 }
 
@@ -348,5 +528,83 @@ mod tests {
     fn create_hover_returns_none_for_unknown_ids() {
         let workspace = SpecWorkspace::load(fixture_path("valid-web-app")).expect("workspace");
         assert!(create_hover_for_spec_id(&workspace, "NOTE-UNKNOWN-001").is_none());
+    }
+
+    #[test]
+    fn canonical_diagnostics_map_to_lsp_fields_and_zero_based_ranges() {
+        let mut diagnostic = CanonicalDiagnostic::error(
+            "MITASE-TARGET-002",
+            "target resolution is ambiguous",
+            "spec/feature.yaml",
+        );
+        diagnostic.primary.line = Some(12);
+        diagnostic.primary.column = Some(5);
+        diagnostic.primary.end_line = Some(12);
+        diagnostic.primary.end_column = Some(19);
+
+        let mapped =
+            to_lsp_diagnostic(Path::new("/workspace"), &diagnostic).expect("diagnostic should map");
+
+        assert_eq!(mapped.range.start.line, 11);
+        assert_eq!(mapped.range.start.character, 4);
+        assert_eq!(mapped.range.end.line, 11);
+        assert_eq!(mapped.range.end.character, 18);
+        assert_eq!(mapped.code.as_deref(), Some("MITASE-TARGET-002"));
+        assert_eq!(mapped.source.as_deref(), Some("mitase"));
+        assert_eq!(mapped.severity, Some(1));
+        assert_eq!(mapped.message, "target resolution is ambiguous");
+        assert_eq!(
+            mapped.data.as_ref().expect("canonical data")["code"],
+            "MITASE-TARGET-002"
+        );
+    }
+
+    #[test]
+    fn handle_initialized_publishes_deterministic_notifications_for_known_documents() {
+        let mut handlers = LspHandlers::new();
+        let workspace = fixture_path("valid-web-app");
+        handlers
+            .handle_initialize(InitializeParams {
+                process_id: None,
+                root_uri: Some(format!("file://{}", workspace.display())),
+                capabilities: None,
+            })
+            .expect("initialize should succeed");
+
+        let first = handlers
+            .handle_initialized()
+            .expect("diagnostics should publish");
+        let second = handlers
+            .handle_initialized()
+            .expect("diagnostics should publish again");
+
+        assert!(!first.is_empty());
+        assert_eq!(
+            serde_json::to_value(&first).expect("serialize notifications"),
+            serde_json::to_value(&second).expect("serialize notifications")
+        );
+        assert!(first.iter().all(|notification| {
+            notification.method == "textDocument/publishDiagnostics"
+                && notification.params.as_ref().is_some_and(|params| {
+                    params["uri"].as_str().is_some() && params["diagnostics"].is_array()
+                })
+        }));
+        assert!(first.iter().any(|notification| {
+            notification.params.as_ref().is_some_and(|params| {
+                params["diagnostics"].as_array().is_some_and(|diagnostics| {
+                    diagnostics.iter().any(|diagnostic| {
+                        diagnostic["source"] == "mitase"
+                            && diagnostic["code"].is_string()
+                            && diagnostic["data"]["reason"].is_string()
+                    })
+                })
+            })
+        }));
+        assert!(first.iter().any(|notification| {
+            notification
+                .params
+                .as_ref()
+                .is_some_and(|params| params["diagnostics"].as_array().is_some_and(Vec::is_empty))
+        }));
     }
 }

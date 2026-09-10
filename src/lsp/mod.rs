@@ -11,9 +11,9 @@
 // - JSON-RPC 2.0 over stdio (standard LSP transport)
 // - Basic LSP lifecycle: initialize, initialized, shutdown, exit
 // - Hover support for spec IDs (PHIL-*, POL-*, REQ-*, FEAT-*)
+// - Push validation diagnostics through textDocument/publishDiagnostics
 //
 // **Foundation for Future Features:**
-// - Diagnostics for validation errors
 // - Go-to-definition for spec IDs and trace references
 // - Code completion for spec IDs
 // - Document symbols for spec files

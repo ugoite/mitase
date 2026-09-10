@@ -181,6 +181,42 @@ impl MarkupContent {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PublishDiagnosticsParams {
+    pub uri: String,
+    pub diagnostics: Vec<LspDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LspDiagnostic {
+    pub range: Range,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related_information: Option<Vec<DiagnosticRelatedInformation>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct DiagnosticRelatedInformation {
+    pub location: DiagnosticLocation,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct DiagnosticLocation {
+    pub uri: String,
+    pub range: Range,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{LspError, MarkupContent, ResponseError, error_codes};

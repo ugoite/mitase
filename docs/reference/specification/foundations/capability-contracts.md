@@ -91,7 +91,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
         - POL-EVIDENCE-001#rule.derived-state
     - **id**: lsp-navigation
       - **kind**: behavior
-      - **statement**: Language-server hover resolves each specification layer from the canonical workspace.
+      - **statement**: Language-server diagnostics and hover resolve the canonical workspace without duplicating validation semantics.
       - **governed_by**:
         - POL-GRAPH-001#rule.canonical-graph
     - **id**: docs-generation
@@ -319,6 +319,22 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **arguments**:
                   - **package**: mitase
                   - **test**: lsp::handlers::tests::handle_hover_renders_each_spec_layer
+        - **id**: lsp-diagnostics-test
+          - **adapter**: rust
+          - **path**: src/lsp/handlers.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::handle_initialized_publishes_deterministic_notifications_for_known_documents
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.lsp-navigation
+              - **covers**:
+                - FEAT-LSP-001#binding.implementation/target.lsp-server
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: mitase
+                  - **test**: lsp::handlers::tests::handle_initialized_publishes_deterministic_notifications_for_known_documents
         - **id**: docs-test
           - **adapter**: rust
           - **path**: tests/v1_cli.rs
@@ -537,7 +553,7 @@ requirements:
         governed_by: [POL-AUTHORITY-001#rule.repository-meaning, POL-EVIDENCE-001#rule.derived-state]
       - id: lsp-navigation
         kind: behavior
-        statement: Language-server hover resolves each specification layer from the canonical workspace.
+        statement: Language-server diagnostics and hover resolve the canonical workspace without duplicating validation semantics.
         governed_by: [POL-GRAPH-001#rule.canonical-graph]
       - id: docs-generation
         kind: documentation
@@ -671,6 +687,15 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.lsp-navigation
                 covers: [FEAT-LSP-001#binding.implementation/target.lsp-server]
                 runner: { runner: cargo-test, arguments: { package: mitase, test: lsp::handlers::tests::handle_hover_renders_each_spec_layer } }
+          - id: lsp-diagnostics-test
+            adapter: rust
+            path: src/lsp/handlers.rs
+            selector: { kind: symbol, name: tests::handle_initialized_publishes_deterministic_notifications_for_known_documents }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.lsp-navigation
+                covers: [FEAT-LSP-001#binding.implementation/target.lsp-server]
+                runner: { runner: cargo-test, arguments: { package: mitase, test: lsp::handlers::tests::handle_initialized_publishes_deterministic_notifications_for_known_documents } }
           - id: docs-test
             adapter: rust
             path: tests/v1_cli.rs
