@@ -5,7 +5,8 @@ use mitase_spec_model::{
     LocalAnchorKind, SpecAnchor, SpecDocument, SpecId, TargetClaim,
 };
 use mitase_validation::{
-    VerificationAssessment, VerificationAssessmentReason, assess_verification_claim,
+    VerificationAssessment, VerificationAssessmentReason, VerificationAssessmentStatus,
+    assess_verification_claim,
 };
 use mitase_workspace::{AnchorValue, SpecIndex, SpecWorkspace};
 use serde::Serialize;
@@ -232,7 +233,7 @@ pub fn list(
             .filter(|item| namespace.is_none_or(|expected| expected == item.namespace))
             .filter(|item| category.is_none_or(|expected| expected == item.category))
             .filter(|item| item.status == Some(ItemStatus::Implemented))
-            .flat_map(|item| criterion_views(index, item))
+            .flat_map(|item| criterion_views(&workspace.config, index, item))
             .filter(|criterion| criterion.verification == CriterionVerification::Unverified)
             .collect()
     } else {
@@ -261,7 +262,7 @@ pub fn show(workspace: &SpecWorkspace, index: &SpecIndex, id: &str) -> Result<Sh
         .get(&item.id)
         .cloned()
         .unwrap_or_default();
-    let criteria = criterion_views(index, item);
+    let criteria = criterion_views(&workspace.config, index, item);
     let mut authored_relations = Vec::new();
     let mut derived_relations = Vec::new();
     for anchor in &anchors {
@@ -648,7 +649,11 @@ fn item_record(
     }
 }
 
-fn criterion_views(index: &SpecIndex, item: &ItemRecord) -> Vec<CriterionView> {
+fn criterion_views(
+    config: &mitase_project_model::ProjectConfig,
+    index: &SpecIndex,
+    item: &ItemRecord,
+) -> Vec<CriterionView> {
     let mut criteria = Vec::new();
     for anchor in index
         .item_anchors
@@ -675,7 +680,12 @@ fn criterion_views(index: &SpecIndex, item: &ItemRecord) -> Vec<CriterionView> {
                 index
                     .verification_by_target
                     .get(implementation)
-                    .is_some_and(|verifications| !verifications.is_empty())
+                    .into_iter()
+                    .flatten()
+                    .any(|verification| {
+                        assess_verification_claim(config, index, verification, anchor).status
+                            == VerificationAssessmentStatus::Valid
+                    })
             });
         criteria.push(CriterionView {
             id: anchor.clone(),

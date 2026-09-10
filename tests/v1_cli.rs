@@ -414,6 +414,35 @@ requirements:
 }
 
 #[test]
+fn show_does_not_mark_invalid_runner_metadata_as_verified() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-web-app");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    let config_path = temp.path().join("mitase.yaml");
+    let config = fs::read_to_string(&config_path).unwrap();
+    let config = config
+        .replace(
+            "verification:\n  runners:\n    cargo-test:\n      executable: cargo\n      arguments: [test, -p, \"{package}\", \"{test}\"]\n",
+            "verification:\n  runners: {}\n",
+        );
+    fs::write(&config_path, config).unwrap();
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-AUTH-001", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let show: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(show["criteria"][0]["verification"], "unverified");
+}
+
+#[test]
 fn query_exposes_explicit_canonical_relations() {
     let output = Command::cargo_bin("mitase")
         .unwrap()
