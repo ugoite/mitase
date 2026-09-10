@@ -259,6 +259,8 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
     let list: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
     assert_eq!(list["items"][0]["kind"], "feature");
     assert_eq!(list["items"][0]["id"], "FEAT-CHANGE-VALIDATION-001");
+    assert_eq!(list["items"][0]["namespace"], "capabilities");
+    assert_eq!(list["items"][0]["category"], "Mitase functional units");
 
     let filtered = Command::cargo_bin("mitase")
         .unwrap()
@@ -308,12 +310,107 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
             .any(|relation| { relation["relation"] == "implementation-targets" })
     );
     assert!(
+        show["criteria"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|criterion| {
+                criterion["id"] == "REQ-CAPABILITY-001#criterion.spec-model"
+                    && criterion["implementation_targets"]
+                        .as_array()
+                        .is_some_and(|targets| !targets.is_empty())
+                    && criterion["verification_targets"]
+                        .as_array()
+                        .is_some_and(|targets| !targets.is_empty())
+                    && criterion["verification"] == "verified"
+            })
+    );
+    assert!(
         show["verification_claims"]
             .as_array()
             .unwrap()
             .iter()
             .any(|claim| { claim["assessment"]["status"] == "valid" })
     );
+}
+
+#[test]
+fn list_filters_canonical_metadata_and_reports_unverified_criteria() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("docs/mitase")).unwrap();
+    fs::write(
+        temp.path().join("mitase.yaml"),
+        "schema: mitase/config/v1\n",
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("docs/mitase/requirements.yaml"),
+        r#"schema: mitase/spec/v1
+kind: requirements
+namespace: demo
+category: Demo requirements
+requirements:
+- id: REQ-DEMO-001
+  title: An inspectable requirement
+  description: A requirement with intentionally incomplete evidence.
+  priority: high
+  status: implemented
+  criteria:
+  - id: acceptance
+    kind: behavior
+    statement: The requirement is visible through the read model.
+    governed_by: []
+"#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "list",
+            "--namespace",
+            "demo",
+            "--category",
+            "Demo requirements",
+            "--unverified-criteria",
+            "--format",
+            "json",
+        ])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["items"].as_array().unwrap().len(), 1);
+    assert_eq!(result["items"][0]["namespace"], "demo");
+    assert_eq!(result["items"][0]["category"], "Demo requirements");
+    assert_eq!(result["unverified_criteria"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        result["unverified_criteria"][0]["id"],
+        "REQ-DEMO-001#criterion.acceptance"
+    );
+    assert_eq!(
+        result["unverified_criteria"][0]["verification"],
+        "unverified"
+    );
+
+    let show = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-DEMO-001", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        show.status.success(),
+        "{}",
+        String::from_utf8_lossy(&show.stderr)
+    );
+    let show: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(show["criteria"][0]["verification"], "unverified");
 }
 
 #[test]

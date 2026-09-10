@@ -55,6 +55,7 @@ impl StatusFilter {
 #[serde(deny_unknown_fields)]
 pub struct ListResult {
     pub items: Vec<ListItem>,
+    pub unverified_criteria: Vec<CriterionView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -62,6 +63,8 @@ pub struct ListResult {
 pub struct ListItem {
     pub id: SpecId,
     pub kind: SpecKind,
+    pub namespace: String,
+    pub category: String,
     pub title: String,
     pub status: Option<ItemStatus>,
     pub source: String,
@@ -78,10 +81,29 @@ pub struct ShowResult {
     pub status: Option<ItemStatus>,
     pub source: String,
     pub anchors: Vec<SpecAnchor>,
+    pub criteria: Vec<CriterionView>,
     pub authored_relations: Vec<RelationView>,
     pub derived_relations: Vec<RelationView>,
     pub bindings: Vec<BindingView>,
     pub verification_claims: Vec<VerificationView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CriterionView {
+    pub id: SpecAnchor,
+    pub kind: mitase_spec_model::CriterionKind,
+    pub statement: String,
+    pub implementation_targets: Vec<BoundTargetRef>,
+    pub verification_targets: Vec<BoundTargetRef>,
+    pub verification: CriterionVerification,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CriterionVerification {
+    Verified,
+    Unverified,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -166,6 +188,8 @@ pub struct VerificationView {
 struct ItemRecord {
     id: SpecId,
     kind: SpecKind,
+    namespace: String,
+    category: String,
     title: String,
     summary: String,
     description: String,
@@ -179,20 +203,45 @@ pub fn list(
     index: &SpecIndex,
     kind: Option<SpecKind>,
     status: Option<StatusFilter>,
+    namespace: Option<&str>,
+    category: Option<&str>,
+    include_unverified_criteria: bool,
 ) -> ListResult {
-    let items = item_records(workspace, index)
-        .into_iter()
+    let records = item_records(workspace, index);
+    let items = records
+        .iter()
         .filter(|item| kind.is_none_or(|expected| expected == item.kind))
         .filter(|item| status.is_none_or(|expected| expected.matches(item.status)))
+        .filter(|item| namespace.is_none_or(|expected| expected == item.namespace))
+        .filter(|item| category.is_none_or(|expected| expected == item.category))
         .map(|item| ListItem {
-            id: item.id,
+            id: item.id.clone(),
             kind: item.kind,
-            title: item.title,
+            namespace: item.namespace.clone(),
+            category: item.category.clone(),
+            title: item.title.clone(),
             status: item.status,
-            source: item.source,
+            source: item.source.clone(),
         })
         .collect();
-    ListResult { items }
+    let unverified_criteria = if include_unverified_criteria {
+        records
+            .iter()
+            .filter(|item| kind.is_none_or(|expected| expected == item.kind))
+            .filter(|item| status.is_none_or(|expected| expected.matches(item.status)))
+            .filter(|item| namespace.is_none_or(|expected| expected == item.namespace))
+            .filter(|item| category.is_none_or(|expected| expected == item.category))
+            .filter(|item| item.status == Some(ItemStatus::Implemented))
+            .flat_map(|item| criterion_views(index, item))
+            .filter(|criterion| criterion.verification == CriterionVerification::Unverified)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    ListResult {
+        items,
+        unverified_criteria,
+    }
 }
 
 pub fn show(workspace: &SpecWorkspace, index: &SpecIndex, id: &str) -> Result<ShowResult> {
@@ -212,6 +261,7 @@ pub fn show(workspace: &SpecWorkspace, index: &SpecIndex, id: &str) -> Result<Sh
         .get(&item.id)
         .cloned()
         .unwrap_or_default();
+    let criteria = criterion_views(index, item);
     let mut authored_relations = Vec::new();
     let mut derived_relations = Vec::new();
     for anchor in &anchors {
@@ -237,6 +287,7 @@ pub fn show(workspace: &SpecWorkspace, index: &SpecIndex, id: &str) -> Result<Sh
         status: item.status,
         source: item.source.clone(),
         anchors,
+        criteria,
         authored_relations,
         derived_relations,
         bindings,
@@ -312,13 +363,21 @@ pub fn render_list_text(result: &ListResult) -> String {
             .unwrap_or("unstatus-bearing");
         let _ = writeln!(
             output,
-            "{} {} [{}] — {} ({})",
+            "{} {} [{}] {}/{} — {} ({})",
             item.kind.label(),
             item.id,
             status,
+            item.namespace,
+            item.category,
             item.title,
             item.source
         );
+    }
+    if !result.unverified_criteria.is_empty() {
+        output.push_str("Unverified criteria:\n");
+        for criterion in &result.unverified_criteria {
+            let _ = writeln!(output, "  {} — {}", criterion.id, criterion.statement);
+        }
     }
     output
 }
@@ -343,6 +402,44 @@ pub fn render_show_text(result: &ShowResult) -> String {
     }
     if !result.description.is_empty() {
         let _ = writeln!(output, "Description: {}", result.description);
+    }
+    if !result.criteria.is_empty() {
+        output.push_str("Criteria:\n");
+        for criterion in &result.criteria {
+            let status = match criterion.verification {
+                CriterionVerification::Verified => "verified",
+                CriterionVerification::Unverified => "unverified",
+            };
+            let _ = writeln!(
+                output,
+                "  {} [{}] {}",
+                criterion.id, status, criterion.statement
+            );
+            if !criterion.implementation_targets.is_empty() {
+                let _ = writeln!(
+                    output,
+                    "    implementation targets: {}",
+                    criterion
+                        .implementation_targets
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            if !criterion.verification_targets.is_empty() {
+                let _ = writeln!(
+                    output,
+                    "    verification targets: {}",
+                    criterion
+                        .verification_targets
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
     }
     write_relations(
         &mut output,
@@ -412,11 +509,18 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
     let mut records = Vec::new();
     for loaded in &workspace.documents {
         match &loaded.document {
-            SpecDocument::Philosophies { philosophies, .. } => {
+            SpecDocument::Philosophies {
+                namespace,
+                category,
+                philosophies,
+                ..
+            } => {
                 for item in philosophies {
                     records.push(item_record(
                         workspace,
                         index,
+                        namespace,
+                        category,
                         item.id.clone(),
                         SpecKind::Philosophy,
                         item.title.clone(),
@@ -428,11 +532,18 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
                     ));
                 }
             }
-            SpecDocument::Policies { policies, .. } => {
+            SpecDocument::Policies {
+                namespace,
+                category,
+                policies,
+                ..
+            } => {
                 for item in policies {
                     records.push(item_record(
                         workspace,
                         index,
+                        namespace,
+                        category,
                         item.id.clone(),
                         SpecKind::Policy,
                         item.title.clone(),
@@ -444,11 +555,18 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
                     ));
                 }
             }
-            SpecDocument::Requirements { requirements, .. } => {
+            SpecDocument::Requirements {
+                namespace,
+                category,
+                requirements,
+                ..
+            } => {
                 for item in requirements {
                     records.push(item_record(
                         workspace,
                         index,
+                        namespace,
+                        category,
                         item.id.clone(),
                         SpecKind::Requirement,
                         item.title.clone(),
@@ -460,11 +578,18 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
                     ));
                 }
             }
-            SpecDocument::Features { features, .. } => {
+            SpecDocument::Features {
+                namespace,
+                category,
+                features,
+                ..
+            } => {
                 for item in features {
                     records.push(item_record(
                         workspace,
                         index,
+                        namespace,
+                        category,
                         item.id.clone(),
                         SpecKind::Feature,
                         item.title.clone(),
@@ -486,6 +611,8 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
 fn item_record(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
+    namespace: &str,
+    category: &str,
     id: SpecId,
     kind: SpecKind,
     title: String,
@@ -510,6 +637,8 @@ fn item_record(
     ItemRecord {
         id,
         kind,
+        namespace: namespace.into(),
+        category: category.into(),
         title,
         summary,
         description,
@@ -517,6 +646,52 @@ fn item_record(
         source: relative_path(workspace, source),
         bindings: binding_views,
     }
+}
+
+fn criterion_views(index: &SpecIndex, item: &ItemRecord) -> Vec<CriterionView> {
+    let mut criteria = Vec::new();
+    for anchor in index
+        .item_anchors
+        .get(&item.id)
+        .into_iter()
+        .flatten()
+        .filter(|anchor| anchor.kind == LocalAnchorKind::Criterion)
+    {
+        let Some(AnchorValue::Criterion(criterion)) = index.anchor(anchor) else {
+            continue;
+        };
+        let implementation_targets = index
+            .criteria_to_implementation_targets
+            .get(anchor)
+            .cloned()
+            .unwrap_or_default();
+        let verification_targets = index
+            .criteria_to_verification_targets
+            .get(anchor)
+            .cloned()
+            .unwrap_or_default();
+        let verified = !implementation_targets.is_empty()
+            && implementation_targets.iter().all(|implementation| {
+                index
+                    .verification_by_target
+                    .get(implementation)
+                    .is_some_and(|verifications| !verifications.is_empty())
+            });
+        criteria.push(CriterionView {
+            id: anchor.clone(),
+            kind: criterion.kind,
+            statement: criterion.statement.clone(),
+            implementation_targets,
+            verification_targets,
+            verification: if verified {
+                CriterionVerification::Verified
+            } else {
+                CriterionVerification::Unverified
+            },
+        });
+    }
+    criteria.sort_by(|left, right| left.id.cmp(&right.id));
+    criteria
 }
 
 fn relative_path(workspace: &SpecWorkspace, path: &Path) -> String {

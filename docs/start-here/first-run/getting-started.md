@@ -31,13 +31,18 @@ Use the read-only discovery commands to inspect the canonical graph:
 ```bash
 mitase list .
 mitase list . --kind requirement --status implemented --format json
+mitase list . --namespace capabilities --category "Mitase functional units" --format json
+mitase list . --unverified-criteria --format json
 mitase show REQ-CAPABILITY-001 . --format json
 mitase query REQ-CAPABILITY-001 . --relation implementation-targets --format json
 ```
 
-`list` returns stable ID, kind, title, status, and source fields. `show`
-includes authored relations, derived reverse relations, exact binding targets,
-and execution-free verification assessments. It does not run tests or other
+`list` returns stable ID, kind, namespace, category, title, status, and source
+fields. Use exact `--namespace` and `--category` filters to narrow that view;
+`--unverified-criteria` adds criteria without current exact verification
+coverage. `show` includes criterion statements, exact implementation and
+verification targets, authored relations, derived reverse relations, and
+execution-free verification assessments. It does not run tests or other
 configured runners. `query` inspects explicit relations for a specification ID,
 local anchor, or exact bound target reference; it does not infer dependencies.
 
