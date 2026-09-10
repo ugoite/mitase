@@ -32,6 +32,7 @@ enum CommandKind {
     Check(CheckArgs),
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
+    Query(QueryArgs),
     Show(ShowArgs),
     List(ListArgs),
     Lsp,
@@ -47,6 +48,17 @@ struct CheckArgs {
 struct ReadinessArgs {
     #[command(subcommand)]
     command: ReadinessCommand,
+}
+#[derive(Debug, Args)]
+struct QueryArgs {
+    /// A specification ID, anchor, or exact bound target reference.
+    source: String,
+    #[arg(long)]
+    relation: Option<String>,
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    #[arg(long, value_enum, default_value = "text")]
+    format: Format,
 }
 #[derive(Debug, Args)]
 struct ShowArgs {
@@ -110,6 +122,7 @@ pub fn run() -> Result<i32> {
         CommandKind::Check(args) => run_check(args),
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
+        CommandKind::Query(args) => run_query(args),
         CommandKind::Show(args) => run_show(args),
         CommandKind::List(args) => run_list(args),
         CommandKind::Lsp => {
@@ -117,6 +130,16 @@ pub fn run() -> Result<i32> {
             Ok(0)
         }
     }
+}
+fn run_query(args: QueryArgs) -> Result<i32> {
+    let workspace = SpecWorkspace::load(args.workspace)?;
+    let index = workspace.index()?;
+    let result = query::query(&workspace, &index, &args.source, args.relation.as_deref())?;
+    match args.format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Text => print!("{}", query::render_query_text(&result)),
+    }
+    Ok(0)
 }
 fn run_show(args: ShowArgs) -> Result<i32> {
     let workspace = SpecWorkspace::load(args.workspace)?;

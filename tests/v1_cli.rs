@@ -316,6 +316,64 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
 }
 
 #[test]
+fn query_exposes_explicit_canonical_relations() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "query",
+            "REQ-CAPABILITY-001#criterion.spec-model",
+            ".",
+            "--relation",
+            "implementation-targets",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["source"], "REQ-CAPABILITY-001#criterion.spec-model");
+    assert_eq!(result["relations"][0]["relation"], "implementation-targets");
+}
+
+#[test]
+fn query_reports_unknown_sources_with_nonzero_exit() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["query", "REQ-DOES-NOT-EXIST"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("query source"));
+}
+
+#[test]
+fn tutorial_yaml_examples_parse_as_canonical_spec_documents() {
+    let tutorial = fs::read_to_string("docs/start-here/first-run/tutorial.md").expect("tutorial");
+    let mut blocks = Vec::new();
+    let mut in_yaml = false;
+    let mut current = String::new();
+    for line in tutorial.lines() {
+        if line.trim() == "```yaml" {
+            assert!(!in_yaml, "nested YAML code block");
+            in_yaml = true;
+            current.clear();
+        } else if in_yaml && line.trim() == "```" {
+            blocks.push(current.clone());
+            in_yaml = false;
+        } else if in_yaml {
+            current.push_str(line);
+            current.push('\n');
+        }
+    }
+    assert!(!in_yaml, "unterminated YAML code block");
+    assert_eq!(blocks.len(), 2);
+    for block in blocks {
+        serde_yaml::from_str::<SpecDocument>(&block).expect("tutorial YAML must be canonical");
+    }
+}
+
+#[test]
 fn show_reports_missing_specifications_with_nonzero_exit() {
     let output = Command::cargo_bin("mitase")
         .unwrap()

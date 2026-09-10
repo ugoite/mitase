@@ -7,7 +7,7 @@ This tutorial creates a minimal v1 workspace by hand.
 3. Create `docs/mitase/policies/policies.yaml`.
 4. Create `docs/mitase/requirements/core/core.yaml`.
 5. Create `docs/mitase/features/core/core.yaml`.
-6. Run `cargo run --quiet -- validate .`.
+6. Run `cargo run --quiet -- validate workspace .`.
 
 A minimal requirement/feature connection looks like this:
 
@@ -37,7 +37,11 @@ requirements:
             adapter: rust
             path: tests/example.rs
             selector: { kind: file }
-        verifies: [REQ-DEMO-001#criterion.exact-behavior]
+            claims:
+              - kind: verifies
+                criterion: REQ-DEMO-001#criterion.exact-behavior
+                covers: []
+                runner: { runner: cargo-test, arguments: {} }
 ```
 
 ```yaml
@@ -60,7 +64,9 @@ features:
             adapter: rust
             path: src/example.rs
             selector: { kind: file }
-        satisfies: [REQ-DEMO-001#criterion.exact-behavior]
+            claims:
+              - kind: satisfies
+                criterion: REQ-DEMO-001#criterion.exact-behavior
 ```
 
 Use the checked-in examples for larger layouts.

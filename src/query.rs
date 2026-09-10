@@ -94,6 +94,13 @@ pub struct RelationView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct QueryResult {
+    pub source: String,
+    pub relations: Vec<RelationView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct BindingView {
     pub id: SpecAnchor,
     pub role: BindingRole,
@@ -237,6 +244,65 @@ pub fn show(workspace: &SpecWorkspace, index: &SpecIndex, id: &str) -> Result<Sh
     })
 }
 
+/// Query explicit authored and derived relations for one canonical graph source.
+///
+/// A source may be a specification ID, a local specification anchor, or an
+/// exact bound target reference. The result is deliberately limited to
+/// relations already represented by `SpecIndex`; it does not infer impact from
+/// source-language dependencies or call graphs.
+pub fn query(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    source: &str,
+    relation: Option<&str>,
+) -> Result<QueryResult> {
+    let mut relations = Vec::new();
+    if let Ok(reference) = source.parse::<BoundTargetRef>() {
+        if index.target(&reference).is_none() {
+            bail!("query source {source} was not found");
+        }
+        add_authored_relations(index, &reference.binding, &mut relations);
+        add_derived_relations(index, &reference.binding, &mut relations);
+        relations.retain(|entry| entry.source == source);
+    } else if let Ok(anchor) = source.parse::<SpecAnchor>() {
+        if index.anchor(&anchor).is_none() {
+            bail!("query source {source} was not found");
+        }
+        add_authored_relations(index, &anchor, &mut relations);
+        add_derived_relations(index, &anchor, &mut relations);
+    } else {
+        let matches = item_records(workspace, index)
+            .into_iter()
+            .filter(|item| item.id.0 == source)
+            .collect::<Vec<_>>();
+        match matches.as_slice() {
+            [] => bail!("query source {source} was not found"),
+            [_] => {
+                let anchors = index
+                    .item_anchors
+                    .get(&matches[0].id)
+                    .cloned()
+                    .unwrap_or_default();
+                for anchor in anchors {
+                    add_authored_relations(index, &anchor, &mut relations);
+                    add_derived_relations(index, &anchor, &mut relations);
+                }
+            }
+            _ => bail!("query source {source} is ambiguous"),
+        }
+    }
+
+    relations.sort();
+    relations.dedup();
+    if let Some(expected) = relation {
+        relations.retain(|entry| entry.relation == expected);
+    }
+    Ok(QueryResult {
+        source: source.into(),
+        relations,
+    })
+}
+
 pub fn render_list_text(result: &ListResult) -> String {
     let mut output = String::new();
     for item in &result.items {
@@ -254,6 +320,13 @@ pub fn render_list_text(result: &ListResult) -> String {
             item.source
         );
     }
+    output
+}
+
+pub fn render_query_text(result: &QueryResult) -> String {
+    let mut output = String::new();
+    let _ = writeln!(output, "Query source: {}", result.source);
+    write_relations(&mut output, "Relations", &result.relations);
     output
 }
 
