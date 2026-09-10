@@ -28,12 +28,14 @@ Use the read-only discovery commands to inspect the canonical graph:
 mitase list .
 mitase list . --kind requirement --status implemented --format json
 mitase show REQ-CAPABILITY-001 . --format json
+mitase query REQ-CAPABILITY-001 . --relation implementation-targets --format json
 ```
 
 `list` returns stable ID, kind, title, status, and source fields. `show`
 includes authored relations, derived reverse relations, exact binding targets,
 and execution-free verification assessments. It does not run tests or other
-configured runners.
+configured runners. `query` inspects explicit relations for a specification ID,
+local anchor, or exact bound target reference; it does not infer dependencies.
 
 A new workspace needs:
 
