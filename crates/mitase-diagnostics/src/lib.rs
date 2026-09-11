@@ -53,6 +53,19 @@ pub struct DiagnosticSubject {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RelationRef {
+    pub relation: String,
+    pub source: DiagnosticSubject,
+    pub target: DiagnosticSubject,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadOnlyHint {
+    pub kind: String,
+    pub value: String,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Evidence {
     pub kind: String,
     pub value: String,
@@ -80,6 +93,8 @@ pub struct Diagnostic {
     pub subject: Option<DiagnosticSubject>,
     #[serde(default)]
     pub reference: Option<DiagnosticSubject>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<RelationRef>,
     #[serde(default)]
     pub candidates: Vec<String>,
     #[serde(default)]
@@ -87,6 +102,8 @@ pub struct Diagnostic {
     #[serde(rename = "suggested_action")]
     #[serde(default)]
     pub help: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next: Vec<ReadOnlyHint>,
     #[serde(default)]
     pub fix: Option<SafeFix>,
 }
@@ -108,9 +125,11 @@ impl Diagnostic {
             related: vec![],
             subject: None,
             reference: None,
+            relation: None,
             candidates: vec![],
             evidence: vec![],
             help: None,
+            next: vec![],
             fix: None,
         }
     }
@@ -147,6 +166,28 @@ impl Diagnostic {
 
     pub fn with_help(mut self, help: impl Into<String>) -> Self {
         self.help = Some(help.into());
+        self
+    }
+
+    pub fn with_relation(
+        mut self,
+        relation: impl Into<String>,
+        source: DiagnosticSubject,
+        target: DiagnosticSubject,
+    ) -> Self {
+        self.relation = Some(RelationRef {
+            relation: relation.into(),
+            source,
+            target,
+        });
+        self
+    }
+
+    pub fn with_next_read(mut self, kind: impl Into<String>, value: impl Into<String>) -> Self {
+        self.next.push(ReadOnlyHint {
+            kind: kind.into(),
+            value: value.into(),
+        });
         self
     }
 
@@ -260,6 +301,18 @@ mod tests {
         });
         diagnostic.set_subject_anchor(&anchor);
         diagnostic.set_reference_target(&target);
+        diagnostic = diagnostic.with_relation(
+            "verifies",
+            DiagnosticSubject {
+                kind: "bound-target".into(),
+                value: target.to_string(),
+            },
+            DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: anchor.to_string(),
+            },
+        );
+        diagnostic = diagnostic.with_next_read("show", anchor.item.to_string());
         diagnostic.candidates = vec!["src/one.rs".into(), "src/two.rs".into()];
         diagnostic.help = Some("make the selector unique".into());
 
@@ -271,6 +324,11 @@ mod tests {
         assert!(value["related_spans"].is_array());
         assert_eq!(value["subject"]["kind"], "spec-anchor");
         assert_eq!(value["reference"]["kind"], "bound-target");
+        assert_eq!(value["relation"]["relation"], "verifies");
+        assert_eq!(value["relation"]["source"]["value"], target.to_string());
+        assert_eq!(value["relation"]["target"]["value"], anchor.to_string());
+        assert_eq!(value["next"][0]["kind"], "show");
+        assert_eq!(value["next"][0]["value"], anchor.item.to_string());
         assert_eq!(value["candidates"][0], "src/one.rs");
         assert_eq!(value["suggested_action"], "make the selector unique");
         assert!(value.get("rule_id").is_none());
@@ -282,5 +340,14 @@ mod tests {
             diagnostic.render_text(),
             "Error MITASE-TARGET-002 spec/requirements.yaml:12:5: target resolution is ambiguous [candidates: src/one.rs, src/two.rs] [suggested action: make the selector unique]"
         );
+    }
+
+    #[test]
+    fn empty_optional_navigation_fields_are_omitted() {
+        let diagnostic = Diagnostic::info("MITASE-INFO-001", "nothing to report", "mitase.yaml");
+        let value = serde_json::to_value(diagnostic).unwrap();
+
+        assert!(value.get("relation").is_none());
+        assert!(value.get("next").is_none());
     }
 }

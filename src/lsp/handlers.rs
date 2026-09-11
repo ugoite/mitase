@@ -953,6 +953,7 @@ mod tests {
     use crate::lsp::protocol::{
         DidCloseTextDocumentParams, Position, TextDocumentIdentifier, WorkspaceFolder,
     };
+    use mitase_diagnostics::DiagnosticSubject;
     use std::{fs, path::PathBuf};
     use tempfile::tempdir;
 
@@ -1479,6 +1480,19 @@ mod tests {
         diagnostic.primary.column = Some(5);
         diagnostic.primary.end_line = Some(12);
         diagnostic.primary.end_column = Some(19);
+        diagnostic = diagnostic
+            .with_relation(
+                "verifies",
+                DiagnosticSubject {
+                    kind: "bound-target".into(),
+                    value: "FEAT-LSP-001#binding.verification/target.test".into(),
+                },
+                DiagnosticSubject {
+                    kind: "spec-anchor".into(),
+                    value: "REQ-LSP-001#criterion.behavior".into(),
+                },
+            )
+            .with_next_read("show", "REQ-LSP-001");
 
         let mapped =
             to_lsp_diagnostic(Path::new("/workspace"), &diagnostic).expect("diagnostic should map");
@@ -1494,6 +1508,14 @@ mod tests {
         assert_eq!(
             mapped.data.as_ref().expect("canonical data")["code"],
             "MITASE-TARGET-002"
+        );
+        assert_eq!(
+            mapped.data.as_ref().expect("canonical data")["relation"]["relation"],
+            "verifies"
+        );
+        assert_eq!(
+            mapped.data.as_ref().expect("canonical data")["next"][0]["value"],
+            "REQ-LSP-001"
         );
     }
 
