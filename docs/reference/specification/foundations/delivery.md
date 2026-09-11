@@ -9,7 +9,7 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
 
 ### Schema
 
-- mitase/spec/v1
+- mitase/authoring/v2
 
 ### Kind
 
@@ -240,7 +240,7 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
 ## Source YAML
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: policies
 namespace: governance
 category: Mitase specification governance

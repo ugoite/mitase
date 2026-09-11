@@ -9,7 +9,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
 
 ### Schema
 
-- mitase/spec/v1
+- mitase/authoring/v2
 
 ### Kind
 
@@ -478,7 +478,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
 ## Source YAML
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: features
 namespace: capabilities
 category: Mitase functional units
