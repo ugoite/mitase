@@ -14,7 +14,8 @@ pub const AUTHORING_SCHEMA: &str = "mitase/authoring/v2";
 
 /// Convert one current canonical document into explicit v0.2 authoring
 /// syntax. This is an opt-in transformation; normal canonical loading never
-/// calls it.
+/// calls it. Normal workspace loading routes authoring/v2 sources through the
+/// separate parser and normalizer instead.
 pub fn migrate_v1_to_v2(source: &str) -> Result<AuthoringDocument, MigrationError> {
     let canonical: SpecDocument = serde_yaml::from_str(source)
         .map_err(|error| MigrationError::InvalidSource(error.to_string()))?;

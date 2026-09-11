@@ -23,8 +23,9 @@ Execution and delivery tooling is external to the Mitase CLI. See the
 building new integrations.
 
 The explicit `migrate <source> --stdout` helper is a read-only v0.1 to v0.2
-authoring transition. It is separate from normal workspace loading; see the
-[migration guide](../../workflows/repository/migration.md).
+authoring transition. During the 0.1.x dogfood period, normal workspace
+loading accepts the resulting v2 documents alongside canonical v1 sources; see
+the [migration guide](../../workflows/repository/migration.md).
 
 Use the read-only discovery commands to inspect the canonical graph:
 

@@ -33,12 +33,13 @@ normalizing it back to the exact source `SpecDocument`, including IDs,
 anchors, binding targets, claims, and verification claims. The command never
 overwrites the source or writes to the workspace itself.
 
-Migration is not a compatibility alias: normal `check` and `validate` do not
-accept the source as v0.2 authoring input. The migration must be requested
-explicitly, and the generated full authoring form can then be simplified using
-the documented v0.2 short contract. Keep generated authoring documents outside
-the configured canonical `spec_roots` until the v0.2 authoring loader is
-introduced.
+Migration is not a compatibility alias: it is an explicit, read-only way to
+produce v0.2 source. During the 0.1.x dogfood period, normal `check` and
+`validate` accept both the existing canonical source and the generated
+authoring source; place reviewed v2 documents under the configured
+`spec_roots`. The generated full authoring form can then be simplified using
+the documented v0.2 short contract. The later 0.2 cutover will close the v1
+authoring entrance after the corpus has moved.
 
 ## Current pre-v1 cutover
 

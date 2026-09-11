@@ -791,6 +791,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "globset",
+ "mitase-authoring",
  "mitase-code-intel",
  "mitase-inventory",
  "mitase-project-model",

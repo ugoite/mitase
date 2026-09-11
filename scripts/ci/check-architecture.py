@@ -39,6 +39,7 @@ ALLOWED_INTERNAL_DEPENDENCIES = {
         "mitase-workspace",
     },
     "mitase-workspace": {
+        "mitase-authoring",
         "mitase-code-intel",
         "mitase-inventory",
         "mitase-project-model",
