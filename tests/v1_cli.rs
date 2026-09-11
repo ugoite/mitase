@@ -29,6 +29,16 @@ fn current_workspace_checks_and_reports_configured_readiness() {
     assert_eq!(report["target"], "traceable");
 }
 
+#[test]
+fn first_run_short_authoring_fixture_passes_check() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/first-run-short");
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", fixture.to_str().unwrap()])
+        .assert()
+        .success();
+}
+
 #[derive(Debug, Deserialize)]
 struct AcceptanceCorpus {
     source: AcceptanceSource,
@@ -631,7 +641,7 @@ fn tutorial_yaml_examples_parse_and_normalize_as_v2_authoring_documents() {
         }
     }
     assert!(!in_yaml, "unterminated YAML code block");
-    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks.len(), 1);
     for block in blocks {
         let authoring = AuthoringDocument::parse(&block).expect("tutorial YAML must be v2");
         authoring

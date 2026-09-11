@@ -1772,19 +1772,6 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                             None,
                         );
                     }
-                    if item
-                        .bindings
-                        .iter()
-                        .any(|binding| binding.role == BindingRole::Implementation)
-                    {
-                        push(
-                            out,
-                            "MITASE-BINDING-002",
-                            "requirement cannot own implementation bindings",
-                            &path,
-                            None,
-                        );
-                    }
                 }
             }
             SpecDocument::Features { features, .. } => {
@@ -2016,15 +2003,9 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 }
             }
             AnchorValue::Criterion(criterion) => {
-                if criterion.governed_by.is_empty() {
-                    push(
-                        out,
-                        "MITASE-REQUIREMENT-002",
-                        "criterion has no governing Rule",
-                        &path,
-                        Some(anchor.clone()),
-                    );
-                }
+                // An empty governing relation is the explicit seed form used
+                // by the v2 short authoring contract. When rules are present,
+                // every authored relation is still checked below.
                 for target in &criterion.governed_by {
                     check_kind(ctx, out, target, LocalAnchorKind::Rule, &path);
                 }

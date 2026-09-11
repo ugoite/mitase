@@ -1,0 +1,30 @@
+schema: mitase/authoring/v2
+kind: requirement
+namespace: demo
+category: Demo
+requirement:
+  id: REQ-DEMO-001
+  title: Keep one behavior exact
+  description: The smallest checked-in authoring slice stays connected.
+  priority: high
+  status: implemented
+  criterion:
+    id: exact-behavior
+    kind: behavior
+    statement: One implementation path has one verification path.
+  implementation:
+    facet: delivery
+    responsibility: Implement the example behavior.
+    target:
+      path: src/example.rs
+      satisfies: exact-behavior
+  verification:
+    facet: verification
+    responsibility: Verify the example behavior.
+    target:
+      path: tests/example.rs
+      verifies:
+        criterion: exact-behavior
+        covers: [source]
+        runner: cargo-test
+        arguments: { package: first-run, test: example_is_available }

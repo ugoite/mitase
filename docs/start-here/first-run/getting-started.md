@@ -1,14 +1,14 @@
 # Getting started
 
-Install a release build or run the binary from source, then create a workspace
-with the current v2 authoring source.
+Install a release build or run the binary from source, then create the smallest
+workspace with the current v2 authoring source.
 
 ## Quick start commands
 
 ```bash
 RELEASE="$(gh release view --json tagName -q .tagName --repo ugoite/mitase)"
 curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/install-mitase.sh" | env MITASE_VERSION=alpha bash
-cargo run --quiet -- validate workspace .
+mitase check .
 ```
 
 The normal v1 CLI surface is specification-only:
@@ -51,11 +51,23 @@ execution-free verification assessments. It does not run tests or other
 configured runners. `query` inspects explicit relations for a specification ID,
 local anchor, or exact bound target reference; it does not infer dependencies.
 
-A new workspace needs:
+A first-run workspace needs only:
 
 - `mitase.yaml`
-- a `docs/mitase` tree with philosophy, policy, requirement, and feature documents
-- artifact roots that point at real implementation and verification files
+- one `docs/mitase` v2 requirement document
+- real implementation and verification files referenced by that document
+
+The minimal config is one line:
+
+```yaml
+schema: mitase/config/v1
+```
+
+The requirement short form connects one criterion to one implementation target
+and one verification target. Copy the checked-in
+[`fixtures/first-run-short`](../../../fixtures/first-run-short) tree to try the
+same path locally, or continue to the [tutorial](./tutorial.md) for the full
+four-layer story.
 
 Use `examples/` as the reference bootstrap path for concrete layouts.
 
