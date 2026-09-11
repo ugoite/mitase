@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod lsp;
+pub mod output;
 pub mod query;
 
 use anyhow::{Context, Result, bail};
@@ -13,6 +14,7 @@ use mitase_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationConte
 use mitase_workspace::{
     FrontendDiagnostic, FrontendDiagnosticError, FrontendSeverity, SpecWorkspace,
 };
+use output::OutputFormat as Format;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -157,11 +159,6 @@ struct ValidateOptions {
     staged: bool,
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
-}
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum Format {
-    Text,
-    Json,
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ConfigFormat {
