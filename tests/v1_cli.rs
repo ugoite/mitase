@@ -653,6 +653,52 @@ fn mitase_authoring_v2_preserves_the_pre_migration_canonical_graph() {
     assert_eq!(actual, expected);
 }
 
+#[test]
+fn mitase_authoring_corpus_measurement_matches_the_short_contract_boundary() {
+    let workspace = SpecWorkspace::load(".").expect("Mitase workspace");
+    assert_eq!(workspace.documents.len(), 11);
+
+    let mut philosophy_count = 0;
+    let mut policy_count = 0;
+    let mut requirement_count = 0;
+    let mut feature_count = 0;
+    let mut requirement_shapes = Vec::new();
+
+    for loaded in &workspace.documents {
+        match &loaded.document {
+            SpecDocument::Philosophies { philosophies, .. } => {
+                philosophy_count += philosophies.len();
+            }
+            SpecDocument::Policies { policies, .. } => {
+                policy_count += policies.len();
+            }
+            SpecDocument::Requirements { requirements, .. } => {
+                requirement_count += requirements.len();
+                requirement_shapes.extend(
+                    requirements.iter().map(|requirement| {
+                        (requirement.criteria.len(), requirement.bindings.len())
+                    }),
+                );
+            }
+            SpecDocument::Features { features, .. } => {
+                feature_count += features.len();
+            }
+        }
+    }
+
+    assert_eq!(
+        (
+            philosophy_count,
+            policy_count,
+            requirement_count,
+            feature_count
+        ),
+        (3, 7, 2, 18)
+    );
+    requirement_shapes.sort_unstable();
+    assert_eq!(requirement_shapes, vec![(3, 1), (13, 2)]);
+}
+
 fn generated_spec_path(relative: &Path) -> PathBuf {
     let parts: Vec<_> = relative.components().collect();
     let section = match parts.as_slice() {
