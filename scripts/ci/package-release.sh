@@ -3,21 +3,6 @@
 
 set -euo pipefail
 
-find_python() {
-  if command -v python3 >/dev/null 2>&1; then
-    command -v python3
-    return 0
-  fi
-
-  if command -v python >/dev/null 2>&1; then
-    command -v python
-    return 0
-  fi
-
-  echo "python3 or python is required to package releases" >&2
-  exit 1
-}
-
 write_sha256() {
   local archive_path="$1"
   local checksum_path="$2"
@@ -34,7 +19,6 @@ package_release_artifact() {
   local binary_path="$2"
   local output_dir="$3"
   local version="$4"
-  local python_bin
   local asset_base
   local archive_path
 
@@ -42,6 +26,16 @@ package_release_artifact() {
     echo "missing release binary: $binary_path" >&2
     exit 1
   fi
+
+  case "$target" in
+    x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | \
+      x86_64-apple-darwin | aarch64-apple-darwin)
+      ;;
+    *)
+      echo "unsupported release target: $target" >&2
+      exit 1
+      ;;
+  esac
 
   if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([\.-][A-Za-z0-9.-]+)?$ ]]; then
     echo "release version must be a version tag: $version" >&2
@@ -51,24 +45,8 @@ package_release_artifact() {
   mkdir -p "$output_dir"
   asset_base="mitase-${version}-${target}"
 
-  if [[ "$target" == *windows* ]]; then
-    archive_path="${output_dir}/${asset_base}.zip"
-    python_bin="$(find_python)"
-    "$python_bin" - "$binary_path" "$archive_path" <<'PY'
-import sys
-import zipfile
-from pathlib import Path
-
-binary_path = Path(sys.argv[1])
-archive_path = Path(sys.argv[2])
-
-with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-    archive.write(binary_path, arcname=binary_path.name)
-PY
-  else
-    archive_path="${output_dir}/${asset_base}.tar.gz"
-    tar -C "$(dirname "$binary_path")" -czf "$archive_path" "$(basename "$binary_path")"
-  fi
+  archive_path="${output_dir}/${asset_base}.tar.gz"
+  tar -C "$(dirname "$binary_path")" -czf "$archive_path" "$(basename "$binary_path")"
 
   write_sha256 "$archive_path" "${archive_path}.sha256"
 }

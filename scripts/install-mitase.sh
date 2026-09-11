@@ -121,8 +121,17 @@ resolve_target_triple() {
   local os_name arch_name
 
   if [[ -n "${MITASE_TARGET_TRIPLE:-}" ]]; then
-    printf '%s\n' "$MITASE_TARGET_TRIPLE"
-    return 0
+    case "$MITASE_TARGET_TRIPLE" in
+      x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | \
+        x86_64-apple-darwin | aarch64-apple-darwin)
+        printf '%s\n' "$MITASE_TARGET_TRIPLE"
+        return 0
+        ;;
+      *)
+        echo "unsupported target: $MITASE_TARGET_TRIPLE" >&2
+        exit 1
+        ;;
+    esac
   fi
 
   os_name="$(uname -s)"
@@ -140,7 +149,6 @@ resolve_target_triple() {
   case "$os_name" in
     Darwin) printf '%s\n' "${arch_name}-apple-darwin" ;;
     Linux) printf '%s\n' "${arch_name}-unknown-linux-gnu" ;;
-    MINGW* | MSYS* | CYGWIN*) printf '%s\n' "${arch_name}-pc-windows-msvc" ;;
     *)
       echo "unsupported operating system: $os_name" >&2
       exit 1
@@ -149,48 +157,23 @@ resolve_target_triple() {
 }
 
 resolve_install_dir() {
-  local os_name
-
   if [[ -n "${MITASE_INSTALL_DIR:-}" ]]; then
     printf '%s\n' "$MITASE_INSTALL_DIR"
     return 0
   fi
 
-  os_name="$(uname -s)"
-
-  case "$os_name" in
-    MINGW* | MSYS* | CYGWIN*)
-      if [[ -n "${LOCALAPPDATA:-}" ]]; then
-        printf '%s\n' "${LOCALAPPDATA}/Programs/mitase/bin"
-      else
-        printf '%s\n' "${HOME}/AppData/Local/Programs/mitase/bin"
-      fi
-      ;;
-    *)
-      printf '%s\n' "${HOME}/.local/bin"
-      ;;
-  esac
+  printf '%s\n' "${HOME}/.local/bin"
 }
 
 resolve_archive_name() {
   local target="$1"
   local version="$2"
 
-  if [[ "$target" == *windows* ]]; then
-    printf 'mitase-%s-%s.zip\n' "$version" "$target"
-  else
-    printf 'mitase-%s-%s.tar.gz\n' "$version" "$target"
-  fi
+  printf 'mitase-%s-%s.tar.gz\n' "$version" "$target"
 }
 
 resolve_binary_name() {
-  local target="$1"
-
-  if [[ "$target" == *windows* ]]; then
-    printf 'mitase.exe\n'
-  else
-    printf 'mitase\n'
-  fi
+  printf 'mitase\n'
 }
 
 fetch_registry_token() {
@@ -343,7 +326,7 @@ for layer in layers:
 for layer in layers:
     annotations = layer.get("annotations") or {}
     title = annotations.get("org.opencontainers.image.title", "")
-    if title.endswith(".tar.gz") or title.endswith(".zip"):
+    if title.endswith(".tar.gz"):
         print(layer["digest"])
         raise SystemExit(0)
 
@@ -436,8 +419,7 @@ filtered.sort(key=lambda candidate: candidate[:5], reverse=True)
 tag = filtered[0][6]
 release = filtered[0][7]
 
-archive_suffix = ".zip" if "windows" in target else ".tar.gz"
-archive_name = f"mitase-{tag}-{target}{archive_suffix}"
+archive_name = f"mitase-{tag}-{target}.tar.gz"
 for asset in release.get("assets") or []:
     if asset.get("name") == archive_name:
         print(asset["browser_download_url"])
@@ -502,20 +484,6 @@ extract_archive() {
     *.tar.gz)
       require_command tar
       tar -C "$destination_dir" -xzf "$archive_path"
-      ;;
-    *.zip)
-      python_bin="$(find_python)"
-      "$python_bin" - "$archive_path" "$destination_dir" <<'PY'
-import sys
-import zipfile
-from pathlib import Path
-
-archive_path = Path(sys.argv[1])
-destination_dir = Path(sys.argv[2])
-
-with zipfile.ZipFile(archive_path) as archive:
-    archive.extractall(destination_dir)
-PY
       ;;
     *)
       echo "unsupported archive format: $archive_path" >&2

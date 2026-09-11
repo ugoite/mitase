@@ -9,7 +9,6 @@ import io
 import json
 import tarfile
 import threading
-import zipfile
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,7 +20,6 @@ TARGETS = {
     "aarch64-unknown-linux-gnu": "mitase",
     "x86_64-apple-darwin": "mitase",
     "aarch64-apple-darwin": "mitase",
-    "x86_64-pc-windows-msvc": "mitase.exe",
 }
 
 TAG_SETS = {
@@ -44,15 +42,11 @@ class Artifact:
 def build_archive(version: str, target: str, binary_name: str) -> bytes:
     payload = f"mock mitase {version} {target}\n".encode()
     buffer = io.BytesIO()
-    if binary_name.endswith(".exe"):
-        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(binary_name, payload)
-    else:
-        with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
-            info = tarfile.TarInfo(name=binary_name)
-            info.size = len(payload)
-            info.mode = 0o755
-            archive.addfile(info, io.BytesIO(payload))
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        info = tarfile.TarInfo(name=binary_name)
+        info.size = len(payload)
+        info.mode = 0o755
+        archive.addfile(info, io.BytesIO(payload))
     return buffer.getvalue()
 
 
@@ -75,11 +69,7 @@ def build_artifacts(
         for target, binary_name in TARGETS.items():
             if target_filter is not None and target != target_filter:
                 continue
-            archive_name = (
-                f"mitase-{version}-{target}.zip"
-                if target.endswith("windows-msvc")
-                else f"mitase-{version}-{target}.tar.gz"
-            )
+            archive_name = f"mitase-{version}-{target}.tar.gz"
             archive_bytes = build_archive(version, target, binary_name)
             archive_digest = sha256_digest(archive_bytes)
             checksum_bytes = f"{archive_digest.split(':', 1)[1]}  {archive_name}\n".encode()
