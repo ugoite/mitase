@@ -12,7 +12,7 @@ the exact bytes selected for publication.
 
 The repository's public version authority is the `version` in the Cargo
 workspace package section of [Cargo.toml](../../Cargo.toml). The Foundation
-Release is `v0.1.0`; the current patch train is prepared as `v0.1.2`. The
+Release is `v0.1.0`; the current patch train is prepared as `v0.1.3`. The
 candidate workflow reads the version from the exact source revision it checks
 out.
 
