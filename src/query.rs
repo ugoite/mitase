@@ -416,6 +416,128 @@ pub fn render_query_text(result: &QueryResult) -> String {
     output
 }
 
+pub fn render_query_compact_text(result: &QueryResult) -> String {
+    if result.relations.is_empty() {
+        return format!(
+            "query | source={} | relations=0\n",
+            compact_value(&result.source)
+        );
+    }
+    result
+        .relations
+        .iter()
+        .map(|relation| {
+            format!(
+                "query | source={} | relation={} | from={} | to={}",
+                compact_value(&result.source),
+                relation.relation,
+                compact_value(&relation.source),
+                relation
+                    .targets
+                    .iter()
+                    .map(|target| compact_value(target))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+pub fn render_show_compact_text(result: &ShowResult) -> String {
+    let mut output = format!(
+        "show | id={} | kind={} | state={} | title={}\n",
+        result.id,
+        result.kind.label(),
+        result
+            .status
+            .map(item_status_label)
+            .unwrap_or("unstatus-bearing"),
+        compact_value(&result.title)
+    );
+    for criterion in &result.criteria {
+        let targets = verification_targets_for_trace(result, criterion);
+        let valid = targets
+            .iter()
+            .filter(|target| verification_status_for(result, &criterion.id, target) == "valid")
+            .count();
+        writeln!(
+            output,
+            "criterion | id={} | status={} | implements={} | verifies={}/{}",
+            criterion.id,
+            criterion_verification_label(criterion.verification),
+            criterion.implementation_targets.len(),
+            valid,
+            targets.len()
+        )
+        .expect("writing to a String cannot fail");
+    }
+    for relation in result
+        .authored_relations
+        .iter()
+        .chain(result.derived_relations.iter())
+    {
+        writeln!(
+            output,
+            "relation | kind=graph | relation={} | from={} | to={}",
+            relation.relation,
+            compact_value(&relation.source),
+            relation
+                .targets
+                .iter()
+                .map(|target| compact_value(target))
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+        .expect("writing to a String cannot fail");
+    }
+    output
+}
+
+pub fn render_list_compact_text(result: &ListResult) -> String {
+    let mut output = String::new();
+    for item in &result.items {
+        let status = item
+            .status
+            .map(item_status_label)
+            .unwrap_or("unstatus-bearing");
+        writeln!(
+            output,
+            "item | kind={} | id={} | state={} | relation={}/{} | title={} | source={}",
+            item.kind.label(),
+            item.id,
+            status,
+            compact_value(&item.namespace),
+            compact_value(&item.category),
+            compact_value(&item.title),
+            compact_value(&item.source)
+        )
+        .expect("writing to a String cannot fail");
+    }
+    for criterion in &result.unverified_criteria {
+        writeln!(
+            output,
+            "unverified | id={} | statement={}",
+            criterion.id,
+            compact_value(&criterion.statement)
+        )
+        .expect("writing to a String cannot fail");
+    }
+    output
+}
+
+fn compact_value(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn criterion_verification_label(value: CriterionVerification) -> &'static str {
+    match value {
+        CriterionVerification::Verified => "verified",
+        CriterionVerification::Unverified => "unverified",
+    }
+}
+
 pub fn render_show_text(result: &ShowResult) -> String {
     let mut output = String::new();
     let _ = writeln!(output, "{} {}", result.kind.label(), result.id);

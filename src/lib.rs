@@ -16,7 +16,8 @@ use mitase_workspace::{
     FrontendDiagnostic, FrontendDiagnosticError, FrontendSeverity, SpecWorkspace,
 };
 use output::OutputFormat as Format;
-use render::HumanRenderer;
+use render::{CompactRenderer, HumanRenderer};
+use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -28,6 +29,26 @@ struct ValidationInputs {
     reported_changed_files: Option<Vec<ChangedFile>>,
     change_base_revision: Option<String>,
     change_scope: Option<String>,
+}
+
+const JSON_SCHEMA_VERSION: &str = "mitase/cli/v1";
+
+#[derive(Serialize)]
+struct JsonResponse<'a, T: Serialize> {
+    schema_version: &'static str,
+    #[serde(flatten)]
+    value: &'a T,
+}
+
+fn print_json<T: Serialize>(value: &T) -> Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&JsonResponse {
+            schema_version: JSON_SCHEMA_VERSION,
+            value,
+        })?
+    );
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -268,7 +289,8 @@ fn run_query(args: QueryArgs) -> Result<i32> {
     let index = workspace.index()?;
     let result = query::query(&workspace, &index, &args.source, args.relation.as_deref())?;
     match args.format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Json => print_json(&result)?,
+        Format::Compact => print!("{}", query::render_query_compact_text(&result)),
         Format::Text => print!("{}", query::render_query_text(&result)),
     }
     Ok(0)
@@ -280,7 +302,8 @@ fn run_show(args: ShowArgs) -> Result<i32> {
     let index = workspace.index()?;
     let result = query::show(&workspace, &index, &args.id)?;
     match args.format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Json => print_json(&result)?,
+        Format::Compact => print!("{}", query::render_show_compact_text(&result)),
         Format::Text => print!("{}", query::render_show_text(&result)),
     }
     Ok(0)
@@ -300,7 +323,8 @@ fn run_list(args: ListArgs) -> Result<i32> {
         args.unverified_criteria,
     );
     match args.format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Json => print_json(&result)?,
+        Format::Compact => print!("{}", query::render_list_compact_text(&result)),
         Format::Text => print!("{}", query::render_list_text(&result)),
     }
     Ok(0)
@@ -368,7 +392,15 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     let report =
         mitase_validation::evaluate_readiness(&workspace, &index, &revision(&workspace.root)?)?;
     match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        Format::Json => print_json(&report)?,
+        Format::Compact => println!(
+            "readiness | target={} | inventory={}/{} | verification={}/{}",
+            report.target,
+            report.inventory.ready,
+            report.inventory.required,
+            report.verification.ready,
+            report.verification.required
+        ),
         Format::Text => println!(
             "Readiness target: {}\nInventory: {}/{}\nVerification: {}/{}",
             report.target,
@@ -465,7 +497,11 @@ fn render_validation_result(
     scope: Option<&str>,
 ) -> Result<()> {
     match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(result)?),
+        Format::Json => print_json(result)?,
+        Format::Compact => print!(
+            "{}",
+            CompactRenderer::render_validation_result(result, operation, elapsed, scope)
+        ),
         Format::Text => {
             let renderer = HumanRenderer::new();
             let rendered = match scope {
@@ -493,7 +529,16 @@ fn load_workspace_or_report(
                 readiness: None,
             };
             match format {
-                Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+                Format::Json => print_json(&result)?,
+                Format::Compact => eprint!(
+                    "{}",
+                    CompactRenderer::render_validation_result(
+                        &result,
+                        "workspace",
+                        std::time::Duration::ZERO,
+                        None,
+                    )
+                ),
                 Format::Text => eprint!(
                     "{}",
                     HumanRenderer::new_for_stderr().render_validation_result(

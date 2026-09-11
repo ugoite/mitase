@@ -13,6 +13,7 @@ pub const MIN_TERMINAL_WIDTH: u16 = 20;
 #[value(rename_all = "kebab-case")]
 pub enum OutputFormat {
     Text,
+    Compact,
     Json,
 }
 
@@ -182,6 +183,13 @@ mod tests {
         assert_eq!(
             OutputFormat::Json.to_possible_value().unwrap().get_name(),
             "json"
+        );
+        assert_eq!(
+            OutputFormat::Compact
+                .to_possible_value()
+                .unwrap()
+                .get_name(),
+            "compact"
         );
     }
 }

@@ -119,6 +119,96 @@ impl HumanRenderer {
     }
 }
 
+pub(crate) struct CompactRenderer;
+
+impl CompactRenderer {
+    pub(crate) fn render_validation_result(
+        result: &ValidationResult,
+        operation: &str,
+        elapsed: Duration,
+        scope: Option<&str>,
+    ) -> String {
+        let summary = Summary::from_result(result, elapsed);
+        let outcome = if result.is_valid() {
+            "passed"
+        } else {
+            "failed"
+        };
+        let mut output = format!(
+            "{operation} {outcome} | errors={} | warnings={} | infos={} | elapsed={:.2}s",
+            summary.errors,
+            summary.warnings,
+            summary.infos,
+            summary.elapsed.as_secs_f64()
+        );
+        if let Some(scope) = scope {
+            write!(output, " | scope={}", compact_text(scope)).expect("writing to String");
+        }
+        output.push('\n');
+        for diagnostic in &result.diagnostics {
+            writeln!(output, "{}", compact_diagnostic(diagnostic))
+                .expect("writing to a String cannot fail");
+        }
+        output
+    }
+}
+
+fn compact_diagnostic(diagnostic: &Diagnostic) -> String {
+    let severity = match diagnostic.severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+        Severity::Info => "info",
+    };
+    let mut output = format!(
+        "{}: {severity}[{}]: {}",
+        compact_location(&diagnostic.primary),
+        diagnostic.rule_id,
+        compact_text(&diagnostic.message)
+    );
+    if let Some(relation) = &diagnostic.relation {
+        let targets = relation
+            .targets
+            .iter()
+            .map(|target| format!("{}={}", target.kind, compact_text(&target.value)))
+            .collect::<Vec<_>>()
+            .join(",");
+        write!(
+            output,
+            " | relation={} {}={} -> {}",
+            relation.relation,
+            relation.source.kind,
+            compact_text(&relation.source.value),
+            targets
+        )
+        .expect("writing to String");
+    }
+    if !diagnostic.next.is_empty() {
+        let next = diagnostic
+            .next
+            .iter()
+            .map(|hint| format!("{}={}", hint.kind, compact_text(&hint.value)))
+            .collect::<Vec<_>>()
+            .join(",");
+        write!(output, " | next={next}").expect("writing to String");
+    }
+    output
+}
+
+fn compact_location(location: &mitase_diagnostics::Location) -> String {
+    let mut output = location.path.clone();
+    if let Some(line) = location.line {
+        write!(output, ":{line}").expect("writing to String");
+        if let Some(column) = location.column {
+            write!(output, ":{column}").expect("writing to String");
+        }
+    }
+    output
+}
+
+fn compact_text(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Summary {
     errors: usize,
@@ -251,6 +341,42 @@ mod tests {
             rendered,
             "✓ validate change passed · 0 diagnostics · 0.42s\n  Scope: working tree changes · baseline: abc123 (default fallback chain)\n"
         );
+    }
+
+    #[test]
+    fn compact_validation_is_one_line_per_diagnostic_without_ansi() {
+        let mut diagnostic = Diagnostic::error(
+            "MITASE-TARGET-002",
+            "target resolution\nis ambiguous",
+            "spec/requirements.yaml",
+        )
+        .with_span(12, 5, 12, 19)
+        .with_relation(
+            "verifies",
+            mitase_diagnostics::DiagnosticSubject {
+                kind: "bound-target".into(),
+                value: "FEAT-DEMO-001#binding.verification/target.contract".into(),
+            },
+            mitase_diagnostics::DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: "REQ-DEMO-001#criterion.acceptance".into(),
+            },
+        );
+        diagnostic = diagnostic.with_next_read("show", "REQ-DEMO-001");
+
+        let rendered = CompactRenderer::render_validation_result(
+            &result_with(vec![diagnostic]),
+            "check",
+            Duration::from_millis(420),
+            None,
+        );
+
+        assert_eq!(
+            rendered,
+            "check failed | errors=1 | warnings=0 | infos=0 | elapsed=0.42s\nspec/requirements.yaml:12:5: error[MITASE-TARGET-002]: target resolution is ambiguous | relation=verifies bound-target=FEAT-DEMO-001#binding.verification/target.contract -> spec-anchor=REQ-DEMO-001#criterion.acceptance | next=show=REQ-DEMO-001\n"
+        );
+        assert!(!rendered.contains('\x1b'));
+        assert!(rendered.lines().all(|line| !line.contains('\n')));
     }
 
     #[test]
