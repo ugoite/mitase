@@ -30,6 +30,25 @@ impl HumanRenderer {
         operation: &str,
         elapsed: Duration,
     ) -> String {
+        self.render_validation_result_with_scope(result, operation, elapsed, None)
+    }
+
+    pub(crate) fn render_change_validation_result(
+        &self,
+        result: &ValidationResult,
+        elapsed: Duration,
+        scope: &str,
+    ) -> String {
+        self.render_validation_result_with_scope(result, "validate change", elapsed, Some(scope))
+    }
+
+    fn render_validation_result_with_scope(
+        &self,
+        result: &ValidationResult,
+        operation: &str,
+        elapsed: Duration,
+        scope: Option<&str>,
+    ) -> String {
         let mut output = String::new();
         let summary = Summary::from_result(result, elapsed);
         let outcome = if result.is_valid() {
@@ -57,6 +76,12 @@ impl HumanRenderer {
         .expect("writing to a String cannot fail");
         for line in summary_lines.iter().skip(1) {
             writeln!(output, "  {line}").expect("writing to a String cannot fail");
+        }
+        if let Some(scope) = scope {
+            let scope_lines = wrap_text(&format!("Scope: {scope}"), width - 2);
+            for line in scope_lines {
+                writeln!(output, "  {line}").expect("writing to a String cannot fail");
+            }
         }
 
         for (index, diagnostic) in result.diagnostics.iter().enumerate() {
@@ -144,7 +169,7 @@ fn count_label(count: usize, singular: &str, plural: &str) -> String {
     }
 }
 
-fn wrap_text(value: &str, width: usize) -> Vec<String> {
+pub(crate) fn wrap_text(value: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     let mut lines = Vec::new();
     let mut current = String::new();
@@ -207,6 +232,25 @@ mod tests {
 
         assert_eq!(rendered, "✓ check passed · 0 diagnostics · 0.42s\n");
         assert_eq!(renderer.capabilities.color_policy(), ColorPolicy::Disabled);
+    }
+
+    #[test]
+    fn change_validation_renders_scope_after_outcome() {
+        let renderer = HumanRenderer::with_capabilities(TerminalCapabilities::from_environment(
+            false,
+            Some("80"),
+            false,
+        ));
+        let rendered = renderer.render_change_validation_result(
+            &result_with(Vec::new()),
+            Duration::from_millis(420),
+            "working tree changes · baseline: abc123 (default fallback chain)",
+        );
+
+        assert_eq!(
+            rendered,
+            "✓ validate change passed · 0 diagnostics · 0.42s\n  Scope: working tree changes · baseline: abc123 (default fallback chain)\n"
+        );
     }
 
     #[test]

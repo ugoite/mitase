@@ -27,6 +27,7 @@ struct ValidationInputs {
     changed_files: Option<Vec<ChangedFile>>,
     reported_changed_files: Option<Vec<ChangedFile>>,
     change_base_revision: Option<String>,
+    change_scope: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -329,7 +330,7 @@ fn run_check(args: CheckArgs) -> Result<i32> {
             .iter()
             .map(canonical_frontend_diagnostic),
     );
-    render_validation_result(&result, args.format, "check", started.elapsed())?;
+    render_validation_result(&result, args.format, "check", started.elapsed(), None)?;
     Ok(if result.is_valid() { 0 } else { 1 })
 }
 fn run_readiness(args: ReadinessArgs) -> Result<i32> {
@@ -442,7 +443,17 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
     } else {
         "validate"
     };
-    render_validation_result(&result, args.format, operation, started.elapsed())?;
+    render_validation_result(
+        &result,
+        args.format,
+        operation,
+        started.elapsed(),
+        if is_change {
+            validation_inputs.change_scope.as_deref()
+        } else {
+            None
+        },
+    )?;
     Ok(if result.is_valid() { 0 } else { 1 })
 }
 
@@ -451,13 +462,18 @@ fn render_validation_result(
     format: Format,
     operation: &str,
     elapsed: std::time::Duration,
+    scope: Option<&str>,
 ) -> Result<()> {
     match format {
         Format::Json => println!("{}", serde_json::to_string_pretty(result)?),
-        Format::Text => print!(
-            "{}",
-            HumanRenderer::new().render_validation_result(result, operation, elapsed)
-        ),
+        Format::Text => {
+            let renderer = HumanRenderer::new();
+            let rendered = match scope {
+                Some(scope) => renderer.render_change_validation_result(result, elapsed, scope),
+                None => renderer.render_validation_result(result, operation, elapsed),
+            };
+            print!("{rendered}");
+        }
     }
     Ok(())
 }
@@ -571,6 +587,7 @@ fn validation_inputs_for_cli(
             changed_files: None,
             reported_changed_files: None,
             change_base_revision: None,
+            change_scope: Some("staged changes · baseline: staged index".into()),
         });
     }
     let reported_changed_files = changed_files_for_validation(workspace, args)?;
@@ -586,11 +603,43 @@ fn validation_inputs_for_cli(
     } else {
         Some(default_change_baseline(workspace)?)
     };
+    let change_scope = if let Some(range) = &args.range {
+        format!(
+            "range {range} · baseline: {}",
+            change_base_revision.as_deref().unwrap_or("unresolved")
+        )
+    } else if let Some(baseline) = &args.baseline {
+        format!(
+            "baseline {} · resolved: {}",
+            describe_change_baseline(&parse_cli_baseline(baseline)?),
+            change_base_revision.as_deref().unwrap_or("unresolved")
+        )
+    } else if let Some(baseline) = &workspace.config.validation.changed.baseline {
+        format!(
+            "configured baseline {} · resolved: {}",
+            describe_change_baseline(baseline),
+            change_base_revision.as_deref().unwrap_or("unresolved")
+        )
+    } else {
+        format!(
+            "working tree changes · baseline: {} (default fallback chain)",
+            change_base_revision.as_deref().unwrap_or("unresolved")
+        )
+    };
     Ok(ValidationInputs {
         changed_files: reported_changed_files,
         reported_changed_files: None,
         change_base_revision,
+        change_scope: Some(change_scope),
     })
+}
+
+fn describe_change_baseline(baseline: &ChangeBaseline) -> String {
+    match baseline {
+        ChangeBaseline::Parent => "parent".into(),
+        ChangeBaseline::MergeBase { against } => format!("merge-base:{}", against.0),
+        ChangeBaseline::Revision { revision } => format!("revision:{}", revision.0),
+    }
 }
 
 fn parse_cli_baseline(value: &str) -> Result<ChangeBaseline> {
