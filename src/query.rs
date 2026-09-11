@@ -475,12 +475,12 @@ fn render_evidence_trace(output: &mut String, result: &ShowResult) {
     }
     output.push_str("Evidence trace:\n");
     for criterion in &result.criteria {
+        let verification_targets = verification_targets_for_trace(result, criterion);
         let status = match criterion.verification {
             CriterionVerification::Verified => "verified",
             CriterionVerification::Unverified => "unverified",
         };
-        let verification_count = criterion
-            .verification_targets
+        let verification_count = verification_targets
             .iter()
             .filter(|target| verification_status_for(result, &criterion.id, target) == "valid")
             .count();
@@ -490,7 +490,7 @@ fn render_evidence_trace(output: &mut String, result: &ShowResult) {
             "    implements {} · verifies {}/{}",
             criterion.implementation_targets.len(),
             verification_count,
-            criterion.verification_targets.len()
+            verification_targets.len()
         );
         let _ = writeln!(output, "    statement: {}", criterion.statement);
         if criterion.implementation_targets.is_empty() {
@@ -501,11 +501,11 @@ fn render_evidence_trace(output: &mut String, result: &ShowResult) {
                 let _ = writeln!(output, "      - {target}");
             }
         }
-        if criterion.verification_targets.is_empty() {
+        if verification_targets.is_empty() {
             output.push_str("    verifies: none\n");
         } else {
             output.push_str("    verifies:\n");
-            for target in &criterion.verification_targets {
+            for target in &verification_targets {
                 let _ = writeln!(
                     output,
                     "      - {} [{}]",
@@ -515,6 +515,23 @@ fn render_evidence_trace(output: &mut String, result: &ShowResult) {
             }
         }
     }
+}
+
+fn verification_targets_for_trace(
+    result: &ShowResult,
+    criterion: &CriterionView,
+) -> Vec<BoundTargetRef> {
+    let mut targets = criterion.verification_targets.clone();
+    targets.extend(
+        result
+            .verification_claims
+            .iter()
+            .filter(|claim| claim.criterion == criterion.id)
+            .map(|claim| claim.verification.clone()),
+    );
+    targets.sort();
+    targets.dedup();
+    targets
 }
 
 fn verification_status_for(
@@ -1173,5 +1190,54 @@ mod tests {
         assert!(rendered.contains("[unverified]"));
         assert!(rendered.contains("verifies 0/1"));
         assert!(rendered.contains(" [unresolved]"));
+    }
+
+    #[test]
+    fn show_text_includes_catalog_only_verification_in_evidence_trace() {
+        let criterion: SpecAnchor = "REQ-SEARCH-004#criterion.advanced".parse().unwrap();
+        let verification: BoundTargetRef = "FEAT-SEARCH-001#binding.verification/target.contract"
+            .parse()
+            .unwrap();
+        let result = ShowResult {
+            id: SpecId::from("REQ-SEARCH-004"),
+            kind: SpecKind::Requirement,
+            title: "Advanced search".into(),
+            summary: String::new(),
+            description: String::new(),
+            status: Some(ItemStatus::Planned),
+            source: "spec/requirements.yaml".into(),
+            anchors: vec![criterion.clone()],
+            criteria: vec![CriterionView {
+                id: criterion.clone(),
+                kind: mitase_spec_model::CriterionKind::Behavior,
+                statement: "Search uses shared semantics.".into(),
+                implementation_targets: Vec::new(),
+                verification_targets: Vec::new(),
+                verification: CriterionVerification::Unverified,
+            }],
+            authored_relations: Vec::new(),
+            derived_relations: Vec::new(),
+            bindings: Vec::new(),
+            verification_claims: vec![VerificationView {
+                verification: verification.clone(),
+                criterion: criterion.clone(),
+                covers: Vec::new(),
+                runner: "cargo-test".into(),
+                assessment: VerificationAssessment {
+                    status: VerificationAssessmentStatus::CatalogOnly,
+                    verification,
+                    criterion,
+                    covers: Vec::new(),
+                    reason: Some(VerificationAssessmentReason::CatalogPlanned),
+                },
+            }],
+        };
+
+        let rendered = render_show_text(&result);
+
+        assert!(rendered.contains("verifies 0/1"));
+        assert!(rendered.contains(
+            "    verifies:\n      - FEAT-SEARCH-001#binding.verification/target.contract [catalog-only]"
+        ));
     }
 }
