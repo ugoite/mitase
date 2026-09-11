@@ -7,6 +7,7 @@ use clap::ValueEnum;
 use std::{fmt::Display, io::IsTerminal};
 
 pub const DEFAULT_TERMINAL_WIDTH: u16 = 80;
+pub const MIN_TERMINAL_WIDTH: u16 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 #[value(rename_all = "kebab-case")]
@@ -65,12 +66,22 @@ impl TerminalCapabilities {
         )
     }
 
+    /// Detect capabilities for the process's standard error.
+    pub fn detect_stderr() -> Self {
+        Self::from_environment(
+            std::io::stderr().is_terminal(),
+            std::env::var("COLUMNS").ok().as_deref(),
+            std::env::var_os("NO_COLOR").is_some(),
+        )
+    }
+
     /// Build capabilities from explicit inputs so renderers can be tested
     /// without mutating the process environment.
     pub fn from_environment(tty: bool, columns: Option<&str>, no_color: bool) -> Self {
         let width = columns
             .and_then(|value| value.parse::<u16>().ok())
             .filter(|value| *value > 0)
+            .map(|value| value.max(MIN_TERMINAL_WIDTH))
             .unwrap_or(DEFAULT_TERMINAL_WIDTH);
         let color = if tty && !no_color {
             ColorPolicy::Enabled
@@ -142,10 +153,22 @@ mod tests {
 
     #[test]
     fn invalid_or_missing_width_uses_the_eighty_column_baseline() {
-        for columns in [None, Some(""), Some("0"), Some("not-a-width")] {
+        for columns in [
+            None,
+            Some(""),
+            Some("0"),
+            Some("1"),
+            Some("2"),
+            Some("10"),
+            Some("not-a-width"),
+        ] {
             assert_eq!(
                 TerminalCapabilities::from_environment(false, columns, false).width(),
-                DEFAULT_TERMINAL_WIDTH
+                if matches!(columns, Some("1" | "2" | "10")) {
+                    MIN_TERMINAL_WIDTH
+                } else {
+                    DEFAULT_TERMINAL_WIDTH
+                }
             );
         }
     }
