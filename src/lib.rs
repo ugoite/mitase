@@ -2,6 +2,7 @@
 mod lsp;
 pub mod output;
 pub mod query;
+mod render;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -15,6 +16,7 @@ use mitase_workspace::{
     FrontendDiagnostic, FrontendDiagnosticError, FrontendSeverity, SpecWorkspace,
 };
 use output::OutputFormat as Format;
+use render::HumanRenderer;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -303,6 +305,7 @@ fn run_list(args: ListArgs) -> Result<i32> {
     Ok(0)
 }
 fn run_check(args: CheckArgs) -> Result<i32> {
+    let started = std::time::Instant::now();
     let Some(workspace) = load_workspace_or_report(args.workspace, args.format)? else {
         return Ok(1);
     };
@@ -326,7 +329,7 @@ fn run_check(args: CheckArgs) -> Result<i32> {
             .iter()
             .map(canonical_frontend_diagnostic),
     );
-    render_validation_result(&result, args.format)?;
+    render_validation_result(&result, args.format, "check", started.elapsed())?;
     Ok(if result.is_valid() { 0 } else { 1 })
 }
 fn run_readiness(args: ReadinessArgs) -> Result<i32> {
@@ -381,6 +384,7 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     })
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {
+    let started = std::time::Instant::now();
     let (is_change, enforce_readiness, args) = match args.command {
         ValidateCommand::Workspace(args) => (false, true, args),
         ValidateCommand::Change(args) => (true, false, args),
@@ -433,19 +437,27 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
             .iter()
             .map(canonical_frontend_diagnostic),
     );
-    render_validation_result(&result, args.format)?;
+    let operation = if is_change {
+        "validate change"
+    } else {
+        "validate"
+    };
+    render_validation_result(&result, args.format, operation, started.elapsed())?;
     Ok(if result.is_valid() { 0 } else { 1 })
 }
 
-fn render_validation_result(result: &ValidationResult, format: Format) -> Result<()> {
+fn render_validation_result(
+    result: &ValidationResult,
+    format: Format,
+    operation: &str,
+    elapsed: std::time::Duration,
+) -> Result<()> {
     match format {
         Format::Json => println!("{}", serde_json::to_string_pretty(result)?),
-        Format::Text => {
-            for diagnostic in &result.diagnostics {
-                println!("{}", diagnostic.render_text());
-            }
-            println!("{} diagnostic(s)", result.diagnostics.len());
-        }
+        Format::Text => print!(
+            "{}",
+            HumanRenderer::new().render_validation_result(result, operation, elapsed)
+        ),
     }
     Ok(())
 }
@@ -466,12 +478,14 @@ fn load_workspace_or_report(
             };
             match format {
                 Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
-                Format::Text => {
-                    for diagnostic in &result.diagnostics {
-                        eprintln!("{}", diagnostic.render_text());
-                    }
-                    eprintln!("{} diagnostic(s)", result.diagnostics.len());
-                }
+                Format::Text => eprint!(
+                    "{}",
+                    HumanRenderer::new().render_validation_result(
+                        &result,
+                        "workspace",
+                        std::time::Duration::ZERO,
+                    )
+                ),
             }
             Ok(None)
         }
