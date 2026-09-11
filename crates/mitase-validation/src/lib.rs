@@ -3173,6 +3173,7 @@ fn normalize_end(start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mitase_project_model::EffectiveProjectConfig;
     use std::fs;
     use std::process::Command;
     use tempfile::tempdir;
@@ -3859,10 +3860,13 @@ features:
     #[test]
     fn identity_cutover_requires_explicit_legacy_baseline() {
         let repository = tempdir().expect("temporary repository");
-        let valid_config =
-            fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../mitase.yaml"))
-                .expect("canonical config");
-        let legacy_config = valid_config.replace("mitase", "legacy");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let valid_config = fs::read_to_string(root.join("mitase.yaml")).expect("canonical config");
+        let effective_config =
+            EffectiveProjectConfig::from_source(&root, &valid_config).expect("effective config");
+        let legacy_config = serde_yaml::to_string(&effective_config.config)
+            .expect("canonical effective config")
+            .replace("mitase", "legacy");
         let parsed_legacy: ProjectConfig =
             serde_yaml::from_str(&legacy_config).expect("complete legacy config");
         assert_eq!(parsed_legacy.schema, "legacy/config/v1");

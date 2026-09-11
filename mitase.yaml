@@ -3,168 +3,30 @@ workspace:
   spec_roots: [docs/mitase]
   excludes: [target/**, node_modules/**, website/package-lock.json, website/package.json, .github/workflows/maintenance.yml]
 inventory:
-  active_profile: default
-  profiles:
-    - id: default
-      providers:
-        rust:
-          mode: test
-          include_tests: true
-        javascript:
-          roots:
-            - editors/vscode/src/model.js
-            - editors/vscode/test/model.test.js
-            - website/src/pages/index.js
-        markdown: { roots: [docs/mitase, docs/understand] }
-        declared:
-          roots:
-            - AGENTS.md
-            - .agents/skills
-            - .github/ISSUE_TEMPLATE/bug_report.yml
-            - .github/actions/setup-rust/action.yml
-            - .github/pull_request_template.md
-            - .github/workflows/ci.yml
-            - .github/workflows/pr-require-close-issue.yml
-            - .github/workflows/release-candidate.yml
-            - .github/workflows/release-publish.yml
-            - .pre-commit-config.yaml
-            - .pre-commit-ci.yaml
-            - build.rs
-            - CONTRIBUTING.md
-            - Cargo.lock
-            - Cargo.toml
-            - README.md
-            - editors/vscode/README.md
-            - docs
-            - mise.toml
-            - scripts
-            - rust-toolchain.toml
-            - website/docusaurus.config.js
-            - website/sidebars.js
-            - crates/mitase-code-intel/Cargo.toml
-            - crates/mitase-code-intel/src/lib.rs
-            - crates/mitase-diagnostics/Cargo.toml
-            - crates/mitase-diagnostics/src/lib.rs
-            - crates/mitase-inventory/Cargo.toml
-            - crates/mitase-inventory/src/lib.rs
-            - crates/mitase-project-model/Cargo.toml
-            - crates/mitase-project-model/src/lib.rs
-            - crates/mitase-spec-model/src/lib.rs
-            - crates/mitase-validation/Cargo.toml
-            - crates/mitase-validation/src/lib.rs
-            - crates/mitase-validation/src/readiness.rs
-            - crates/mitase-workspace/Cargo.toml
-            - crates/mitase-workspace/src/lib.rs
-            - docs/reference/specification/index.md
-            - docs/reference/specification/capabilities/index.md
-            - docs/reference/specification/capabilities/core.md
-            - docs/reference/specification/capabilities/surfaces.md
-            - docs/reference/specification/contracts/index.md
-            - docs/reference/specification/contracts/code-diagnostics.md
-            - docs/reference/specification/contracts/inventory.md
-            - docs/reference/specification/contracts/spec-model.md
-            - docs/reference/specification/contracts/validation.md
-            - docs/reference/specification/contracts/workspace-loading.md
-            - docs/reference/specification/contracts/workspace-resolution.md
-            - docs/reference/specification/foundations/index.md
-            - docs/reference/specification/foundations/foundation.md
-            - docs/reference/specification/foundations/delivery.md
-            - docs/reference/specification/foundations/capability-contracts.md
-            - docs/workflows/repository/configuration.md
-            - docs/start-here/adopt/examples-and-templates.md
-            - docs/start-here/adopt/existing-repository.md
-            - docs/workflows/repository/migration.md
-            - docs/understand/quality/spec-antipatterns.md
-            - docs/workflows/integrations/vscode-extension.md
-            - docs/mitase/features/capabilities/core.yaml
-            - docs/mitase/features/capabilities/surfaces.yaml
-            - docs/mitase/features/public-entrypoints/code-diagnostics.yaml
-            - docs/mitase/features/public-entrypoints/inventory.yaml
-            - docs/mitase/features/public-entrypoints/spec-model.yaml
-            - docs/mitase/features/public-entrypoints/validation.yaml
-            - docs/mitase/features/public-entrypoints/workspace-loading.yaml
-            - docs/mitase/features/public-entrypoints/workspace-resolution.yaml
-            - docs/mitase/philosophies/foundation.yaml
-            - docs/mitase/policies/delivery.yaml
-            - docs/mitase/requirements/capability-contracts.yaml
-            - editors/vscode/README.md
-            - editors/vscode/src/model.js
-            - editors/vscode/test/model.test.js
-            - examples/browser-ui/docs/mitase/features/core/core.yaml
-            - examples/browser-ui/docs/mitase/policies/policies.yaml
-            - examples/browser-ui/docs/mitase/requirements/core/core.yaml
-            - examples/browser-ui/README.md
-            - examples/browser-ui/mitase.yaml
-            - examples/csharp-fallback/docs/mitase/features/core/core.yaml
-            - examples/csharp-fallback/docs/mitase/policies/policies.yaml
-            - examples/csharp-fallback/docs/mitase/requirements/core/core.yaml
-            - examples/csharp-fallback/README.md
-            - examples/csharp-fallback/mitase.yaml
-            - examples/docs-first/docs/mitase/features/core/core.yaml
-            - examples/docs-first/docs/mitase/policies/policies.yaml
-            - examples/docs-first/docs/mitase/requirements/core/core.yaml
-            - examples/docs-first/README.md
-            - examples/docs-first/mitase.yaml
-            - examples/generic/docs/mitase/features/core/core.yaml
-            - examples/generic/docs/mitase/policies/policies.yaml
-            - examples/generic/docs/mitase/requirements/core/core.yaml
-            - examples/generic/README.md
-            - examples/generic/mitase.yaml
-            - examples/go-only/docs/mitase/features/core/core.yaml
-            - examples/go-only/docs/mitase/policies/policies.yaml
-            - examples/go-only/docs/mitase/requirements/core/core.yaml
-            - examples/go-only/README.md
-            - examples/go-only/mitase.yaml
-            - examples/java-only/docs/mitase/features/core/core.yaml
-            - examples/java-only/docs/mitase/policies/policies.yaml
-            - examples/java-only/docs/mitase/requirements/core/core.yaml
-            - examples/java-only/README.md
-            - examples/java-only/mitase.yaml
-            - examples/polyglot/docs/mitase/features/core/core.yaml
-            - examples/polyglot/docs/mitase/policies/policies.yaml
-            - examples/polyglot/docs/mitase/requirements/core/core.yaml
-            - examples/polyglot/README.md
-            - examples/polyglot/mitase.yaml
-            - examples/python-only/docs/mitase/features/core/core.yaml
-            - examples/python-only/docs/mitase/policies/policies.yaml
-            - examples/python-only/docs/mitase/requirements/core/core.yaml
-            - examples/python-only/README.md
-            - examples/python-only/mitase.yaml
-            - examples/ruby-only/docs/mitase/features/core/core.yaml
-            - examples/ruby-only/docs/mitase/policies/policies.yaml
-            - examples/ruby-only/docs/mitase/requirements/core/core.yaml
-            - examples/ruby-only/README.md
-            - examples/ruby-only/mitase.yaml
-            - examples/rust-only/docs/mitase/features/core/core.yaml
-            - examples/rust-only/docs/mitase/policies/policies.yaml
-            - examples/rust-only/docs/mitase/requirements/core/core.yaml
-            - examples/rust-only/README.md
-            - examples/rust-only/mitase.yaml
-            - examples/team-scale/docs/mitase/features/core/core.yaml
-            - examples/team-scale/docs/mitase/policies/policies.yaml
-            - examples/team-scale/docs/mitase/requirements/core/core.yaml
-            - examples/team-scale/README.md
-            - examples/team-scale/mitase.yaml
-            - examples/typescript-only/docs/mitase/features/core/core.yaml
-            - examples/typescript-only/docs/mitase/policies/policies.yaml
-            - examples/typescript-only/docs/mitase/requirements/core/core.yaml
-            - examples/typescript-only/README.md
-            - examples/typescript-only/mitase.yaml
-            - fixtures/rejected/obsolete-pre-release-v1/spec.yaml
-            - fixtures/rejected/obsolete-pre-release-v1/mitase.yaml
-            - fixtures/v1/invalid-unknown-field/mitase.yaml
-            - fixtures/v1/valid-web-app/Cargo.toml
-            - fixtures/v1/valid-web-app/spec/feature.yaml
-            - fixtures/v1/valid-web-app/spec/requirement.yaml
-            - fixtures/v1/valid-web-app/mitase.yaml
-            - fixtures/acceptance/ugoite-foundation-policy-v1
-            - scripts/ci/installed-binary-smoke.sh
-            - scripts/dev/validate-changed.sh
-            - src/lib.rs
-            - tests/v1_cli.rs
-            - tests/support/mod.rs
-            - website/src/pages/index.js
-            - mitase.yaml
+  discovery: true
+  providers:
+    markdown: { roots: [docs/understand] }
+    declared:
+      roots:
+        - .github/workflows/ci.yml
+        - README.md
+        - crates/mitase-inventory/Cargo.toml
+        - docs/contribute
+        - docs/index.md
+        - docs/mitase
+        - docs/project
+        - docs/reference
+        - docs/reference/specification/index.md
+        - docs/start-here
+        - docs/understand
+        - docs/workflows
+        - editors/vscode/README.md
+        - scripts/ci/check-generated-docs-freshness.sh
+        - scripts/ci/coverage.sh
+        - scripts/generate-docs-site-extras.py
+        - scripts/generate-site-docs.py
+        - website/docusaurus.config.js
+        - website/sidebars.js
 validation:
   preset: strict
   readiness:

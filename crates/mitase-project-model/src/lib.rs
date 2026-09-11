@@ -59,6 +59,11 @@ pub struct WorkspaceConfigInput {
 pub struct InventoryConfigInput {
     #[serde(default)]
     pub active_profile: Option<String>,
+    /// Merge explicit provider exceptions into providers discovered from the
+    /// repository. This is only available for the direct single-profile
+    /// form; named profiles remain fully explicit.
+    #[serde(default)]
+    pub discovery: Option<bool>,
     #[serde(default)]
     pub profiles: Option<Vec<InventoryProfileInput>>,
     /// A single profile can omit the profile wrapper and declare providers
@@ -201,6 +206,13 @@ fn resolve_inventory(
     spec_roots: &[RepoPath],
     applied_conventions: &mut Vec<String>,
 ) -> Result<InventoryConfig, String> {
+    let discovery = input.discovery.unwrap_or(false);
+    if discovery && input.profiles.is_some() {
+        return Err(
+            "inventory.discovery cannot be combined with inventory.profiles; use direct providers"
+                .into(),
+        );
+    }
     if input.providers.is_some() && input.profiles.is_some() {
         return Err("inventory.providers cannot be combined with inventory.profiles".into());
     }
@@ -263,6 +275,12 @@ fn resolve_inventory(
                 .clone()
                 .unwrap_or_else(|| "default".into());
             let providers = match input.providers {
+                Some(providers) if discovery => {
+                    applied_conventions.push("inventory.providers=repository-discovery".into());
+                    let mut discovered = discover_inventory_providers(root, spec_roots);
+                    merge_provider_exceptions(&mut discovered, providers)?;
+                    discovered
+                }
                 Some(providers) => providers,
                 None => {
                     applied_conventions.push("inventory.providers=repository-discovery".into());
@@ -290,6 +308,46 @@ fn resolve_inventory(
         active_profile,
         profiles,
     })
+}
+
+fn merge_provider_exceptions(
+    discovered: &mut BTreeMap<String, serde_yaml::Value>,
+    explicit: BTreeMap<String, serde_yaml::Value>,
+) -> Result<(), String> {
+    for (adapter, settings) in explicit {
+        if let (Some(existing), serde_yaml::Value::Mapping(explicit_mapping)) =
+            (discovered.get_mut(&adapter), &settings)
+            && let serde_yaml::Value::Mapping(existing_mapping) = existing
+        {
+            for (key, value) in explicit_mapping {
+                if key == &serde_yaml::Value::String("roots".into()) {
+                    let Some(explicit_roots) = value.as_sequence() else {
+                        return Err(format!(
+                            "inventory provider {adapter}.roots must be a sequence"
+                        ));
+                    };
+                    let existing_roots = existing_mapping
+                        .entry(key.clone())
+                        .or_insert_with(|| serde_yaml::Value::Sequence(Vec::new()));
+                    let Some(existing_roots) = existing_roots.as_sequence_mut() else {
+                        return Err(format!(
+                            "discovered provider {adapter}.roots is not a sequence"
+                        ));
+                    };
+                    for root in explicit_roots {
+                        if !existing_roots.contains(root) {
+                            existing_roots.push(root.clone());
+                        }
+                    }
+                } else {
+                    existing_mapping.insert(key.clone(), value.clone());
+                }
+            }
+        } else {
+            discovered.insert(adapter, settings);
+        }
+    }
+    Ok(())
 }
 
 fn resolve_validation(
@@ -630,8 +688,13 @@ verification: { runners: {} }
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mitase.yaml"),
         )
         .expect("root mitase.yaml");
-        let root_config: ProjectConfig =
-            serde_yaml::from_str(&root_source).expect("root project config");
+        let root_config = EffectiveProjectConfig::from_source(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .as_path(),
+            &root_source,
+        )
+        .expect("root effective project config");
         assert_eq!(
             root_config.validation.readiness.limits,
             ReadinessLimits {
@@ -686,6 +749,38 @@ verification: { runners: {} }
             effective
                 .applied_conventions
                 .contains(&"workspace.spec_roots=docs/mitase".to_string())
+        );
+        assert!(
+            effective
+                .applied_conventions
+                .contains(&"inventory.providers=repository-discovery".to_string())
+        );
+    }
+
+    #[test]
+    fn discovery_merges_explicit_provider_exceptions() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let source = r#"
+schema: mitase/config/v1
+inventory:
+  discovery: true
+  providers:
+    markdown: { roots: [docs/understand] }
+    declared: { roots: [README.md] }
+"#;
+        let effective = EffectiveProjectConfig::from_source(&root, source)
+            .expect("discovery with explicit exceptions");
+        let providers = &effective.inventory.profiles[0].providers;
+        assert!(providers.contains_key("rust"));
+        assert!(providers.contains_key("javascript"));
+        assert!(providers.contains_key("markdown"));
+        assert_eq!(
+            providers["markdown"]["roots"],
+            serde_yaml::from_str::<serde_yaml::Value>("[docs/mitase, docs/understand]").unwrap()
+        );
+        assert_eq!(
+            providers["declared"]["roots"],
+            serde_yaml::from_str::<serde_yaml::Value>("[README.md]").unwrap()
         );
         assert!(
             effective

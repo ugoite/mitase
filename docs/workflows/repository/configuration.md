@@ -32,6 +32,22 @@ excludes, one default inventory profile, Rust/JavaScript/TypeScript source and
 test discovery, validation defaults, and repository-specific common runner
 presets.
 
+For a single self-hosted profile that needs only a small number of
+non-discoverable exceptions, `inventory.discovery: true` combines repository
+provider discovery with the direct `inventory.providers` map. Explicit provider
+settings override discovered settings; `roots` are merged so a provider can
+add an exceptional subtree without repeating discovered roots. Named
+`inventory.profiles` remain fully explicit and do not use this merge mode.
+Declared file and path-prefix targets are the intended use for such exceptions:
+
+```yaml
+inventory:
+  discovery: true
+  providers:
+    markdown: { roots: [docs/understand] }
+    declared: { roots: [docs/project] }
+```
+
 ```yaml
 schema: mitase/config/v1
 workspace:
