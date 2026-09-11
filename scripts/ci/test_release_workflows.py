@@ -148,6 +148,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "mitase migrate",
             "mitase_authoring_v2_preserves_the_pre_migration_canonical_graph",
             "self_hosted_config_preserves_the_exact_artifact_resolution_baseline",
+            "ugoite_current_v2_corpus_covers_all_output_contracts",
+            "cli_help_contract_fixture_matches_the_current_read_only_surface",
             "check-architecture.py",
         ):
             self.assertIn(required, script)

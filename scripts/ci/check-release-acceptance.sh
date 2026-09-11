@@ -76,6 +76,8 @@ case "$version" in
     cargo test --locked --quiet -p mitase-workspace current_release_policy_keeps_dual_source_during_0_1_x
     run_focused_test mitase_authoring_v2_preserves_the_pre_migration_canonical_graph
     run_focused_test self_hosted_config_preserves_the_exact_artifact_resolution_baseline
+    run_focused_test ugoite_current_v2_corpus_covers_all_output_contracts
+    run_focused_test cli_help_contract_fixture_matches_the_current_read_only_surface
     ;;
   0.2.*)
     echo "checking 0.2.x single-source cutover acceptance for $version"

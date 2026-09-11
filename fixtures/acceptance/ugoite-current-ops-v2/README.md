@@ -19,3 +19,19 @@ mirror of Ugoite's repository.
 The acceptance test proves that the v2 documents normalize into one canonical
 graph, the implementation and verification targets resolve exactly, and the
 same graph is consumable through `mitase show` and `mitase query`.
+
+The corpus also exercises the three supported output choices against this
+representative Ugoite slice:
+
+```bash
+mitase check . --format text
+mitase check . --format compact
+mitase show REQ-OPS-006 . --format json
+mitase query REQ-OPS-006#criterion.cli-surface . \
+  --relation implementation-targets --format compact
+```
+
+The compact commands are intended for one-line CI records and the JSON command
+must expose `schema_version: "mitase/cli/v1"` without moving the existing
+payload fields. The fixture remains a materialized, versioned acceptance copy;
+it does not execute Ugoite tooling or mutate the Ugoite repository.

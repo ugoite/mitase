@@ -1,0 +1,11 @@
+# command|stable help text that documents the supported read-only CLI
+root|Exact specification validation
+root|readiness
+root|normalize
+root|query
+root|show
+root|list
+check|--format <FORMAT>
+validate-change|--format <FORMAT>
+readiness-report|--format <FORMAT>
+list|--unverified-criteria
