@@ -13,6 +13,12 @@ impl HumanRenderer {
         }
     }
 
+    pub(crate) fn new_for_stderr() -> Self {
+        Self {
+            capabilities: TerminalCapabilities::detect_stderr(),
+        }
+    }
+
     #[cfg(test)]
     fn with_capabilities(capabilities: TerminalCapabilities) -> Self {
         Self { capabilities }
@@ -262,5 +268,30 @@ mod tests {
                 .all(|line| line.chars().count() <= 24)
         );
         assert!(rendered.contains("\n  "));
+    }
+
+    #[test]
+    fn diagnostics_at_tiny_columns_use_the_clamped_width() {
+        let renderer = HumanRenderer::with_capabilities(TerminalCapabilities::from_environment(
+            false,
+            Some("1"),
+            false,
+        ));
+        let rendered = renderer.render_validation_result(
+            &result_with(vec![Diagnostic::error(
+                "MITASE-E001",
+                "a diagnostic with enough text to wrap",
+                "spec.yaml",
+            )]),
+            "check",
+            Duration::ZERO,
+        );
+
+        assert!(
+            rendered
+                .lines()
+                .skip(1)
+                .all(|line| line.chars().count() <= 20)
+        );
     }
 }

@@ -480,7 +480,7 @@ fn load_workspace_or_report(
                 Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
                 Format::Text => eprint!(
                     "{}",
-                    HumanRenderer::new().render_validation_result(
+                    HumanRenderer::new_for_stderr().render_validation_result(
                         &result,
                         "workspace",
                         std::time::Duration::ZERO,
