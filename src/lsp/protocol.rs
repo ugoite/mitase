@@ -157,6 +157,8 @@ pub(crate) struct InitializeResult {
 pub(crate) struct ServerCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hover_provider: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub definition_provider: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +166,12 @@ pub(crate) struct Hover {
     pub contents: MarkupContent,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub range: Option<Range>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct Location {
+    pub uri: String,
+    pub range: Range,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

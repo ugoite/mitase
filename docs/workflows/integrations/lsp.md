@@ -11,7 +11,7 @@ Today `mitase lsp` is intentionally small and explicit:
 - transport is **JSON-RPC 2.0 over stdio**
 - the server supports the standard lifecycle requests and notifications
 - the editor features exposed today are **workspace validation diagnostics**
-  and **hover for `PHIL-*`, `POL-*`, `REQ-*`, and `FEAT-*` IDs**
+  and **hover plus go-to-definition for exact specification references**
 
 That narrow scope is deliberate. The server is already usable for editor
 experiments, while the CLI and checked-in YAML remain the broader integration
@@ -46,7 +46,7 @@ The expected startup flow is:
 
 1. send `initialize`
 2. send `initialized`
-3. send requests such as `textDocument/hover`
+3. send requests such as `textDocument/hover` or `textDocument/definition`
 4. send `shutdown`
 5. send `exit`
 
@@ -64,6 +64,7 @@ server process working directory to decide the workspace.
 At the moment the server advertises:
 
 - `hoverProvider: true`
+- `definitionProvider: true`
 
 The server sends validation diagnostics after the `initialized` notification.
 This is the push-based LSP flow; the server does not advertise or implement a
@@ -76,6 +77,7 @@ The current request / notification surface is:
 | `initialize` | yes | loads the `mitase` workspace from `rootUri` or the current directory |
 | `initialized` | yes | marks the session ready and publishes current workspace diagnostics |
 | `textDocument/hover` | yes | returns Markdown hover content for spec IDs under the cursor |
+| `textDocument/definition` | yes | resolves an exact spec ID, anchor, or bound target reference to its declaration |
 | `shutdown` | yes | resets server state and returns `null` |
 | `exit` | yes | terminates the process cleanly |
 
@@ -86,8 +88,17 @@ Hover content currently resolves only checked-in spec IDs:
 - `REQ-*`
 - `FEAT-*`
 
-The server does not yet provide go-to-definition, completion, document symbols,
-or workspace symbols.
+The server does not yet provide completion, document symbols, or workspace
+symbols. Go-to-definition is intentionally limited to exact references already
+represented by the shared canonical workspace index:
+
+- `REQ-CAPABILITY-001`
+- `REQ-CAPABILITY-001#criterion.lsp-navigation`
+- `FEAT-LSP-001#binding.implementation/target.lsp-server`
+
+The result points to the owning specification source declaration. A reference
+that is not present in the canonical index returns no location; the server does
+not guess from text or from artifact-language symbols.
 
 Diagnostics use the shared `mitase-diagnostics` validation result. Each LSP
 diagnostic carries the canonical rule code, reason, severity, exact primary
