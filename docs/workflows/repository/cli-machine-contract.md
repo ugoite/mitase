@@ -7,19 +7,32 @@ add a compatibility parser or a second semantic implementation.
 ## JSON success shapes
 
 Pass `--format json` to `check`, `validate workspace`, `validate change`,
-`query`, `show`, or `list`. A successful command writes exactly one JSON value
-to stdout and does not write diagnostics to stderr.
+`query`, `show`, `list`, or `readiness report`. A successful command writes
+exactly one JSON value to stdout and does not write diagnostics to stderr.
+
+Every JSON result includes `schema_version: "mitase/cli/v1"`. The version is
+part of the top-level object; the command-specific fields below remain at that
+same level so consumers can select the contract before reading a payload.
 
 | Command | Top-level JSON shape |
 | --- | --- |
-| `check`, `validate ...` | `ValidationResult`: `diagnostics` plus optional `readiness` |
-| `query` | `{ source, relations }` |
-| `show` | `{ id, kind, title, summary, description, status, source, anchors, criteria, authored_relations, derived_relations, bindings, verification_claims }` |
-| `list` | `{ items, unverified_criteria }` |
+| `check`, `validate ...` | `{ schema_version, diagnostics, readiness? }` |
+| `query` | `{ schema_version, source, relations }` |
+| `show` | `{ schema_version, id, kind, title, summary, description, status, source, anchors, criteria, authored_relations, derived_relations, bindings, verification_claims }` |
+| `list` | `{ schema_version, items, unverified_criteria }` |
+| `readiness report` | `{ schema_version, target, inventory, verification }` |
 
 The read models use the canonical specification identifiers and exact relation
 references. Their arrays are deterministic for the same workspace and command
 arguments.
+
+## Compact output
+
+Pass `--format compact` when a stable one-line-per-record stream is preferred
+for CI logs or annotations. Validation records use the form
+`path:line:column: severity[rule]: message` followed by relation and next-read
+metadata when available. The first line is a one-line outcome summary. Compact
+output never emits ANSI control sequences, regardless of terminal state.
 
 ## Diagnostic JSON
 

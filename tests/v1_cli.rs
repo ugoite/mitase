@@ -27,6 +27,7 @@ fn current_workspace_checks_and_reports_configured_readiness() {
     assert_eq!(check.status.code(), Some(0));
     assert!(check.stderr.is_empty());
     let check_result: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check_result["schema_version"], "mitase/cli/v1");
     assert!(check_result["diagnostics"].is_array());
 
     let output = Command::cargo_bin("mitase")
@@ -36,7 +37,38 @@ fn current_workspace_checks_and_reports_configured_readiness() {
         .unwrap();
     assert!(output.status.success());
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["schema_version"], "mitase/cli/v1");
     assert_eq!(report["target"], "traceable");
+}
+
+#[test]
+fn compact_format_is_available_for_ci_and_has_no_ansi() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", ".", "--format", "compact"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.starts_with("check passed | errors="));
+    assert!(!stdout.contains('\x1b'));
+    assert!(stdout.lines().all(|line| !line.is_empty()));
+
+    let list = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["list", ".", "--format", "compact"])
+        .output()
+        .unwrap();
+    assert!(list.status.success());
+    assert!(
+        String::from_utf8_lossy(&list.stdout)
+            .lines()
+            .all(|line| { line.starts_with("item | ") || line.starts_with("unverified | ") })
+    );
 }
 
 #[test]
@@ -468,13 +500,18 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
     assert_eq!(first.stdout, second.stdout);
 
     let list: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(list["schema_version"], "mitase/cli/v1");
     assert_eq!(
         list.as_object()
             .unwrap()
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>(),
-        BTreeSet::from(["items".to_string(), "unverified_criteria".to_string()])
+        BTreeSet::from([
+            "items".to_string(),
+            "schema_version".to_string(),
+            "unverified_criteria".to_string(),
+        ])
     );
     assert_eq!(list["items"][0]["kind"], "feature");
     assert_eq!(list["items"][0]["id"], "FEAT-CHANGE-VALIDATION-001");
@@ -512,6 +549,7 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
         .unwrap();
     assert!(show.status.success());
     let show: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(show["schema_version"], "mitase/cli/v1");
     assert_eq!(show["id"], "REQ-CAPABILITY-001");
     assert_eq!(show["kind"], "requirement");
     assert!(
@@ -569,6 +607,7 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
                 "kind",
                 "source",
                 "status",
+                "schema_version",
                 "summary",
                 "title",
                 "verification_claims",
@@ -776,6 +815,7 @@ fn query_exposes_explicit_canonical_relations() {
         .unwrap();
     assert!(output.status.success());
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["schema_version"], "mitase/cli/v1");
     assert_eq!(result["source"], "REQ-CAPABILITY-001#criterion.spec-model");
     assert_eq!(result["relations"][0]["relation"], "implementation-targets");
     assert_eq!(
@@ -785,7 +825,11 @@ fn query_exposes_explicit_canonical_relations() {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>(),
-        BTreeSet::from(["source".to_string(), "relations".to_string()])
+        BTreeSet::from([
+            "relations".to_string(),
+            "schema_version".to_string(),
+            "source".to_string(),
+        ])
     );
 }
 
@@ -1003,6 +1047,7 @@ fn frontend_load_diagnostics_use_the_validation_shape_for_cli_json_and_text() {
     assert_eq!(json.status.code(), Some(1));
     assert!(json.stderr.is_empty());
     let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(report["schema_version"], "mitase/cli/v1");
     let diagnostic = &report["diagnostics"][0];
     assert_eq!(diagnostic["code"], "MITASE-AUTHORING-002");
     assert!(diagnostic["primary"]["line"].is_number());
