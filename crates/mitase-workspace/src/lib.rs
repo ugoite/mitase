@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use mitase_authoring::{AUTHORING_SCHEMA, AuthoringDocument};
 use mitase_code_intel::resolve_symbol;
 use mitase_inventory::{
     ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry, resolve_test_in_path,
@@ -129,15 +130,7 @@ impl SpecWorkspace {
         let mut documents = Vec::new();
         for path in paths {
             let source = fs::read_to_string(&path)?;
-            let document: SpecDocument = match serde_yaml::from_str(&source) {
-                Ok(document) => document,
-                Err(_error) if is_obsolete_pre_release_spec(&source) => bail!(
-                    "The document uses an obsolete pre-release mitase/spec/v1 shape.\nRewrite it using the current mitase/spec/v1 model."
-                ),
-                Err(error) => {
-                    return Err(error).with_context(|| format!("strict parse {}", path.display()));
-                }
-            };
+            let document = load_spec_document(&source, &path)?;
             if document.schema() != SPEC_SCHEMA {
                 bail!("{}: schema must be {SPEC_SCHEMA}", path.display());
             }
@@ -170,6 +163,39 @@ impl SpecWorkspace {
     pub fn path_is_excluded(&self, path: &Path) -> bool {
         self.matcher.is_excluded(path)
     }
+}
+
+fn load_spec_document(source: &str, path: &Path) -> Result<SpecDocument> {
+    if declares_authoring_schema(source) {
+        let authoring = AuthoringDocument::parse(source)
+            .map_err(|error| anyhow::anyhow!("parse authoring document: {error}"))
+            .with_context(|| format!("strict parse {}", path.display()))?;
+        return authoring
+            .normalize()
+            .map(|normalized| normalized.document)
+            .map_err(|error| anyhow::anyhow!("normalize authoring document: {error}"))
+            .with_context(|| format!("normalize {}", path.display()));
+    }
+
+    match serde_yaml::from_str(source) {
+        Ok(document) => Ok(document),
+        Err(_error) if is_obsolete_pre_release_spec(source) => bail!(
+            "The document uses an obsolete pre-release mitase/spec/v1 shape.\nRewrite it using the current mitase/spec/v1 model."
+        ),
+        Err(error) => Err(error).with_context(|| format!("strict parse {}", path.display())),
+    }
+}
+
+fn declares_authoring_schema(source: &str) -> bool {
+    serde_yaml::from_str::<serde_yaml::Value>(source)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("schema")
+                .and_then(serde_yaml::Value::as_str)
+                .map(|schema| schema == AUTHORING_SCHEMA)
+        })
+        .unwrap_or(false)
 }
 
 fn is_obsolete_pre_release_spec(source: &str) -> bool {
@@ -2592,6 +2618,165 @@ mod tests {
 
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         assert_eq!(workspace.documents.len(), 1);
+    }
+
+    #[test]
+    fn authoring_documents_normalize_before_entering_the_workspace_graph() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs/mitase")).expect("spec dir");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace: { spec_roots: [docs/mitase], excludes: [] }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles: [{ id: default, providers: { rust: {} } }]\n",
+                "validation:\n",
+                "  preset: strict\n",
+                "  readiness: { target: 'off', limits: { max_ownership_scope_units: 64 } }\n",
+                "  changed: { require_owned_changes: false }\n",
+                "verification: { runners: {} }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir
+                .path()
+                .join("docs/mitase/authoring-requirement.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: requirement\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "requirement:\n",
+                "  id: REQ-AUTHORING-001\n",
+                "  title: Authoring requirement\n",
+                "  description: A requirement loaded through the authoring frontend.\n",
+                "  priority: medium\n",
+                "  status: planned\n",
+                "  criterion:\n",
+                "    id: behavior\n",
+                "    kind: behavior\n",
+                "    statement: The authoring document is normalized.\n",
+                "    governed_by: []\n",
+                "  implementation:\n",
+                "    facet: delivery\n",
+                "    responsibility: Own the exact implementation.\n",
+                "    target:\n",
+                "      adapter: rust\n",
+                "      path: src/lib.rs\n",
+                "      satisfies: behavior\n",
+                "  verification:\n",
+                "    facet: verification\n",
+                "    responsibility: Verify the exact behavior.\n",
+                "    target:\n",
+                "      adapter: rust\n",
+                "      path: src/lib.rs\n",
+                "      verifies:\n",
+                "        criterion: behavior\n",
+                "        covers: [source]\n",
+                "        runner: cargo-test\n",
+            ),
+        )
+        .expect("authoring requirement");
+        for (filename, kind, collection) in [
+            (
+                "authoring-philosophies.yaml",
+                "philosophies",
+                "philosophies",
+            ),
+            ("authoring-policies.yaml", "policies", "policies"),
+            (
+                "authoring-requirements.yaml",
+                "requirements",
+                "requirements",
+            ),
+            ("authoring-features.yaml", "features", "features"),
+        ] {
+            fs::write(
+                tempdir.path().join(format!("docs/mitase/{filename}")),
+                format!(
+                    "schema: mitase/authoring/v2\nkind: {kind}\nnamespace: test\ncategory: Test\n{collection}: []\n"
+                ),
+            )
+            .expect("authoring document");
+        }
+        fs::write(
+            tempdir.path().join("docs/mitase/canonical-feature.yaml"),
+            concat!(
+                "schema: mitase/spec/v1\n",
+                "kind: features\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "features: []\n",
+            ),
+        )
+        .expect("canonical feature");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+
+        assert_eq!(workspace.documents.len(), 6);
+        assert!(
+            workspace
+                .documents
+                .iter()
+                .all(|loaded| loaded.document.schema() == SPEC_SCHEMA)
+        );
+        let requirement = workspace
+            .documents
+            .iter()
+            .find_map(|loaded| match &loaded.document {
+                SpecDocument::Requirements { requirements, .. } => requirements.first(),
+                _ => None,
+            })
+            .expect("normalized requirement");
+        assert_eq!(requirement.id, "REQ-AUTHORING-001".into());
+        assert_eq!(requirement.bindings.len(), 2);
+        assert_eq!(requirement.bindings[0].targets[0].adapter, "rust");
+        assert_eq!(
+            requirement.bindings[0].targets[0].selector,
+            ExactSelector::File
+        );
+
+        let invalid_source = concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: requirement\n",
+            "namespace: test\n",
+            "category: Test\n",
+            "requirement:\n",
+            "  id: REQ-AUTHORING-INVALID-001\n",
+            "  title: Invalid authoring requirement\n",
+            "  description: The adapter must be explicit for an unknown extension.\n",
+            "  priority: medium\n",
+            "  status: planned\n",
+            "  criterion: { id: behavior, kind: behavior, statement: Explicit meaning, governed_by: [] }\n",
+            "  implementation:\n",
+            "    facet: delivery\n",
+            "    responsibility: Own the exact implementation.\n",
+            "    target: { path: src/example.txt, satisfies: behavior }\n",
+            "  verification:\n",
+            "    facet: verification\n",
+            "    responsibility: Verify the exact behavior.\n",
+            "    target:\n",
+            "      adapter: rust\n",
+            "      path: src/lib.rs\n",
+            "      verifies: { criterion: behavior, covers: [source], runner: cargo-test }\n",
+        );
+        fs::write(
+            tempdir
+                .path()
+                .join("docs/mitase/authoring-requirement.yaml"),
+            invalid_source,
+        )
+        .expect("invalid authoring requirement");
+        let error = SpecWorkspace::load(tempdir.path())
+            .err()
+            .expect("normalization error");
+        let error = format!("{error:#}");
+        assert!(error.contains("docs/mitase/authoring-requirement.yaml"));
+        assert!(error.contains("normalize authoring document"));
+        assert!(error.contains("cannot infer requirement.implementation.target.adapter"));
     }
 
     #[test]

@@ -154,7 +154,7 @@ The production crates have one canonical responsibility each:
 | `mitase-project-model` | Typed `mitase/config/v1` project configuration | `mitase-spec-model` |
 | `mitase-code-intel` | Language-aware symbol resolution supporting artifact adapters | `mitase-spec-model` |
 | `mitase-inventory` | Repository artifact inventory and semantic comparison | `mitase-project-model`, `mitase-spec-model` |
-| `mitase-workspace` | Workspace loading, `SpecIndex`, ownership, and exact artifact resolution | `mitase-code-intel`, `mitase-inventory`, `mitase-project-model`, `mitase-spec-model` |
+| `mitase-workspace` | Workspace loading, v2 authoring normalization, `SpecIndex`, ownership, and exact artifact resolution | `mitase-authoring`, `mitase-code-intel`, `mitase-inventory`, `mitase-project-model`, `mitase-spec-model` |
 | `mitase-diagnostics` | Portable validation diagnostics and results | `mitase-spec-model` |
 | `mitase-validation` | Structural, semantic, and repository validation over the canonical workspace | `mitase-diagnostics`, `mitase-inventory`, `mitase-project-model`, `mitase-spec-model`, `mitase-workspace` |
 | `mitase` | Specification-facing CLI and LSP composition | all canonical libraries |
