@@ -66,6 +66,16 @@ adapters and therefore require an explicit adapter.
 The normalized result exposes `applied_defaults` and `inferred` provenance so
 the authoring result is fully inspectable.
 
+Authoring frontend failures use the shared diagnostic object used by semantic
+validation. A v1 source rejected by the v0.2 loader is reported as
+`MITASE-SOURCE-001`; malformed v2 input as `MITASE-AUTHORING-001`; and failed
+normalization as `MITASE-AUTHORING-002` (no candidate), `003` (ambiguous
+candidates), or `004` (unknown exact reference). Each diagnostic carries a
+path/span, a reason, any candidates, and a suggested next action. `check` and
+`validate` serialize that same object in JSON and render it in text; the LSP
+publishes it in `publishDiagnostics.data` without introducing a separate
+editor-specific semantic model.
+
 ## Corpus boundary
 
 The Mitase corpus is the measurement boundary for this contract. The current

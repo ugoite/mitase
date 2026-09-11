@@ -548,6 +548,70 @@ fn config_effective_reports_resolved_conventions_without_loading_or_mutating_spe
 }
 
 #[test]
+fn frontend_load_diagnostics_use_the_validation_shape_for_cli_json_and_text() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("docs/mitase")).unwrap();
+    fs::write(
+        temp.path().join("mitase.yaml"),
+        "schema: mitase/config/v1\n",
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("docs/mitase/invalid.yaml"),
+        concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: requirement\n",
+            "namespace: test\n",
+            "category: Test\n",
+            "requirement:\n",
+            "  id: REQ-CLI-INVALID-001\n",
+            "  title: Invalid frontend input\n",
+            "  description: The adapter cannot be inferred.\n",
+            "  priority: medium\n",
+            "  status: planned\n",
+            "  criterion: { id: behavior, kind: behavior, statement: Explicit, governed_by: [] }\n",
+            "  implementation:\n",
+            "    facet: delivery\n",
+            "    responsibility: Own the implementation.\n",
+            "    target: { path: src/example.txt, satisfies: behavior }\n",
+            "  verification:\n",
+            "    facet: verification\n",
+            "    responsibility: Verify the implementation.\n",
+            "    target:\n",
+            "      adapter: rust\n",
+            "      path: src/lib.rs\n",
+            "      verifies: { criterion: behavior, covers: [source], runner: cargo-test }\n",
+        ),
+    )
+    .unwrap();
+    initialize_fixture_git(temp.path());
+
+    let json = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(!json.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    let diagnostic = &report["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "MITASE-AUTHORING-002");
+    assert!(diagnostic["primary"]["line"].is_number());
+    assert!(diagnostic["reason"].is_string());
+    assert!(diagnostic["suggested_action"].is_string());
+
+    let text = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", "--format", "text"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    let rendered = String::from_utf8_lossy(&text.stderr);
+    assert!(rendered.contains("MITASE-AUTHORING-002"));
+    assert!(rendered.contains("suggested action"));
+}
+
+#[test]
 fn tutorial_yaml_examples_parse_as_canonical_spec_documents() {
     let tutorial = fs::read_to_string("docs/start-here/first-run/tutorial.md").expect("tutorial");
     let mut blocks = Vec::new();

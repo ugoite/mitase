@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use mitase_spec_model::{BoundTargetRef, SpecAnchor};
 use serde::{Deserialize, Serialize};
+use std::{error::Error, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -114,6 +115,41 @@ impl Diagnostic {
         }
     }
 
+    pub fn warning(rule: &str, message: impl Into<String>, path: impl Into<String>) -> Self {
+        let mut diagnostic = Self::error(rule, message, path);
+        diagnostic.severity = Severity::Warning;
+        diagnostic
+    }
+
+    pub fn info(rule: &str, message: impl Into<String>, path: impl Into<String>) -> Self {
+        let mut diagnostic = Self::error(rule, message, path);
+        diagnostic.severity = Severity::Info;
+        diagnostic
+    }
+
+    pub fn with_span(mut self, line: u32, column: u32, end_line: u32, end_column: u32) -> Self {
+        self.primary.line = Some(line);
+        self.primary.column = Some(column);
+        self.primary.end_line = Some(end_line);
+        self.primary.end_column = Some(end_column);
+        self
+    }
+
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.primary.label = Some(label.into());
+        self
+    }
+
+    pub fn with_candidates(mut self, candidates: impl IntoIterator<Item = String>) -> Self {
+        self.candidates = candidates.into_iter().collect();
+        self
+    }
+
+    pub fn with_help(mut self, help: impl Into<String>) -> Self {
+        self.help = Some(help.into());
+        self
+    }
+
     pub fn set_subject_anchor(&mut self, anchor: &SpecAnchor) {
         self.subject = Some(DiagnosticSubject {
             kind: "spec-anchor".into(),
@@ -133,9 +169,13 @@ impl Diagnostic {
     pub fn render_text(&self) -> String {
         use std::fmt::Write as _;
 
+        let location = match (self.primary.line, self.primary.column) {
+            (Some(line), Some(column)) => format!("{}:{line}:{column}", self.primary.path),
+            _ => self.primary.path.clone(),
+        };
         let mut output = format!(
-            "{:?} {} {}: {}",
-            self.severity, self.rule_id, self.primary.path, self.message
+            "{:?} {} {location}: {}",
+            self.severity, self.rule_id, self.message
         );
         if !self.candidates.is_empty() {
             write!(output, " [candidates: {}]", self.candidates.join(", "))
@@ -148,6 +188,28 @@ impl Diagnostic {
         output
     }
 }
+
+/// An actionable frontend diagnostic carried through anyhow without reducing
+/// it to an unstructured error string. CLI and LSP callers can downcast this
+/// value and render the same [`Diagnostic`] object in their native protocol.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagnosticError {
+    pub diagnostic: Diagnostic,
+}
+
+impl DiagnosticError {
+    pub fn new(diagnostic: Diagnostic) -> Self {
+        Self { diagnostic }
+    }
+}
+
+impl fmt::Display for DiagnosticError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.diagnostic.render_text())
+    }
+}
+
+impl Error for DiagnosticError {}
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValidationResult {
@@ -218,7 +280,7 @@ mod tests {
         assert_eq!(decoded, diagnostic);
         assert_eq!(
             diagnostic.render_text(),
-            "Error MITASE-TARGET-002 spec/requirements.yaml: target resolution is ambiguous [candidates: src/one.rs, src/two.rs] [suggested action: make the selector unique]"
+            "Error MITASE-TARGET-002 spec/requirements.yaml:12:5: target resolution is ambiguous [candidates: src/one.rs, src/two.rs] [suggested action: make the selector unique]"
         );
     }
 }

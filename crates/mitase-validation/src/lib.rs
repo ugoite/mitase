@@ -1925,6 +1925,8 @@ fn push(
     anchor: Option<SpecAnchor>,
 ) {
     let mut d = Diagnostic::error(rule, msg, path);
+    d.help =
+        Some("inspect the reported location and update the specification or configuration".into());
     if let Some(anchor) = anchor.as_ref() {
         d.set_subject_anchor(anchor);
     }
@@ -1953,6 +1955,14 @@ fn push_resolution(
             kind: "resolution-candidate".into(),
             value: candidate.clone(),
         }));
+    diagnostic.primary.label = Some(format!("{} target", failure.selector.as_str()));
+    diagnostic.help = Some(match resolution_status(rule, failure) {
+        "ambiguous" => "choose one exact candidate or make the selector unique".into(),
+        "unsupported" => {
+            "configure the adapter or choose a selector kind supported by it".into()
+        }
+        _ => "correct the target path or selector, or mark the target absent if it is intentionally absent".into(),
+    });
     out.push(diagnostic);
 }
 
@@ -3739,12 +3749,14 @@ features:
             diagnostic.rule_id == "MITASE-TARGET-002"
                 && diagnostic.message.contains("heading Shared is ambiguous")
                 && !diagnostic.candidates.is_empty()
+                && diagnostic.help.is_some()
         }));
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.rule_id == "MITASE-TARGET-005"
                 && diagnostic
                     .message
                     .contains("adapter and selector kind are incompatible")
+                && diagnostic.help.is_some()
         }));
     }
 

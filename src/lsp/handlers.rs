@@ -3,7 +3,7 @@
 
 use mitase_diagnostics::{Diagnostic as CanonicalDiagnostic, Location, Severity};
 use mitase_spec_model::SpecDocument;
-use mitase_workspace::SpecWorkspace;
+use mitase_workspace::{FrontendDiagnosticError, SpecWorkspace};
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
@@ -22,6 +22,8 @@ use super::protocol::{
 
 pub(crate) struct LspHandlers {
     workspace: Option<SpecWorkspace>,
+    workspace_root: Option<PathBuf>,
+    startup_diagnostics: Vec<CanonicalDiagnostic>,
     initialized: bool,
 }
 
@@ -29,6 +31,8 @@ impl LspHandlers {
     pub(crate) fn new() -> Self {
         Self {
             workspace: None,
+            workspace_root: None,
+            startup_diagnostics: Vec::new(),
             initialized: false,
         }
     }
@@ -43,10 +47,21 @@ impl LspHandlers {
             std::env::current_dir().map_err(|error| LspError::internal(error.to_string()))?
         };
 
-        self.workspace = Some(
-            SpecWorkspace::load(&root_path)
-                .map_err(|error| LspError::internal(error.to_string()))?,
-        );
+        self.workspace_root = Some(root_path.clone());
+        match SpecWorkspace::load(&root_path) {
+            Ok(workspace) => {
+                self.workspace = Some(workspace);
+                self.startup_diagnostics.clear();
+            }
+            Err(error) => {
+                let Some(frontend) = error.downcast_ref::<FrontendDiagnosticError>() else {
+                    return Err(LspError::internal(error.to_string()));
+                };
+                self.workspace = None;
+                self.startup_diagnostics =
+                    vec![crate::canonical_frontend_diagnostic(&frontend.diagnostic)];
+            }
+        }
 
         let result = InitializeResult {
             capabilities: ServerCapabilities {
@@ -59,9 +74,10 @@ impl LspHandlers {
 
     pub(crate) fn handle_initialized(&mut self) -> Result<Vec<Notification>, LspError> {
         self.initialized = true;
-        match &self.workspace {
-            Some(_) => self.publish_diagnostics(),
-            None => Ok(Vec::new()),
+        if self.workspace.is_some() || !self.startup_diagnostics.is_empty() {
+            self.publish_diagnostics()
+        } else {
+            Ok(Vec::new())
         }
     }
 
@@ -103,41 +119,63 @@ impl LspHandlers {
     }
 
     fn publish_diagnostics(&self) -> Result<Vec<Notification>, LspError> {
-        let workspace = self
-            .workspace
-            .as_ref()
-            .ok_or_else(|| LspError::internal("workspace not initialized"))?;
-        let index = workspace
-            .index()
-            .map_err(|error| LspError::internal(error.to_string()))?;
-        let revision = current_revision(&workspace.root);
-        let context = mitase_validation::ValidationContext {
-            config: &workspace.config,
-            workspace,
-            index: &index,
-            changed_files: None,
-            reported_changed_files: None,
-            preset: workspace.config.validation.preset,
-            revision: revision.as_deref(),
-            change_base_revision: None,
+        let (root, document_paths, diagnostics) = if let Some(workspace) = &self.workspace {
+            let index = workspace
+                .index()
+                .map_err(|error| LspError::internal(error.to_string()))?;
+            let revision = current_revision(&workspace.root);
+            let context = mitase_validation::ValidationContext {
+                config: &workspace.config,
+                workspace,
+                index: &index,
+                changed_files: None,
+                reported_changed_files: None,
+                preset: workspace.config.validation.preset,
+                revision: revision.as_deref(),
+                change_base_revision: None,
+            };
+            let mut result = mitase_validation::validate_workspace(&context);
+            result.diagnostics.splice(
+                0..0,
+                workspace
+                    .frontend_diagnostics
+                    .iter()
+                    .map(crate::canonical_frontend_diagnostic),
+            );
+            (
+                workspace.root.clone(),
+                workspace
+                    .documents
+                    .iter()
+                    .map(|document| document.path.clone())
+                    .collect::<Vec<_>>(),
+                result.diagnostics,
+            )
+        } else {
+            (
+                self.workspace_root
+                    .clone()
+                    .ok_or_else(|| LspError::internal("workspace not initialized"))?,
+                Vec::new(),
+                self.startup_diagnostics.clone(),
+            )
         };
-        let result = mitase_validation::validate_workspace(&context);
 
         let mut diagnostics_by_uri = BTreeMap::<String, Vec<LspDiagnostic>>::new();
         let mut known_uris = BTreeSet::new();
-        known_uris.insert(path_to_uri(&workspace.root.join("mitase.yaml"))?);
-        for document in &workspace.documents {
-            known_uris.insert(path_to_uri(&document.path)?);
+        known_uris.insert(path_to_uri(&root.join("mitase.yaml"))?);
+        for document_path in document_paths {
+            known_uris.insert(path_to_uri(&document_path)?);
         }
 
-        for diagnostic in &result.diagnostics {
-            let path = diagnostic_path(&workspace.root, &diagnostic.primary.path);
+        for diagnostic in &diagnostics {
+            let path = diagnostic_path(&root, &diagnostic.primary.path);
             let uri = path_to_uri(&path)?;
             known_uris.insert(uri.clone());
             diagnostics_by_uri
                 .entry(uri)
                 .or_default()
-                .push(to_lsp_diagnostic(&workspace.root, diagnostic)?);
+                .push(to_lsp_diagnostic(&root, diagnostic)?);
         }
         for diagnostics in diagnostics_by_uri.values_mut() {
             diagnostics.sort_by(|left, right| {
@@ -438,6 +476,69 @@ mod tests {
 
         assert_eq!(value["capabilities"]["hoverProvider"], true);
         assert!(handlers.workspace.is_some());
+    }
+
+    #[test]
+    fn handle_initialized_publishes_frontend_load_diagnostic() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs/mitase")).expect("spec dir");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            "schema: mitase/config/v1\n",
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("docs/mitase/invalid.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: requirement\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "requirement:\n",
+                "  id: REQ-LSP-INVALID-001\n",
+                "  title: Invalid frontend input\n",
+                "  description: The adapter cannot be inferred.\n",
+                "  priority: medium\n",
+                "  status: planned\n",
+                "  criterion: { id: behavior, kind: behavior, statement: Explicit, governed_by: [] }\n",
+                "  implementation:\n",
+                "    facet: delivery\n",
+                "    responsibility: Own the implementation.\n",
+                "    target: { path: src/example.txt, satisfies: behavior }\n",
+                "  verification:\n",
+                "    facet: verification\n",
+                "    responsibility: Verify the implementation.\n",
+                "    target:\n",
+                "      adapter: rust\n",
+                "      path: src/lib.rs\n",
+                "      verifies: { criterion: behavior, covers: [source], runner: cargo-test }\n",
+            ),
+        )
+        .expect("invalid authoring document");
+
+        let mut handlers = LspHandlers::new();
+        handlers
+            .handle_initialize(InitializeParams {
+                process_id: None,
+                root_uri: Some(format!("file://{}", tempdir.path().display())),
+                capabilities: None,
+            })
+            .expect("initialize should return capabilities with a frontend diagnostic");
+        let notifications = handlers
+            .handle_initialized()
+            .expect("frontend diagnostics should publish");
+        assert!(handlers.workspace.is_none());
+        assert!(notifications.iter().any(|notification| {
+            notification.params.as_ref().is_some_and(|params| {
+                params["diagnostics"].as_array().is_some_and(|diagnostics| {
+                    diagnostics.iter().any(|diagnostic| {
+                        diagnostic["code"] == "MITASE-AUTHORING-002"
+                            && diagnostic["data"]["reason"].is_string()
+                            && diagnostic["data"]["suggested_action"].is_string()
+                    })
+                })
+            })
+        }));
     }
 
     #[test]
