@@ -43,13 +43,21 @@ impl HumanRenderer {
         } else {
             ColorStyle::Error
         };
+        let width = usize::from(self.capabilities.width()).max(2);
+        let summary_lines = wrap_text(
+            &format!("{operation} {outcome} · {}", summary.render()),
+            width - 2,
+        );
         writeln!(
             output,
-            "{} {operation} {outcome} · {}",
+            "{} {}",
             self.capabilities.paint(outcome_style, outcome_marker),
-            summary.render()
+            summary_lines[0]
         )
         .expect("writing to a String cannot fail");
+        for line in summary_lines.iter().skip(1) {
+            writeln!(output, "  {line}").expect("writing to a String cannot fail");
+        }
 
         for (index, diagnostic) in result.diagnostics.iter().enumerate() {
             if index > 0 {
@@ -287,11 +295,6 @@ mod tests {
             Duration::ZERO,
         );
 
-        assert!(
-            rendered
-                .lines()
-                .skip(1)
-                .all(|line| line.chars().count() <= 20)
-        );
+        assert!(rendered.lines().all(|line| line.chars().count() <= 20));
     }
 }
