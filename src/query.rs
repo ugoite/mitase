@@ -1,3 +1,4 @@
+use crate::{output::TerminalCapabilities, render::wrap_text};
 use anyhow::{Result, bail};
 use clap::ValueEnum;
 use mitase_spec_model::{
@@ -356,31 +357,56 @@ pub fn query(
 }
 
 pub fn render_list_text(result: &ListResult) -> String {
+    render_list_text_with_width(result, usize::from(TerminalCapabilities::detect().width()))
+}
+
+fn render_list_text_with_width(result: &ListResult, width: usize) -> String {
     let mut output = String::new();
     for item in &result.items {
         let status = item
             .status
             .map(item_status_label)
             .unwrap_or("unstatus-bearing");
-        let _ = writeln!(
-            output,
-            "{} {} [{}] {}/{} — {} ({})",
-            item.kind.label(),
-            item.id,
-            status,
-            item.namespace,
-            item.category,
-            item.title,
-            item.source
+        write_wrapped(
+            &mut output,
+            &format!("{} {} — {}", item.kind.label(), item.id, item.title),
+            0,
+            width,
+        );
+        write_wrapped(
+            &mut output,
+            &format!(
+                "state: {status} · {}/{} · {}",
+                item.namespace, item.category, item.source
+            ),
+            2,
+            width,
         );
     }
     if !result.unverified_criteria.is_empty() {
-        output.push_str("Unverified criteria:\n");
+        let _ = writeln!(
+            output,
+            "Unverified criteria ({}):",
+            result.unverified_criteria.len()
+        );
         for criterion in &result.unverified_criteria {
-            let _ = writeln!(output, "  {} — {}", criterion.id, criterion.statement);
+            write_wrapped(
+                &mut output,
+                &format!("{} — {}", criterion.id, criterion.statement),
+                2,
+                width,
+            );
         }
     }
     output
+}
+
+fn write_wrapped(output: &mut String, value: &str, indent: usize, width: usize) {
+    let prefix = " ".repeat(indent);
+    let content_width = width.saturating_sub(indent).max(1);
+    for line in wrap_text(value, content_width) {
+        let _ = writeln!(output, "{prefix}{line}");
+    }
 }
 
 pub fn render_query_text(result: &QueryResult) -> String {
@@ -1095,6 +1121,51 @@ fn verification_reason_label(reason: VerificationAssessmentReason) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_text_uses_two_line_rows_and_preserves_context() {
+        let result = ListResult {
+            items: vec![ListItem {
+                id: SpecId::from("REQ-DEMO-001"),
+                kind: SpecKind::Requirement,
+                namespace: "demo".into(),
+                category: "Demo requirements".into(),
+                title: "An inspectable requirement".into(),
+                status: Some(ItemStatus::Implemented),
+                source: "docs/mitase/requirements.yaml".into(),
+            }],
+            unverified_criteria: Vec::new(),
+        };
+
+        let rendered = render_list_text_with_width(&result, 80);
+
+        assert_eq!(
+            rendered,
+            "requirement REQ-DEMO-001 — An inspectable requirement\n  state: implemented · demo/Demo requirements · docs/mitase/requirements.yaml\n"
+        );
+    }
+
+    #[test]
+    fn list_text_wraps_long_rows_at_the_requested_width() {
+        let result = ListResult {
+            items: vec![ListItem {
+                id: SpecId::from("REQ-DEMO-001"),
+                kind: SpecKind::Requirement,
+                namespace: "demo".into(),
+                category: "Demo requirements".into(),
+                title: "A requirement with a deliberately long title".into(),
+                status: Some(ItemStatus::Planned),
+                source: "docs/mitase/requirements.yaml".into(),
+            }],
+            unverified_criteria: Vec::new(),
+        };
+
+        let rendered = render_list_text_with_width(&result, 40);
+
+        assert!(rendered.lines().all(|line| line.chars().count() <= 40));
+        assert!(rendered.contains("REQ-DEMO-001"));
+        assert!(rendered.contains("docs/mitase/requirements.yaml"));
+    }
 
     #[test]
     fn show_text_renders_a_single_evidence_trace() {

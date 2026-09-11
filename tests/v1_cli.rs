@@ -658,6 +658,55 @@ requirements:
 }
 
 #[test]
+fn validate_change_text_reports_scope_without_changing_json() {
+    let temp = staged_validation_fixture();
+    let text = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "validate",
+            "change",
+            "--range",
+            "HEAD..HEAD",
+            "--format",
+            "text",
+        ])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        text.status.success(),
+        "{}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("validate change passed"));
+    assert!(text.contains("Scope: range HEAD..HEAD · baseline: HEAD"));
+
+    let temp = staged_validation_fixture();
+    let json = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "validate",
+            "change",
+            "--range",
+            "HEAD..HEAD",
+            "--format",
+            "json",
+        ])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        json.status.success(),
+        "{}",
+        String::from_utf8_lossy(&json.stderr)
+    );
+    let json_result: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert!(json_result["diagnostics"].is_array());
+    assert!(!String::from_utf8_lossy(&json.stdout).contains("Scope:"));
+}
+
+#[test]
 fn show_does_not_mark_invalid_runner_metadata_as_verified() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-web-app");
     let temp = tempdir().unwrap();
