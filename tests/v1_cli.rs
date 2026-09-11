@@ -19,6 +19,26 @@ fn current_workspace_checks_and_reports_configured_readiness() {
         .args(["check", "."])
         .assert()
         .success();
+    let check = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(check.status.code(), Some(0));
+    assert!(check.stderr.is_empty());
+    let check_result: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert!(check_result["diagnostics"].is_array());
+
+    let validate = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["validate", "workspace", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(validate.status.code(), Some(1));
+    assert!(validate.stderr.is_empty());
+    let validate_result: serde_json::Value = serde_json::from_slice(&validate.stdout).unwrap();
+    assert!(validate_result["diagnostics"].is_array());
+
     let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["readiness", "report", ".", "--format", "json"])
@@ -268,6 +288,14 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
     assert_eq!(first.stdout, second.stdout);
 
     let list: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(
+        list.as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["items".to_string(), "unverified_criteria".to_string()])
+    );
     assert_eq!(list["items"][0]["kind"], "feature");
     assert_eq!(list["items"][0]["id"], "FEAT-CHANGE-VALIDATION-001");
     assert_eq!(list["items"][0]["namespace"], "capabilities");
@@ -342,6 +370,31 @@ fn show_and_list_expose_deterministic_semantic_read_models() {
             .unwrap()
             .iter()
             .any(|claim| { claim["assessment"]["status"] == "valid" })
+    );
+    assert_eq!(
+        show.as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(
+            [
+                "anchors",
+                "authored_relations",
+                "bindings",
+                "criteria",
+                "description",
+                "derived_relations",
+                "id",
+                "kind",
+                "source",
+                "status",
+                "summary",
+                "title",
+                "verification_claims",
+            ]
+            .map(str::to_string),
+        )
     );
 }
 
@@ -472,6 +525,15 @@ fn query_exposes_explicit_canonical_relations() {
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["source"], "REQ-CAPABILITY-001#criterion.spec-model");
     assert_eq!(result["relations"][0]["relation"], "implementation-targets");
+    assert_eq!(
+        result
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["source".to_string(), "relations".to_string()])
+    );
 }
 
 #[test]
@@ -482,6 +544,8 @@ fn query_reports_unknown_sources_with_nonzero_exit() {
         .output()
         .unwrap();
     assert!(!output.status.success());
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("query source"));
 }
 
@@ -683,6 +747,8 @@ fn frontend_load_diagnostics_use_the_validation_shape_for_cli_json_and_text() {
         .output()
         .unwrap();
     assert!(!json.status.success());
+    assert_eq!(json.status.code(), Some(1));
+    assert!(json.stderr.is_empty());
     let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
     let diagnostic = &report["diagnostics"][0];
     assert_eq!(diagnostic["code"], "MITASE-AUTHORING-002");
@@ -696,6 +762,8 @@ fn frontend_load_diagnostics_use_the_validation_shape_for_cli_json_and_text() {
         .arg(temp.path())
         .output()
         .unwrap();
+    assert_eq!(text.status.code(), Some(1));
+    assert!(text.stdout.is_empty());
     let rendered = String::from_utf8_lossy(&text.stderr);
     assert!(rendered.contains("MITASE-AUTHORING-002"));
     assert!(rendered.contains("suggested action"));
