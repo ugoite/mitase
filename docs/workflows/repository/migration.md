@@ -38,8 +38,9 @@ produce v0.2 source. During the 0.1.x dogfood period, normal `check` and
 `validate` accept both the existing canonical source and the generated
 authoring source; place reviewed v2 documents under the configured
 `spec_roots`. The generated full authoring form can then be simplified using
-the documented v0.2 short contract. The later 0.2 cutover will close the v1
-authoring entrance after the corpus has moved.
+the documented v0.2 short contract. In the 0.2.x release line, the normal
+workspace loader closes the v1 authoring entrance; `mitase migrate` remains the
+explicit path that reads v1 and emits v2.
 
 ## Current pre-v1 cutover
 

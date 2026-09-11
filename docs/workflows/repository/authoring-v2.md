@@ -11,6 +11,10 @@ During the 0.1.x dogfood period, normal workspace loading accepts both
 parsed and normalized before indexing and validation, so downstream consumers
 always receive the canonical graph.
 
+The loader derives the source policy from the Mitase release line: 0.1.x uses
+the dual-source policy, and 0.2.x uses the v2-only policy. The 0.2 policy
+rejects v1 source at the workspace boundary with an explicit migration action.
+
 The first short form describes one requirement, one criterion, one
 implementation target, and one verification target:
 
