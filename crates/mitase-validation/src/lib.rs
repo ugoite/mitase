@@ -1962,58 +1962,63 @@ fn push_resolution(
 }
 
 fn target_relation(target: &BoundTargetRef, claim: &TargetClaim) -> Option<RelationRef> {
-    let (relation, target_subject) = match claim {
+    let (relation, targets) = match claim {
         TargetClaim::Satisfies { criterion } => (
             "satisfies",
-            DiagnosticSubject {
+            vec![DiagnosticSubject {
                 kind: "spec-anchor".into(),
                 value: criterion.to_string(),
-            },
+            }],
         ),
         TargetClaim::Verifies { criterion, .. } => (
             "verifies",
-            DiagnosticSubject {
+            vec![DiagnosticSubject {
                 kind: "spec-anchor".into(),
                 value: criterion.to_string(),
-            },
+            }],
         ),
         TargetClaim::Documents { anchor } => (
             "documents",
-            DiagnosticSubject {
+            vec![DiagnosticSubject {
                 kind: "spec-anchor".into(),
                 value: anchor.to_string(),
-            },
+            }],
         ),
         TargetClaim::Enforces { rule } => (
             "enforces",
-            DiagnosticSubject {
+            vec![DiagnosticSubject {
                 kind: "spec-anchor".into(),
                 value: rule.to_string(),
-            },
+            }],
         ),
         TargetClaim::Evidences { anchor } => (
             "evidences",
-            DiagnosticSubject {
+            vec![DiagnosticSubject {
                 kind: "spec-anchor".into(),
                 value: anchor.to_string(),
-            },
+            }],
         ),
         TargetClaim::GeneratedFrom { targets } => {
-            let source = targets.first()?;
+            if targets.is_empty() {
+                return None;
+            }
             (
                 "generated-from",
-                DiagnosticSubject {
-                    kind: "bound-target".into(),
-                    value: source.to_string(),
-                },
+                targets
+                    .iter()
+                    .map(|source| DiagnosticSubject {
+                        kind: "bound-target".into(),
+                        value: source.to_string(),
+                    })
+                    .collect(),
             )
         }
         TargetClaim::Exposes { target } => (
             "exposes",
-            DiagnosticSubject {
+            vec![DiagnosticSubject {
                 kind: "bound-target".into(),
                 value: target.to_string(),
-            },
+            }],
         ),
     };
     let source = DiagnosticSubject {
@@ -2023,7 +2028,7 @@ fn target_relation(target: &BoundTargetRef, claim: &TargetClaim) -> Option<Relat
     Some(RelationRef {
         relation: relation.into(),
         source,
-        target: target_subject,
+        targets,
     })
 }
 
@@ -4593,7 +4598,37 @@ requirements:
         assert_eq!(relation.relation, "satisfies");
         assert_eq!(relation.source.kind, "bound-target");
         assert_eq!(relation.source.value, target.to_string());
-        assert_eq!(relation.target.kind, "spec-anchor");
-        assert_eq!(relation.target.value, criterion.to_string());
+        assert_eq!(relation.targets[0].kind, "spec-anchor");
+        assert_eq!(relation.targets[0].value, criterion.to_string());
+    }
+
+    #[test]
+    fn generated_relation_preserves_all_source_targets() {
+        let target: BoundTargetRef = "FEAT-TEST-001#binding.generated/target.output"
+            .parse()
+            .unwrap();
+        let source_a: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.source-a"
+            .parse()
+            .unwrap();
+        let source_b: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.source-b"
+            .parse()
+            .unwrap();
+        let relation = target_relation(
+            &target,
+            &TargetClaim::GeneratedFrom {
+                targets: vec![source_a.clone(), source_b.clone()],
+            },
+        )
+        .expect("generated-from claim has source targets");
+
+        assert_eq!(relation.relation, "generated-from");
+        assert_eq!(
+            relation
+                .targets
+                .iter()
+                .map(|subject| subject.value.as_str())
+                .collect::<Vec<_>>(),
+            vec![source_a.to_string(), source_b.to_string()]
+        );
     }
 }

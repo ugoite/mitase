@@ -56,7 +56,7 @@ pub struct DiagnosticSubject {
 pub struct RelationRef {
     pub relation: String,
     pub source: DiagnosticSubject,
-    pub target: DiagnosticSubject,
+    pub targets: Vec<DiagnosticSubject>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -178,7 +178,7 @@ impl Diagnostic {
         self.relation = Some(RelationRef {
             relation: relation.into(),
             source,
-            target,
+            targets: vec![target],
         });
         self
     }
@@ -326,7 +326,7 @@ mod tests {
         assert_eq!(value["reference"]["kind"], "bound-target");
         assert_eq!(value["relation"]["relation"], "verifies");
         assert_eq!(value["relation"]["source"]["value"], target.to_string());
-        assert_eq!(value["relation"]["target"]["value"], anchor.to_string());
+        assert_eq!(value["relation"]["targets"][0]["value"], anchor.to_string());
         assert_eq!(value["next"][0]["kind"], "show");
         assert_eq!(value["next"][0]["value"], anchor.item.to_string());
         assert_eq!(value["candidates"][0], "src/one.rs");
