@@ -49,10 +49,15 @@ requirement:
         criterion: behavior
         covers: [source]
         runner: cargo-test
+        arguments: { package: demo, test: example_behavior }
 ```
 
 Requirement and criterion meaning, binding responsibilities, claims, and the
-verification runner are explicit. The normalizer may only infer mechanics:
+verification runner metadata are explicit. A standalone short requirement is
+a valid seed workspace: its implementation and verification bindings are
+normalized into the canonical requirement graph, and an empty
+`criterion.governed_by` relation means that the slice has not yet introduced a
+policy layer. The normalizer may only infer mechanics:
 
 - binding IDs default to `implementation` and `verification`;
 - target IDs default to `source` and `test`;
