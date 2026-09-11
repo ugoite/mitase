@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 mod readiness;
 use anyhow::{Context, Result, bail};
-use mitase_diagnostics::{Diagnostic, Evidence, ValidationPhase, ValidationResult};
+use mitase_diagnostics::{
+    Diagnostic, DiagnosticSubject, Evidence, RelationRef, ValidationPhase, ValidationResult,
+};
 use mitase_inventory::ArtifactUnitKind;
 use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use mitase_spec_model::{
@@ -1916,6 +1918,7 @@ fn push(
         Some("inspect the reported location and update the specification or configuration".into());
     if let Some(anchor) = anchor.as_ref() {
         d.set_subject_anchor(anchor);
+        d = d.with_next_read("show", anchor.item.to_string());
     }
     out.push(d);
 }
@@ -1926,11 +1929,16 @@ fn push_resolution(
     failure: &ResolutionFailure,
     path: impl Into<String>,
     anchor: Option<SpecAnchor>,
+    target: &BoundTargetRef,
+    relation: Option<RelationRef>,
 ) {
     let mut diagnostic = Diagnostic::error(rule, &failure.message, path);
     if let Some(anchor) = anchor.as_ref() {
         diagnostic.set_subject_anchor(anchor);
+        diagnostic = diagnostic.with_next_read("show", anchor.item.to_string());
     }
+    diagnostic.set_reference_target(target);
+    diagnostic.relation = relation;
     diagnostic.candidates = failure.candidates.clone();
     diagnostic.evidence.push(Evidence {
         kind: "resolution-status".into(),
@@ -1951,6 +1959,77 @@ fn push_resolution(
         _ => "correct the target path or selector, or mark the target absent if it is intentionally absent".into(),
     });
     out.push(diagnostic);
+}
+
+fn target_relation(target: &BoundTargetRef, claim: &TargetClaim) -> Option<RelationRef> {
+    let (relation, targets) = match claim {
+        TargetClaim::Satisfies { criterion } => (
+            "satisfies",
+            vec![DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: criterion.to_string(),
+            }],
+        ),
+        TargetClaim::Verifies { criterion, .. } => (
+            "verifies",
+            vec![DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: criterion.to_string(),
+            }],
+        ),
+        TargetClaim::Documents { anchor } => (
+            "documents",
+            vec![DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: anchor.to_string(),
+            }],
+        ),
+        TargetClaim::Enforces { rule } => (
+            "enforces",
+            vec![DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: rule.to_string(),
+            }],
+        ),
+        TargetClaim::Evidences { anchor } => (
+            "evidences",
+            vec![DiagnosticSubject {
+                kind: "spec-anchor".into(),
+                value: anchor.to_string(),
+            }],
+        ),
+        TargetClaim::GeneratedFrom { targets } => {
+            if targets.is_empty() {
+                return None;
+            }
+            (
+                "generated-from",
+                targets
+                    .iter()
+                    .map(|source| DiagnosticSubject {
+                        kind: "bound-target".into(),
+                        value: source.to_string(),
+                    })
+                    .collect(),
+            )
+        }
+        TargetClaim::Exposes { target } => (
+            "exposes",
+            vec![DiagnosticSubject {
+                kind: "bound-target".into(),
+                value: target.to_string(),
+            }],
+        ),
+    };
+    let source = DiagnosticSubject {
+        kind: "bound-target".into(),
+        value: target.to_string(),
+    };
+    Some(RelationRef {
+        relation: relation.into(),
+        source,
+        targets,
+    })
 }
 
 fn resolution_status(rule: &str, failure: &ResolutionFailure) -> &'static str {
@@ -2874,6 +2953,11 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         &failure,
                         target.path.to_string_lossy(),
                         Some(anchor.clone()),
+                        &target_ref,
+                        target
+                            .claims
+                            .iter()
+                            .find_map(|claim| target_relation(&target_ref, claim)),
                     );
                 }
                 ArtifactResolution::Unsupported(failure)
@@ -2887,6 +2971,11 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         &failure,
                         target.path.to_string_lossy(),
                         Some(anchor.clone()),
+                        &target_ref,
+                        target
+                            .claims
+                            .iter()
+                            .find_map(|claim| target_relation(&target_ref, claim)),
                     );
                 }
                 _ => {}
@@ -4490,5 +4579,56 @@ requirements:
             None,
             &changed,
         ));
+    }
+
+    #[test]
+    fn target_relation_preserves_canonical_claim_identity() {
+        let target: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.source"
+            .parse()
+            .unwrap();
+        let criterion: SpecAnchor = "FEAT-TEST-001#criterion.contract".parse().unwrap();
+        let relation = target_relation(
+            &target,
+            &TargetClaim::Satisfies {
+                criterion: criterion.clone(),
+            },
+        )
+        .expect("satisfies claim has a relation");
+
+        assert_eq!(relation.relation, "satisfies");
+        assert_eq!(relation.source.kind, "bound-target");
+        assert_eq!(relation.source.value, target.to_string());
+        assert_eq!(relation.targets[0].kind, "spec-anchor");
+        assert_eq!(relation.targets[0].value, criterion.to_string());
+    }
+
+    #[test]
+    fn generated_relation_preserves_all_source_targets() {
+        let target: BoundTargetRef = "FEAT-TEST-001#binding.generated/target.output"
+            .parse()
+            .unwrap();
+        let source_a: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.source-a"
+            .parse()
+            .unwrap();
+        let source_b: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.source-b"
+            .parse()
+            .unwrap();
+        let relation = target_relation(
+            &target,
+            &TargetClaim::GeneratedFrom {
+                targets: vec![source_a.clone(), source_b.clone()],
+            },
+        )
+        .expect("generated-from claim has source targets");
+
+        assert_eq!(relation.relation, "generated-from");
+        assert_eq!(
+            relation
+                .targets
+                .iter()
+                .map(|subject| subject.value.as_str())
+                .collect::<Vec<_>>(),
+            vec![source_a.to_string(), source_b.to_string()]
+        );
     }
 }
