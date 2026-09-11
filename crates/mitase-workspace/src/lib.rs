@@ -34,6 +34,26 @@ struct WorkspaceMatcher {
     excludes: Option<GlobSet>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpecSourcePolicy {
+    DualSource,
+    V2Only,
+}
+
+impl SpecSourcePolicy {
+    fn current() -> Self {
+        Self::for_release(env!("CARGO_PKG_VERSION"))
+    }
+
+    fn for_release(version: &str) -> Self {
+        if version.starts_with("0.1.") {
+            Self::DualSource
+        } else {
+            Self::V2Only
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SpecIndex {
     pub anchors: BTreeMap<SpecAnchor, AnchorValue>,
@@ -107,6 +127,10 @@ pub enum AnchorValue {
 
 impl SpecWorkspace {
     pub fn load(start: impl AsRef<Path>) -> Result<Self> {
+        Self::load_with_policy(start, SpecSourcePolicy::current())
+    }
+
+    fn load_with_policy(start: impl AsRef<Path>, source_policy: SpecSourcePolicy) -> Result<Self> {
         let root = find_root(start.as_ref())?;
         let config_path = root.join("mitase.yaml");
         let config_source = fs::read_to_string(&config_path)
@@ -130,7 +154,7 @@ impl SpecWorkspace {
         let mut documents = Vec::new();
         for path in paths {
             let source = fs::read_to_string(&path)?;
-            let document = load_spec_document(&source, &path)?;
+            let document = load_spec_document(&source, &path, source_policy)?;
             if document.schema() != SPEC_SCHEMA {
                 bail!("{}: schema must be {SPEC_SCHEMA}", path.display());
             }
@@ -165,16 +189,28 @@ impl SpecWorkspace {
     }
 }
 
-fn load_spec_document(source: &str, path: &Path) -> Result<SpecDocument> {
-    if declares_authoring_schema(source) {
-        let authoring = AuthoringDocument::parse(source)
-            .map_err(|error| anyhow::anyhow!("parse authoring document: {error}"))
-            .with_context(|| format!("strict parse {}", path.display()))?;
-        return authoring
-            .normalize()
-            .map(|normalized| normalized.document)
-            .map_err(|error| anyhow::anyhow!("normalize authoring document: {error}"))
-            .with_context(|| format!("normalize {}", path.display()));
+fn load_spec_document(
+    source: &str,
+    path: &Path,
+    source_policy: SpecSourcePolicy,
+) -> Result<SpecDocument> {
+    match declared_schema(source).as_deref() {
+        Some(SPEC_SCHEMA) if source_policy == SpecSourcePolicy::V2Only => bail!(
+            "{}: canonical mitase/spec/v1 authoring input is not accepted in the v0.2 single-source mode.\nRun `mitase migrate {} --stdout` and save the result as mitase/authoring/v2 source.",
+            path.display(),
+            path.display(),
+        ),
+        Some(AUTHORING_SCHEMA) => {
+            let authoring = AuthoringDocument::parse(source)
+                .map_err(|error| anyhow::anyhow!("parse authoring document: {error}"))
+                .with_context(|| format!("strict parse {}", path.display()))?;
+            return authoring
+                .normalize()
+                .map(|normalized| normalized.document)
+                .map_err(|error| anyhow::anyhow!("normalize authoring document: {error}"))
+                .with_context(|| format!("normalize {}", path.display()));
+        }
+        _ => {}
     }
 
     match serde_yaml::from_str(source) {
@@ -186,16 +222,15 @@ fn load_spec_document(source: &str, path: &Path) -> Result<SpecDocument> {
     }
 }
 
-fn declares_authoring_schema(source: &str) -> bool {
+fn declared_schema(source: &str) -> Option<String> {
     serde_yaml::from_str::<serde_yaml::Value>(source)
         .ok()
         .and_then(|value| {
             value
                 .get("schema")
                 .and_then(serde_yaml::Value::as_str)
-                .map(|schema| schema == AUTHORING_SCHEMA)
+                .map(str::to_owned)
         })
-        .unwrap_or(false)
 }
 
 fn is_obsolete_pre_release_spec(source: &str) -> bool {
@@ -2777,6 +2812,64 @@ mod tests {
         assert!(error.contains("docs/mitase/authoring-requirement.yaml"));
         assert!(error.contains("normalize authoring document"));
         assert!(error.contains("cannot infer requirement.implementation.target.adapter"));
+    }
+
+    #[test]
+    fn v2_only_mode_rejects_v1_with_an_explicit_migration_action() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs/mitase")).expect("spec dir");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace: { spec_roots: [docs/mitase], excludes: [] }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles: [{ id: default, providers: { rust: {} } }]\n",
+                "validation:\n",
+                "  preset: strict\n",
+                "  readiness: { target: 'off', limits: { max_ownership_scope_units: 64 } }\n",
+                "  changed: { require_owned_changes: false }\n",
+                "verification: { runners: {} }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("docs/mitase/legacy.yaml"),
+            concat!(
+                "schema: mitase/spec/v1\n",
+                "kind: features\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "features: []\n",
+            ),
+        )
+        .expect("canonical source");
+
+        let error = SpecWorkspace::load_with_policy(tempdir.path(), SpecSourcePolicy::V2Only)
+            .err()
+            .expect("v1 source rejection");
+        let error = format!("{error:#}");
+        assert!(error.contains("docs/mitase/legacy.yaml"));
+        assert!(error.contains("not accepted in the v0.2 single-source mode"));
+        assert!(error.contains("mitase migrate"));
+    }
+
+    #[test]
+    fn current_release_policy_keeps_dual_source_during_0_1_x() {
+        assert_eq!(SpecSourcePolicy::current(), SpecSourcePolicy::DualSource);
+    }
+
+    #[test]
+    fn release_policy_switches_to_v2_only_for_the_0_2_line() {
+        assert_eq!(
+            SpecSourcePolicy::for_release("0.2.0-alpha.1"),
+            SpecSourcePolicy::V2Only
+        );
+        assert_eq!(
+            SpecSourcePolicy::for_release("0.1.99"),
+            SpecSourcePolicy::DualSource
+        );
     }
 
     #[test]
