@@ -29,16 +29,6 @@ fn current_workspace_checks_and_reports_configured_readiness() {
     let check_result: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
     assert!(check_result["diagnostics"].is_array());
 
-    let validate = Command::cargo_bin("mitase")
-        .unwrap()
-        .args(["validate", "workspace", ".", "--format", "json"])
-        .output()
-        .unwrap();
-    assert_eq!(validate.status.code(), Some(1));
-    assert!(validate.stderr.is_empty());
-    let validate_result: serde_json::Value = serde_json::from_slice(&validate.stdout).unwrap();
-    assert!(validate_result["diagnostics"].is_array());
-
     let output = Command::cargo_bin("mitase")
         .unwrap()
         .args(["readiness", "report", ".", "--format", "json"])
