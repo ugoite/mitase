@@ -43,3 +43,6 @@ error until the author makes the declaration exact.
 
 The text format is a compact human-readable view of the same diagnostic. Use
 JSON when an integration needs stable fields or exact locations.
+
+For the complete 0.1.x JSON result, stream, and exit-code contract, see the
+[CLI machine contract](./cli-machine-contract.md).
