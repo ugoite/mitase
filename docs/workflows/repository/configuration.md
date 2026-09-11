@@ -32,6 +32,15 @@ excludes, one default inventory profile, Rust/JavaScript/TypeScript source and
 test discovery, validation defaults, and repository-specific common runner
 presets.
 
+When a normal workspace load applies one of these mechanical conventions, the
+CLI and LSP expose it as the shared informational diagnostic
+`MITASE-CONFIG-003`. Its reason names the resolved convention, its candidate is
+the resolved value, and its suggested action shows the explicit config key to
+set when a repository wants to override the convention. Configuration parse
+failures use the same object (`MITASE-CONFIG-001` for an obsolete pre-release
+shape and `MITASE-CONFIG-002` for current-shape errors), including the
+`mitase.yaml` path/span and a next action.
+
 For a single self-hosted profile that needs only a small number of
 non-discoverable exceptions, `inventory.discovery: true` combines repository
 provider discovery with the direct `inventory.providers` map. Explicit provider

@@ -5,11 +5,14 @@ pub mod query;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use mitase_authoring::migrate_v1_to_v2;
+use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use mitase_inventory::{InventoryContext, InventoryRegistry};
 use mitase_project_model::{ChangeBaseline, EffectiveProjectConfig, GitRef};
 use mitase_spec_model::RepoPath;
 use mitase_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationContext, validate};
-use mitase_workspace::SpecWorkspace;
+use mitase_workspace::{
+    FrontendDiagnostic, FrontendDiagnosticError, FrontendSeverity, SpecWorkspace,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -217,7 +220,9 @@ fn config_root(start: &Path) -> Result<PathBuf> {
     }
 }
 fn run_query(args: QueryArgs) -> Result<i32> {
-    let workspace = SpecWorkspace::load(args.workspace)?;
+    let Some(workspace) = load_workspace_or_report(args.workspace, args.format)? else {
+        return Ok(1);
+    };
     let index = workspace.index()?;
     let result = query::query(&workspace, &index, &args.source, args.relation.as_deref())?;
     match args.format {
@@ -227,7 +232,9 @@ fn run_query(args: QueryArgs) -> Result<i32> {
     Ok(0)
 }
 fn run_show(args: ShowArgs) -> Result<i32> {
-    let workspace = SpecWorkspace::load(args.workspace)?;
+    let Some(workspace) = load_workspace_or_report(args.workspace, args.format)? else {
+        return Ok(1);
+    };
     let index = workspace.index()?;
     let result = query::show(&workspace, &index, &args.id)?;
     match args.format {
@@ -237,7 +244,9 @@ fn run_show(args: ShowArgs) -> Result<i32> {
     Ok(0)
 }
 fn run_list(args: ListArgs) -> Result<i32> {
-    let workspace = SpecWorkspace::load(args.workspace)?;
+    let Some(workspace) = load_workspace_or_report(args.workspace, args.format)? else {
+        return Ok(1);
+    };
     let index = workspace.index()?;
     let result = query::list(
         &workspace,
@@ -255,7 +264,9 @@ fn run_list(args: ListArgs) -> Result<i32> {
     Ok(0)
 }
 fn run_check(args: CheckArgs) -> Result<i32> {
-    let workspace = SpecWorkspace::load(args.workspace)?;
+    let Some(workspace) = load_workspace_or_report(args.workspace, args.format)? else {
+        return Ok(1);
+    };
     let index = workspace.index()?;
     let revision = revision(&workspace.root)?;
     let context = ValidationContext {
@@ -268,21 +279,22 @@ fn run_check(args: CheckArgs) -> Result<i32> {
         revision: Some(&revision),
         change_base_revision: None,
     };
-    let result = mitase_validation::validate_workspace(&context);
-    match args.format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
-        Format::Text => {
-            for d in &result.diagnostics {
-                println!("{}", d.render_text());
-            }
-            println!("{} diagnostic(s)", result.diagnostics.len());
-        }
-    }
+    let mut result = mitase_validation::validate_workspace(&context);
+    result.diagnostics.splice(
+        0..0,
+        workspace
+            .frontend_diagnostics
+            .iter()
+            .map(canonical_frontend_diagnostic),
+    );
+    render_validation_result(&result, args.format)?;
     Ok(if result.is_valid() { 0 } else { 1 })
 }
 fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     let ReadinessCommand::Report { workspace, format } = args.command;
-    let workspace = SpecWorkspace::load(workspace)?;
+    let Some(workspace) = load_workspace_or_report(workspace, format)? else {
+        return Ok(1);
+    };
     let index = workspace.index()?;
     let profile = workspace
         .config
@@ -350,7 +362,9 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         .as_ref()
         .map(|(_, path)| path)
         .unwrap_or(&args.workspace);
-    let workspace = SpecWorkspace::load(workspace_path)?;
+    let Some(workspace) = load_workspace_or_report(workspace_path, args.format)? else {
+        return Ok(1);
+    };
     let index = workspace.index()?;
     // Every validation invocation gets one explicit revision. Changed-unit
     // probes use the same resolved baseline plus staged, working-tree, and
@@ -372,16 +386,80 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
     } else {
         validate(&context)
     };
-    match args.format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+    let mut result = result;
+    result.diagnostics.splice(
+        0..0,
+        workspace
+            .frontend_diagnostics
+            .iter()
+            .map(canonical_frontend_diagnostic),
+    );
+    render_validation_result(&result, args.format)?;
+    Ok(if result.is_valid() { 0 } else { 1 })
+}
+
+fn render_validation_result(result: &ValidationResult, format: Format) -> Result<()> {
+    match format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(result)?),
         Format::Text => {
-            for d in &result.diagnostics {
-                println!("{}", d.render_text());
+            for diagnostic in &result.diagnostics {
+                println!("{}", diagnostic.render_text());
             }
             println!("{} diagnostic(s)", result.diagnostics.len());
         }
     }
-    Ok(if result.is_valid() { 0 } else { 1 })
+    Ok(())
+}
+
+fn load_workspace_or_report(
+    path: impl AsRef<Path>,
+    format: Format,
+) -> Result<Option<SpecWorkspace>> {
+    match SpecWorkspace::load(path) {
+        Ok(workspace) => Ok(Some(workspace)),
+        Err(error) => {
+            let Some(frontend) = error.downcast_ref::<FrontendDiagnosticError>() else {
+                return Err(error);
+            };
+            let result = ValidationResult {
+                diagnostics: vec![canonical_frontend_diagnostic(&frontend.diagnostic)],
+                readiness: None,
+            };
+            match format {
+                Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+                Format::Text => {
+                    for diagnostic in &result.diagnostics {
+                        eprintln!("{}", diagnostic.render_text());
+                    }
+                    eprintln!("{} diagnostic(s)", result.diagnostics.len());
+                }
+            }
+            Ok(None)
+        }
+    }
+}
+
+pub(crate) fn canonical_frontend_diagnostic(frontend: &FrontendDiagnostic) -> Diagnostic {
+    let mut diagnostic = match frontend.severity {
+        FrontendSeverity::Error => {
+            Diagnostic::error(&frontend.code, &frontend.message, frontend.path.clone())
+        }
+        FrontendSeverity::Warning => {
+            Diagnostic::warning(&frontend.code, &frontend.message, frontend.path.clone())
+        }
+        FrontendSeverity::Info => {
+            Diagnostic::info(&frontend.code, &frontend.message, frontend.path.clone())
+        }
+    };
+    diagnostic.phase = ValidationPhase::Config;
+    diagnostic.primary.line = frontend.line;
+    diagnostic.primary.column = frontend.column;
+    diagnostic.primary.end_line = frontend.end_line;
+    diagnostic.primary.end_column = frontend.end_column;
+    diagnostic.primary.label = frontend.label.clone();
+    diagnostic.candidates = frontend.candidates.clone();
+    diagnostic.help = frontend.help.clone();
+    diagnostic
 }
 
 fn revision(root: &Path) -> Result<String> {

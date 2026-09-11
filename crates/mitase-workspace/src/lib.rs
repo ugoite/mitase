@@ -21,11 +21,114 @@ pub struct LoadedDocument {
     pub path: PathBuf,
     pub document: SpecDocument,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrontendSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrontendDiagnostic {
+    pub code: String,
+    pub severity: FrontendSeverity,
+    pub message: String,
+    pub path: String,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub end_line: Option<u32>,
+    pub end_column: Option<u32>,
+    pub label: Option<String>,
+    pub candidates: Vec<String>,
+    pub help: Option<String>,
+}
+
+impl FrontendDiagnostic {
+    fn error(code: impl Into<String>, message: impl Into<String>, path: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            severity: FrontendSeverity::Error,
+            message: message.into(),
+            path: path.into(),
+            line: None,
+            column: None,
+            end_line: None,
+            end_column: None,
+            label: None,
+            candidates: Vec::new(),
+            help: None,
+        }
+    }
+
+    fn info(code: impl Into<String>, message: impl Into<String>, path: impl Into<String>) -> Self {
+        let mut diagnostic = Self::error(code, message, path);
+        diagnostic.severity = FrontendSeverity::Info;
+        diagnostic
+    }
+
+    fn with_span(mut self, line: u32, column: u32, end_line: u32, end_column: u32) -> Self {
+        self.line = Some(line);
+        self.column = Some(column);
+        self.end_line = Some(end_line);
+        self.end_column = Some(end_column);
+        self
+    }
+
+    fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    fn with_candidates(mut self, candidates: impl IntoIterator<Item = String>) -> Self {
+        self.candidates = candidates.into_iter().collect();
+        self
+    }
+
+    fn with_help(mut self, help: impl Into<String>) -> Self {
+        self.help = Some(help.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrontendDiagnosticError {
+    pub diagnostic: FrontendDiagnostic,
+}
+
+impl std::fmt::Display for FrontendDiagnosticError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let diagnostic = &self.diagnostic;
+        write!(formatter, "{}", diagnostic.path)?;
+        if let (Some(line), Some(column)) = (diagnostic.line, diagnostic.column) {
+            write!(formatter, ":{line}:{column}")?;
+        }
+        write!(formatter, ": {}", diagnostic.message)?;
+        if !diagnostic.candidates.is_empty() {
+            write!(
+                formatter,
+                " [candidates: {}]",
+                diagnostic.candidates.join(", ")
+            )?;
+        }
+        if let Some(help) = &diagnostic.help {
+            write!(formatter, " [suggested action: {help}]")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for FrontendDiagnosticError {}
+
 #[derive(Clone)]
 pub struct SpecWorkspace {
     pub root: PathBuf,
     pub config: EffectiveProjectConfig,
     pub documents: Vec<LoadedDocument>,
+    /// Frontend information produced while resolving repository conventions.
+    /// These diagnostics are informational and are rendered alongside
+    /// validation diagnostics by CLI and LSP consumers.
+    pub frontend_diagnostics: Vec<FrontendDiagnostic>,
     matcher: WorkspaceMatcher,
 }
 #[derive(Debug, Clone)]
@@ -137,10 +240,25 @@ impl SpecWorkspace {
             .with_context(|| format!("read {}", config_path.display()))?;
         let effective_config = match EffectiveProjectConfig::from_source(&root, &config_source) {
             Ok(config) => config,
-            Err(_) if is_obsolete_pre_release_config(&config_source) => bail!(
-                "The document uses an obsolete pre-release mitase/config/v1 shape.\nRewrite it using the current mitase/config/v1 model."
-            ),
-            Err(error) => return Err(anyhow::anyhow!(error)).context("parse mitase/config/v1"),
+            Err(_) if is_obsolete_pre_release_config(&config_source) => {
+                return Err(frontend_error(
+                    FrontendDiagnostic::error(
+                        "MITASE-CONFIG-001",
+                        "configuration uses an obsolete pre-release mitase/config/v1 shape",
+                        config_path.to_string_lossy(),
+                    )
+                    .with_span(1, 1, 1, 1)
+                    .with_candidates([CONFIG_SCHEMA.to_string()])
+                    .with_help("rewrite mitase.yaml using the current mitase/config/v1 model"),
+                ));
+            }
+            Err(error) => {
+                return Err(frontend_error(config_parse_diagnostic(
+                    &config_path,
+                    &config_source,
+                    &error,
+                )));
+            }
         };
         if effective_config.schema != CONFIG_SCHEMA {
             bail!("config schema must be {CONFIG_SCHEMA}");
@@ -156,14 +274,29 @@ impl SpecWorkspace {
             let source = fs::read_to_string(&path)?;
             let document = load_spec_document(&source, &path, source_policy)?;
             if document.schema() != SPEC_SCHEMA {
-                bail!("{}: schema must be {SPEC_SCHEMA}", path.display());
+                return Err(frontend_error(
+                    FrontendDiagnostic::error(
+                        "MITASE-SOURCE-002",
+                        format!("document schema must be {SPEC_SCHEMA}"),
+                        path.to_string_lossy(),
+                    )
+                    .with_span(1, 1, 1, 1)
+                    .with_candidates([AUTHORING_SCHEMA.to_string()])
+                    .with_help("rewrite the document using the mitase/authoring/v2 schema"),
+                ));
             }
             documents.push(LoadedDocument { path, document });
         }
+        let frontend_diagnostics = effective_config
+            .applied_conventions
+            .iter()
+            .map(|convention| config_convention_diagnostic(&config_path, convention))
+            .collect();
         Ok(Self {
             root,
             config: effective_config,
             documents,
+            frontend_diagnostics,
             matcher,
         })
     }
@@ -195,31 +328,209 @@ fn load_spec_document(
     source_policy: SpecSourcePolicy,
 ) -> Result<SpecDocument> {
     match declared_schema(source).as_deref() {
-        Some(SPEC_SCHEMA) if source_policy == SpecSourcePolicy::V2Only => bail!(
-            "{}: canonical mitase/spec/v1 authoring input is not accepted in the v0.2 single-source mode.\nRun `mitase migrate {} --stdout` and save the result as mitase/authoring/v2 source.",
-            path.display(),
-            path.display(),
-        ),
+        Some(SPEC_SCHEMA) if source_policy == SpecSourcePolicy::V2Only => {
+            return Err(frontend_error(
+                FrontendDiagnostic::error(
+                    "MITASE-SOURCE-001",
+                    "canonical mitase/spec/v1 authoring input is not accepted in the v0.2 single-source mode",
+                    path.to_string_lossy(),
+                )
+                .with_span(schema_span(source).0, schema_span(source).1, schema_span(source).0, schema_span(source).1 + 1)
+                .with_candidates([AUTHORING_SCHEMA.to_string()])
+                .with_help(format!(
+                    "run `mitase migrate {} --stdout` and save the result as mitase/authoring/v2 source",
+                    path.display()
+                )),
+            ));
+        }
         Some(AUTHORING_SCHEMA) => {
-            let authoring = AuthoringDocument::parse(source)
-                .map_err(|error| anyhow::anyhow!("parse authoring document: {error}"))
-                .with_context(|| format!("strict parse {}", path.display()))?;
+            let authoring = AuthoringDocument::parse(source).map_err(|error| {
+                frontend_error(
+                    FrontendDiagnostic::error(
+                        "MITASE-AUTHORING-001",
+                        format!("authoring document is invalid: {error}"),
+                        path.to_string_lossy(),
+                    )
+                    .with_span(
+                        error_span(source, &error).0,
+                        error_span(source, &error).1,
+                        error_span(source, &error).0,
+                        error_span(source, &error).1 + 1,
+                    )
+                    .with_candidates([AUTHORING_SCHEMA.to_string()])
+                    .with_help(
+                        "fix the YAML and keep the document schema set to mitase/authoring/v2",
+                    ),
+                )
+            })?;
             return authoring
                 .normalize()
                 .map(|normalized| normalized.document)
-                .map_err(|error| anyhow::anyhow!("normalize authoring document: {error}"))
-                .with_context(|| format!("normalize {}", path.display()));
+                .map_err(|error| frontend_error(normalization_diagnostic(source, path, &error)));
         }
         _ => {}
     }
 
     match serde_yaml::from_str(source) {
         Ok(document) => Ok(document),
-        Err(_error) if is_obsolete_pre_release_spec(source) => bail!(
-            "The document uses an obsolete pre-release mitase/spec/v1 shape.\nRewrite it using the current mitase/spec/v1 model."
-        ),
-        Err(error) => Err(error).with_context(|| format!("strict parse {}", path.display())),
+        Err(_error) if is_obsolete_pre_release_spec(source) => Err(frontend_error(
+            FrontendDiagnostic::error(
+                "MITASE-SOURCE-003",
+                "document uses an obsolete pre-release mitase/spec/v1 shape",
+                path.to_string_lossy(),
+            )
+            .with_span(1, 1, 1, 1)
+            .with_candidates([SPEC_SCHEMA.to_string(), AUTHORING_SCHEMA.to_string()])
+            .with_help("rewrite the document using the current mitase/spec/v1 model or migrate it to mitase/authoring/v2"),
+        )),
+        Err(error) => Err(frontend_error(
+            FrontendDiagnostic::error(
+                "MITASE-SOURCE-004",
+                format!("specification document is not valid YAML: {error}"),
+                path.to_string_lossy(),
+            )
+            .with_span(error_span(source, &error.to_string()).0, error_span(source, &error.to_string()).1, error_span(source, &error.to_string()).0, error_span(source, &error.to_string()).1 + 1)
+            .with_candidates([SPEC_SCHEMA.to_string(), AUTHORING_SCHEMA.to_string()])
+            .with_help("fix the YAML and declare either mitase/spec/v1 or mitase/authoring/v2"),
+        )),
     }
+}
+
+fn frontend_error(diagnostic: FrontendDiagnostic) -> anyhow::Error {
+    anyhow::Error::new(FrontendDiagnosticError { diagnostic })
+}
+
+fn config_parse_diagnostic(path: &Path, source: &str, error: &str) -> FrontendDiagnostic {
+    FrontendDiagnostic::error(
+        "MITASE-CONFIG-002",
+        format!("configuration is invalid: {error}"),
+        path.to_string_lossy(),
+    )
+    .with_span(
+        error_span(source, error).0,
+        error_span(source, error).1,
+        error_span(source, error).0,
+        error_span(source, error).1 + 1,
+    )
+    .with_candidates([CONFIG_SCHEMA.to_string()])
+    .with_help("fix mitase.yaml and keep its schema set to mitase/config/v1")
+}
+
+fn config_convention_diagnostic(path: &Path, convention: &str) -> FrontendDiagnostic {
+    let key = convention.split('=').next().unwrap_or(convention);
+    FrontendDiagnostic::info(
+        "MITASE-CONFIG-003",
+        format!("applied repository configuration convention: {convention}"),
+        path.to_string_lossy(),
+    )
+    .with_span(1, 1, 1, 1)
+    .with_label(key)
+    .with_candidates([convention.to_string()])
+    .with_help(format!(
+        "keep this convention or set {key} explicitly in mitase.yaml"
+    ))
+}
+
+fn normalization_diagnostic(
+    source: &str,
+    path: &Path,
+    error: &mitase_authoring::NormalizationError,
+) -> FrontendDiagnostic {
+    let (code, candidates, help, field) = match error {
+        mitase_authoring::NormalizationError::NoCandidates { field } => (
+            "MITASE-AUTHORING-002",
+            Vec::new(),
+            format!("set {field} explicitly; inference has no unique candidate"),
+            field.as_str(),
+        ),
+        mitase_authoring::NormalizationError::Ambiguous { field, candidates } => (
+            "MITASE-AUTHORING-003",
+            candidates.clone(),
+            format!("set {field} explicitly to one exact candidate"),
+            field.as_str(),
+        ),
+        mitase_authoring::NormalizationError::UnknownReference { field, value } => (
+            "MITASE-AUTHORING-004",
+            vec![value.clone()],
+            format!("replace {value} with the exact local reference expected by {field}"),
+            field.as_str(),
+        ),
+    };
+    let mut diagnostic = FrontendDiagnostic::error(
+        code,
+        format!("normalize authoring document: {error}"),
+        path.to_string_lossy(),
+    )
+    .with_label(field)
+    .with_candidates(candidates)
+    .with_help(help);
+    if let Some((line, column)) = field_span(source, field) {
+        diagnostic = diagnostic.with_span(line, column, line, column + 1);
+    }
+    diagnostic
+}
+
+fn schema_span(source: &str) -> (u32, u32) {
+    source
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.trim_start().starts_with("schema:"))
+        .map(|(line, value)| {
+            (
+                line as u32 + 1,
+                value.find("schema").unwrap_or(0) as u32 + 1,
+            )
+        })
+        .unwrap_or((1, 1))
+}
+
+fn error_span(source: &str, error: &str) -> (u32, u32) {
+    let line = error
+        .split("line ")
+        .nth(1)
+        .and_then(|value| value.split_whitespace().next())
+        .and_then(|value| value.trim_end_matches(',').parse::<u32>().ok());
+    let column = error
+        .split("column ")
+        .nth(1)
+        .and_then(|value| value.split_whitespace().next())
+        .and_then(|value| value.trim_end_matches([',', '.']).parse::<u32>().ok());
+    match (line, column) {
+        (Some(line), Some(column)) => (line, column),
+        _ => schema_span(source),
+    }
+}
+
+fn field_span(source: &str, field: &str) -> Option<(u32, u32)> {
+    let fields = field.split('.').collect::<Vec<_>>();
+    let mut stack = Vec::<(&str, usize)>::new();
+    let mut best = None;
+    for (line, value) in source.lines().enumerate() {
+        let trimmed = value.trim_start();
+        let Some(separator) = trimmed.find(':') else {
+            continue;
+        };
+        let key = trimmed[..separator].trim();
+        if key.is_empty() || key.contains(char::is_whitespace) {
+            continue;
+        }
+        let indent = value.len() - trimmed.len();
+        while stack
+            .last()
+            .is_some_and(|(_, parent_indent)| *parent_indent >= indent)
+        {
+            stack.pop();
+        }
+        if stack.len() < fields.len() && fields[stack.len()] == key {
+            let column = indent + trimmed.find(key).unwrap_or(0) + 1;
+            stack.push((key, indent));
+            best = Some((line as u32 + 1, column as u32));
+            if stack.len() == fields.len() {
+                return best;
+            }
+        }
+    }
+    best
 }
 
 fn declared_schema(source: &str) -> Option<String> {
@@ -2808,6 +3119,13 @@ mod tests {
         let error = SpecWorkspace::load(tempdir.path())
             .err()
             .expect("normalization error");
+        let diagnostic = error
+            .downcast_ref::<FrontendDiagnosticError>()
+            .expect("normalization should retain its structured diagnostic");
+        assert_eq!(diagnostic.diagnostic.code, "MITASE-AUTHORING-002");
+        assert_eq!(diagnostic.diagnostic.line, Some(15));
+        assert_eq!(diagnostic.diagnostic.column, Some(5));
+        assert!(diagnostic.diagnostic.help.is_some());
         let error = format!("{error:#}");
         assert!(error.contains("docs/mitase/authoring-requirement.yaml"));
         assert!(error.contains("normalize authoring document"));
@@ -2849,10 +3167,40 @@ mod tests {
         let error = SpecWorkspace::load_with_policy(tempdir.path(), SpecSourcePolicy::V2Only)
             .err()
             .expect("v1 source rejection");
+        let diagnostic = error
+            .downcast_ref::<FrontendDiagnosticError>()
+            .expect("v1 rejection should retain its structured diagnostic");
+        assert_eq!(diagnostic.diagnostic.code, "MITASE-SOURCE-001");
+        assert_eq!(
+            diagnostic.diagnostic.candidates,
+            vec![AUTHORING_SCHEMA.to_string()]
+        );
+        assert!(diagnostic.diagnostic.help.is_some());
         let error = format!("{error:#}");
         assert!(error.contains("docs/mitase/legacy.yaml"));
         assert!(error.contains("not accepted in the v0.2 single-source mode"));
         assert!(error.contains("mitase migrate"));
+    }
+
+    #[test]
+    fn workspace_exposes_repository_conventions_as_shared_diagnostics() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs/mitase")).expect("spec dir");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            "schema: mitase/config/v1\n",
+        )
+        .expect("minimal config");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        assert!(!workspace.frontend_diagnostics.is_empty());
+        assert!(workspace.frontend_diagnostics.iter().all(|diagnostic| {
+            diagnostic.code == "MITASE-CONFIG-003"
+                && diagnostic.severity == FrontendSeverity::Info
+                && diagnostic.path.ends_with("mitase.yaml")
+                && diagnostic.line.is_some()
+                && diagnostic.help.is_some()
+        }));
     }
 
     #[test]
