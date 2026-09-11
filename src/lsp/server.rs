@@ -149,6 +149,61 @@ impl LspServer {
                 self.should_exit = true;
                 Ok(Vec::new())
             }
+            "textDocument/didOpen" => {
+                let Ok(params) = parse_required_params(notification.params) else {
+                    return Ok(Vec::new());
+                };
+                Ok(self
+                    .handlers
+                    .handle_did_open(params)?
+                    .into_iter()
+                    .map(Message::Notification)
+                    .collect())
+            }
+            "textDocument/didChange" => {
+                let Ok(params) = parse_required_params(notification.params) else {
+                    return Ok(Vec::new());
+                };
+                Ok(self
+                    .handlers
+                    .handle_did_change(params)?
+                    .into_iter()
+                    .map(Message::Notification)
+                    .collect())
+            }
+            "textDocument/didSave" => {
+                let Ok(params) = parse_required_params(notification.params) else {
+                    return Ok(Vec::new());
+                };
+                Ok(self
+                    .handlers
+                    .handle_did_save(params)?
+                    .into_iter()
+                    .map(Message::Notification)
+                    .collect())
+            }
+            "textDocument/didClose" => {
+                let Ok(params) = parse_required_params(notification.params) else {
+                    return Ok(Vec::new());
+                };
+                Ok(self
+                    .handlers
+                    .handle_did_close(params)?
+                    .into_iter()
+                    .map(Message::Notification)
+                    .collect())
+            }
+            "workspace/didChangeWatchedFiles" => {
+                let Ok(params) = parse_required_params(notification.params) else {
+                    return Ok(Vec::new());
+                };
+                Ok(self
+                    .handlers
+                    .handle_did_change_watched_files(params)?
+                    .into_iter()
+                    .map(Message::Notification)
+                    .collect())
+            }
             _ => Ok(Vec::new()),
         }
     }
@@ -481,6 +536,83 @@ mod tests {
                     if method == "textDocument/publishDiagnostics"
             )
         }));
+    }
+
+    #[test]
+    fn handle_edit_notifications_refresh_diagnostics() {
+        let workspace = fixture_path("valid-web-app");
+        let source_path = workspace.join("spec/requirement.yaml");
+        let source = fs::read_to_string(&source_path).expect("read source");
+        let source_uri = format!("file://{}", source_path.display());
+        let mut server = LspServer::new();
+        server
+            .handle_request(Request {
+                jsonrpc: "2.0".to_string(),
+                id: super::super::protocol::RequestId::Number(1),
+                method: "initialize".to_string(),
+                params: Some(json!({
+                    "rootUri": format!("file://{}", workspace.display())
+                })),
+            })
+            .expect("initialize response");
+        server
+            .handle_notification(Notification {
+                jsonrpc: "2.0".to_string(),
+                method: "initialized".to_string(),
+                params: None,
+            })
+            .expect("initialized notification");
+
+        for (method, params) in [
+            (
+                "textDocument/didOpen",
+                json!({
+                    "textDocument": {
+                        "uri": source_uri.clone(),
+                        "languageId": "yaml",
+                        "version": 1,
+                        "text": source.clone(),
+                    }
+                }),
+            ),
+            (
+                "textDocument/didChange",
+                json!({
+                    "textDocument": {"uri": source_uri.clone(), "version": 2},
+                    "contentChanges": [{"text": source.clone()}],
+                }),
+            ),
+            (
+                "textDocument/didSave",
+                json!({"textDocument": {"uri": source_uri.clone()}}),
+            ),
+            (
+                "textDocument/didClose",
+                json!({"textDocument": {"uri": source_uri.clone()}}),
+            ),
+            (
+                "workspace/didChangeWatchedFiles",
+                json!({
+                    "changes": [{"uri": source_uri.clone(), "type": 2}]
+                }),
+            ),
+        ] {
+            let messages = server
+                .handle_notification(Notification {
+                    jsonrpc: "2.0".to_string(),
+                    method: method.to_string(),
+                    params: Some(params),
+                })
+                .expect("edit notification");
+            assert!(!messages.is_empty(), "{method} should publish diagnostics");
+            assert!(messages.iter().all(|message| {
+                matches!(
+                    message,
+                    Message::Notification(Notification { method, .. })
+                        if method == "textDocument/publishDiagnostics"
+                )
+            }));
+        }
     }
 
     #[test]
