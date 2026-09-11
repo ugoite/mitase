@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 use mitase_authoring::AuthoringDocument;
-use mitase_spec_model::{LocalAnchorKind, SpecDocument};
+use mitase_spec_model::{BoundTargetRef, LocalAnchorKind, SpecDocument};
 use mitase_workspace::SpecWorkspace;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -648,6 +648,31 @@ fn mitase_authoring_v2_preserves_the_pre_migration_canonical_graph() {
                 .collect::<String>();
             (relative, digest)
         })
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn self_hosted_config_preserves_the_exact_artifact_resolution_baseline() {
+    let workspace = SpecWorkspace::load(".").expect("Mitase workspace");
+    let index = workspace.index().expect("Mitase index");
+    let expected = fs::read_to_string("tests/fixtures/mitase-artifact-resolution-baseline.txt")
+        .expect("artifact resolution baseline")
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            let (reference, artifact) = line
+                .split_once("  ")
+                .expect("artifact resolution baseline entry");
+            let reference: BoundTargetRef = reference.parse().expect("target reference");
+            (reference.to_string(), artifact.to_owned())
+        })
+        .collect::<BTreeMap<_, _>>();
+    let actual = index
+        .target_to_artifact
+        .iter()
+        .map(|(reference, artifact)| (reference.to_string(), artifact.clone()))
         .collect::<BTreeMap<_, _>>();
 
     assert_eq!(actual, expected);
