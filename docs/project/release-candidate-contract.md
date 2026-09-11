@@ -11,9 +11,10 @@ incidental branch or tag. A candidate records the exact source revision and
 the exact bytes selected for publication.
 
 The repository's public version authority is the `version` in the Cargo
-workspace package section of [Cargo.toml](../../Cargo.toml). The current
-Foundation Release is `v0.1.0`; the candidate workflow reads that version from
-the exact source revision it checks out.
+workspace package section of [Cargo.toml](../../Cargo.toml). The Foundation
+Release is `v0.1.0`; the current patch train is prepared as `v0.1.2`. The
+candidate workflow reads the version from the exact source revision it checks
+out.
 
 ## Manifest
 
@@ -64,3 +65,8 @@ candidate workflow run ID and the recorded `candidate_id`. It downloads that
 bundle, verifies the manifest checksum, candidate identity, source revision,
 and every artifact byte, then publishes those same files to the GitHub release
 and package registry. It does not rebuild from `main` or from a tag.
+
+The release-line behavior and the v0.2 cutover acceptance are fixed in the
+[release train acceptance](./release-acceptance.md) contract. The candidate
+workflow runs that repository-only gate after the standard `mise run ci`
+quality gate.

@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 CANDIDATE = ROOT / ".github/workflows/release-candidate.yml"
 PUBLISH = ROOT / ".github/workflows/release-publish.yml"
+ACCEPTANCE = ROOT / "scripts/ci/check-release-acceptance.sh"
 PINNED_ACTION = re.compile(r"^\s*(?:-\s*)?uses:\s+[^\s@]+@[0-9a-f]{40}(?:\s+#.*)?$")
 
 
@@ -22,7 +23,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse((ROOT / ".release-please-manifest.json").exists())
         self.assertFalse((ROOT / "release-please-config.json").exists())
         installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
-        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.1.0"', installer)
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.1.2"', installer)
         self.assertNotIn("__MITASE_RELEASE_TAG__", installer)
         candidate = CANDIDATE.read_text(encoding="utf-8")
         self.assertIn('Path("Cargo.toml")', candidate)
@@ -39,6 +40,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "release_candidate.py build",
             "release_candidate.py validate",
             "name: mitase-release-candidate",
+            "name: Run release-line acceptance gate",
+            "bash scripts/ci/check-release-acceptance.sh",
         ):
             self.assertIn(required, workflow)
         self.assertNotIn("gh release create", workflow)
@@ -89,6 +92,22 @@ class ReleaseWorkflowTests(unittest.TestCase):
             for line in workflow_path.read_text(encoding="utf-8").splitlines():
                 if "uses:" in line and "./" not in line:
                     self.assertRegex(line, PINNED_ACTION)
+
+    def test_release_acceptance_gate_covers_both_release_lines(self) -> None:
+        self.assertTrue(ACCEPTANCE.is_file())
+        self.assertTrue(ACCEPTANCE.stat().st_mode & 0o111)
+        script = ACCEPTANCE.read_text(encoding="utf-8")
+        for required in (
+            '0.1.*)',
+            '0.2.*)',
+            "current_release_policy_keeps_dual_source_during_0_1_x",
+            "MITASE-SOURCE-001",
+            "mitase migrate",
+            "mitase_authoring_v2_preserves_the_pre_migration_canonical_graph",
+            "self_hosted_config_preserves_the_exact_artifact_resolution_baseline",
+            "check-architecture.py",
+        ):
+            self.assertIn(required, script)
 
 
 if __name__ == "__main__":
