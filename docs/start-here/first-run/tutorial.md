@@ -12,6 +12,20 @@ target.
 3. Add the referenced `src/example.rs` and `tests/example.rs` files.
 4. Run `mitase check .`.
 
+The default `text` output is the Balanced Hybrid human view. For the same
+validation result in a CI-friendly stream or a machine contract, run:
+
+```bash
+mitase check . --format compact
+mitase check . --format json
+```
+
+Compact output keeps the outcome and each diagnostic on one line. JSON keeps
+the same validation payload fields and adds the top-level
+`schema_version: "mitase/cli/v1"`. The command exit code remains the authority
+for automation; see the [CLI machine contract](../../workflows/repository/cli-machine-contract.md)
+for the exit-code matrix.
+
 A minimal requirement slice looks like this:
 
 ```yaml

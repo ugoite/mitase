@@ -1,7 +1,9 @@
 # Getting started
 
 Install a release build or run the binary from source, then create the smallest
-workspace with the current v2 authoring source.
+workspace with the current v2 authoring source. The default human renderer is
+the Balanced Hybrid layout: a concise outcome first, followed by the evidence
+needed to understand an unresolved result.
 
 ## Quick start commands
 
@@ -15,6 +17,8 @@ The normal v1 CLI surface is specification-only:
 
 - `validate`
 - `check`
+- `readiness report`
+- `config effective`
 - `normalize`
 - `query`
 - `show`
@@ -51,6 +55,38 @@ verification targets, authored relations, derived reverse relations, and
 execution-free verification assessments. It does not run tests or other
 configured runners. `query` inspects explicit relations for a specification ID,
 local anchor, or exact bound target reference; it does not infer dependencies.
+
+## Choosing an output format
+
+Human-readable `text` is the default and is intended for a person reading a
+terminal or a review log. Use `compact` when a CI log or annotation needs one
+record per line, or `json` when an integration needs stable fields:
+
+```bash
+mitase check . --format text
+mitase check . --format compact
+mitase check . --format json
+```
+
+Compact validation starts with a one-line outcome and counts, then prints each
+diagnostic as `path:line:column: severity[rule]: message`. Relation and
+read-only next-read hints follow on the same line when available. Compact
+output never contains ANSI control sequences, including in CI or redirected
+output. JSON responses carry the additive top-level
+`schema_version: "mitase/cli/v1"`; the command-specific fields remain at the
+same level. See the [complete CLI contract](../../workflows/repository/cli-machine-contract.md)
+for all supported commands.
+
+All normal commands use these exit-code meanings:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | The command completed with a valid or successfully inspected result. |
+| `1` | The workspace loaded, but validation/readiness failed, or a structured frontend diagnostic was reported. |
+| `2` | A top-level command or workspace error occurred. |
+
+Use the exit code for automation; do not infer failure from the severity of an
+individual diagnostic.
 
 A first-run workspace needs only:
 

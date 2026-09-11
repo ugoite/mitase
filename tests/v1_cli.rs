@@ -382,6 +382,7 @@ fn ugoite_current_v2_corpus_normalizes_resolves_and_exposes_the_graph() {
         String::from_utf8_lossy(&show.stderr)
     );
     let show: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(show["schema_version"], "mitase/cli/v1");
     assert_eq!(show["kind"], "requirement");
     assert_eq!(show["criteria"][0]["verification"], "verified");
     assert_eq!(
@@ -409,6 +410,7 @@ fn ugoite_current_v2_corpus_normalizes_resolves_and_exposes_the_graph() {
         .unwrap();
     assert!(feature_show.status.success());
     let feature_show: serde_json::Value = serde_json::from_slice(&feature_show.stdout).unwrap();
+    assert_eq!(feature_show["schema_version"], "mitase/cli/v1");
     assert_eq!(
         feature_show["bindings"][0]["targets"][0]["path"],
         corpus.expected.implementation_path
@@ -430,6 +432,7 @@ fn ugoite_current_v2_corpus_normalizes_resolves_and_exposes_the_graph() {
         .unwrap();
     assert!(query.status.success());
     let query: serde_json::Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["schema_version"], "mitase/cli/v1");
     assert_eq!(
         query["relations"][0]["targets"][0],
         corpus.source.selected["implementation_target"]
@@ -439,6 +442,127 @@ fn ugoite_current_v2_corpus_normalizes_resolves_and_exposes_the_graph() {
         corpus.expected.verification_symbol,
         "test_cli_req_ops_006_config_path_precedence_and_home_fallback"
     );
+}
+
+#[test]
+fn ugoite_current_v2_corpus_covers_all_output_contracts() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/acceptance/ugoite-current-ops-v2");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    initialize_fixture_git(temp.path());
+
+    let text = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", ".", "--format", "text"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(text.status.success());
+    assert!(String::from_utf8_lossy(&text.stdout).contains("check passed"));
+
+    let compact = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", ".", "--format", "compact"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(compact.status.success());
+    let compact = String::from_utf8_lossy(&compact.stdout);
+    assert!(compact.starts_with("check passed | errors="));
+    assert!(!compact.contains('\x1b'));
+    assert!(compact.lines().all(|line| !line.is_empty()));
+
+    let list = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["list", ".", "--format", "compact"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(list.status.success());
+    let list = String::from_utf8_lossy(&list.stdout);
+    assert!(list.contains("item | kind=requirement | id=REQ-OPS-006"));
+    assert!(
+        list.lines()
+            .all(|line| line.starts_with("item | ") || line.starts_with("unverified | "))
+    );
+
+    let show = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-OPS-006", ".", "--format", "compact"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(show.status.success());
+    let show = String::from_utf8_lossy(&show.stdout);
+    assert!(show.starts_with("show | id=REQ-OPS-006 | kind=requirement |"));
+    assert!(show.contains("criterion | id=REQ-OPS-006#criterion.cli-surface | status=verified"));
+    assert!(
+        show.lines()
+            .all(|line| !line.is_empty() && !line.contains('\x1b'))
+    );
+
+    let query = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "query",
+            "REQ-OPS-006#criterion.cli-surface",
+            ".",
+            "--relation",
+            "implementation-targets",
+            "--format",
+            "compact",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(query.status.success());
+    let query = String::from_utf8_lossy(&query.stdout);
+    assert!(query.contains(
+        "query | source=REQ-OPS-006#criterion.cli-surface | relation=implementation-targets"
+    ));
+    assert!(
+        query
+            .lines()
+            .all(|line| !line.is_empty() && !line.contains('\x1b'))
+    );
+}
+
+#[test]
+fn cli_help_contract_fixture_matches_the_current_read_only_surface() {
+    let fixture = fs::read_to_string("tests/fixtures/cli-help-contract.txt")
+        .expect("CLI help contract fixture");
+    for line in fixture.lines().filter(|line| !line.trim().is_empty()) {
+        if line.starts_with('#') {
+            continue;
+        }
+        let (command, expected) = line
+            .split_once("|")
+            .expect("help fixture line must contain command and expected text");
+        let args = match command {
+            "root" => vec!["--help"],
+            "check" => vec!["check", "--help"],
+            "validate-change" => vec!["validate", "change", "--help"],
+            "readiness-report" => vec!["readiness", "report", "--help"],
+            "list" => vec!["list", "--help"],
+            other => panic!("unsupported help fixture command: {other}"),
+        };
+        let output = Command::cargo_bin("mitase")
+            .unwrap()
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "help failed for {command}");
+        let help = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            help.contains(expected),
+            "{command} help is missing {expected:?}"
+        );
+    }
 }
 
 #[test]
