@@ -9,7 +9,7 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/sp
 
 ### Schema
 
-- mitase/spec/v1
+- mitase/authoring/v2
 
 ### Kind
 
@@ -146,7 +146,7 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/sp
 ## Source YAML
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: features
 namespace: public
 category: Public entrypoint contracts

@@ -9,7 +9,7 @@ description: "Generated reference for docs/mitase/philosophies/foundation.yaml"
 
 ### Schema
 
-- mitase/spec/v1
+- mitase/authoring/v2
 
 ### Kind
 
@@ -114,7 +114,7 @@ description: "Generated reference for docs/mitase/philosophies/foundation.yaml"
 ## Source YAML
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: philosophies
 namespace: foundation
 category: Foundation

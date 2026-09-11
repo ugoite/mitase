@@ -1,0 +1,14 @@
+# Canonical serde_yaml digests generated from the pre-v2 Mitase corpus.
+# The regression test compares these digests with the documents normalized
+# from the checked-in mitase/authoring/v2 sources.
+a7a90fa920e675d1f176c70d4298627e8815fbe63750f8420d5d3a1ce566d3e4  docs/mitase/features/capabilities/core.yaml
+9e7b7883a3bd1d68e44d266ccc8dbecc5f0a431006936ae897334b62e22200f7  docs/mitase/features/capabilities/surfaces.yaml
+552dd02640ad9b5578709320e7f9925c6c599757e0adb166b1ea3b58094ddf8c  docs/mitase/features/public-entrypoints/code-diagnostics.yaml
+104de7326c01e82139c35ab5297ba6ed8c79286b21eeae666f881d33d7f2eef1  docs/mitase/features/public-entrypoints/inventory.yaml
+c6ad8d89335d8df462c87c90b56a5cfad43b92bd5a33dcbe314ee9e28d32eae4  docs/mitase/features/public-entrypoints/spec-model.yaml
+496e35e743063984279681966daddfb46039cbdf0467dcfbcb5de33cb849a13d  docs/mitase/features/public-entrypoints/validation.yaml
+f71525fc037af147d86626b78afee63874d620d0a0a1e958e25a8e3a2c8b1da1  docs/mitase/features/public-entrypoints/workspace-loading.yaml
+802ce215a7e36cdfff4bbff51029cb91f7a117dc56c92a701921afdc0041258b  docs/mitase/features/public-entrypoints/workspace-resolution.yaml
+93b27c07da865eaf04703cf2db72552555ff65266526067574ba280cb6734bdd  docs/mitase/philosophies/foundation.yaml
+63cb758f5e2f562a84a5738a5a5c58fa8f64a91c4f20ba7428ecb4bc68b08e7d  docs/mitase/policies/delivery.yaml
+5c8c878c91ff2f6cc1aea137954612e8e8d24d0ca6f78e2744112ccce6a50731  docs/mitase/requirements/capability-contracts.yaml

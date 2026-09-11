@@ -9,7 +9,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
 
 ### Schema
 
-- mitase/spec/v1
+- mitase/authoring/v2
 
 ### Kind
 
@@ -496,7 +496,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
 ## Source YAML
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: requirements
 namespace: capabilities
 category: Capability acceptance contracts

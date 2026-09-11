@@ -3,6 +3,7 @@ use mitase_authoring::AuthoringDocument;
 use mitase_spec_model::{LocalAnchorKind, SpecDocument};
 use mitase_workspace::SpecWorkspace;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -612,6 +613,44 @@ fn generated_spec_reference_covers_every_source_document() {
             "generated index does not link {doc_link}"
         );
     }
+}
+
+#[test]
+fn mitase_authoring_v2_preserves_the_pre_migration_canonical_graph() {
+    let workspace = SpecWorkspace::load(".").expect("Mitase workspace");
+    let expected = fs::read_to_string("tests/fixtures/mitase-v1-canonical-digests.txt")
+        .expect("canonical graph baseline")
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            let (digest, path) = line.split_once("  ").expect("digest fixture entry");
+            (path.to_owned(), digest.to_owned())
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let actual = workspace
+        .documents
+        .iter()
+        .map(|loaded| {
+            let relative = loaded
+                .path
+                .strip_prefix(&workspace.root)
+                .expect("document under workspace root")
+                .to_string_lossy()
+                .into_owned();
+            let canonical = serde_yaml::to_string(&loaded.document).expect("canonical document");
+            let mut hasher = Sha256::new();
+            hasher.update(canonical.as_bytes());
+            let digest = hasher.finalize();
+            let digest = digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            (relative, digest)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(actual, expected);
 }
 
 fn generated_spec_path(relative: &Path) -> PathBuf {
