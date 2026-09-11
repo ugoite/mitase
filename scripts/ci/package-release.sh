@@ -23,9 +23,9 @@ write_sha256() {
   local checksum_path="$2"
 
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$archive_path" >"$checksum_path"
+    (cd "$(dirname "$archive_path")" && sha256sum "$(basename "$archive_path")") >"$checksum_path"
   else
-    shasum -a 256 "$archive_path" >"$checksum_path"
+    (cd "$(dirname "$archive_path")" && shasum -a 256 "$(basename "$archive_path")") >"$checksum_path"
   fi
 }
 
@@ -33,6 +33,7 @@ package_release_artifact() {
   local target="$1"
   local binary_path="$2"
   local output_dir="$3"
+  local version="$4"
   local python_bin
   local asset_base
   local archive_path
@@ -42,8 +43,13 @@ package_release_artifact() {
     exit 1
   fi
 
+  if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([\.-][A-Za-z0-9.-]+)?$ ]]; then
+    echo "release version must be a version tag: $version" >&2
+    exit 1
+  fi
+
   mkdir -p "$output_dir"
-  asset_base="mitase-${target}"
+  asset_base="mitase-${version}-${target}"
 
   if [[ "$target" == *windows* ]]; then
     archive_path="${output_dir}/${asset_base}.zip"
@@ -66,5 +72,10 @@ PY
 
   write_sha256 "$archive_path" "${archive_path}.sha256"
 }
+
+if [[ "$#" -ne 4 ]]; then
+  echo "usage: $0 <target> <binary> <output-dir> <version>" >&2
+  exit 2
+fi
 
 package_release_artifact "$@"

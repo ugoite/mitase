@@ -24,7 +24,7 @@ The candidate manifest uses the `mitase/release-candidate/v1` schema:
 {
   "artifacts": [
     {
-      "name": "mitase-x86_64-unknown-linux-gnu.tar.gz",
+      "name": "mitase-v0.1.0-x86_64-unknown-linux-gnu.tar.gz",
       "sha256": "sha256:<64 lowercase hexadecimal characters>"
     }
   ],
@@ -70,3 +70,22 @@ The release-line behavior and the v0.2 cutover acceptance are fixed in the
 [release train acceptance](./release-acceptance.md) contract. The candidate
 workflow runs that repository-only gate after the standard `mise run ci`
 quality gate.
+
+## Standalone CLI package
+
+Each published release contains one versioned Unix archive for each supported
+target:
+
+```text
+mitase-v<version>-x86_64-unknown-linux-gnu.tar.gz
+mitase-v<version>-aarch64-unknown-linux-gnu.tar.gz
+mitase-v<version>-x86_64-apple-darwin.tar.gz
+mitase-v<version>-aarch64-apple-darwin.tar.gz
+```
+
+An archive contains exactly one file, the executable `mitase`. The candidate
+workflow smoke-tests the exact packaged archive on a native runner by checking
+`mitase --version` and running `mitase check fixtures/acceptance/ugoite-foundation-policy-v1`. The
+published `SHA256SUMS` and `release-manifest.json` describe and verify those
+same archive bytes; downstream repositories may pin those immutable version
+and digest values without importing Mitase crates or source.

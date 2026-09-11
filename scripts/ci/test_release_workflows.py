@@ -9,6 +9,9 @@ ROOT = Path(__file__).parents[2]
 CANDIDATE = ROOT / ".github/workflows/release-candidate.yml"
 PUBLISH = ROOT / ".github/workflows/release-publish.yml"
 ACCEPTANCE = ROOT / "scripts/ci/check-release-acceptance.sh"
+PACKAGE = ROOT / "scripts/ci/package-release.sh"
+PACKAGE_SMOKE = ROOT / "scripts/ci/verify-packaged-release.sh"
+RELEASE_MANIFEST = ROOT / "scripts/ci/release_manifest.py"
 PINNED_ACTION = re.compile(r"^\s*(?:-\s*)?uses:\s+[^\s@]+@[0-9a-f]{40}(?:\s+#.*)?$")
 
 
@@ -42,6 +45,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "name: mitase-release-candidate",
             "name: Run release-line acceptance gate",
             "bash scripts/ci/check-release-acceptance.sh",
+            "scripts/ci/release_manifest.py build",
+            "scripts/ci/release_manifest.py validate",
+            "SHA256SUMS",
+            "release-manifest.json",
         ):
             self.assertIn(required, workflow)
         self.assertNotIn("gh release create", workflow)
@@ -53,6 +60,30 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn('checksum_file="checksums-${{ matrix.target }}.sha256"', workflow)
         self.assertNotIn("> checksums.sha256", workflow)
 
+    def test_candidate_builds_four_versioned_unix_archives_and_smoke_tests_them(self) -> None:
+        workflow = CANDIDATE.read_text(encoding="utf-8")
+        for target in (
+            "x86_64-unknown-linux-gnu",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-apple-darwin",
+            "aarch64-apple-darwin",
+        ):
+            self.assertIn(f"target: {target}", workflow)
+        self.assertNotIn("x86_64-pc-windows-msvc", workflow)
+        self.assertIn('"${{ needs.preflight.outputs.version }}"', workflow)
+        self.assertIn("package-smoke:", workflow)
+        self.assertIn("ubuntu-24.04-arm", workflow)
+        self.assertIn("scripts/ci/verify-packaged-release.sh", workflow)
+        self.assertIn("- package-smoke", workflow)
+
+    def test_package_tools_are_present(self) -> None:
+        self.assertTrue(PACKAGE.is_file())
+        self.assertTrue(PACKAGE_SMOKE.is_file())
+        self.assertTrue(RELEASE_MANIFEST.is_file())
+        self.assertTrue(PACKAGE.stat().st_mode & 0o111)
+        self.assertTrue(PACKAGE_SMOKE.stat().st_mode & 0o111)
+        self.assertTrue(RELEASE_MANIFEST.stat().st_mode & 0o111)
+
     def test_promotion_downloads_by_run_id_and_never_builds(self) -> None:
         workflow = PUBLISH.read_text(encoding="utf-8")
         for required in (
@@ -61,6 +92,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "run-id: ${{ inputs.candidate_run_id }}",
             "--candidate-id \"$INPUT_CANDIDATE_ID\"",
             "--artifact-root \"$artifact_root\"",
+            "release_manifest.py validate",
+            "sha256sum -c SHA256SUMS",
             "gh release create",
             "publish-package.sh",
         ):

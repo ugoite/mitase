@@ -97,9 +97,6 @@ jobs:
           - runner: macos-14
             target: aarch64-apple-darwin
             binary: mitase
-          - runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary: mitase.exe
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -165,7 +162,8 @@ jobs:
           scripts/ci/package-release.sh \
             "${{ matrix.target }}" \
             "target/rust/${{ matrix.target }}/release/${{ matrix.binary }}" \
-            release-artifacts
+            release-artifacts \
+            "${{ needs.preflight.outputs.version }}"
 
       - name: Include release installer
         if: matrix.target == 'x86_64-unknown-linux-gnu'
@@ -203,6 +201,45 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  package-smoke:
+    needs:
+      - preflight
+      - build-artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: candidate-${{ matrix.target }}
+          path: target/package-input
+
+      - name: Smoke-test the packaged Mitase executable
+        run: |
+          archive="target/package-input/mitase-${{ needs.preflight.outputs.version }}-${{ matrix.target }}.tar.gz"
+          bash scripts/ci/verify-packaged-release.sh \
+            "${{ needs.preflight.outputs.version }}" \
+            "${{ matrix.target }}" \
+            "$archive" \
+            fixtures/acceptance/ugoite-foundation-policy-v1
+
   release-grade:
     needs: preflight
     runs-on: ubuntu-24.04
@@ -234,7 +271,8 @@ jobs:
       - preflight
       - build-artifacts
       - release-grade
-    if: always() && needs.build-artifacts.result == 'success' && needs.release-grade.result == 'success'
+      - package-smoke
+    if: always() && needs.build-artifacts.result == 'success' && needs.release-grade.result == 'success' && needs.package-smoke.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -316,6 +354,21 @@ jobs:
           set -euo pipefail
           cp target/candidate-manifest.json target/candidate-bundle/candidate-manifest.json
           cp target/candidate-artifacts/* target/candidate-bundle/artifacts/
+          python3 scripts/ci/release_manifest.py build \
+            --candidate-manifest target/candidate-manifest.json \
+            --output target/candidate-bundle/artifacts/release-manifest.json
+          (
+            cd target/candidate-bundle/artifacts
+            sha256sum mitase-*.tar.gz > SHA256SUMS
+          )
+          python3 scripts/ci/release_manifest.py validate \
+            --candidate-manifest target/candidate-manifest.json \
+            --manifest target/candidate-bundle/artifacts/release-manifest.json \
+            --artifact-root target/candidate-bundle/artifacts
+          (
+            cd target/candidate-bundle/artifacts
+            sha256sum -c SHA256SUMS
+          )
           (
             cd target/candidate-bundle
             sha256sum candidate-manifest.json > candidate-manifest.json.sha256
