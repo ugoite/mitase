@@ -18,3 +18,5 @@ making architecture jargon the first thing a new user sees.
   decision to keep execution lifecycle concerns outside Mitase.
 - [Release candidate identity](./release-candidate-contract.md) — the
   reproducible source and artifact identity contract for release promotion.
+- [Release train acceptance](./release-acceptance.md) — the 0.1.x dogfood and
+  v0.2 single-source cutover gates.

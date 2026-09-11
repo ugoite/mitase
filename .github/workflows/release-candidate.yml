@@ -226,6 +226,9 @@ jobs:
       - name: Run release-grade repository gate
         run: mise run ci
 
+      - name: Run release-line acceptance gate
+        run: bash scripts/ci/check-release-acceptance.sh
+
   assemble-candidate:
     needs:
       - preflight
