@@ -1,6 +1,8 @@
 # Tutorial
 
-This tutorial creates a minimal v1 workspace by hand.
+This tutorial creates a minimal v2 authoring workspace by hand. The v2
+documents are normalized into Mitase's canonical specification graph before
+validation.
 
 1. Add `mitase.yaml` with `schema: mitase/config/v1`.
 2. Create `docs/mitase/philosophy/foundation.yaml`.
@@ -12,7 +14,7 @@ This tutorial creates a minimal v1 workspace by hand.
 A minimal requirement/feature connection looks like this:
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: requirements
 namespace: demo
 category: Demo
@@ -45,7 +47,7 @@ requirements:
 ```
 
 ```yaml
-schema: mitase/spec/v1
+schema: mitase/authoring/v2
 kind: features
 namespace: demo
 category: Demo
@@ -69,4 +71,7 @@ features:
                 criterion: REQ-DEMO-001#criterion.exact-behavior
 ```
 
-Use the checked-in examples for larger layouts.
+Existing v1 source can still be converted during the 0.1.x dogfood period with
+the read-only `mitase migrate <source> --stdout` command. Use the checked-in
+examples and the [short authoring contract](../../workflows/repository/authoring-v2.md)
+for larger v2 layouts.
