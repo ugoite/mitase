@@ -105,14 +105,16 @@ The normal v1 CLI is correspondingly specification-only:
 ```text
 mitase check
 mitase validate
+mitase normalize
 mitase query
 mitase show
 mitase list
 ```
 
-`mitase check` is the CI-facing whole-repository gate. `mitase show` exposes a
-specification's forward relations and derived reverse relations. The CLI does
-not run tests or apply changes. The explicit read-only
+`mitase check` is the CI-facing whole-repository gate. `mitase normalize` is
+a read-only frontend inspection surface for the canonical graph and authoring
+provenance. `mitase show` exposes a specification's forward relations and
+derived reverse relations. The CLI does not run tests or apply changes. The explicit read-only
 `mitase migrate <source> --stdout` transition converts a canonical v1
 document into v0.2 authoring syntax; it is not a compatibility alias and does
 not write to the workspace.

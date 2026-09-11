@@ -47,9 +47,9 @@ mise run check:repo
 ```
 
 The normal v1 CLI is intentionally limited to specification operations:
-`mitase check`, `mitase validate`, `mitase query`, `mitase show`, and
-`mitase list`. The re-foundation removes execution commands rather than
-replacing them with compatibility aliases.
+`mitase check`, `mitase validate`, `mitase normalize`, `mitase query`,
+`mitase show`, and `mitase list`. The re-foundation removes execution
+commands rather than replacing them with compatibility aliases.
 
 The explicit `mitase migrate <source> --stdout` helper is a read-only v0.1 to
 v0.2 authoring transition. It is not part of normal `check` or `validate`

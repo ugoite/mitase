@@ -71,6 +71,17 @@ adapters and therefore require an explicit adapter.
 The normalized result exposes `applied_defaults` and `inferred` provenance so
 the authoring result is fully inspectable.
 
+Inspect one source without changing it:
+
+```bash
+mitase normalize docs/mitase/requirements/example.yaml --stdout --format json
+```
+
+The output contains `document`, the canonical `mitase/spec/v1` graph, and
+`provenance`, the defaults and unique adapter inferences applied by the
+frontend. The command is read-only; it never replaces the source or writes to
+the workspace.
+
 Authoring frontend failures use the shared diagnostic object used by semantic
 validation. A v1 source rejected by the v0.2 loader is reported as
 `MITASE-SOURCE-001`; malformed v2 input as `MITASE-AUTHORING-001`; and failed
