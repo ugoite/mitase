@@ -1,0 +1,12 @@
+schema: mitase/authoring/v2
+kind: philosophies
+namespace: foundation
+category: Foundation
+philosophies:
+  - id: PHIL-000
+    title: User-Owned Knowledge and Stable Authority
+    summary: Durable Knowledge remains user-owned and tools do not become a second authority.
+    principles:
+      - id: stable-foundation
+        statement: Foundational ownership and authority remain stable across implementations.
+        applies_to: [product, specification, implementation, verification]

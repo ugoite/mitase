@@ -1,0 +1,22 @@
+schema: mitase/authoring/v2
+kind: features
+namespace: ops
+category: Operations documentation, automation, and quality gates
+features:
+  - id: FEAT-OPS-001
+    title: Repository operations and quality gates
+    summary: Connect the current operations requirement to an exact Rust CLI artifact.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: cli
+        responsibility: Keep the current Ugoite CLI configuration helper addressable.
+        targets:
+          - id: config
+            adapter: rust
+            path: crates/ugoite-cli/src/config.rs
+            selector: { kind: symbol, name: config_path }
+            claims:
+              - kind: satisfies
+                criterion: REQ-OPS-006#criterion.cli-surface

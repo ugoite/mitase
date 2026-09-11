@@ -1,0 +1,35 @@
+schema: mitase/authoring/v2
+kind: requirements
+namespace: ops
+category: Operations documentation, automation, and quality gates
+requirements:
+  - id: REQ-OPS-006
+    title: Rust Quality Gate Parity
+    description: Root local and CI gates retain the configured Rust quality-gate composition.
+    priority: medium
+    status: implemented
+    criteria:
+      - id: cli-surface
+        kind: behavior
+        statement: CLI configuration helpers retain the current local-run surface.
+        governed_by: [POL-002#rule.governance]
+    bindings:
+      - id: verification
+        role: verification
+        facet: rust-and-task-tests
+        responsibility: Verify the selected CLI configuration behavior with the exact integration test.
+        targets:
+          - id: config-path-precedence
+            adapter: rust
+            path: crates/ugoite-cli/tests/test_cli_req_ops_006_config_helpers.rs
+            selector: { kind: symbol, name: test_cli_req_ops_006_config_path_precedence_and_home_fallback }
+            claims:
+              - kind: verifies
+                criterion: REQ-OPS-006#criterion.cli-surface
+                covers: [FEAT-OPS-001#binding.implementation/target.config]
+                runner:
+                  runner: cargo-test-integration
+                  arguments:
+                    package: ugoite-cli
+                    harness: test_cli_req_ops_006_config_helpers
+                    test: test_cli_req_ops_006_config_path_precedence_and_home_fallback
