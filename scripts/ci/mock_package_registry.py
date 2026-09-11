@@ -76,7 +76,9 @@ def build_artifacts(
             if target_filter is not None and target != target_filter:
                 continue
             archive_name = (
-                f"mitase-{target}.zip" if target.endswith("windows-msvc") else f"mitase-{target}.tar.gz"
+                f"mitase-{version}-{target}.zip"
+                if target.endswith("windows-msvc")
+                else f"mitase-{version}-{target}.tar.gz"
             )
             archive_bytes = build_archive(version, target, binary_name)
             archive_digest = sha256_digest(archive_bytes)

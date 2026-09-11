@@ -174,11 +174,12 @@ resolve_install_dir() {
 
 resolve_archive_name() {
   local target="$1"
+  local version="$2"
 
   if [[ "$target" == *windows* ]]; then
-    printf 'mitase-%s.zip\n' "$target"
+    printf 'mitase-%s-%s.zip\n' "$version" "$target"
   else
-    printf 'mitase-%s.tar.gz\n' "$target"
+    printf 'mitase-%s-%s.tar.gz\n' "$version" "$target"
   fi
 }
 
@@ -309,9 +310,12 @@ download_package_archive() {
   local package_scheme="$2"
   local package_repository="$3"
   local package_tag="$4"
-  local archive_name="$5"
+  local target="$5"
   local archive_path="$6"
   local digest manifest python_bin token
+  local archive_name
+
+  archive_name="$(resolve_archive_name "$target" "${package_tag%%__*}")"
 
   python_bin="$(find_python)"
   token="$(fetch_registry_token "$package_host" "$package_repository" "$package_scheme")"
@@ -367,7 +371,7 @@ fetch_release_catalog() {
 
 resolve_release_asset_url() {
   local repository="$1"
-  local archive_name="$2"
+  local target="$2"
   local python_bin release_catalog selector
 
   python_bin="$(find_python)"
@@ -379,7 +383,7 @@ import json
 import re
 import sys
 
-selector, archive_name = sys.argv[1], sys.argv[2]
+selector, target = sys.argv[1], sys.argv[2]
 releases = json.load(sys.stdin)
 version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$")
 
@@ -429,24 +433,27 @@ if not filtered:
     raise SystemExit(f"no release matched selector {selector!r}")
 
 filtered.sort(key=lambda candidate: candidate[:5], reverse=True)
+tag = filtered[0][6]
 release = filtered[0][7]
 
+archive_suffix = ".zip" if "windows" in target else ".tar.gz"
+archive_name = f"mitase-{tag}-{target}{archive_suffix}"
 for asset in release.get("assets") or []:
     if asset.get("name") == archive_name:
         print(asset["browser_download_url"])
         raise SystemExit(0)
 
 raise SystemExit(f"release asset not found: {archive_name}")
-' "$selector" "$archive_name"
+' "$selector" "$target"
 }
 
 download_release_archive() {
   local repository="$1"
-  local archive_name="$2"
+  local target="$2"
   local archive_path="$3"
   local asset_url
 
-  asset_url="$(resolve_release_asset_url "$repository" "$archive_name")"
+  asset_url="$(resolve_release_asset_url "$repository" "$target")"
 
   curl -fsSL "$asset_url" -o "$archive_path"
 }
@@ -457,8 +464,7 @@ download_distribution_archive() {
   local package_scheme="$3"
   local package_repository="$4"
   local target="$5"
-  local archive_name="$6"
-  local archive_path="$7"
+  local archive_path="$6"
   local package_error_log package_tag
 
   package_error_log="${tmp_dir}/package-download.log"
@@ -471,7 +477,7 @@ download_distribution_archive() {
       "$package_scheme" \
       "$package_repository" \
       "$package_tag" \
-      "$archive_name" \
+      "$target" \
       "$archive_path" \
       2>>"$package_error_log"; then
       return 0
@@ -482,7 +488,7 @@ download_distribution_archive() {
     cat "$package_error_log" >&2
   fi
   echo "package download unavailable, falling back to GitHub release assets" >&2
-  download_release_archive "$repository" "$archive_name" "$archive_path"
+  download_release_archive "$repository" "$target" "$archive_path"
 }
 
 extract_archive() {
@@ -569,7 +575,7 @@ install_mitase() {
   target="$(resolve_target_triple)"
   install_dir="$(resolve_install_dir)"
   binary_name="$(resolve_binary_name "$target")"
-  archive_name="$(resolve_archive_name "$target")"
+  archive_name="$(resolve_archive_name "$target" download)"
 
   tmp_dir="$(mktemp -d)"
   extracted_dir="${tmp_dir}/extract"
@@ -583,7 +589,6 @@ install_mitase() {
     "$package_scheme" \
     "$package_repository" \
     "$target" \
-    "$archive_name" \
     "$archive_path"
   extract_archive "$archive_path" "$extracted_dir"
   install_binary "${extracted_dir}/${binary_name}" "${install_dir}/${binary_name}"

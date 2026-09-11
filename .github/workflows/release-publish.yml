@@ -63,6 +63,11 @@ jobs:
             --manifest "$manifest_path" \
             --candidate-id "$INPUT_CANDIDATE_ID" \
             --artifact-root "$artifact_root"
+          python3 scripts/ci/release_manifest.py validate \
+            --candidate-manifest "$manifest_path" \
+            --manifest "$artifact_root/release-manifest.json" \
+            --artifact-root "$artifact_root"
+          (cd "$artifact_root" && sha256sum -c SHA256SUMS)
 
           source_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_sha"])' "$manifest_path")"
           version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$manifest_path")"
@@ -120,12 +125,12 @@ jobs:
           while IFS= read -r archive; do
             filename="$(basename "$archive")"
             case "$filename" in
-              mitase-*.tar.gz)
-                target="${filename#mitase-}"
+              mitase-"$RELEASE_TAG"-*.tar.gz)
+                target="${filename#mitase-${RELEASE_TAG}-}"
                 target="${target%.tar.gz}"
                 ;;
-              mitase-*.zip)
-                target="${filename#mitase-}"
+              mitase-"$RELEASE_TAG"-*.zip)
+                target="${filename#mitase-${RELEASE_TAG}-}"
                 target="${target%.zip}"
                 ;;
               *)
