@@ -135,6 +135,74 @@ pub(crate) struct TextDocumentPositionParams {
     pub position: Position,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TextDocumentItem {
+    pub uri: String,
+    pub language_id: String,
+    pub version: i64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VersionedTextDocumentIdentifier {
+    pub uri: String,
+    pub version: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TextDocumentContentChangeEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range: Option<Range>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range_length: Option<u32>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DidOpenTextDocumentParams {
+    pub text_document: TextDocumentItem,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DidChangeTextDocumentParams {
+    pub text_document: VersionedTextDocumentIdentifier,
+    pub content_changes: Vec<TextDocumentContentChangeEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DidSaveTextDocumentParams {
+    pub text_document: TextDocumentIdentifier,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DidCloseTextDocumentParams {
+    pub text_document: TextDocumentIdentifier,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DidChangeWatchedFilesParams {
+    pub changes: Vec<FileEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FileEvent {
+    pub uri: String,
+    /// LSP FileChangeType: Created = 1, Changed = 2, Deleted = 3.
+    #[serde(rename = "type")]
+    pub typ: u32,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InitializeParams {
@@ -143,7 +211,16 @@ pub(crate) struct InitializeParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceFolder {
+    pub uri: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,6 +236,39 @@ pub(crate) struct ServerCapabilities {
     pub hover_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub definition_provider: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_document_sync: Option<TextDocumentSyncOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceServerCapabilities>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TextDocumentSyncOptions {
+    pub open_close: bool,
+    /// LSP TextDocumentSyncKind.Full.
+    pub change: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub save: Option<TextDocumentSaveOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TextDocumentSaveOptions {
+    pub include_text: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceServerCapabilities {
+    pub workspace_folders: WorkspaceFoldersServerCapabilities,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceFoldersServerCapabilities {
+    pub supported: bool,
+    pub change_notifications: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

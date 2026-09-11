@@ -15,14 +15,20 @@ use std::{
 use url::Url;
 
 use super::protocol::{
-    DiagnosticLocation, DiagnosticRelatedInformation, Hover, InitializeParams, InitializeResult,
-    Location as LspLocation, LspDiagnostic, LspError, MarkupContent, Notification, Position,
-    PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentPositionParams,
+    DiagnosticLocation, DiagnosticRelatedInformation, DidChangeTextDocumentParams,
+    DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, Hover, InitializeParams, InitializeResult, Location as LspLocation,
+    LspDiagnostic, LspError, MarkupContent, Notification, Position, PublishDiagnosticsParams,
+    Range, ServerCapabilities, TextDocumentPositionParams, TextDocumentSaveOptions,
+    TextDocumentSyncOptions, WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
 
 pub(crate) struct LspHandlers {
     workspace: Option<SpecWorkspace>,
     workspace_root: Option<PathBuf>,
+    workspace_folders: Vec<PathBuf>,
+    open_documents: BTreeMap<PathBuf, String>,
+    published_uris: BTreeSet<String>,
     startup_diagnostics: Vec<CanonicalDiagnostic>,
     initialized: bool,
 }
@@ -32,6 +38,9 @@ impl LspHandlers {
         Self {
             workspace: None,
             workspace_root: None,
+            workspace_folders: Vec::new(),
+            open_documents: BTreeMap::new(),
+            published_uris: BTreeSet::new(),
             startup_diagnostics: Vec::new(),
             initialized: false,
         }
@@ -41,32 +50,47 @@ impl LspHandlers {
         &mut self,
         params: InitializeParams,
     ) -> Result<Value, LspError> {
+        let workspace_folders = params
+            .workspace_folders
+            .unwrap_or_default()
+            .into_iter()
+            .map(|folder| uri_to_path(&folder.uri))
+            .collect::<Result<Vec<_>, _>>()?;
         let root_path = if let Some(root_uri) = params.root_uri {
             uri_to_path(&root_uri)?
+        } else if let Some(folder) = workspace_folders.first() {
+            folder.clone()
         } else {
             std::env::current_dir().map_err(|error| LspError::internal(error.to_string()))?
         };
 
         self.workspace_root = Some(root_path.clone());
-        match SpecWorkspace::load(&root_path) {
-            Ok(workspace) => {
-                self.workspace = Some(workspace);
-                self.startup_diagnostics.clear();
-            }
-            Err(error) => {
-                let Some(frontend) = error.downcast_ref::<FrontendDiagnosticError>() else {
-                    return Err(LspError::internal(error.to_string()));
-                };
-                self.workspace = None;
-                self.startup_diagnostics =
-                    vec![crate::canonical_frontend_diagnostic(&frontend.diagnostic)];
-            }
-        }
+        self.workspace_folders = if workspace_folders.is_empty() {
+            vec![root_path.clone()]
+        } else {
+            workspace_folders
+        };
+        self.open_documents.clear();
+        self.published_uris.clear();
+        self.reload_workspace()?;
 
         let result = InitializeResult {
             capabilities: ServerCapabilities {
                 hover_provider: Some(true),
                 definition_provider: Some(true),
+                text_document_sync: Some(TextDocumentSyncOptions {
+                    open_close: true,
+                    change: 1,
+                    save: Some(TextDocumentSaveOptions {
+                        include_text: false,
+                    }),
+                }),
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: WorkspaceFoldersServerCapabilities {
+                        supported: true,
+                        change_notifications: false,
+                    },
+                }),
             },
         };
 
@@ -87,6 +111,71 @@ impl LspHandlers {
         Ok(Value::Null)
     }
 
+    pub(crate) fn handle_did_open(
+        &mut self,
+        params: DidOpenTextDocumentParams,
+    ) -> Result<Vec<Notification>, LspError> {
+        let path = uri_to_path(&params.text_document.uri)?;
+        self.open_documents.insert(path, params.text_document.text);
+        self.refresh_diagnostics()
+    }
+
+    pub(crate) fn handle_did_change(
+        &mut self,
+        params: DidChangeTextDocumentParams,
+    ) -> Result<Vec<Notification>, LspError> {
+        let change = params
+            .content_changes
+            .last()
+            .ok_or_else(|| LspError::invalid_params("contentChanges must not be empty"))?;
+        if change.range.is_some() {
+            return Err(LspError::invalid_params(
+                "mitase LSP uses full document synchronization",
+            ));
+        }
+        let path = uri_to_path(&params.text_document.uri)?;
+        self.open_documents.insert(path, change.text.clone());
+        self.refresh_diagnostics()
+    }
+
+    pub(crate) fn handle_did_save(
+        &mut self,
+        params: DidSaveTextDocumentParams,
+    ) -> Result<Vec<Notification>, LspError> {
+        let path = uri_to_path(&params.text_document.uri)?;
+        if let Some(text) = params.text {
+            self.open_documents.insert(path, text);
+        }
+        self.reload_workspace()?;
+        self.refresh_diagnostics()
+    }
+
+    pub(crate) fn handle_did_close(
+        &mut self,
+        params: DidCloseTextDocumentParams,
+    ) -> Result<Vec<Notification>, LspError> {
+        let path = uri_to_path(&params.text_document.uri)?;
+        self.open_documents.remove(&path);
+        self.refresh_diagnostics()
+    }
+
+    pub(crate) fn handle_did_change_watched_files(
+        &mut self,
+        params: DidChangeWatchedFilesParams,
+    ) -> Result<Vec<Notification>, LspError> {
+        let affects_workspace = params.changes.iter().any(|event| {
+            uri_to_path(&event.uri).ok().is_some_and(|path| {
+                self.workspace_folders
+                    .iter()
+                    .any(|root| path.starts_with(root))
+            })
+        });
+        if affects_workspace {
+            self.reload_workspace()?;
+        }
+        self.refresh_diagnostics()
+    }
+
     pub(crate) fn handle_hover(
         &self,
         params: TextDocumentPositionParams,
@@ -99,8 +188,7 @@ impl LspHandlers {
         let file_path = uri_to_path(&params.text_document.uri)?;
         let line = params.position.line as usize;
 
-        let content = std::fs::read_to_string(&file_path)
-            .map_err(|error| LspError::internal(error.to_string()))?;
+        let content = self.document_text(&file_path)?;
         let lines: Vec<&str> = content.lines().collect();
 
         if line >= lines.len() {
@@ -129,8 +217,7 @@ impl LspHandlers {
         };
 
         let file_path = uri_to_path(&params.text_document.uri)?;
-        let content = std::fs::read_to_string(&file_path)
-            .map_err(|error| LspError::internal(error.to_string()))?;
+        let content = self.document_text(&file_path)?;
         let line = params.position.line as usize;
         let lines: Vec<&str> = content.lines().collect();
         let Some(current_line) = lines.get(line) else {
@@ -151,8 +238,7 @@ impl LspHandlers {
         let Some(path) = index.item_paths.get(&item) else {
             return Ok(None);
         };
-        let source =
-            std::fs::read_to_string(path).map_err(|error| LspError::internal(error.to_string()))?;
+        let source = self.document_text(path)?;
         let Some(range) = find_declaration_range(&source, &item, declaration) else {
             return Ok(None);
         };
@@ -163,7 +249,49 @@ impl LspHandlers {
         }))
     }
 
-    fn publish_diagnostics(&self) -> Result<Vec<Notification>, LspError> {
+    fn document_text(&self, path: &Path) -> Result<String, LspError> {
+        if let Some(text) = self.open_documents.get(path) {
+            return Ok(text.clone());
+        }
+        std::fs::read_to_string(path).map_err(|error| LspError::internal(error.to_string()))
+    }
+
+    fn reload_workspace(&mut self) -> Result<(), LspError> {
+        let root = self
+            .workspace_root
+            .clone()
+            .ok_or_else(|| LspError::internal("workspace not initialized"))?;
+        match SpecWorkspace::load(&root) {
+            Ok(workspace) => {
+                self.workspace = Some(workspace);
+                self.startup_diagnostics.clear();
+            }
+            Err(error) => {
+                self.workspace = None;
+                if let Some(frontend) = error.downcast_ref::<FrontendDiagnosticError>() {
+                    self.startup_diagnostics =
+                        vec![crate::canonical_frontend_diagnostic(&frontend.diagnostic)];
+                } else {
+                    self.startup_diagnostics = vec![CanonicalDiagnostic::error(
+                        "MITASE-LSP-001",
+                        format!("workspace reload failed: {error}"),
+                        "workspace",
+                    )];
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn refresh_diagnostics(&mut self) -> Result<Vec<Notification>, LspError> {
+        if self.initialized {
+            self.publish_diagnostics()
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    fn publish_diagnostics(&mut self) -> Result<Vec<Notification>, LspError> {
         let (root, document_paths, diagnostics) = if let Some(workspace) = &self.workspace {
             let index = workspace
                 .index()
@@ -207,16 +335,16 @@ impl LspHandlers {
         };
 
         let mut diagnostics_by_uri = BTreeMap::<String, Vec<LspDiagnostic>>::new();
-        let mut known_uris = BTreeSet::new();
-        known_uris.insert(path_to_uri(&root.join("mitase.yaml"))?);
+        let mut current_uris = BTreeSet::new();
+        current_uris.insert(path_to_uri(&root.join("mitase.yaml"))?);
         for document_path in document_paths {
-            known_uris.insert(path_to_uri(&document_path)?);
+            current_uris.insert(path_to_uri(&document_path)?);
         }
 
         for diagnostic in &diagnostics {
             let path = diagnostic_path(&root, &diagnostic.primary.path);
             let uri = path_to_uri(&path)?;
-            known_uris.insert(uri.clone());
+            current_uris.insert(uri.clone());
             diagnostics_by_uri
                 .entry(uri)
                 .or_default()
@@ -243,7 +371,9 @@ impl LspHandlers {
             });
         }
 
-        known_uris
+        let mut published_uris = current_uris.clone();
+        published_uris.extend(self.published_uris.iter().cloned());
+        let notifications = published_uris
             .into_iter()
             .map(|uri| {
                 let diagnostics = diagnostics_by_uri.remove(&uri).unwrap_or_default();
@@ -257,7 +387,9 @@ impl LspHandlers {
                     ),
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, LspError>>()?;
+        self.published_uris = current_uris;
+        Ok(notifications)
     }
 }
 
@@ -818,7 +950,9 @@ fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lsp::protocol::{Position, TextDocumentIdentifier};
+    use crate::lsp::protocol::{
+        DidCloseTextDocumentParams, Position, TextDocumentIdentifier, WorkspaceFolder,
+    };
     use std::{fs, path::PathBuf};
     use tempfile::tempdir;
 
@@ -848,6 +982,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", workspace_root.display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should succeed");
@@ -967,6 +1102,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", workspace.display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should succeed");
@@ -1138,6 +1274,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", workspace.display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should succeed");
@@ -1145,6 +1282,34 @@ mod tests {
         assert_eq!(value["capabilities"]["hoverProvider"], true);
         assert_eq!(value["capabilities"]["definitionProvider"], true);
         assert!(handlers.workspace.is_some());
+    }
+
+    #[test]
+    fn handle_initialize_uses_workspace_folder_when_root_uri_is_omitted() {
+        let mut handlers = LspHandlers::new();
+        let workspace = fixture_path("valid-web-app");
+        let value = handlers
+            .handle_initialize(InitializeParams {
+                process_id: None,
+                root_uri: None,
+                workspace_folders: Some(vec![WorkspaceFolder {
+                    uri: format!("file://{}", workspace.display()),
+                    name: "valid-web-app".to_string(),
+                }]),
+                capabilities: None,
+            })
+            .expect("workspaceFolders should select the workspace");
+
+        assert_eq!(
+            handlers.workspace_root.as_deref(),
+            Some(workspace.as_path())
+        );
+        assert_eq!(handlers.workspace_folders, vec![workspace]);
+        assert_eq!(value["capabilities"]["textDocumentSync"]["change"], 1);
+        assert_eq!(
+            value["capabilities"]["workspace"]["workspaceFolders"]["supported"],
+            true
+        );
     }
 
     #[test]
@@ -1190,6 +1355,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", tempdir.path().display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should return capabilities with a frontend diagnostic");
@@ -1218,6 +1384,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", workspace.display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should succeed");
@@ -1263,6 +1430,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", workspace.display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should succeed");
@@ -1337,6 +1505,7 @@ mod tests {
             .handle_initialize(InitializeParams {
                 process_id: None,
                 root_uri: Some(format!("file://{}", workspace.display())),
+                workspace_folders: None,
                 capabilities: None,
             })
             .expect("initialize should succeed");
@@ -1375,6 +1544,47 @@ mod tests {
                 .params
                 .as_ref()
                 .is_some_and(|params| params["diagnostics"].as_array().is_some_and(Vec::is_empty))
+        }));
+    }
+
+    #[test]
+    fn edit_loop_clears_diagnostics_for_a_document_removed_after_reload() {
+        let mut handlers = LspHandlers::new();
+        let workspace = fixture_path("valid-web-app");
+        handlers
+            .handle_initialize(InitializeParams {
+                process_id: None,
+                root_uri: Some(format!("file://{}", workspace.display())),
+                workspace_folders: None,
+                capabilities: None,
+            })
+            .expect("initialize should succeed");
+        let initial = handlers
+            .handle_initialized()
+            .expect("initial diagnostics should publish");
+        let removed_path = workspace.join("spec/requirement.yaml");
+        let removed_uri = path_to_uri(&removed_path).expect("document URI");
+        assert!(initial.iter().any(|notification| {
+            notification
+                .params
+                .as_ref()
+                .is_some_and(|params| params["uri"] == removed_uri)
+        }));
+
+        handlers.workspace = None;
+        handlers.startup_diagnostics.clear();
+        let refreshed = handlers
+            .handle_did_close(DidCloseTextDocumentParams {
+                text_document: TextDocumentIdentifier {
+                    uri: removed_uri.clone(),
+                },
+            })
+            .expect("edit loop should refresh diagnostics");
+        assert!(refreshed.iter().any(|notification| {
+            notification.params.as_ref().is_some_and(|params| {
+                params["uri"] == removed_uri
+                    && params["diagnostics"].as_array().is_some_and(Vec::is_empty)
+            })
         }));
     }
 }

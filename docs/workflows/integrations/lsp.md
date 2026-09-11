@@ -51,13 +51,10 @@ The expected startup flow is:
 5. send `exit`
 
 If `initialize` includes `rootUri`, `mitase` loads the workspace from that path.
-If `rootUri` is omitted, it falls back to the current working directory of the
-server process.
-
-Today the server reads only `rootUri` from the initialize payload. It does not
-yet consume `workspaceFolders`, `rootPath`, or other alternate workspace-root
-fields, so clients should send `rootUri` explicitly when they do not want the
-server process working directory to decide the workspace.
+If `rootUri` is omitted, it uses the first `workspaceFolders` entry, then falls
+back to the current working directory of the server process. The server tracks
+all supplied workspace folders for file-change filtering while the first
+selected folder is the active Mitase workspace.
 
 ## Current capabilities
 
@@ -65,6 +62,8 @@ At the moment the server advertises:
 
 - `hoverProvider: true`
 - `definitionProvider: true`
+- full `textDocument` synchronization with open/close and save notifications
+- `workspaceFolders` support
 
 The server sends validation diagnostics after the `initialized` notification.
 This is the push-based LSP flow; the server does not advertise or implement a
@@ -74,8 +73,13 @@ The current request / notification surface is:
 
 | Method | Support | Notes |
 | --- | --- | --- |
-| `initialize` | yes | loads the `mitase` workspace from `rootUri` or the current directory |
+| `initialize` | yes | loads the workspace from `rootUri`, the first `workspaceFolders` entry, or the current directory |
 | `initialized` | yes | marks the session ready and publishes current workspace diagnostics |
+| `textDocument/didOpen` | yes | tracks the open document and republishes diagnostics |
+| `textDocument/didChange` | yes | accepts full-document changes and republishes diagnostics without writing files |
+| `textDocument/didSave` | yes | reloads the workspace from disk and republishes diagnostics |
+| `textDocument/didClose` | yes | drops the in-memory document view and republishes diagnostics |
+| `workspace/didChangeWatchedFiles` | yes | reloads for watched changes inside a tracked workspace folder |
 | `textDocument/hover` | yes | returns Markdown hover content for spec IDs under the cursor |
 | `textDocument/definition` | yes | resolves an exact spec ID, anchor, or bound target reference to its declaration |
 | `shutdown` | yes | resets server state and returns `null` |
@@ -104,7 +108,9 @@ Diagnostics use the shared `mitase-diagnostics` validation result. Each LSP
 diagnostic carries the canonical rule code, reason, severity, exact primary
 range when available, and the full canonical diagnostic in `data`. A known
 workspace document receives an empty diagnostic array when it has no current
-diagnostics, which clears stale editor state.
+diagnostics, which clears stale editor state. The server also republishes an
+empty array for a document that was present in the previous workspace snapshot
+but is deleted or no longer loaded after a save/watch reload.
 
 ## Minimal client example
 
@@ -126,10 +132,11 @@ the equivalent command is:
 }
 ```
 
-Use the repository root as the workspace folder so `rootUri` points at the
-directory that contains `mitase.yaml`. If your client only exposes
-`workspaceFolders`, add an explicit `rootUri` override until the server learns
-that alternate shape too.
+Use the repository root as the workspace folder so `rootUri` or the first
+`workspaceFolders` entry points at the directory that contains `mitase.yaml`.
+The server does not write an open buffer to disk; the editor remains responsible
+for saving it, after which `textDocument/didSave` or a watched-file event causes
+the shared workspace to reload.
 
 ## Relationship to the VS Code extension
 
