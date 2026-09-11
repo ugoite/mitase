@@ -612,7 +612,7 @@ fn frontend_load_diagnostics_use_the_validation_shape_for_cli_json_and_text() {
 }
 
 #[test]
-fn tutorial_yaml_examples_parse_as_canonical_spec_documents() {
+fn tutorial_yaml_examples_parse_and_normalize_as_v2_authoring_documents() {
     let tutorial = fs::read_to_string("docs/start-here/first-run/tutorial.md").expect("tutorial");
     let mut blocks = Vec::new();
     let mut in_yaml = false;
@@ -633,7 +633,10 @@ fn tutorial_yaml_examples_parse_as_canonical_spec_documents() {
     assert!(!in_yaml, "unterminated YAML code block");
     assert_eq!(blocks.len(), 2);
     for block in blocks {
-        serde_yaml::from_str::<SpecDocument>(&block).expect("tutorial YAML must be canonical");
+        let authoring = AuthoringDocument::parse(&block).expect("tutorial YAML must be v2");
+        authoring
+            .normalize()
+            .expect("tutorial v2 YAML must normalize");
     }
 }
 

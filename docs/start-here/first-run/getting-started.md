@@ -1,6 +1,7 @@
 # Getting started
 
-Install a release build or run the binary from source, then create a v1 workspace.
+Install a release build or run the binary from source, then create a workspace
+with the current v2 authoring source.
 
 ## Quick start commands
 
@@ -22,10 +23,13 @@ Execution and delivery tooling is external to the Mitase CLI. See the
 [Re-Foundation freeze](../../project/mitase-re-foundation-freeze.md) before
 building new integrations.
 
-The explicit `migrate <source> --stdout` helper is a read-only v0.1 to v0.2
-authoring transition. During the 0.1.x dogfood period, normal workspace
-loading accepts the resulting v2 documents alongside canonical v1 sources; see
-the [migration guide](../../workflows/repository/migration.md).
+The current authoring source is `schema: mitase/authoring/v2`; the workspace
+frontend normalizes it into Mitase's canonical graph before validation. During
+the 0.1.x dogfood period, normal loading also accepts existing canonical v1
+sources. The explicit `migrate <source> --stdout` helper is the read-only path
+for those existing sources, and the 0.2.x release line closes the v1 entrance;
+see the [authoring contract](../../workflows/repository/authoring-v2.md) and
+[migration guide](../../workflows/repository/migration.md).
 
 Use the read-only discovery commands to inspect the canonical graph:
 
