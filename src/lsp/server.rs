@@ -113,6 +113,16 @@ impl LspServer {
                 let hover = self.handlers.handle_hover(params)?;
                 serde_json::to_value(hover).map_err(|error| LspError::internal(error.to_string()))
             }
+            "textDocument/definition" => {
+                let params = parse_required_params(request.params);
+                let params = match params {
+                    Ok(value) => value,
+                    Err(error) => return Ok(error_response(request.id, error)),
+                };
+                let definition = self.handlers.handle_definition(params)?;
+                serde_json::to_value(definition)
+                    .map_err(|error| LspError::internal(error.to_string()))
+            }
             _ => Err(LspError::method_not_found(request.method)),
         };
 
@@ -365,6 +375,52 @@ mod tests {
             response.result.expect("hover result")["contents"]["kind"],
             "markdown"
         );
+    }
+
+    #[test]
+    fn handle_request_serializes_definition_results() {
+        let workspace = fixture_path("valid-web-app");
+        let source_path = workspace.join("spec/requirement.yaml");
+        let source = fs::read_to_string(&source_path).expect("read requirement");
+        let reference = "FEAT-AUTH-001#binding.backend/target.handler";
+        let (line, text) = source
+            .lines()
+            .enumerate()
+            .find(|(_, text)| text.contains(reference))
+            .expect("reference should exist");
+        let character = text.find(reference).expect("reference offset");
+
+        let mut server = LspServer::new();
+        server
+            .handle_request(Request {
+                jsonrpc: "2.0".to_string(),
+                id: super::super::protocol::RequestId::Number(1),
+                method: "initialize".to_string(),
+                params: Some(json!({
+                    "rootUri": format!("file://{}", workspace.display())
+                })),
+            })
+            .expect("initialize response");
+
+        let response = server
+            .handle_request(Request {
+                jsonrpc: "2.0".to_string(),
+                id: super::super::protocol::RequestId::Number(2),
+                method: "textDocument/definition".to_string(),
+                params: Some(json!({
+                    "textDocument": {"uri": format!("file://{}", source_path.display())},
+                    "position": {"line": line, "character": character}
+                })),
+            })
+            .expect("definition response");
+
+        assert!(response.error.is_none());
+        let result = response.result.expect("definition result");
+        assert_eq!(
+            result["uri"],
+            format!("file://{}", workspace.join("spec/feature.yaml").display())
+        );
+        assert_eq!(result["range"]["start"]["line"], 25);
     }
 
     #[test]

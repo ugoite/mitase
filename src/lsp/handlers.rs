@@ -2,8 +2,8 @@
 // REQ-CORE-001
 
 use mitase_diagnostics::{Diagnostic as CanonicalDiagnostic, Location, Severity};
-use mitase_spec_model::SpecDocument;
-use mitase_workspace::{FrontendDiagnosticError, SpecWorkspace};
+use mitase_spec_model::{BoundTargetRef, LocalAnchorKind, SpecAnchor, SpecDocument, SpecId};
+use mitase_workspace::{FrontendDiagnosticError, SpecIndex, SpecWorkspace};
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
@@ -16,8 +16,8 @@ use url::Url;
 
 use super::protocol::{
     DiagnosticLocation, DiagnosticRelatedInformation, Hover, InitializeParams, InitializeResult,
-    LspDiagnostic, LspError, MarkupContent, Notification, Position, PublishDiagnosticsParams,
-    Range, ServerCapabilities, TextDocumentPositionParams,
+    Location as LspLocation, LspDiagnostic, LspError, MarkupContent, Notification, Position,
+    PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentPositionParams,
 };
 
 pub(crate) struct LspHandlers {
@@ -66,6 +66,7 @@ impl LspHandlers {
         let result = InitializeResult {
             capabilities: ServerCapabilities {
                 hover_provider: Some(true),
+                definition_provider: Some(true),
             },
         };
 
@@ -116,6 +117,50 @@ impl LspHandlers {
         }
 
         Ok(None)
+    }
+
+    pub(crate) fn handle_definition(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<LspLocation>, LspError> {
+        let workspace = match &self.workspace {
+            Some(ws) => ws,
+            None => return Err(LspError::internal("workspace not initialized")),
+        };
+
+        let file_path = uri_to_path(&params.text_document.uri)?;
+        let content = std::fs::read_to_string(&file_path)
+            .map_err(|error| LspError::internal(error.to_string()))?;
+        let line = params.position.line as usize;
+        let lines: Vec<&str> = content.lines().collect();
+        let Some(current_line) = lines.get(line) else {
+            return Ok(None);
+        };
+        let Some(reference) =
+            find_reference_at_position(current_line, params.position.character as usize)
+        else {
+            return Ok(None);
+        };
+
+        let index = workspace
+            .index()
+            .map_err(|error| LspError::internal(error.to_string()))?;
+        let Some((item, declaration)) = resolve_definition_reference(&index, &reference) else {
+            return Ok(None);
+        };
+        let Some(path) = index.item_paths.get(&item) else {
+            return Ok(None);
+        };
+        let source =
+            std::fs::read_to_string(path).map_err(|error| LspError::internal(error.to_string()))?;
+        let Some(range) = find_declaration_range(&source, &item, declaration) else {
+            return Ok(None);
+        };
+
+        Ok(Some(LspLocation {
+            uri: path_to_uri(path)?,
+            range,
+        }))
     }
 
     fn publish_diagnostics(&self) -> Result<Vec<Notification>, LspError> {
@@ -343,6 +388,374 @@ fn find_spec_id_at_position(line: &str, char_pos: usize) -> Option<String> {
     None
 }
 
+#[derive(Debug, Clone)]
+enum DeclarationReference {
+    Item,
+    Anchor(SpecAnchor),
+    Target(BoundTargetRef),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SourceSpan {
+    line: usize,
+    start: usize,
+    end: usize,
+}
+
+fn find_reference_at_position(line: &str, char_pos: usize) -> Option<String> {
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"[A-Za-z][A-Za-z0-9-]*(?:#[a-z]+\.[a-z0-9-]+(?:/target\.[a-z0-9-]+)?)?")
+            .expect("reference regex")
+    });
+
+    RE.find_iter(line).find_map(|matched| {
+        let start = line[..matched.start()].encode_utf16().count();
+        let end = line[..matched.end()].encode_utf16().count();
+        (char_pos >= start && char_pos < end).then(|| matched.as_str().to_string())
+    })
+}
+
+fn resolve_definition_reference(
+    index: &SpecIndex,
+    candidate: &str,
+) -> Option<(SpecId, DeclarationReference)> {
+    if let Ok(target) = candidate.parse::<BoundTargetRef>() {
+        if index.target(&target).is_some() {
+            let item = target.binding.item.clone();
+            return Some((item, DeclarationReference::Target(target)));
+        }
+        return None;
+    }
+    if let Ok(anchor) = candidate.parse::<SpecAnchor>() {
+        if index.anchor(&anchor).is_some() {
+            let item = anchor.item.clone();
+            return Some((item, DeclarationReference::Anchor(anchor)));
+        }
+        return None;
+    }
+
+    let item = SpecId(candidate.to_string());
+    index
+        .item_paths
+        .contains_key(&item)
+        .then_some((item, DeclarationReference::Item))
+}
+
+fn find_declaration_range(
+    source: &str,
+    item: &SpecId,
+    declaration: DeclarationReference,
+) -> Option<Range> {
+    let lines: Vec<&str> = source.lines().collect();
+    let span = match declaration {
+        DeclarationReference::Item => find_item_declaration_span(&lines, item),
+        DeclarationReference::Anchor(anchor) => find_anchor_declaration_span(&lines, item, &anchor),
+        DeclarationReference::Target(target) => find_target_declaration_span(&lines, item, &target),
+    }?;
+    Some(source_span_to_range(lines[span.line], span))
+}
+
+fn find_item_declaration_span(lines: &[&str], item: &SpecId) -> Option<SourceSpan> {
+    lines.iter().enumerate().find_map(|(line, text)| {
+        find_id_value_span(text, &item.0).map(|(start, end)| SourceSpan { line, start, end })
+    })
+}
+
+fn find_anchor_declaration_span(
+    lines: &[&str],
+    item: &SpecId,
+    anchor: &SpecAnchor,
+) -> Option<SourceSpan> {
+    let item_span = find_item_declaration_span(lines, item)?;
+    let item_end = item_scope_end(lines, item_span.line);
+    if anchor.kind == LocalAnchorKind::Binding {
+        return find_binding_declaration_span(lines, item_span.line, item_end, anchor);
+    }
+    let section_names: &[&str] = match anchor.kind {
+        LocalAnchorKind::Principle => &["principles", "principle"],
+        LocalAnchorKind::Rule => &["rules", "rule"],
+        LocalAnchorKind::Criterion => &["criteria", "criterion"],
+        LocalAnchorKind::Binding => unreachable!(),
+        LocalAnchorKind::Contract => &["contracts", "contract"],
+    };
+    let section = find_section(lines, item_span.line + 1, item_end, section_names)?;
+    let section_end = scope_end(lines, section.line, line_indent(lines[section.line]));
+    if let Some((start, end)) = find_id_value_span(lines[section.line], &anchor.local_id.0) {
+        return Some(SourceSpan {
+            line: section.line,
+            start,
+            end,
+        });
+    }
+    find_id_value_in_range(
+        lines,
+        section.line + 1,
+        section_end.min(item_end),
+        &anchor.local_id.0,
+    )
+    .or(Some(section))
+}
+
+fn find_binding_declaration_span(
+    lines: &[&str],
+    item_line: usize,
+    item_end: usize,
+    anchor: &SpecAnchor,
+) -> Option<SourceSpan> {
+    if let Some(section) = find_section(lines, item_line + 1, item_end, &["bindings"]) {
+        let section_end = scope_end(lines, section.line, line_indent(lines[section.line]));
+        if let Some(span) = find_id_value_in_range(
+            lines,
+            section.line + 1,
+            section_end.min(item_end),
+            &anchor.local_id.0,
+        ) {
+            return Some(span);
+        }
+    }
+
+    for section_name in ["implementation", "verification", "binding"] {
+        let Some(section) = find_section(lines, item_line + 1, item_end, &[section_name]) else {
+            continue;
+        };
+        let section_end = scope_end(lines, section.line, line_indent(lines[section.line]));
+        if let Some((start, end)) = find_id_value_span(lines[section.line], &anchor.local_id.0) {
+            return Some(SourceSpan {
+                line: section.line,
+                start,
+                end,
+            });
+        }
+        if let Some(span) = find_id_value_in_range(
+            lines,
+            section.line + 1,
+            section_end.min(item_end),
+            &anchor.local_id.0,
+        ) {
+            return Some(span);
+        }
+        if anchor.local_id.0 == section_name {
+            return Some(section);
+        }
+    }
+
+    None
+}
+
+fn find_target_declaration_span(
+    lines: &[&str],
+    item: &SpecId,
+    target: &BoundTargetRef,
+) -> Option<SourceSpan> {
+    let binding_span = find_anchor_declaration_span(lines, item, &target.binding)?;
+    let binding_start =
+        short_binding_section_start(lines, binding_span.line).unwrap_or(binding_span.line);
+    let binding_end = scope_end(lines, binding_start, line_indent(lines[binding_start]));
+    let section = find_section(
+        lines,
+        binding_span.line + 1,
+        binding_end,
+        &["targets", "target"],
+    )?;
+    let section_end = scope_end(lines, section.line, line_indent(lines[section.line]));
+    if let Some((start, end)) = find_id_value_span(lines[section.line], &target.target_id.0) {
+        return Some(SourceSpan {
+            line: section.line,
+            start,
+            end,
+        });
+    }
+    find_id_value_in_range(
+        lines,
+        section.line + 1,
+        section_end.min(binding_end),
+        &target.target_id.0,
+    )
+    .or(Some(section))
+}
+
+fn short_binding_section_start(lines: &[&str], binding_line: usize) -> Option<usize> {
+    let binding_indent = line_indent(lines[binding_line]);
+    lines
+        .iter()
+        .enumerate()
+        .take(binding_line)
+        .rev()
+        .find_map(|(line, text)| {
+            (line_indent(text) < binding_indent
+                && (yaml_container_key_span(text, "implementation").is_some()
+                    || yaml_container_key_span(text, "verification").is_some()))
+            .then_some(line)
+        })
+}
+
+fn find_section(lines: &[&str], start: usize, end: usize, names: &[&str]) -> Option<SourceSpan> {
+    lines
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(end.saturating_sub(start))
+        .find_map(|(line, text)| {
+            names.iter().find_map(|name| {
+                yaml_container_key_span(text, name).map(|(start, end)| SourceSpan {
+                    line,
+                    start,
+                    end,
+                })
+            })
+        })
+}
+
+fn find_id_value_in_range(
+    lines: &[&str],
+    start: usize,
+    end: usize,
+    value: &str,
+) -> Option<SourceSpan> {
+    lines
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(end.saturating_sub(start))
+        .find_map(|(line, text)| {
+            find_id_value_span(text, value).map(|(start, end)| SourceSpan { line, start, end })
+        })
+}
+
+fn scope_end(lines: &[&str], start: usize, base_indent: usize) -> usize {
+    lines
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .find_map(|(line, text)| {
+            (!text.trim().is_empty() && line_indent(text) <= base_indent).then_some(line)
+        })
+        .unwrap_or(lines.len())
+}
+
+fn item_scope_end(lines: &[&str], start: usize) -> usize {
+    let base_indent = line_indent(lines[start]);
+    if lines[start].trim_start().starts_with("- ") {
+        return scope_end(lines, start, base_indent);
+    }
+    lines
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .find_map(|(line, text)| {
+            (!text.trim().is_empty() && line_indent(text) < base_indent).then_some(line)
+        })
+        .unwrap_or(lines.len())
+}
+
+fn line_indent(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+fn yaml_key_span(line: &str, key: &str) -> Option<(usize, usize)> {
+    let leading = line.len() - line.trim_start_matches(' ').len();
+    let mut start = leading;
+    if line[start..].starts_with("- ") {
+        start += 2;
+    }
+    let rest = &line[start..];
+    rest.strip_prefix(key)
+        .filter(|suffix| suffix.starts_with(':'))
+        .map(|_| (start, start + key.len()))
+}
+
+fn yaml_container_key_span(line: &str, key: &str) -> Option<(usize, usize)> {
+    let span = yaml_key_span(line, key)?;
+    let value = line[span.1 + 1..].trim_start();
+    (value.is_empty() || value.starts_with('#') || value.starts_with('{') || value.starts_with('['))
+        .then_some(span)
+}
+
+fn find_id_value_span(line: &str, value: &str) -> Option<(usize, usize)> {
+    let key_start = line.match_indices("id:").find_map(|(start, _)| {
+        if yaml_comment_before(line, start) {
+            return None;
+        }
+        let previous = line[..start].chars().next_back();
+        previous
+            .is_none_or(|character| !character.is_ascii_alphanumeric() && character != '_')
+            .then_some(start)
+    })?;
+    let key_end = key_start + 2;
+    let value_start = line[key_end + 1..]
+        .char_indices()
+        .find_map(|(offset, character)| {
+            (!character.is_whitespace()).then_some(key_end + 1 + offset)
+        })?;
+    if let Some(quote @ ('\'' | '"')) = line[value_start..].chars().next() {
+        let content_start = value_start + quote.len_utf8();
+        let suffix = &line[content_start..];
+        if !suffix.starts_with(value) {
+            return None;
+        }
+        let value_end = content_start + value.len();
+        if line.as_bytes()[value_end..].first().copied() != Some(quote as u8) {
+            return None;
+        }
+        let boundary = line[value_end + quote.len_utf8()..].chars().next();
+        if boundary.is_some_and(|character| {
+            !character.is_whitespace() && !matches!(character, ',' | ']' | '}' | '#')
+        }) {
+            return None;
+        }
+        return Some((content_start, value_end));
+    }
+
+    let suffix = &line[value_start..];
+    if !suffix.starts_with(value) {
+        return None;
+    }
+    let boundary = suffix[value.len()..].chars().next();
+    if boundary.is_some_and(|character| {
+        !character.is_whitespace() && !matches!(character, ',' | ']' | '}' | '#')
+    }) {
+        return None;
+    }
+    Some((value_start, value_start + value.len()))
+}
+
+fn yaml_comment_before(line: &str, end: usize) -> bool {
+    let mut quote = None;
+    for (offset, character) in line.char_indices() {
+        if offset >= end {
+            break;
+        }
+        match (quote, character) {
+            (None, '\'' | '"') => quote = Some(character),
+            (Some(current), character) if character == current => quote = None,
+            (None, '#')
+                if offset == 0
+                    || line[..offset]
+                        .chars()
+                        .next_back()
+                        .is_some_and(char::is_whitespace) =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+fn source_span_to_range(line: &str, span: SourceSpan) -> Range {
+    Range {
+        start: Position {
+            line: span.line as u32,
+            character: line[..span.start].encode_utf16().count() as u32,
+        },
+        end: Position {
+            line: span.line as u32,
+            character: line[..span.end].encode_utf16().count() as u32,
+        },
+    }
+}
+
 fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<Hover> {
     for loaded in &workspace.documents {
         match &loaded.document {
@@ -425,6 +838,244 @@ mod tests {
         assert_eq!(find_spec_id_at_position(line, 0), None);
     }
 
+    fn definition_location(
+        workspace_root: &Path,
+        source_path: &Path,
+        reference: &str,
+    ) -> Option<LspLocation> {
+        let mut handlers = LspHandlers::new();
+        handlers
+            .handle_initialize(InitializeParams {
+                process_id: None,
+                root_uri: Some(format!("file://{}", workspace_root.display())),
+                capabilities: None,
+            })
+            .expect("initialize should succeed");
+        let source = fs::read_to_string(source_path).expect("source should exist");
+        let (line, text) = source
+            .lines()
+            .enumerate()
+            .find(|(_, text)| text.contains(reference))
+            .expect("reference should exist in source");
+        let character = text.find(reference).expect("reference offset") as u32;
+
+        handlers
+            .handle_definition(TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: path_to_uri(source_path).expect("source URI"),
+                },
+                position: Position {
+                    line: line as u32,
+                    character,
+                },
+            })
+            .expect("definition should resolve")
+    }
+
+    #[test]
+    fn handle_definition_resolves_ids_anchors_and_targets_from_v1_source() {
+        let workspace = fixture_path("valid-web-app");
+        let requirement = workspace.join("spec/requirement.yaml");
+        let feature = workspace.join("spec/feature.yaml");
+
+        let item =
+            definition_location(&workspace, &requirement, "REQ-AUTH-001").expect("item definition");
+        assert_eq!(
+            item.uri,
+            path_to_uri(&requirement).expect("requirement URI")
+        );
+        assert_eq!(item.range.start.line, 5);
+        assert_eq!(item.range.start.character, 8);
+
+        let anchor = definition_location(
+            &workspace,
+            &requirement,
+            "REQ-AUTH-001#criterion.invalid-credentials",
+        )
+        .expect("anchor definition");
+        assert_eq!(
+            anchor.uri,
+            path_to_uri(&requirement).expect("requirement URI")
+        );
+        assert_eq!(anchor.range.start.line, 11);
+        assert_eq!(anchor.range.start.character, 12);
+
+        let target = definition_location(
+            &workspace,
+            &requirement,
+            "FEAT-AUTH-001#binding.backend/target.handler",
+        )
+        .expect("target definition");
+        assert_eq!(target.uri, path_to_uri(&feature).expect("feature URI"));
+        assert_eq!(target.range.start.line, 25);
+        assert_eq!(target.range.start.character, 16);
+
+        let inline_target = definition_location(
+            &workspace,
+            &feature,
+            "FEAT-AUTH-001#binding.schema/target.operation",
+        )
+        .expect("inline target definition");
+        assert_eq!(
+            inline_target.uri,
+            path_to_uri(&feature).expect("feature URI")
+        );
+        assert_eq!(inline_target.range.start.line, 40);
+    }
+
+    #[test]
+    fn handle_definition_resolves_references_from_authoring_v2_source() {
+        let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let requirements = workspace.join("docs/mitase/requirements/capability-contracts.yaml");
+        let features = workspace.join("docs/mitase/features/capabilities/surfaces.yaml");
+
+        let anchor = definition_location(
+            &workspace,
+            &requirements,
+            "REQ-CAPABILITY-001#criterion.lsp-navigation",
+        )
+        .expect("v2 anchor definition");
+        assert_eq!(
+            anchor.uri,
+            path_to_uri(&requirements).expect("requirements URI")
+        );
+        assert_eq!(anchor.range.start.line, 55);
+
+        let target = definition_location(
+            &workspace,
+            &requirements,
+            "FEAT-LSP-001#binding.implementation/target.lsp-server",
+        )
+        .expect("v2 target definition");
+        assert_eq!(target.uri, path_to_uri(&features).expect("features URI"));
+        assert_eq!(target.range.start.line, 74);
+    }
+
+    #[test]
+    fn handle_definition_does_not_guess_unknown_references() {
+        let workspace = fixture_path("valid-web-app");
+        let tempdir = tempdir().expect("tempdir");
+        let reference_path = tempdir.path().join("reference.yaml");
+        fs::write(
+            &reference_path,
+            "criterion: REQ-AUTH-001#criterion.not-authored\n",
+        )
+        .expect("reference source");
+
+        let mut handlers = LspHandlers::new();
+        handlers
+            .handle_initialize(InitializeParams {
+                process_id: None,
+                root_uri: Some(format!("file://{}", workspace.display())),
+                capabilities: None,
+            })
+            .expect("initialize should succeed");
+        let definition = handlers
+            .handle_definition(TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: path_to_uri(&reference_path).expect("reference URI"),
+                },
+                position: Position {
+                    line: 0,
+                    character: 12,
+                },
+            })
+            .expect("unknown references should be handled");
+
+        assert!(definition.is_none());
+    }
+
+    #[test]
+    fn declaration_ranges_follow_yaml_structure_and_quoted_ids() {
+        let source = concat!(
+            "schema: mitase/spec/v1\n",
+            "kind: requirements\n",
+            "requirements:\n",
+            "  - id: \"REQ-NAV-001\"\n",
+            "    bindings:\n",
+            "      - id: \"verify\"\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the behavior.\n",
+            "        targets:\n",
+            "          - id: \"test\"\n",
+            "            adapter: rust\n",
+            "            path: tests/example.rs\n",
+            "            selector: { kind: file }\n",
+            "            claims:\n",
+            "              - kind: verifies\n",
+            "                criterion: REQ-NAV-001#criterion.behavior\n",
+            "    criteria:\n",
+            "      - id: \"behavior\"\n",
+        );
+        let item: SpecId = "REQ-NAV-001".into();
+        let anchor: SpecAnchor = "REQ-NAV-001#criterion.behavior".parse().expect("anchor");
+        let target: BoundTargetRef = "REQ-NAV-001#binding.verify/target.test"
+            .parse()
+            .expect("target");
+
+        let item_range =
+            find_declaration_range(source, &item, DeclarationReference::Item).expect("item range");
+        assert_eq!(item_range.start.line, 3);
+        let anchor_range =
+            find_declaration_range(source, &item, DeclarationReference::Anchor(anchor))
+                .expect("anchor range");
+        assert_eq!(anchor_range.start.line, 18);
+        let target_range =
+            find_declaration_range(source, &item, DeclarationReference::Target(target))
+                .expect("target range");
+        assert_eq!(target_range.start.line, 10);
+
+        let short_source = concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: requirement\n",
+            "requirement:\n",
+            "  id: \"REQ-SHORT-001\"\n",
+            "  verification:\n",
+            "    facet: verification\n",
+            "    responsibility: Verify the behavior.\n",
+            "    target:\n",
+            "      id: \"test\"\n",
+            "      path: tests/example.rs\n",
+            "  implementation:\n",
+            "    id: \"implementation\"\n",
+            "    facet: delivery\n",
+            "    responsibility: Implement the behavior.\n",
+            "    target:\n",
+            "      id: \"source\"\n",
+            "      path: src/example.rs\n",
+            "  criterion: { id: behavior }\n",
+        );
+        let short_item: SpecId = "REQ-SHORT-001".into();
+        let short_binding: SpecAnchor = "REQ-SHORT-001#binding.implementation"
+            .parse()
+            .expect("short binding");
+        let short_target: BoundTargetRef = "REQ-SHORT-001#binding.implementation/target.source"
+            .parse()
+            .expect("short target");
+        let short_binding_range = find_declaration_range(
+            short_source,
+            &short_item,
+            DeclarationReference::Anchor(short_binding),
+        )
+        .expect("short binding range");
+        assert_eq!(short_binding_range.start.line, 11);
+        let short_target_range = find_declaration_range(
+            short_source,
+            &short_item,
+            DeclarationReference::Target(short_target),
+        )
+        .expect("short target range");
+        assert_eq!(short_target_range.start.line, 15);
+
+        let comment_source = "# id: REQ-COMMENT-001\nid: \"REQ-COMMENT-001\"\n";
+        let comment_item: SpecId = "REQ-COMMENT-001".into();
+        let comment_range =
+            find_declaration_range(comment_source, &comment_item, DeclarationReference::Item)
+                .expect("comment-safe item range");
+        assert_eq!(comment_range.start.line, 1);
+    }
+
     #[test]
     fn test_uri_to_path() {
         let uri = "file:///home/user/file.txt";
@@ -463,6 +1114,23 @@ mod tests {
     }
 
     #[test]
+    fn handle_definition_requires_initialization() {
+        let handlers = LspHandlers::new();
+        let error = handlers
+            .handle_definition(TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: "file:///tmp/example.yaml".to_string(),
+                },
+                position: Position {
+                    line: 0,
+                    character: 0,
+                },
+            })
+            .expect_err("definition should require initialization");
+        assert!(error.to_string().contains("workspace not initialized"));
+    }
+
+    #[test]
     fn handle_initialize_loads_workspace_from_root_uri() {
         let mut handlers = LspHandlers::new();
         let workspace = fixture_path("valid-web-app");
@@ -475,6 +1143,7 @@ mod tests {
             .expect("initialize should succeed");
 
         assert_eq!(value["capabilities"]["hoverProvider"], true);
+        assert_eq!(value["capabilities"]["definitionProvider"], true);
         assert!(handlers.workspace.is_some());
     }
 
