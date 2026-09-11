@@ -275,6 +275,7 @@ pub struct ShortCriterion {
     pub id: LocalId,
     pub kind: mitase_spec_model::CriterionKind,
     pub statement: String,
+    #[serde(default)]
     pub governed_by: Vec<SpecAnchor>,
 }
 
@@ -383,6 +384,9 @@ impl ShortRequirement {
         }
         if self.verification.target.id.is_none() {
             applied_defaults.push("requirement.verification.target.id=test".into());
+        }
+        if self.criterion.governed_by.is_empty() {
+            applied_defaults.push("requirement.criterion.governed_by=[]".into());
         }
 
         let implementation_selector = self.implementation.target.selector.clone().or_else(|| {
@@ -767,7 +771,6 @@ requirement:
     id: behavior
     kind: behavior
     statement: The behavior stays explicit.
-    governed_by: []
   implementation:
     facet: delivery
     responsibility: Own the exact implementation.
@@ -832,6 +835,7 @@ requirement:
                 "requirement.verification.id=verification",
                 "requirement.implementation.target.id=source",
                 "requirement.verification.target.id=test",
+                "requirement.criterion.governed_by=[]",
                 "requirement.implementation.target.selector=file",
                 "requirement.verification.target.selector=file",
             ]

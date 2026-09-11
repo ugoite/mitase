@@ -65,3 +65,22 @@ For example, JSON, YAML, and Markdown extensions overlap multiple inventory
 adapters and therefore require an explicit adapter.
 The normalized result exposes `applied_defaults` and `inferred` provenance so
 the authoring result is fully inspectable.
+
+## Corpus boundary
+
+The Mitase corpus is the measurement boundary for this contract. The current
+corpus contains 11 authoring-v2 documents and 30 top-level semantic items:
+3 philosophies, 7 policies, 2 requirements, and 18 features. Neither
+requirement fits the minimal short shape because the first has 13 criteria and
+two verification bindings, while the second has three criteria and six
+verification targets. The corpus therefore stays in the explicit collection
+forms; it is not rewritten into a short form that would discard relations or
+binding responsibilities.
+
+The only additional omission supported by the corpus audit is an empty
+`criterion.governed_by` list. An absent list means exactly the same empty
+relation set and does not infer a governing policy. Requirement text, status,
+priority, criterion kind and statement, binding facets and responsibilities,
+claims, coverage, and runners remain required. Adapter inference remains
+fail-closed: Rust paths have one candidate, while overlapping formats such as
+Markdown and JSON require an explicit adapter.
