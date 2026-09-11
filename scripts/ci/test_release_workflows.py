@@ -76,6 +76,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("ubuntu-24.04-arm", workflow)
         self.assertIn("scripts/ci/verify-packaged-release.sh", workflow)
         self.assertIn("- package-smoke", workflow)
+        self.assertNotIn(".zip", workflow)
 
     def test_package_tools_are_present(self) -> None:
         self.assertTrue(PACKAGE.is_file())
@@ -84,11 +85,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertTrue(PACKAGE.stat().st_mode & 0o111)
         self.assertTrue(PACKAGE_SMOKE.stat().st_mode & 0o111)
         self.assertTrue(RELEASE_MANIFEST.stat().st_mode & 0o111)
+        self.assertNotIn("windows", PACKAGE.read_text(encoding="utf-8"))
+        self.assertNotIn("zip", PACKAGE.read_text(encoding="utf-8"))
 
     def test_release_fallback_uses_the_selected_release_tag(self) -> None:
         installer = INSTALLER.read_text(encoding="utf-8")
         self.assertIn("tag = filtered[0][6]", installer)
-        self.assertIn('archive_name = f\"mitase-{tag}-{target}{archive_suffix}\"', installer)
+        self.assertIn('archive_name = f\"mitase-{tag}-{target}.tar.gz\"', installer)
+        self.assertNotIn("windows", installer)
 
     def test_promotion_downloads_by_run_id_and_never_builds(self) -> None:
         workflow = PUBLISH.read_text(encoding="utf-8")

@@ -11,6 +11,17 @@ version="$1"
 target="$2"
 archive="$3"
 fixture="$4"
+
+case "$target" in
+  x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | \
+    x86_64-apple-darwin | aarch64-apple-darwin)
+    ;;
+  *)
+    echo "unsupported release target: $target" >&2
+    exit 1
+    ;;
+esac
+
 expected_archive="mitase-${version}-${target}.tar.gz"
 
 if [[ "$(basename "$archive")" != "$expected_archive" ]]; then

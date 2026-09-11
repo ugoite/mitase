@@ -89,3 +89,5 @@ workflow smoke-tests the exact packaged archive on a native runner by checking
 published `SHA256SUMS` and `release-manifest.json` describe and verify those
 same archive bytes; downstream repositories may pin those immutable version
 and digest values without importing Mitase crates or source.
+The installer supports these four Unix targets only and reports unsupported
+operating systems before attempting a download.

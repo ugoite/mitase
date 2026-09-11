@@ -35,8 +35,17 @@ resolve_target_triple() {
   local os_name arch_name
 
   if [[ -n "${MITASE_INSTALL_SMOKE_TARGET:-}" ]]; then
-    printf '%s\n' "$MITASE_INSTALL_SMOKE_TARGET"
-    return 0
+    case "$MITASE_INSTALL_SMOKE_TARGET" in
+      x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | \
+        x86_64-apple-darwin | aarch64-apple-darwin)
+        printf '%s\n' "$MITASE_INSTALL_SMOKE_TARGET"
+        return 0
+        ;;
+      *)
+        echo "unsupported target: $MITASE_INSTALL_SMOKE_TARGET" >&2
+        exit 1
+        ;;
+    esac
   fi
 
   os_name="$(uname -s)"
@@ -60,7 +69,6 @@ resolve_target_triple() {
         printf '%s\n' "${arch_name}-unknown-linux-gnu"
       fi
       ;;
-    MINGW* | MSYS* | CYGWIN*) printf '%s\n' "${arch_name}-pc-windows-msvc" ;;
     *)
       echo "unsupported operating system: $os_name" >&2
       exit 1
@@ -69,12 +77,7 @@ resolve_target_triple() {
 }
 
 resolve_binary_name() {
-  local target="$1"
-  if [[ "$target" == *windows* ]]; then
-    printf 'mitase.exe\n'
-  else
-    printf 'mitase\n'
-  fi
+  printf 'mitase\n'
 }
 
 start_registry() {
@@ -148,6 +151,23 @@ run_install_case() {
   rm -rf "$temp_root"
 }
 
+run_unsupported_target_case() {
+  local temp_root output
+
+  temp_root="$(mktemp -d)"
+  if output="$(
+    MITASE_TARGET_TRIPLE="x86_64-pc-windows-msvc" \
+      MITASE_INSTALL_DIR="$temp_root/bin" \
+      bash "$repo_root/scripts/install-mitase.sh" 2>&1
+  )"; then
+    echo "installer accepted an unsupported target" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$output" | grep -F "unsupported target: x86_64-pc-windows-msvc" >/dev/null
+  rm -rf "$temp_root"
+}
+
 main() {
   local target binary_name
   local default_version
@@ -163,6 +183,7 @@ main() {
   run_install_case "prerelease" "v0.0.1-alpha.2" "v0.0.1-alpha.2" "$target" "$binary_name"
   run_install_case "mixed" "stable" "v0.0.2" "$target" "$binary_name"
   run_install_case "mixed" "" "$default_version" "$target" "$binary_name"
+  run_unsupported_target_case
 }
 
 main "$@"
