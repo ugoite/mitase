@@ -448,7 +448,11 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         args.format,
         operation,
         started.elapsed(),
-        validation_inputs.change_scope.as_deref(),
+        if is_change {
+            validation_inputs.change_scope.as_deref()
+        } else {
+            None
+        },
     )?;
     Ok(if result.is_valid() { 0 } else { 1 })
 }

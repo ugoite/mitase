@@ -707,6 +707,30 @@ fn validate_change_text_reports_scope_without_changing_json() {
 }
 
 #[test]
+fn validate_workspace_text_keeps_workspace_label_without_change_scope() {
+    let temp = staged_validation_fixture();
+    assert!(
+        ProcessCommand::new("git")
+            .args(["commit", "--allow-empty", "-qm", "workspace validation"])
+            .current_dir(temp.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["validate", "workspace", "--format", "text"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("validate "));
+    assert!(!stdout.contains("validate change"));
+    assert!(!stdout.contains("Scope:"));
+}
+
+#[test]
 fn show_does_not_mark_invalid_runner_metadata_as_verified() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-web-app");
     let temp = tempdir().unwrap();
