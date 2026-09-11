@@ -433,6 +433,7 @@ if not filtered:
     raise SystemExit(f"no release matched selector {selector!r}")
 
 filtered.sort(key=lambda candidate: candidate[:5], reverse=True)
+tag = filtered[0][6]
 release = filtered[0][7]
 
 archive_suffix = ".zip" if "windows" in target else ".tar.gz"
