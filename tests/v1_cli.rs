@@ -76,6 +76,31 @@ struct AcceptanceExpected {
     policy_to_philosophies: BTreeMap<String, Vec<String>>,
 }
 
+#[derive(Debug, Deserialize)]
+struct CurrentUgoiteCorpus {
+    source: CurrentUgoiteSource,
+    expected: CurrentUgoiteExpected,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurrentUgoiteSource {
+    repository: String,
+    revision: String,
+    files: BTreeMap<String, String>,
+    selected: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurrentUgoiteExpected {
+    normalized_schema: String,
+    implementation_path: String,
+    implementation_symbol: String,
+    implementation_identity: String,
+    verification_path: String,
+    verification_symbol: String,
+    verification_identity: String,
+}
+
 #[test]
 fn ugoite_foundation_policy_fixture_preserves_items_and_derived_governance() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -217,6 +242,171 @@ fn ugoite_foundation_policy_fixture_preserves_items_and_derived_governance() {
         .current_dir(temp.path())
         .assert()
         .success();
+}
+
+#[test]
+fn ugoite_current_v2_corpus_normalizes_resolves_and_exposes_the_graph() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/acceptance/ugoite-current-ops-v2");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    initialize_fixture_git(temp.path());
+
+    let corpus: CurrentUgoiteCorpus =
+        serde_yaml::from_str(&fs::read_to_string(temp.path().join("corpus.yaml")).unwrap())
+            .expect("current Ugoite corpus manifest");
+    assert_eq!(corpus.source.repository, "ugoite/ugoite");
+    assert_eq!(
+        corpus.source.revision,
+        "7b036f3e23fed7ed3ae68f1f0ef3ad904602fb4a"
+    );
+    assert_eq!(
+        corpus.source.files["requirement"],
+        "docs/mitase/requirements/ops.yaml"
+    );
+    assert_eq!(
+        corpus.source.files["feature"],
+        "docs/mitase/features/ops.yaml"
+    );
+    assert_eq!(
+        corpus.source.selected["criterion"],
+        "REQ-OPS-006#criterion.cli-surface"
+    );
+
+    let workspace = SpecWorkspace::load(temp.path()).expect("current Ugoite workspace");
+    assert!(
+        workspace
+            .documents
+            .iter()
+            .all(|loaded| loaded.document.schema() == corpus.expected.normalized_schema)
+    );
+    let index = workspace.index().expect("current Ugoite index");
+    let implementation: BoundTargetRef = corpus.source.selected["implementation_target"]
+        .parse()
+        .unwrap();
+    let verification: BoundTargetRef = corpus.source.selected["verification_target"]
+        .parse()
+        .unwrap();
+    let criterion: mitase_spec_model::SpecAnchor =
+        corpus.source.selected["criterion"].parse().unwrap();
+
+    assert_eq!(
+        index
+            .target_to_artifact
+            .get(&implementation)
+            .map(String::as_str),
+        Some(corpus.expected.implementation_identity.as_str())
+    );
+    assert_eq!(
+        index
+            .target_to_artifact
+            .get(&verification)
+            .map(String::as_str),
+        Some(corpus.expected.verification_identity.as_str())
+    );
+    assert!(
+        index
+            .path_to_targets
+            .get(&corpus.expected.implementation_path)
+            .is_some_and(|targets| targets.contains(&implementation))
+    );
+    assert!(
+        index
+            .path_to_targets
+            .get(&corpus.expected.verification_path)
+            .is_some_and(|targets| targets.contains(&verification))
+    );
+    assert_eq!(
+        index
+            .criteria_to_implementation_targets
+            .get(&criterion)
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        index
+            .criteria_to_verification_targets
+            .get(&criterion)
+            .map(Vec::len),
+        Some(1)
+    );
+
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", "."])
+        .current_dir(temp.path())
+        .assert()
+        .success();
+
+    let show = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-OPS-006", ".", "--format", "json"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        show.status.success(),
+        "{}",
+        String::from_utf8_lossy(&show.stderr)
+    );
+    let show: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(show["kind"], "requirement");
+    assert_eq!(show["criteria"][0]["verification"], "verified");
+    assert_eq!(
+        show["criteria"][0]["implementation_targets"][0],
+        corpus.source.selected["implementation_target"]
+    );
+    assert_eq!(
+        show["criteria"][0]["verification_targets"][0],
+        corpus.source.selected["verification_target"]
+    );
+    assert_eq!(
+        show["bindings"][0]["targets"][0]["path"],
+        corpus.expected.verification_path
+    );
+    assert_eq!(
+        show["verification_claims"][0]["assessment"]["status"],
+        "valid"
+    );
+
+    let feature_show = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "FEAT-OPS-001", ".", "--format", "json"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(feature_show.status.success());
+    let feature_show: serde_json::Value = serde_json::from_slice(&feature_show.stdout).unwrap();
+    assert_eq!(
+        feature_show["bindings"][0]["targets"][0]["path"],
+        corpus.expected.implementation_path
+    );
+
+    let query = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "query",
+            "REQ-OPS-006#criterion.cli-surface",
+            ".",
+            "--relation",
+            "implementation-targets",
+            "--format",
+            "json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(query.status.success());
+    let query: serde_json::Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(
+        query["relations"][0]["targets"][0],
+        corpus.source.selected["implementation_target"]
+    );
+    assert_eq!(corpus.expected.implementation_symbol, "config_path");
+    assert_eq!(
+        corpus.expected.verification_symbol,
+        "test_cli_req_ops_006_config_path_precedence_and_home_fallback"
+    );
 }
 
 #[test]

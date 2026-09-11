@@ -1,0 +1,29 @@
+schema: mitase/acceptance-corpus/v1
+fixture:
+  id: ugoite-current-ops-v2
+  version: 1
+source:
+  repository: ugoite/ugoite
+  revision: 7b036f3e23fed7ed3ae68f1f0ef3ad904602fb4a
+  snapshot_date: 2026-09-11
+  files:
+    philosophy: docs/mitase/philosophies/foundation.yaml
+    policy: docs/mitase/policies/policies.yaml
+    requirement: docs/mitase/requirements/ops.yaml
+    feature: docs/mitase/features/ops.yaml
+    implementation: crates/ugoite-cli/src/config.rs
+    verification: crates/ugoite-cli/tests/test_cli_req_ops_006_config_helpers.rs
+  selected:
+    requirement: REQ-OPS-006
+    criterion: REQ-OPS-006#criterion.cli-surface
+    feature: FEAT-OPS-001
+    implementation_target: FEAT-OPS-001#binding.implementation/target.config
+    verification_target: REQ-OPS-006#binding.verification/target.config-path-precedence
+expected:
+  normalized_schema: mitase/spec/v1
+  implementation_path: crates/ugoite-cli/src/config.rs
+  implementation_symbol: config_path
+  implementation_identity: rust:crates/ugoite-cli/src/config.rs::config::config_path
+  verification_path: crates/ugoite-cli/tests/test_cli_req_ops_006_config_helpers.rs
+  verification_symbol: test_cli_req_ops_006_config_path_precedence_and_home_fallback
+  verification_identity: rust:crates/ugoite-cli/tests/test_cli_req_ops_006_config_helpers.rs::test_cli_req_ops_006_config_helpers::test_cli_req_ops_006_config_path_precedence_and_home_fallback

@@ -1,0 +1,15 @@
+schema: mitase/authoring/v2
+kind: policies
+namespace: product
+category: Implementation Policies
+policies:
+  - id: POL-002
+    title: Rust Core as Canonical Logic Layer
+    summary: Durable business logic remains in the canonical Rust core boundary.
+    description: The selected Ugoite policy governs the current operations slice.
+    rules:
+      - id: governance
+        level: must
+        statement: Durable business logic remains in the canonical Rust core boundary.
+        governed_by: [PHIL-000#principle.stable-foundation]
+        enforcement: external repository tooling

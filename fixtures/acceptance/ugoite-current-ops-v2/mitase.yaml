@@ -1,0 +1,23 @@
+schema: mitase/config/v1
+workspace:
+  spec_roots: [spec]
+  excludes: []
+inventory:
+  active_profile: default
+  profiles:
+    - id: default
+      providers:
+        rust: { mode: test, include_tests: true }
+validation:
+  preset: strict
+  readiness:
+    target: off
+    limits: { max_ownership_scope_units: 64 }
+  changed:
+    baseline: { strategy: parent }
+    require_owned_changes: false
+verification:
+  runners:
+    cargo-test-integration:
+      executable: cargo
+      arguments: [test, -p, "{package}", --test, "{harness}", "{test}", --, --exact]
