@@ -15,6 +15,7 @@ The normal v1 CLI surface is specification-only:
 
 - `validate`
 - `check`
+- `normalize`
 - `query`
 - `show`
 - `list`

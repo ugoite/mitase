@@ -4,7 +4,7 @@ pub mod query;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use mitase_authoring::migrate_v1_to_v2;
+use mitase_authoring::{AuthoringDocument, migrate_v1_to_v2};
 use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use mitase_inventory::{InventoryContext, InventoryRegistry};
 use mitase_project_model::{ChangeBaseline, EffectiveProjectConfig, GitRef};
@@ -38,6 +38,7 @@ enum CommandKind {
     Readiness(ReadinessArgs),
     Config(ConfigArgs),
     Migrate(MigrateArgs),
+    Normalize(NormalizeArgs),
     Query(QueryArgs),
     Show(ShowArgs),
     List(ListArgs),
@@ -73,6 +74,16 @@ struct MigrateArgs {
     /// Migration is deliberately read-only; output is written only to stdout.
     #[arg(long)]
     stdout: bool,
+}
+#[derive(Debug, Args)]
+struct NormalizeArgs {
+    /// An authoring/v2 document to normalize without writing it.
+    source: PathBuf,
+    /// Normalization is deliberately read-only; output is written only to stdout.
+    #[arg(long)]
+    stdout: bool,
+    #[arg(long, value_enum, default_value = "yaml")]
+    format: NormalizeFormat,
 }
 #[derive(Debug, Args)]
 struct ReadinessArgs {
@@ -157,6 +168,11 @@ enum ConfigFormat {
     Yaml,
     Json,
 }
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum NormalizeFormat {
+    Yaml,
+    Json,
+}
 
 pub fn run() -> Result<i32> {
     match Cli::parse().command {
@@ -165,6 +181,7 @@ pub fn run() -> Result<i32> {
         CommandKind::Readiness(args) => run_readiness(args),
         CommandKind::Config(args) => run_config(args),
         CommandKind::Migrate(args) => run_migrate(args),
+        CommandKind::Normalize(args) => run_normalize(args),
         CommandKind::Query(args) => run_query(args),
         CommandKind::Show(args) => run_show(args),
         CommandKind::List(args) => run_list(args),
@@ -198,6 +215,31 @@ fn run_migrate(args: MigrateArgs) -> Result<i32> {
         anyhow::anyhow!("migration failed for {}: {error}", args.source.display())
     })?;
     print!("{}", serde_yaml::to_string(&document)?);
+    Ok(0)
+}
+
+fn run_normalize(args: NormalizeArgs) -> Result<i32> {
+    if !args.stdout {
+        bail!("normalization is read-only; pass --stdout to write the result to stdout");
+    }
+    let source = fs::read_to_string(&args.source)
+        .with_context(|| format!("read normalization source {}", args.source.display()))?;
+    let authoring = AuthoringDocument::parse(&source).map_err(|error| {
+        anyhow::anyhow!(
+            "normalization failed for {}: {error}",
+            args.source.display()
+        )
+    })?;
+    let normalized = authoring.normalize().map_err(|error| {
+        anyhow::anyhow!(
+            "normalization failed for {}: {error}",
+            args.source.display()
+        )
+    })?;
+    match args.format {
+        NormalizeFormat::Yaml => print!("{}", serde_yaml::to_string(&normalized)?),
+        NormalizeFormat::Json => println!("{}", serde_json::to_string_pretty(&normalized)?),
+    }
     Ok(0)
 }
 

@@ -524,6 +524,86 @@ requirements: []
 }
 
 #[test]
+fn normalize_is_explicit_read_only_and_exposes_graph_and_provenance() {
+    let temp = tempdir().unwrap();
+    let source_path = temp.path().join("requirement.yaml");
+    let source = r#"
+schema: mitase/authoring/v2
+kind: requirement
+namespace: demo
+category: Demo
+requirement:
+  id: REQ-DEMO-001
+  title: Inspect one normalized requirement
+  description: The normalized graph is visible without writing the source.
+  priority: high
+  status: implemented
+  criterion:
+    id: behavior
+    kind: behavior
+    statement: The behavior is inspectable.
+  implementation:
+    facet: delivery
+    responsibility: Own the exact implementation.
+    target:
+      path: src/example.rs
+      satisfies: behavior
+  verification:
+    facet: verification
+    responsibility: Verify the exact behavior.
+    target:
+      path: tests/example.rs
+      verifies:
+        criterion: behavior
+        covers: [source]
+        runner: cargo-test
+        arguments: { package: demo, test: example }
+"#;
+    fs::write(&source_path, source).unwrap();
+
+    let without_stdout = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["normalize"])
+        .arg(&source_path)
+        .output()
+        .unwrap();
+    assert!(!without_stdout.status.success());
+    assert!(String::from_utf8_lossy(&without_stdout.stderr).contains("--stdout"));
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["normalize"])
+        .arg(&source_path)
+        .args(["--stdout", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
+    let normalized: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(normalized["document"]["schema"], "mitase/spec/v1");
+    assert_eq!(normalized["document"]["kind"], "requirements");
+    assert_eq!(
+        normalized["document"]["requirements"][0]["id"],
+        "REQ-DEMO-001"
+    );
+    assert!(
+        normalized["provenance"]["applied_defaults"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "requirement.implementation.id=implementation")
+    );
+    assert!(
+        normalized["provenance"]["inferred"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "requirement.implementation.target.adapter=rust")
+    );
+}
+
+#[test]
 fn config_effective_reports_resolved_conventions_without_loading_or_mutating_specs() {
     let temp = tempdir().unwrap();
     fs::write(
