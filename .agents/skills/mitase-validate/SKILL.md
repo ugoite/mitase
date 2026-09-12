@@ -17,6 +17,7 @@ mise run fmt:check
 mise run lint
 mise run check
 mise run test
+mise run build
 mise run ci
 mise run ci:merge
 ```
@@ -41,7 +42,7 @@ Docker, browser, or network work.
 
 ## Hosted CI
 
-`ci-rust-check`, `ci-rust-test`, and `ci-repo` run in parallel and
+`ci-rust-check`, `ci-rust-test`, `ci-node`, and `ci-repo` run in parallel and
 `ci-required` aggregates them. The merge-group run validates the synthetic
 merge commit. CodeQL and release workflows remain separate from the canonical
 product task graph.

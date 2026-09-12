@@ -60,3 +60,27 @@ loading and never writes to a workspace; see the
 [migration guide](docs/workflows/repository/migration.md).
 
 See [the v1 architecture](docs/understand/model/v1-architecture.md).
+
+## Repository development
+
+The root [`mise.toml`](mise.toml) is the source of truth for the maintained
+development surface: Rust, Node/npm, the Docusaurus docs site, and the VS Code
+extension. From a fresh checkout:
+
+```bash
+mise install
+mise run setup
+```
+
+Use the same root entrypoints locally and in CI:
+
+```bash
+mise run fmt
+mise run lint
+mise run check
+mise run test
+mise run build
+```
+
+Use `mise run build:website` for a docs-site build and
+`mise run check:vscode` / `mise run test:vscode` for focused extension work.

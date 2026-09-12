@@ -7,18 +7,36 @@ CARGO_TARGET_DIR = "target/rust"
 RUST_BACKTRACE = "1"
 
 [tools]
+node = "20.20.2"
+npm = "11.8.0"
 rust = "1.88.0"
 
 [tools."github:nextest-rs/nextest"]
 version = "cargo-nextest-0.9.143"
 matching = "cargo-nextest"
 
-[tasks.setup]
+[tasks."setup:rust"]
 description = "Install the pinned Rust components and fetch locked dependencies"
 run = [
   "rustup component add rustfmt clippy",
   "cargo fetch --locked",
 ]
+
+[tasks."setup:website"]
+description = "Install the locked documentation-site dependencies"
+run = "npm ci --prefix website --no-audit --no-fund"
+
+[tasks."setup:vscode"]
+description = "Install the locked VS Code extension dependencies"
+run = "npm ci --prefix editors/vscode --no-audit --no-fund"
+
+[tasks."setup:node"]
+description = "Install locked dependencies for the maintained Node surfaces"
+run = [{ tasks = ["setup:website", "setup:vscode"] }]
+
+[tasks.setup]
+description = "Install the complete maintained development surface"
+run = [{ tasks = ["setup:rust", "setup:node"] }]
 
 [tasks.fmt]
 description = "Format the Rust workspace"
@@ -30,7 +48,7 @@ run = "cargo fmt --all -- --check"
 
 [tasks."lint:rust"]
 description = "Lint the Rust workspace"
-run = "cargo clippy --workspace --all-targets -- -D warnings"
+run = "cargo clippy --workspace --all-targets --locked -- -D warnings"
 
 [tasks.lint]
 description = "Run all repository linters"
@@ -38,7 +56,19 @@ run = [{ task = "lint:rust" }]
 
 [tasks."check:rust"]
 description = "Compile-check the Rust workspace"
-run = "cargo check --workspace --all-targets"
+run = "cargo check --workspace --all-targets --locked"
+
+[tasks."check:website"]
+description = "Build the documentation site and validate generated links"
+run = "npm --prefix website run build"
+
+[tasks."check:vscode"]
+description = "Syntax-check the VS Code extension sources"
+run = "npm --prefix editors/vscode run check"
+
+[tasks."check:node"]
+description = "Check the documentation site and VS Code extension"
+run = [{ tasks = ["check:website", "check:vscode"] }]
 
 [tasks."check:architecture"]
 description = "Check canonical production-crate responsibilities and dependencies"
@@ -52,19 +82,54 @@ run = [
 ]
 
 [tasks.check]
-description = "Run Rust and repository checks"
+description = "Run Rust, Node, and repository checks"
 run = [
   { task = "check:rust" },
+  { task = "check:node" },
   { task = "check:repo" },
 ]
 
 [tasks."test:rust"]
 description = "Run the canonical Rust workspace tests"
-run = "cargo test --workspace"
+run = [
+  "cargo nextest run --workspace --locked",
+  "cargo test --workspace --doc --locked",
+]
+
+[tasks."test:vscode"]
+description = "Run the VS Code extension tests"
+run = "npm --prefix editors/vscode test"
+
+[tasks."test:node"]
+description = "Run tests for the maintained Node surfaces"
+run = [{ task = "test:vscode" }]
 
 [tasks.test]
 description = "Run the repository test suite"
-run = [{ task = "test:rust" }]
+run = [
+  { task = "test:rust" },
+  { task = "test:node" },
+]
+
+[tasks."build:rust"]
+description = "Build the Rust workspace"
+run = "cargo build --workspace --locked"
+
+[tasks."build:website"]
+description = "Build the documentation site"
+run = "npm --prefix website run build"
+
+[tasks."build:vscode"]
+description = "Validate the source-only VS Code extension build"
+run = "npm --prefix editors/vscode run check"
+
+[tasks.build]
+description = "Build all maintained repository surfaces"
+run = [{ tasks = ["build:rust", "build:website", "build:vscode"] }]
+
+[tasks."audit:website"]
+description = "Audit production documentation-site dependencies"
+run = "npm --prefix website audit --omit=dev --audit-level=high"
 
 [tasks.ci]
 description = "Run the complete local repository quality gate"
@@ -90,6 +155,13 @@ run = [{ task = "test:rust" }]
 [tasks."ci:lane:repo"]
 description = "Run the hosted repository validation lane"
 run = [{ task = "check:repo" }]
+
+[tasks."ci:lane:node"]
+description = "Run hosted checks and tests for the maintained Node surfaces"
+run = [
+  { task = "check:node" },
+  { task = "test:node" },
+]
 
 [tasks."ci:merge"]
 description = "Run the merge-equivalent product quality gate locally"

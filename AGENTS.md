@@ -54,6 +54,7 @@ mise run fmt:check
 mise run lint
 mise run check
 mise run test
+mise run build
 mise run ci
 ```
 
@@ -69,9 +70,10 @@ repository-specific absolute path.
 ## Validation and hosted CI
 
 The semantic checks are owned by Mise. `.github/workflows/ci.yml` only places
-the parallel `ci:lane:rust-check`, `ci:lane:rust-test`, and `ci:lane:repo`
-tasks, then aggregates them in `ci-required`. The merge group validates its
-synthetic merge commit. CodeQL and release remain separate concerns.
+the parallel `ci:lane:rust-check`, `ci:lane:rust-test`, `ci:lane:node`, and
+`ci:lane:repo` tasks, then aggregates them in `ci-required`. The merge group
+validates its synthetic merge commit. CodeQL and release remain separate
+concerns.
 
 Rust dependency cache and compiler cache are separate. Shared dependency
 cache writes are limited to the `main` push lane, and sccache is read-only for

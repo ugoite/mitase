@@ -2,81 +2,64 @@
 
 <!-- FEAT-DOCS-001 -->
 
-Use this guide when you are contributing to `mitase` itself and need one place that
-answers a practical question fast: **which Node major should I use for this
-task right now?**
-
-The repository intentionally does **not** use one shared Node major for every
-surface. Different parts of the product move at different speeds, and the
-checked-in source of truth lives next to each package rather than in tribal
-knowledge.
+Use this guide when you are contributing to `mitase` itself and need the
+repository's Node workflow. The root `mise.toml` is the single source of truth
+for the toolchain and task entrypoints.
 
 ## Quick matrix
 
-| Surface | Checked-in source of truth | Use this Node major | Typical commands |
-| --- | --- | --- | --- |
-| Docs site (`website/`) | `website/.nvmrc`, `website/package.json#engines` | **Node 20** | `bash scripts/ci/install-docs-site-deps.sh`, `npm --prefix website run start`, `npm --prefix website run build` |
-| VS Code extension (`editors/vscode/`) | `editors/vscode/.nvmrc`, `editors/vscode/package.json#engines` | **Node 20** | `scripts/ci/pinned-npm.sh install editors/vscode`, `npm --prefix editors/vscode ci`, `npm --prefix editors/vscode test` |
+| Surface | Maintained by | Root task entrypoints |
+| --- | --- | --- |
+| Docs site (`website/`) | `mise.toml` | `mise run setup:website`, `mise run build:website` |
+| VS Code extension (`editors/vscode/`) | `mise.toml` | `mise run setup:vscode`, `mise run check:vscode`, `mise run test:vscode` |
 
-All checked-in Node package surfaces also pin the expected npm release through
-`package.json#packageManager`, and the repository helpers read that field so the
-CLI output stays aligned with CI.
+The exact Node and npm versions are the `node` and `npm` entries in the root
+`mise.toml`. The package `engines` fields describe compatibility for each
+surface; they are not separate installation instructions.
 
-## Do not trust the current shell by default
+## Provision the maintained Node surfaces
 
-The devcontainer installs `node:lts`, and a reused local shell may already be
-pointing at some other major. Treat the checked-in `.nvmrc` files as the source
-of truth for contributor tasks instead of assuming the current shell is already
-correct.
+Install the root tools and locked dependencies once:
 
-When you switch tasks, switch Node first. Pick the one command that matches the
-surface you are about to touch:
+```bash
+mise install
+mise run setup
+```
 
-- Docs site: `nvm use "$(cat website/.nvmrc)"`
-- VS Code extension: `nvm use "$(cat editors/vscode/.nvmrc)"`
-
-`fnm`, `Volta`, or another version manager are equally fine; the important part
-is matching the checked-in major for the surface you are about to touch.
+The two surface-specific setup tasks are useful when only one package needs to
+be refreshed. They still use the Node and npm versions selected by root Mise.
 
 ## Docs-site work
 
-Use **Node 20** for anything under `website/` and for docs-site validation.
-
 ```bash
-nvm use "$(cat website/.nvmrc)"
-bash scripts/ci/install-docs-site-deps.sh
+mise run setup:website
 npm --prefix website run start
 ```
 
 Before opening a PR, run the same build CI uses:
 
 ```bash
-npm --prefix website run build
+mise run build:website
 ```
-
-The install helper removes `website/node_modules` first so repeated runs stay
-deterministic across branch switches and reused worktrees.
 
 ## VS Code extension work
 
-Use **Node 20** for `editors/vscode/`.
-
 ```bash
-nvm use "$(cat editors/vscode/.nvmrc)"
-scripts/ci/pinned-npm.sh install editors/vscode
-npm --prefix editors/vscode ci
-npm --prefix editors/vscode test
+mise run setup:vscode
+mise run check:vscode
+mise run test:vscode
 ```
 
-If you are editing the extension and the docs site in the same session, you can
-stay on Node 20 for both.
+If you are editing the extension and the docs site in the same session, the
+same root-managed Node/npm environment serves both.
 
 ## Fast switching rules
 
-1. Changing `website/` or docs-site build inputs? Use **Node 20**.
-2. Changing `editors/vscode/`? Use **Node 20**.
-3. Unsure which major wins? Follow the package directory you are executing from,
-   then confirm with that surface's `.nvmrc` and `package.json#engines`.
+1. Changing `website/` or docs-site build inputs? Run `mise run build:website`.
+2. Changing `editors/vscode/`? Run `mise run check:vscode` and
+   `mise run test:vscode`.
+3. Unsure which task applies? Start with the root `mise run check` and
+   `mise run test` entrypoints.
 
 If you want the full contributor gate matrix after switching runtimes, return to
 [`CONTRIBUTING.md`](https://github.com/ugoite/mitase/blob/main/CONTRIBUTING.md).

@@ -27,18 +27,17 @@ later.
 
 ## Running from source
 
-Switch your shell to the checked-in Node 20 version from
-`editors/vscode/.nvmrc`, then use the pinned npm release from
-`editors/vscode/package.json` to install dependencies from the repository root.
-If you are hopping between the extension and the docs site, use the repository
-Node workflow guide at `docs/contribute/maintaining/node-workflow.md` as the one-place runtime
-map first:
+The root `mise.toml` owns the Node/npm versions and the extension task
+entrypoints. If you are hopping between the extension and the docs site, use
+the repository Node workflow guide at
+`docs/contribute/maintaining/node-workflow.md` as the one-place task map first:
 
 ```bash
-nvm use "$(cat editors/vscode/.nvmrc)"
-scripts/ci/pinned-npm.sh install editors/vscode
-npm --prefix editors/vscode ci
+mise install
+mise run setup:vscode
 ```
+
+Run `mise run check:vscode` and `mise run test:vscode` before opening a PR.
 
 1. Open `editors/vscode/` in VS Code.
 2. Press `F5` to start an Extension Development Host.

@@ -5,22 +5,16 @@ description: Install dependencies and build the checked-in Docusaurus site
 runs:
   using: composite
   steps:
-    - name: Set up Node.js
-      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+    - name: Install the repository toolchain
+      uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       with:
-        node-version: "20"
-        cache: npm
-        cache-dependency-path: website/package-lock.json
+        install: true
+        cache: true
 
-    - name: Align npm with website/package.json
+    - name: Install docs-site dependencies
       shell: bash
-      run: scripts/ci/pinned-npm.sh install website
-
-    - name: Install docs dependencies
-      shell: bash
-      run: bash scripts/ci/install-docs-site-deps.sh
+      run: mise run setup:website
 
     - name: Build documentation site
-      working-directory: website
       shell: bash
-      run: npm run build
+      run: mise run build:website
