@@ -65,8 +65,8 @@ The short form supplies only mechanical details: binding and target IDs,
 file selectors, and a unique adapter inferred from each file extension. The
 criterion text, binding responsibilities, claim relationships, coverage, and
 verification runner remain explicit. The checked-in
-[`fixtures/first-run-short`](../../../fixtures/first-run-short) is the CI
-acceptance copy of this tutorial path.
+[`fixtures/first-run-short`](https://github.com/ugoite/mitase/tree/main/fixtures/first-run-short)
+is the CI acceptance copy of this tutorial path.
 
 Existing v1 source can still be converted during the 0.1.x dogfood period with
 the read-only `mitase migrate <source> --stdout` command. Use the checked-in

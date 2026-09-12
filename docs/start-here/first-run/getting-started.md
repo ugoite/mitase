@@ -102,9 +102,9 @@ schema: mitase/config/v1
 
 The requirement short form connects one criterion to one implementation target
 and one verification target. Copy the checked-in
-[`fixtures/first-run-short`](../../../fixtures/first-run-short) tree to try the
-same path locally, or continue to the [tutorial](./tutorial.md) for the full
-four-layer story.
+[`fixtures/first-run-short`](https://github.com/ugoite/mitase/tree/main/fixtures/first-run-short)
+tree to try the same path locally, or continue to the [tutorial](./tutorial.md)
+for the full four-layer story.
 
 Use `examples/` as the reference bootstrap path for concrete layouts.
 

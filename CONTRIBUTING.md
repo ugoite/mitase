@@ -1,11 +1,23 @@
 # Contributing
 
-Quality gates are defined once in the root `mise.toml` and placed into hosted
-CI lanes by `.github/workflows/ci.yml`:
+The maintained toolchain and task graph are defined once in the root
+`mise.toml`. Start from a fresh checkout with:
+
+```bash
+mise install
+mise run setup
+```
+
+That provisions the pinned Rust and Node/npm tools and installs the locked
+dependencies for the Rust workspace, docs site, and VS Code extension.
+
+The root tasks are placed into hosted CI lanes by `.github/workflows/ci.yml`:
 
 - local work uses `mise run fmt`, `mise run lint`, `mise run check`, and
   `mise run test`;
-- hosted `ci-rust-check`, `ci-rust-test`, and `ci-repo` run in parallel;
+- `mise run build` builds every maintained surface;
+- hosted `ci-rust-check`, `ci-rust-test`, `ci-node`, and `ci-repo` run in
+  parallel;
 - `ci-required` is the required aggregation status for pull requests and the
   merge queue.
 

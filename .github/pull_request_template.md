@@ -16,6 +16,7 @@ Closes #
 - [ ] `mise run lint`
 - [ ] `mise run check`
 - [ ] `mise run test`
+- [ ] `mise run build`
 
 ## Review scope
 

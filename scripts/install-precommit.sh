@@ -13,7 +13,7 @@ print_troubleshooting_hint() {
   if command -v pipx >/dev/null 2>&1; then
     echo "If you installed pre-commit with pipx, also compare 'pipx environment --value PIPX_BIN_DIR' with your PATH." >&2
   fi
-  echo "See CONTRIBUTING.md#local-checks for the expected local bootstrap flow." >&2
+  echo "See CONTRIBUTING.md for the expected local bootstrap flow." >&2
 }
 
 find_python() {

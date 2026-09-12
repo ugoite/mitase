@@ -9,7 +9,7 @@ sidebar_position: 1
 These guides are maintainer-facing and intentionally sit away from the
 newcomer workflow.
 
-- [Node workflow](./node-workflow.md) — choose the correct Node major for each
+- [Node workflow](./node-workflow.md) — use the root Mise tasks for each Node
   repository surface.
 - [Merge queue playbook](./merge-queue-playbook.md) — diagnose queue and
   `merge_group` behavior.

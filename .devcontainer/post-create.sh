@@ -13,7 +13,7 @@ log_step() {
 
 install_coverage_tooling() {
   log_step "Installing cargo-llvm-cov for scripts/ci/coverage.sh summary."
-  cargo install cargo-llvm-cov --locked
+  mise exec -- cargo install cargo-llvm-cov --locked
 }
 
 install_precommit_tooling() {
@@ -27,7 +27,7 @@ main() {
 
   cd "$root"
 
-  log_step "Setting up the contributor toolchain. See CONTRIBUTING.md#local-checks for what this bootstrap installs and which workflows still stay opt-in."
+  log_step "Installing contributor-only coverage and hook tooling. The maintained surface is provisioned by the devcontainer onCreateCommand; see CONTRIBUTING.md for the root Mise task contract."
   install_coverage_tooling
   install_precommit_tooling
   log_step "Devcontainer setup complete."

@@ -45,17 +45,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js (docs site)
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Install the repository toolchain
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: website/package-lock.json
+          install: true
+          cache: true
 
-      - name: Align npm with website/package.json
-        shell: bash
-        run: scripts/ci/pinned-npm.sh install website
+      - name: Install docs-site dependencies
+        run: mise run setup:website
 
       - name: Audit docs site dependencies
-        working-directory: website
-        run: npm audit --omit=dev --audit-level=high
+        run: mise run audit:website

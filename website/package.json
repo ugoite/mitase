@@ -23,7 +23,6 @@
   "engines": {
     "node": ">=20 <21"
   },
-  "packageManager": "npm@11.8.0",
   "overrides": {
     "lodash": "4.18.1",
     "picomatch": "2.3.2",

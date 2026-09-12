@@ -27,8 +27,8 @@ Determine:
    specification-facing, or operational.
 3. Which source of truth and invariant must remain valid.
 4. Which root `mise.toml` task is the smallest useful validation.
-5. Whether the change affects `ci-rust-check`, `ci-rust-test`, `ci-repo`, or a
-   separate CodeQL or release workflow.
+5. Whether the change affects `ci-rust-check`, `ci-rust-test`, `ci-node`,
+   `ci-repo`, or a separate CodeQL or release workflow.
 
 Only root tasks from `mise.toml` are valid. Do not use GitHub Actions command
 snippets as a local command source of truth.

@@ -1,19 +1,26 @@
 {
-  "name": "mitase FEAT-CONTRIB-001",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
+  "name": "mitase + Mise",
+  "image": "mcr.microsoft.com/devcontainers/base:2.1.7-ubuntu24.04",
   "features": {
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12"
-    },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "lts"
     },
     "ghcr.io/devcontainers/features/java:1": {
       "version": "17",
       "installMaven": "true"
     },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1.1.2": {},
+    "ghcr.io/devcontainers-extra/features/mise:1.0.0": {}
   },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "MISE_EXPERIMENTAL": "1",
+    "GH_TOKEN": "${localEnv:GH_TOKEN}",
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
+  },
+  "onCreateCommand": "mise trust --yes /workspace/mise.toml && eval \"$(mise activate bash --shims)\" >> ~/.bashrc && mise install --yes && mise run setup",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
@@ -21,7 +28,8 @@
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
         "redhat.vscode-yaml",
-        "ms-python.python"
+        "ms-python.python",
+        "hverlin.mise-vscode"
       ]
     }
   }

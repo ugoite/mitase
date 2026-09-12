@@ -175,15 +175,14 @@ they are not a second source of truth.
 
 ## CI contract at re-foundation completion
 
-Mitase's release gate will require:
+Mitase's release gate will require the root repository gate:
 
 ```text
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-mitase check .
+mise run ci
 ```
 
+The root Mise task expands this gate across the maintained Rust, docs-site, and
+VS Code surfaces, including the specification-only `mitase check .` command.
 The same engine validates Mitase itself and, after migration, Ugoite. A green
 result proves the declared specification agrees with the checked-out
 repository; it does not grant Mitase authority to change that repository.
