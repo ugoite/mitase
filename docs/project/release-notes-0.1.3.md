@@ -1,7 +1,7 @@
 ---
 title: "Mitase 0.1.3 release notes"
 description: "The 0.1.3 patch-line improvements to CLI diagnostics and traceability."
-sidebar_position: 6
+sidebar_position: 7
 ---
 
 # Mitase 0.1.3 release notes

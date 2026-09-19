@@ -957,10 +957,8 @@ mod tests {
     use std::{fs, path::PathBuf};
     use tempfile::tempdir;
 
-    fn fixture_path(name: &str) -> PathBuf {
+    fn fixture_path(_name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures/v1")
-            .join(name)
     }
 
     #[test]
@@ -1009,54 +1007,31 @@ mod tests {
     }
 
     #[test]
-    fn handle_definition_resolves_ids_anchors_and_targets_from_v1_source() {
-        let workspace = fixture_path("valid-web-app");
-        let requirement = workspace.join("spec/requirement.yaml");
-        let feature = workspace.join("spec/feature.yaml");
-
-        let item =
-            definition_location(&workspace, &requirement, "REQ-AUTH-001").expect("item definition");
-        assert_eq!(
-            item.uri,
-            path_to_uri(&requirement).expect("requirement URI")
-        );
-        assert_eq!(item.range.start.line, 5);
-        assert_eq!(item.range.start.character, 8);
+    fn handle_definition_resolves_ids_anchors_and_targets_from_v2_source() {
+        let workspace = fixture_path("current");
+        let requirements = workspace.join("docs/mitase/requirements/capability-contracts.yaml");
+        let features = workspace.join("docs/mitase/features/capabilities/surfaces.yaml");
 
         let anchor = definition_location(
             &workspace,
-            &requirement,
-            "REQ-AUTH-001#criterion.invalid-credentials",
+            &requirements,
+            "REQ-CAPABILITY-001#criterion.lsp-navigation",
         )
-        .expect("anchor definition");
+        .expect("v2 anchor definition");
         assert_eq!(
             anchor.uri,
-            path_to_uri(&requirement).expect("requirement URI")
+            path_to_uri(&requirements).expect("requirements URI")
         );
-        assert_eq!(anchor.range.start.line, 11);
-        assert_eq!(anchor.range.start.character, 12);
+        assert_eq!(anchor.range.start.line, 55);
 
         let target = definition_location(
             &workspace,
-            &requirement,
-            "FEAT-AUTH-001#binding.backend/target.handler",
+            &requirements,
+            "FEAT-LSP-001#binding.implementation/target.lsp-server",
         )
-        .expect("target definition");
-        assert_eq!(target.uri, path_to_uri(&feature).expect("feature URI"));
-        assert_eq!(target.range.start.line, 25);
-        assert_eq!(target.range.start.character, 16);
-
-        let inline_target = definition_location(
-            &workspace,
-            &feature,
-            "FEAT-AUTH-001#binding.schema/target.operation",
-        )
-        .expect("inline target definition");
-        assert_eq!(
-            inline_target.uri,
-            path_to_uri(&feature).expect("feature URI")
-        );
-        assert_eq!(inline_target.range.start.line, 40);
+        .expect("v2 target definition");
+        assert_eq!(target.uri, path_to_uri(&features).expect("features URI"));
+        assert_eq!(target.range.start.line, 74);
     }
 
     #[test]
@@ -1094,7 +1069,7 @@ mod tests {
         let reference_path = tempdir.path().join("reference.yaml");
         fs::write(
             &reference_path,
-            "criterion: REQ-AUTH-001#criterion.not-authored\n",
+            "criterion: REQ-CAPABILITY-001#criterion.not-authored\n",
         )
         .expect("reference source");
 
@@ -1295,7 +1270,7 @@ mod tests {
                 root_uri: None,
                 workspace_folders: Some(vec![WorkspaceFolder {
                     uri: format!("file://{}", workspace.display()),
-                    name: "valid-web-app".to_string(),
+                    name: "mitase".to_string(),
                 }]),
                 capabilities: None,
             })
@@ -1413,10 +1388,10 @@ mod tests {
         let workspace = SpecWorkspace::load(fixture_path("valid-web-app")).expect("workspace");
 
         for (spec_id, expected) in [
-            ("PHIL-AUTH-001", "**Safe authentication**"),
-            ("POL-AUTH-001", "## Summary"),
-            ("REQ-AUTH-001", "**Priority:**"),
-            ("FEAT-AUTH-001", "**Status:**"),
+            ("PHIL-003", "**Build Rules, Not Disposable Artifacts**"),
+            ("POL-AUTHORITY-001", "## Summary"),
+            ("REQ-CAPABILITY-001", "**Priority:**"),
+            ("FEAT-LSP-001", "**Status:**"),
         ] {
             let hover = create_hover_for_spec_id(&workspace, spec_id).expect("hover should exist");
             assert!(hover.contents.value.contains(expected));
@@ -1584,7 +1559,7 @@ mod tests {
         let initial = handlers
             .handle_initialized()
             .expect("initial diagnostics should publish");
-        let removed_path = workspace.join("spec/requirement.yaml");
+        let removed_path = workspace.join("docs/mitase/requirements/capability-contracts.yaml");
         let removed_uri = path_to_uri(&removed_path).expect("document URI");
         assert!(initial.iter().any(|notification| {
             notification

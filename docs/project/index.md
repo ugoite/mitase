@@ -20,5 +20,5 @@ making architecture jargon the first thing a new user sees.
   reproducible source and artifact identity contract for release promotion.
 - [Release train acceptance](./release-acceptance.md) — the 0.1.x dogfood and
   v0.2 single-source cutover gates.
-- [0.1.3 release notes](./release-notes-0.1.3.md) — the CLI diagnostics,
-  traceability, and output-contract improvements in the current patch line.
+- [0.2.0 release notes](./release-notes-0.2.0.md) — the stable v2-only source
+  line, explicit migration path, and release boundary.

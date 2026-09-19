@@ -244,10 +244,8 @@ mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
     use tempfile::tempdir;
 
-    fn fixture_path(name: &str) -> PathBuf {
+    fn fixture_path(_name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures/v1")
-            .join(name)
     }
 
     fn message_bytes(value: serde_json::Value) -> Vec<u8> {
@@ -399,7 +397,7 @@ mod tests {
     fn handle_request_serializes_hover_results() {
         let tempdir = tempdir().expect("tempdir");
         let hover_file = tempdir.path().join("hover.txt");
-        fs::write(&hover_file, "REQ-AUTH-001\n").expect("hover file");
+        fs::write(&hover_file, "REQ-CAPABILITY-001\n").expect("hover file");
 
         let mut server = LspServer::new();
         server
@@ -435,9 +433,9 @@ mod tests {
     #[test]
     fn handle_request_serializes_definition_results() {
         let workspace = fixture_path("valid-web-app");
-        let source_path = workspace.join("spec/requirement.yaml");
+        let source_path = workspace.join("docs/mitase/requirements/capability-contracts.yaml");
         let source = fs::read_to_string(&source_path).expect("read requirement");
-        let reference = "FEAT-AUTH-001#binding.backend/target.handler";
+        let reference = "FEAT-LSP-001#binding.implementation/target.lsp-server";
         let (line, text) = source
             .lines()
             .enumerate()
@@ -473,9 +471,14 @@ mod tests {
         let result = response.result.expect("definition result");
         assert_eq!(
             result["uri"],
-            format!("file://{}", workspace.join("spec/feature.yaml").display())
+            format!(
+                "file://{}",
+                workspace
+                    .join("docs/mitase/features/capabilities/surfaces.yaml")
+                    .display()
+            )
         );
-        assert_eq!(result["range"]["start"]["line"], 25);
+        assert_eq!(result["range"]["start"]["line"], 74);
     }
 
     #[test]
@@ -541,7 +544,7 @@ mod tests {
     #[test]
     fn handle_edit_notifications_refresh_diagnostics() {
         let workspace = fixture_path("valid-web-app");
-        let source_path = workspace.join("spec/requirement.yaml");
+        let source_path = workspace.join("docs/mitase/requirements/capability-contracts.yaml");
         let source = fs::read_to_string(&source_path).expect("read source");
         let source_uri = format!("file://{}", source_path.display());
         let mut server = LspServer::new();

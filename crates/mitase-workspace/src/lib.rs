@@ -2942,7 +2942,7 @@ mod tests {
         fs::write(
             tempdir.path().join("spec/requirements/req-new.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: requirements\n",
                 "namespace: test\n",
                 "category: Test\n",
@@ -3051,7 +3051,7 @@ mod tests {
         fs::write(
             tempdir.path().join("docs/mitase/canonical-feature.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: features\n",
                 "namespace: test\n",
                 "category: Test\n",
@@ -3204,14 +3204,14 @@ mod tests {
     }
 
     #[test]
-    fn current_release_policy_keeps_dual_source_during_0_1_x() {
-        assert_eq!(SpecSourcePolicy::current(), SpecSourcePolicy::DualSource);
+    fn current_release_policy_is_v2_only_for_the_0_2_stable_line() {
+        assert_eq!(SpecSourcePolicy::current(), SpecSourcePolicy::V2Only);
     }
 
     #[test]
     fn release_policy_switches_to_v2_only_for_the_0_2_line() {
         assert_eq!(
-            SpecSourcePolicy::for_release("0.2.0-alpha.1"),
+            SpecSourcePolicy::for_release("0.2.0"),
             SpecSourcePolicy::V2Only
         );
         assert_eq!(
@@ -3247,7 +3247,7 @@ mod tests {
         fs::write(
             tempdir.path().join("docs/mitase/planned.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: features\n",
                 "namespace: test\n",
                 "category: Test\n",

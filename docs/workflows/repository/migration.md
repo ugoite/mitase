@@ -16,6 +16,14 @@ for the version you just installed.
 
 ---
 
+## v0.2.0 stable cutover
+
+v0.2.0 is the stable v2-only release line. Normal `check` and `validate`
+reject the v1 authoring entrance with `MITASE-SOURCE-001`; they do not silently
+select a legacy parser or compatibility mode. Existing v1 documents must be
+reviewed and converted explicitly before they are placed under the v2 source
+roots.
+
 ## Explicit v0.1 to v0.2 authoring migration
 
 The v0.2 authoring contract is a separate frontend from the canonical graph.
