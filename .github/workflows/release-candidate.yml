@@ -237,11 +237,23 @@ jobs:
       - name: Smoke-test the packaged Mitase executable
         run: |
           archive="target/package-input/mitase-${{ needs.preflight.outputs.version }}-${{ matrix.target }}.tar.gz"
+          case "${{ needs.preflight.outputs.version }}" in
+            v0.1.*)
+              fixture="fixtures/acceptance/ugoite-foundation-policy-v1"
+              ;;
+            v0.2.*)
+              fixture="fixtures/acceptance/ugoite-current-ops-v2"
+              ;;
+            *)
+              echo "unsupported release line for package smoke: ${{ needs.preflight.outputs.version }}" >&2
+              exit 1
+              ;;
+          esac
           bash scripts/ci/verify-packaged-release.sh \
             "${{ needs.preflight.outputs.version }}" \
             "${{ matrix.target }}" \
             "$archive" \
-            fixtures/acceptance/ugoite-foundation-policy-v1
+            "$fixture"
 
   release-grade:
     needs: preflight
