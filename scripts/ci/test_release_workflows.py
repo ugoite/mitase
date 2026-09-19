@@ -56,6 +56,18 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("oras push", workflow)
         self.assertNotIn("__MITASE_RELEASE_TAG__", workflow)
 
+    def test_release_selection_is_stable_only(self) -> None:
+        workflow = CANDIDATE.read_text(encoding="utf-8")
+        installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
+        release_manifest = (ROOT / "scripts/ci/release_manifest.py").read_text(encoding="utf-8")
+
+        self.assertIn(r're.fullmatch(r"\d+\.\d+\.\d+", version)', workflow)
+        self.assertNotIn("alpha|beta", workflow)
+        self.assertNotIn("alpha", installer)
+        self.assertNotIn("beta", installer)
+        self.assertNotIn("alpha", release_manifest)
+        self.assertNotIn("beta", release_manifest)
+
     def test_candidate_checksum_artifacts_are_unique_per_target(self) -> None:
         workflow = CANDIDATE.read_text(encoding="utf-8")
         self.assertIn('checksum_file="checksums-${{ matrix.target }}.sha256"', workflow)
@@ -90,7 +102,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_release_fallback_uses_the_selected_release_tag(self) -> None:
         installer = INSTALLER.read_text(encoding="utf-8")
-        self.assertIn("tag = filtered[0][6]", installer)
+        self.assertIn("tag = filtered[0][3]", installer)
         self.assertIn('archive_name = f\"mitase-{tag}-{target}.tar.gz\"', installer)
         self.assertNotIn("windows", installer)
 

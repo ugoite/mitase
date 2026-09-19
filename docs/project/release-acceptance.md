@@ -22,7 +22,13 @@ the Mitase executable.
 | Release line | Normal source policy | Required acceptance |
 | --- | --- | --- |
 | `0.1.x` | Dual-source | v2 self-hosted dogfood, v1 fixture loading, canonical graph regression, and exact artifact-resolution regression |
-| `0.2.x` including RCs | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, and the frozen architecture boundary |
+| `0.2.x` | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, and the frozen architecture boundary |
+
+The active release contract is stable tags only. Historical alpha and beta
+tags remain part of the release history, but they are not supported selectors
+or publication channels. A candidate is an internal verification unit and is
+identified by its exact source SHA and artifact digests; it is not a public
+prerelease version.
 
 The 0.1.x candidate is built from the exact merged source SHA. Its workspace
 version and installer default identify the next patch release; the candidate

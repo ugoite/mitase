@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 SCHEMA = "mitase/release-candidate/v1"
-VERSION_PATTERN = re.compile(r"^v\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?$")
+VERSION_PATTERN = re.compile(r"^v\d+\.\d+\.\d+$")
 GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 ARTIFACT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -25,10 +25,7 @@ class CandidateError(ValueError):
 
 def validate_version(version: str) -> None:
     if not VERSION_PATTERN.fullmatch(version):
-        raise CandidateError(
-            "version must be v<major>.<minor>.<patch> with an optional "
-            "alpha or beta prerelease"
-        )
+        raise CandidateError("version must be v<major>.<minor>.<patch> with no prerelease suffix")
 
 
 def validate_source_sha(source_sha: str, repository: Path) -> None:

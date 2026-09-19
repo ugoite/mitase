@@ -12,7 +12,12 @@ from pathlib import Path
 SCRIPT = Path(__file__).with_name("release_candidate.py")
 sys.path.insert(0, str(SCRIPT.parent))
 
-from release_candidate import CandidateError, candidate_id, validate_manifest  # noqa: E402
+from release_candidate import (
+    CandidateError,
+    candidate_id,
+    validate_manifest,
+    validate_version,
+)  # noqa: E402
 
 
 class ReleaseCandidateTests(unittest.TestCase):
@@ -48,6 +53,12 @@ class ReleaseCandidateTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def test_prerelease_versions_are_rejected(self) -> None:
+        for version in ("v0.2.0-alpha.1", "v0.2.0-beta.1", "v0.2.0-rc.1"):
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(CandidateError, "no prerelease suffix"):
+                    validate_version(version)
 
     def test_build_is_deterministic_and_validates_against_the_manifest(self) -> None:
         first = self.repository / "candidate-a.json"
