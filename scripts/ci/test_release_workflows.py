@@ -90,6 +90,26 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("- package-smoke", workflow)
         self.assertNotIn(".zip", workflow)
 
+    def test_v2_smoke_paths_use_the_v2_fixture_and_v1_rejection_contract(self) -> None:
+        workflow = CANDIDATE.read_text(encoding="utf-8")
+        package_smoke = PACKAGE_SMOKE.read_text(encoding="utf-8")
+        installed_smoke = (ROOT / "scripts/ci/installed-binary-smoke.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("ugoite-current-ops-v2", workflow)
+        self.assertIn("v0.2.*", workflow)
+        self.assertIn("fixtures/v1/valid-web-app", package_smoke)
+        self.assertIn("MITASE-SOURCE-001", package_smoke)
+        self.assertIn("migrate", package_smoke)
+        for source in (installed_smoke,):
+            self.assertIn("ugoite-current-ops-v2", source)
+            self.assertIn("fixtures/v1/valid-web-app", source)
+            self.assertIn("MITASE-SOURCE-001", source)
+            self.assertIn("migrate", source)
+        self.assertIn("0.2.*", package_smoke)
+        self.assertIn("0.2.*", installed_smoke)
+
     def test_package_tools_are_present(self) -> None:
         self.assertTrue(PACKAGE.is_file())
         self.assertTrue(PACKAGE_SMOKE.is_file())
