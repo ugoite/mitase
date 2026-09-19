@@ -3274,7 +3274,16 @@ mod tests {
             if entry.file_type().expect("file type").is_dir() {
                 copy_dir(&path, &destination);
             } else {
-                fs::copy(&path, &destination).expect("copy file");
+                let contents = fs::read(&path).expect("read file");
+                if let Ok(text) = String::from_utf8(contents.clone()) {
+                    fs::write(
+                        &destination,
+                        text.replace("schema: mitase/spec/v1", "schema: mitase/authoring/v2"),
+                    )
+                    .expect("copy text file");
+                } else {
+                    fs::write(&destination, contents).expect("copy file");
+                }
             }
         }
     }
@@ -3384,7 +3393,7 @@ mod tests {
         } else {
             ("implementation", "verification")
         };
-        let spec = r#"schema: mitase/spec/v1
+        let spec = r#"schema: mitase/authoring/v2
 kind: requirements
 namespace: test
 category: Verification
@@ -3408,7 +3417,7 @@ requirements:
         .to_string();
         fs::write(tempdir.path().join("spec/requirement.yaml"), spec).expect("requirement");
         let feature = format!(
-            r#"schema: mitase/spec/v1
+            r#"schema: mitase/authoring/v2
 kind: features
 namespace: test
 category: Verification
@@ -3786,7 +3795,7 @@ features:
         fs::write(
             tempdir.path().join("spec/feature.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: features\n",
                 "namespace: test\n",
                 "category: Test\n",
@@ -3864,7 +3873,7 @@ features:
         fs::write(
             root.join("spec/feature.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: features\n",
                 "namespace: sample\n",
                 "category: Sample\n",
@@ -4032,7 +4041,7 @@ features:
         copy_dir(&fixture_root(), current_dir.path());
         fs::write(
             current_dir.path().join("spec/requirement.yaml"),
-            r#"schema: mitase/spec/v1
+            r#"schema: mitase/authoring/v2
 kind: requirements
 namespace: auth
 category: Authentication
@@ -4272,7 +4281,7 @@ requirements:
         let baseline = init_git_repo(tempdir.path());
         fs::write(
             tempdir.path().join("spec/requirement.yaml"),
-            r#"schema: mitase/spec/v1
+            r#"schema: mitase/authoring/v2
 kind: requirements
 namespace: auth
 category: Authentication
@@ -4345,7 +4354,7 @@ requirements:
         fs::write(
             repository.path().join("spec/feature.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: features\n",
                 "namespace: sample\n",
                 "category: Sample\n",
@@ -4485,7 +4494,7 @@ requirements:
         fs::write(
             tempdir.path().join("spec/feature.yaml"),
             concat!(
-                "schema: mitase/spec/v1\n",
+                "schema: mitase/authoring/v2\n",
                 "kind: features\n",
                 "namespace: sample\n",
                 "category: Sample\n",

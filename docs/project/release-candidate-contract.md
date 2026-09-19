@@ -11,11 +11,12 @@ incidental branch or tag. A candidate records the exact source revision and
 the exact bytes selected for publication.
 
 The repository's public version authority is the `version` in the Cargo
-workspace package section of [Cargo.toml](../../Cargo.toml). The Foundation
-Release is `v0.1.0`; the current patch train is prepared as `v0.1.2`. Public
-release tags use plain `v<major>.<minor>.<patch>` SemVer only. Historical alpha
-and beta tags are not active channels. The candidate workflow reads the
-version from the exact source revision it checks out.
+workspace package section of [Cargo.toml](../../Cargo.toml). The stable v0.2.0
+release is the first release on the v2-only source line; the earlier 0.1.x
+dogfood line remains historical. Public release tags use plain
+`v<major>.<minor>.<patch>` SemVer only. Historical alpha and beta tags are not
+active channels. The candidate workflow reads the version from the exact
+source revision it checks out.
 
 ## Manifest
 
@@ -25,14 +26,14 @@ The candidate manifest uses the `mitase/release-candidate/v1` schema:
 {
   "artifacts": [
     {
-      "name": "mitase-v0.1.0-x86_64-unknown-linux-gnu.tar.gz",
+      "name": "mitase-v0.2.0-x86_64-unknown-linux-gnu.tar.gz",
       "sha256": "sha256:<64 lowercase hexadecimal characters>"
     }
   ],
   "candidate_id": "sha256:<64 lowercase hexadecimal characters>",
   "schema": "mitase/release-candidate/v1",
   "source_sha": "<40 lowercase hexadecimal Git commit characters>",
-  "version": "v0.1.0"
+  "version": "v0.2.0"
 }
 ```
 
@@ -86,7 +87,10 @@ mitase-v<version>-aarch64-apple-darwin.tar.gz
 
 An archive contains exactly one file, the executable `mitase`. The candidate
 workflow smoke-tests the exact packaged archive on a native runner by checking
-`mitase --version` and running `mitase check fixtures/acceptance/ugoite-foundation-policy-v1`. The
+`mitase --version` and selecting the acceptance fixture for the release line.
+The v0.2.0 smoke path checks
+`fixtures/acceptance/ugoite-current-ops-v2`, rejects the v1 fixture with
+`MITASE-SOURCE-001`, and verifies the explicit read-only migration output. The
 published `SHA256SUMS` and `release-manifest.json` describe and verify those
 same archive bytes; downstream repositories may pin those immutable version
 and digest values without importing Mitase crates or source.

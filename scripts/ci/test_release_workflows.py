@@ -27,11 +27,29 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse((ROOT / ".release-please-manifest.json").exists())
         self.assertFalse((ROOT / "release-please-config.json").exists())
         installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
-        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.1.3"', installer)
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.0"', installer)
         self.assertNotIn("__MITASE_RELEASE_TAG__", installer)
         candidate = CANDIDATE.read_text(encoding="utf-8")
         self.assertIn('Path("Cargo.toml")', candidate)
         self.assertIn(r"\[workspace\.package\]", candidate)
+
+    def test_v02_is_the_authoritative_stable_release(self) -> None:
+        cargo = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        lock = (ROOT / "Cargo.lock").read_text(encoding="utf-8")
+        installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
+        acceptance = (ROOT / "docs/project/release-acceptance.md").read_text(
+            encoding="utf-8"
+        )
+        release_notes = (ROOT / "docs/project/release-notes-0.2.0.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('version = "0.2.0"', cargo)
+        self.assertEqual(lock.count('version = "0.2.0"'), 9)
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.0"', installer)
+        self.assertIn("`0.2.x` (active)", acceptance)
+        self.assertIn("first stable release", release_notes)
+        self.assertIn("not supported release channels", release_notes)
 
     def test_candidate_requires_source_sha_and_builds_manifest_after_packaging(self) -> None:
         workflow = CANDIDATE.read_text(encoding="utf-8")

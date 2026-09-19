@@ -6,10 +6,9 @@ sidebar_position: 5
 
 # Release train acceptance
 
-Mitase's next patch line is the 0.1.x dogfood release. It keeps the semantic
-core and makes the new authoring and configuration frontends observable in the
-real Mitase corpus. The later 0.2 release candidate closes the canonical v1
-authoring entrance.
+Mitase 0.2.0 is the first stable release on the v2-only source line. The
+earlier 0.1.x line is retained as historical dogfood context; it is not the
+active default release line.
 
 The release candidate workflow runs
 [`check-release-acceptance.sh`](../../scripts/ci/check-release-acceptance.sh)
@@ -21,8 +20,8 @@ the Mitase executable.
 
 | Release line | Normal source policy | Required acceptance |
 | --- | --- | --- |
-| `0.1.x` | Dual-source | v2 self-hosted dogfood, v1 fixture loading, canonical graph regression, and exact artifact-resolution regression |
-| `0.2.x` | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, and the frozen architecture boundary |
+| `0.1.x` (historical) | Dual-source | v2 self-hosted dogfood, v1 fixture loading, canonical graph regression, and exact artifact-resolution regression |
+| `0.2.x` (active) | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, and the frozen architecture boundary |
 
 The active release contract is stable tags only. Historical alpha and beta
 tags remain part of the release history, but they are not supported selectors
@@ -30,8 +29,8 @@ or publication channels. A candidate is an internal verification unit and is
 identified by its exact source SHA and artifact digests; it is not a public
 prerelease version.
 
-The 0.1.x candidate is built from the exact merged source SHA. Its workspace
-version and installer default identify the next patch release; the candidate
+The v0.2.0 candidate is built from the exact merged source SHA. Its workspace
+version and installer default identify the stable release; the candidate
 workflow records the same source SHA and artifact digests in the immutable
 candidate manifest.
 
