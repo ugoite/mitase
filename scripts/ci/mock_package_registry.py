@@ -23,10 +23,9 @@ TARGETS = {
 }
 
 TAG_SETS = {
-    "prerelease": ["v0.0.1-alpha.2", "v0.0.1-alpha.3", "v0.0.2-beta.1"],
-    "mixed": ["v0.0.1-alpha.2", "v0.0.1-alpha.3", "v0.0.2-beta.1", "v0.0.2"],
+    "stable": ["v0.1.0", "v0.1.1", "v0.2.0"],
 }
-DEFAULT_TAG = TAG_SETS["mixed"][2]
+DEFAULT_TAG = TAG_SETS["stable"][2]
 
 
 @dataclass(frozen=True)

@@ -65,7 +65,7 @@ jobs:
           if match is None:
               raise SystemExit("workspace package version is missing")
           version = match.group(1)
-          if not re.fullmatch(r"\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?", version):
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version):
               raise SystemExit(f"unsupported release version: {version}")
           print(f"v{version}")
           PY

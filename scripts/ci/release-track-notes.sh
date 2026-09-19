@@ -11,33 +11,16 @@ require_command() {
   fi
 }
 
-release_track() {
-  local tag="$1"
-
-  case "$tag" in
-    *-alpha.*) printf 'alpha\n' ;;
-    *-beta.*) printf 'beta\n' ;;
-    *) printf 'stable\n' ;;
-  esac
-}
-
 previous_track_tag() {
   local repository="$1"
   local current_tag="$2"
-  local track="$3"
   gh api "repos/${repository}/releases?per_page=100" | python3 -c '
 import json
+import re
 import sys
 
-current_tag, desired_track = sys.argv[1:3]
+current_tag = sys.argv[1]
 releases = json.load(sys.stdin)
-
-def track_for(tag: str) -> str:
-    if "-alpha." in tag:
-        return "alpha"
-    if "-beta." in tag:
-        return "beta"
-    return "stable"
 
 for release in releases:
     tag = release.get("tag_name") or ""
@@ -45,11 +28,11 @@ for release in releases:
         continue
     if release.get("draft"):
         continue
-    if track_for(tag) != desired_track:
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         continue
     print(tag)
     break
-' "$current_tag" "$track"
+' "$current_tag"
 }
 
 generate_release_notes() {
@@ -88,16 +71,15 @@ main() {
     exit 1
   fi
 
-  local track previous_tag notes_file
-  track="$(release_track "$tag")"
-  previous_tag="$(previous_track_tag "$repository" "$tag" "$track")"
+  local previous_tag notes_file
+  previous_tag="$(previous_track_tag "$repository" "$tag")"
   notes_file="$(mktemp)"
 
   generate_release_notes "$repository" "$tag" "$previous_tag" >"$notes_file"
   gh release edit "$tag" --notes-file "$notes_file"
 
   rm -f "$notes_file"
-  echo "updated ${tag} release notes using the ${track} track"
+  echo "updated ${tag} release notes using stable release history"
 }
 
 main "$@"

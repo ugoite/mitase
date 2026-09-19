@@ -19,7 +19,7 @@ SUPPORTED_TARGETS = {
     "x86_64-apple-darwin",
     "x86_64-unknown-linux-gnu",
 }
-VERSION_PATTERN = re.compile(r"^v\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?$")
+VERSION_PATTERN = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
 def canonical_bytes(payload: dict[str, object]) -> bytes:

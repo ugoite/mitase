@@ -75,14 +75,18 @@ normalize_version_selector() {
   local version="${MITASE_VERSION:-$(resolve_default_release_tag)}"
 
   case "$version" in
-    latest | alpha | beta | stable)
-      printf '%s\n' "$version"
-      ;;
-    v*)
+    latest | stable)
       printf '%s\n' "$version"
       ;;
     *)
-      printf 'v%s\n' "$version"
+      if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        printf '%s\n' "$version"
+      elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        printf 'v%s\n' "$version"
+      else
+        echo "unsupported version selector: $version" >&2
+        return 1
+      fi
       ;;
   esac
 }
@@ -225,8 +229,8 @@ import sys
 selector, target = sys.argv[1], sys.argv[2]
 payload = json.load(sys.stdin)
 tags = payload.get("tags") or []
-pattern = re.compile(r"^(v\d+\.\d+\.\d+(?:-(alpha|beta)\.\d+)?)__(.+)$")
-version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$")
+pattern = re.compile(r"^(v\d+\.\d+\.\d+)__(.+)$")
+version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 
 candidates = []
 for tag in tags:
@@ -235,7 +239,7 @@ for tag in tags:
         continue
 
     version = match.group(1)
-    tag_target = match.group(3)
+    tag_target = match.group(2)
     if tag_target != target:
         continue
 
@@ -244,17 +248,11 @@ for tag in tags:
         continue
 
     major, minor, patch = (int(version_match.group(index)) for index in (1, 2, 3))
-    prerelease_type = version_match.group(4)
-    prerelease_number = int(version_match.group(5) or 0)
-    prerelease_rank = {"alpha": 0, "beta": 1, None: 2}[prerelease_type]
     candidates.append(
         (
             major,
             minor,
             patch,
-            prerelease_rank,
-            prerelease_number,
-            prerelease_type,
             version,
             tag,
         )
@@ -267,14 +265,8 @@ if selector.startswith("v"):
     print(expected)
     raise SystemExit(0)
 
-if selector == "latest":
+if selector in {"latest", "stable"}:
     filtered = candidates
-elif selector == "stable":
-    filtered = [candidate for candidate in candidates if candidate[5] is None]
-elif selector == "alpha":
-    filtered = [candidate for candidate in candidates if candidate[5] == "alpha"]
-elif selector == "beta":
-    filtered = [candidate for candidate in candidates if candidate[5] == "beta"]
 else:
     raise SystemExit(f"unsupported version selector: {selector}")
 
@@ -283,8 +275,8 @@ if not filtered:
         f"no package tag matched selector {selector!r} for target {target}"
     )
 
-filtered.sort(key=lambda candidate: candidate[:5], reverse=True)
-print(filtered[0][7])
+filtered.sort(key=lambda candidate: candidate[:3], reverse=True)
+print(filtered[0][4])
 ' "$selector" "$target"
 }
 
@@ -368,7 +360,7 @@ import sys
 
 selector, target = sys.argv[1], sys.argv[2]
 releases = json.load(sys.stdin)
-version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$")
+version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 
 candidates = []
 for release in releases:
@@ -383,41 +375,29 @@ for release in releases:
         continue
 
     major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
-    prerelease_type = match.group(4)
-    prerelease_number = int(match.group(5) or 0)
-    prerelease_rank = {"alpha": 0, "beta": 1, None: 2}[prerelease_type]
     candidates.append(
         (
             major,
             minor,
             patch,
-            prerelease_rank,
-            prerelease_number,
-            prerelease_type,
             tag,
             release,
         )
     )
 
 if selector.startswith("v"):
-    filtered = [candidate for candidate in candidates if candidate[6] == selector]
-elif selector == "latest":
+    filtered = [candidate for candidate in candidates if candidate[3] == selector]
+elif selector in {"latest", "stable"}:
     filtered = candidates
-elif selector == "stable":
-    filtered = [candidate for candidate in candidates if candidate[5] is None]
-elif selector == "alpha":
-    filtered = [candidate for candidate in candidates if candidate[5] == "alpha"]
-elif selector == "beta":
-    filtered = [candidate for candidate in candidates if candidate[5] == "beta"]
 else:
     raise SystemExit(f"unsupported version selector: {selector}")
 
 if not filtered:
     raise SystemExit(f"no release matched selector {selector!r}")
 
-filtered.sort(key=lambda candidate: candidate[:5], reverse=True)
-tag = filtered[0][6]
-release = filtered[0][7]
+filtered.sort(key=lambda candidate: candidate[:3], reverse=True)
+tag = filtered[0][3]
+release = filtered[0][4]
 
 archive_name = f"mitase-{tag}-{target}.tar.gz"
 for asset in release.get("assets") or []:

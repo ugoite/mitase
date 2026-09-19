@@ -9,7 +9,7 @@ needed to understand an unresolved result.
 
 ```bash
 RELEASE="$(gh release view --json tagName -q .tagName --repo ugoite/mitase)"
-curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/install-mitase.sh" | env MITASE_VERSION=alpha bash
+curl -fsSL "https://github.com/ugoite/mitase/releases/download/${RELEASE}/install-mitase.sh" | bash
 mitase check .
 ```
 

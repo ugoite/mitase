@@ -178,11 +178,10 @@ main() {
   binary_name="$(resolve_binary_name "$target")"
   default_version="$(resolve_repo_release_tag)"
 
-  run_install_case "prerelease" "latest" "v0.0.2-beta.1" "$target" "$binary_name"
-  run_install_case "prerelease" "alpha" "v0.0.1-alpha.3" "$target" "$binary_name"
-  run_install_case "prerelease" "v0.0.1-alpha.2" "v0.0.1-alpha.2" "$target" "$binary_name"
-  run_install_case "mixed" "stable" "v0.0.2" "$target" "$binary_name"
-  run_install_case "mixed" "" "$default_version" "$target" "$binary_name"
+  run_install_case "stable" "latest" "v0.2.0" "$target" "$binary_name"
+  run_install_case "stable" "stable" "v0.2.0" "$target" "$binary_name"
+  run_install_case "stable" "0.1.1" "v0.1.1" "$target" "$binary_name"
+  run_install_case "stable" "" "$default_version" "$target" "$binary_name"
   run_unsupported_target_case
 }
 
