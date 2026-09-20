@@ -276,7 +276,9 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Install Node surface dependencies
-        run: scripts/ci/bootstrap-contributor-tooling.sh --all
+        run: |
+          npm ci --prefix website --no-audit --no-fund
+          npm ci --prefix editors/vscode --no-audit --no-fund
 
       - name: Run release-grade repository gate
         run: mise run ci
