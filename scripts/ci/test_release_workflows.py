@@ -59,6 +59,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "ref: ${{ inputs.source_sha }}",
             "ref: ${{ needs.preflight.outputs.source_sha }}",
             "rustup component add rustfmt clippy",
+            "scripts/ci/bootstrap-contributor-tooling.sh --all",
             "release_candidate.py build",
             "release_candidate.py validate",
             "name: mitase-release-candidate",
