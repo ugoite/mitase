@@ -27,6 +27,8 @@ pub struct ProjectConfig {
     pub validation: ValidationConfig,
     #[serde(default)]
     pub verification: VerificationConfig,
+    #[serde(default)]
+    pub review: ReviewConfig,
 }
 
 /// Strict user-authored configuration. Optional sections are resolved into a
@@ -43,6 +45,8 @@ pub struct ProjectConfigInput {
     pub validation: ValidationConfigInput,
     #[serde(default)]
     pub verification: Option<VerificationConfig>,
+    #[serde(default)]
+    pub review: Option<ReviewConfig>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -187,6 +191,37 @@ impl ProjectConfigInput {
                 }
             }
         };
+        let review = self.review.unwrap_or_default();
+        let mut review_rule_ids = BTreeSet::new();
+        for rule in &review.always {
+            if rule.id.trim().is_empty()
+                || !review_rule_ids.insert(rule.id.as_str())
+                || rule.paths.is_empty()
+                || rule.items.is_empty()
+            {
+                return Err(
+                    "review.always rules require unique non-empty ids, paths, and items".into(),
+                );
+            }
+            for pattern in &rule.paths {
+                if pattern.0.trim().is_empty()
+                    || pattern.0.starts_with('/')
+                    || pattern.0.contains('\\')
+                    || pattern.0.split('/').any(|segment| segment == "..")
+                {
+                    return Err(format!(
+                        "review.always rule {} has invalid repository-relative path pattern {:?}",
+                        rule.id, pattern.0
+                    ));
+                }
+                globset::Glob::new(&pattern.0).map_err(|error| {
+                    format!(
+                        "review.always rule {} has invalid path pattern {:?}: {error}",
+                        rule.id, pattern.0
+                    )
+                })?;
+            }
+        }
         Ok(EffectiveProjectConfig {
             config: ProjectConfig {
                 schema: CONFIG_SCHEMA.into(),
@@ -194,6 +229,7 @@ impl ProjectConfigInput {
                 inventory,
                 validation,
                 verification,
+                review,
             },
             applied_conventions,
         })
@@ -611,6 +647,22 @@ pub struct VerificationConfig {
     #[serde(default)]
     pub runners: BTreeMap<String, VerificationRunner>,
 }
+/// Additional specification items to include in review reports when any
+/// configured repository path pattern matches a changed path.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewConfig {
+    #[serde(default)]
+    pub always: Vec<AlwaysReviewRule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AlwaysReviewRule {
+    pub id: String,
+    pub paths: Vec<RepoPathPattern>,
+    pub items: Vec<String>,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerificationRunner {
@@ -754,6 +806,35 @@ verification: { runners: {} }
             effective
                 .applied_conventions
                 .contains(&"inventory.providers=repository-discovery".to_string())
+        );
+    }
+
+    #[test]
+    fn review_rules_are_optional_strict_and_validate_path_patterns() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let source = r#"
+schema: mitase/config/v1
+review:
+  always:
+    - id: frontend
+      paths: ["web/**"]
+      items: [POL-006, PHIL-INTERACTION-001]
+"#;
+        let config = EffectiveProjectConfig::from_source(&root, source).expect("review config");
+        assert_eq!(config.review.always[0].id, "frontend");
+        assert_eq!(config.review.always[0].items.len(), 2);
+        assert!(
+            EffectiveProjectConfig::from_source(
+                &root,
+                "schema: mitase/config/v1\nreview: { unknown: true }\n"
+            )
+            .is_err()
+        );
+        let invalid_pattern = source.replace("web/**", "[");
+        assert!(
+            EffectiveProjectConfig::from_source(&root, &invalid_pattern)
+                .unwrap_err()
+                .contains("invalid path pattern")
         );
     }
 

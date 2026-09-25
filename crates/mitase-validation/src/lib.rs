@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+pub mod pr_context;
 mod readiness;
 use anyhow::{Context, Result, bail};
 use mitase_diagnostics::{

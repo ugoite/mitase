@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 mod lsp;
 pub mod output;
+mod pr_context;
 pub mod query;
 mod render;
 
@@ -68,6 +69,7 @@ enum CommandKind {
     Query(QueryArgs),
     Show(ShowArgs),
     List(ListArgs),
+    Report(ReportArgs),
     Lsp,
 }
 #[derive(Debug, Args)]
@@ -152,6 +154,29 @@ struct ListArgs {
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
 }
+#[derive(Debug, Args)]
+struct ReportArgs {
+    #[command(subcommand)]
+    command: ReportCommand,
+}
+#[derive(Debug, Subcommand)]
+enum ReportCommand {
+    Pr {
+        #[arg(long)]
+        base: String,
+        #[arg(long)]
+        head: String,
+        #[arg(default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "json")]
+        format: ReportFormat,
+    },
+}
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ReportFormat {
+    Json,
+    Markdown,
+}
 #[derive(Debug, Subcommand)]
 enum ReadinessCommand {
     Report {
@@ -206,6 +231,7 @@ pub fn run() -> Result<i32> {
         CommandKind::Query(args) => run_query(args),
         CommandKind::Show(args) => run_show(args),
         CommandKind::List(args) => run_list(args),
+        CommandKind::Report(args) => run_report(args),
         CommandKind::Lsp => {
             lsp::run_lsp_server()?;
             Ok(0)
@@ -225,6 +251,109 @@ fn run_config(args: ConfigArgs) -> Result<i32> {
         ConfigFormat::Json => println!("{}", serde_json::to_string_pretty(&effective)?),
     }
     Ok(0)
+}
+
+fn run_report(args: ReportArgs) -> Result<i32> {
+    let ReportCommand::Pr {
+        base,
+        head,
+        workspace,
+        format,
+    } = args.command;
+    let repo = git_output(&workspace, &["rev-parse", "--show-toplevel"])?;
+    let repo = PathBuf::from(String::from_utf8(repo)?.trim());
+    let base_sha = resolve_commit(&repo, &base)?;
+    let head_sha = resolve_commit(&repo, &head)?;
+    let base_snapshot = snapshot_commit(&repo, &base_sha)?;
+    let head_snapshot = snapshot_commit(&repo, &head_sha)?;
+    let base_workspace = SpecWorkspace::load(base_snapshot.path())?;
+    let head_workspace = SpecWorkspace::load(head_snapshot.path())?;
+    let base_index = base_workspace.index()?;
+    let head_index = head_workspace.index()?;
+    let changes = pr_context::changed_paths(&repo, &base_sha, &head_sha)?;
+    let semantic_changes =
+        mitase_inventory::semantic_diff(&base_index.artifact_units, &head_index.artifact_units);
+    let report = mitase_validation::pr_context::build_pr_context_report(
+        mitase_validation::pr_context::PrContextSide {
+            revision: &base_sha,
+            workspace: &base_workspace,
+            index: &base_index,
+        },
+        mitase_validation::pr_context::PrContextSide {
+            revision: &head_sha,
+            workspace: &head_workspace,
+            index: &head_index,
+        },
+        &changes,
+        &semantic_changes,
+    );
+    match format {
+        ReportFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        ReportFormat::Markdown => print!("{}", pr_context::render_markdown(&report)),
+    }
+    Ok(0)
+}
+
+fn resolve_commit(repo: &Path, revision: &str) -> Result<String> {
+    let expression = format!("{revision}^{{commit}}");
+    let output = git_output(
+        repo,
+        &["rev-parse", "--verify", "--end-of-options", &expression],
+    )?;
+    Ok(String::from_utf8(output)?.trim().to_owned())
+}
+
+fn snapshot_commit(repo: &Path, revision: &str) -> Result<tempfile::TempDir> {
+    let snapshot = tempfile::tempdir().context("create commit snapshot directory")?;
+    let mut archive = Command::new("git")
+        .args(["archive", "--format=tar", revision])
+        .current_dir(repo)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("start git archive for commit snapshot")?;
+    let mut unpack = Command::new("tar")
+        .args(["-xf", "-", "-C"])
+        .arg(snapshot.path())
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("start tar to unpack commit snapshot")?;
+    let mut archive_output = archive.stdout.take().context("open git archive output")?;
+    let mut unpack_input = unpack.stdin.take().context("open snapshot archive input")?;
+    std::io::copy(&mut archive_output, &mut unpack_input)?;
+    drop(unpack_input);
+    let unpack_result = unpack.wait_with_output()?;
+    let archive_result = archive.wait_with_output()?;
+    if !archive_result.status.success() {
+        bail!(
+            "git archive failed: {}",
+            String::from_utf8_lossy(&archive_result.stderr)
+        );
+    }
+    if !unpack_result.status.success() {
+        bail!(
+            "tar failed to unpack commit snapshot: {}",
+            String::from_utf8_lossy(&unpack_result.stderr)
+        );
+    }
+    Ok(snapshot)
+}
+
+fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .context("run git")?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(output.stdout)
 }
 fn run_migrate(args: MigrateArgs) -> Result<i32> {
     if !args.stdout {

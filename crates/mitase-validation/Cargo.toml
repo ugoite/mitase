@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+globset.workspace = true
 serde.workspace = true
 mitase-diagnostics = { path = "../mitase-diagnostics" }
 mitase-inventory = { path = "../mitase-inventory" }

@@ -756,6 +756,7 @@ dependencies = [
 name = "mitase-project-model"
 version = "0.2.0"
 dependencies = [
+ "globset",
  "mitase-spec-model",
  "serde",
  "serde_yaml",
@@ -774,6 +775,7 @@ name = "mitase-validation"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "globset",
  "mitase-diagnostics",
  "mitase-inventory",
  "mitase-project-model",

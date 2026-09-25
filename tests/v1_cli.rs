@@ -81,6 +81,214 @@ fn first_run_short_authoring_fixture_passes_check() {
         .success();
 }
 
+#[test]
+fn pr_context_report_uses_explicit_commits_and_emits_json_and_markdown() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/acceptance/ugoite-current-ops-v2");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    let config_path = temp.path().join("mitase.yaml");
+    let mut config = fs::read_to_string(&config_path)
+        .unwrap()
+        .replace("executable: cargo", "executable: report-must-not-run");
+    config.push_str(
+        "\nreview:\n  always:\n    - id: operations\n      paths: [\"crates/ugoite-cli/**\"]\n      items: [POL-002, PHIL-000]\n",
+    );
+    fs::write(&config_path, config).unwrap();
+    let requirement_path = temp.path().join("spec/requirements.yaml");
+    initialize_fixture_git(temp.path());
+    let git = |args: &[&str]| {
+        let output = ProcessCommand::new("git")
+            .args(args)
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    let base = git(&["rev-parse", "HEAD"]);
+    let changed_path = "crates/ugoite-cli/src/config.rs";
+    let source_path = temp.path().join(changed_path);
+    let source = fs::read_to_string(&source_path)
+        .unwrap()
+        .replace("config_path", "config_path_renamed");
+    fs::write(&source_path, source).unwrap();
+    git(&["add", changed_path]);
+    fs::write(temp.path().join("new-unbound.md"), "unbound artifact\n").unwrap();
+    git(&["add", "new-unbound.md"]);
+    let requirement = fs::read_to_string(&requirement_path).unwrap();
+    let marker = "            claims:\n              - kind: verifies\n                criterion: REQ-OPS-006#criterion.cli-surface\n                covers: [FEAT-OPS-001#binding.implementation/target.config]\n                runner:\n                  runner: cargo-test-integration\n                  arguments:\n                    package: ugoite-cli\n                    harness: test_cli_req_ops_006_config_helpers\n                    test: test_cli_req_ops_006_config_path_precedence_and_home_fallback\n";
+    assert!(
+        requirement.contains(marker),
+        "verification claim fixture must exist"
+    );
+    fs::write(
+        &requirement_path,
+        requirement.replace(marker, "            claims: []\n"),
+    )
+    .unwrap();
+    git(&["add", "spec/requirements.yaml"]);
+    git(&["commit", "-qm", "change implementation fixture"]);
+    let head = git(&["rev-parse", "HEAD"]);
+    let before = fs::read(&source_path).unwrap();
+    let before_requirement = fs::read(&requirement_path).unwrap();
+    let before_config = fs::read(&config_path).unwrap();
+    fs::write(temp.path().join("README.md"), "working tree only\n").unwrap();
+
+    let json = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "report", "pr", "--base", &base, "--head", &head, "--format", "json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        json.status.success(),
+        "{}",
+        String::from_utf8_lossy(&json.stderr)
+    );
+    let repeated = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "report", "pr", "--base", &base, "--head", &head, "--format", "json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(repeated.status.success());
+    assert_eq!(
+        json.stdout, repeated.stdout,
+        "identical commit pairs must render deterministically"
+    );
+    let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(report["schema_version"], "mitase/cli/v1");
+    assert_eq!(report["revision"]["base_sha"], base);
+    assert_eq!(report["revision"]["head_sha"], head);
+    assert!(
+        report["changed_artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["path"] == changed_path)
+    );
+    assert!(
+        report["changed_artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| {
+                item["symbol"] == "config_path_renamed"
+                    && item["base_identity"]
+                        .as_str()
+                        .is_some_and(|identity| identity.ends_with("::config_path"))
+                    && item["head_identity"]
+                        .as_str()
+                        .is_some_and(|identity| identity.ends_with("::config_path_renamed"))
+            })
+    );
+    assert!(
+        report["evidence_gaps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|gap| { gap["kind"] == "unbound-artifact" && gap["path"] == "new-unbound.md" })
+    );
+    assert!(
+        report["verification_evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["evidence_lost"] == true),
+        "report: {}",
+        serde_json::to_string_pretty(&report).unwrap()
+    );
+    assert_eq!(
+        report["verification_evidence"][0]["claim"]["kind"],
+        "verifies"
+    );
+    assert_eq!(
+        report["verification_evidence"][0]["runner"]["id"],
+        "cargo-test-integration"
+    );
+    assert_eq!(
+        report["verification_evidence"][0]["runner"]["base"]["executable"],
+        "report-must-not-run"
+    );
+    assert_eq!(
+        report["verification_evidence"][0]["base_assessment"]["status"],
+        "valid"
+    );
+    assert!(report["verification_evidence"][0]["base_assessment"]["covers"].is_array());
+    let policy = report["related_specifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "POL-002")
+        .unwrap();
+    assert!(
+        policy["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "upstream")
+    );
+    assert!(
+        policy["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "always")
+    );
+    let requirement = report["related_specifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "REQ-OPS-006")
+        .unwrap();
+    assert!(
+        requirement["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "direct"),
+        "report: {}",
+        serde_json::to_string_pretty(&report).unwrap()
+    );
+    assert!(
+        !report["changed_artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["path"] == "README.md")
+    );
+
+    let markdown = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "report", "pr", "--base", &base, "--head", &head, "--format", "markdown",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        markdown.status.success(),
+        "{}",
+        String::from_utf8_lossy(&markdown.stderr)
+    );
+    let markdown = String::from_utf8_lossy(&markdown.stdout);
+    assert!(markdown.contains("## Direct Impact"));
+    assert!(markdown.contains("## Evidence Gaps"));
+    assert!(markdown.contains(changed_path));
+    assert_eq!(fs::read(source_path).unwrap(), before);
+    assert_eq!(fs::read(requirement_path).unwrap(), before_requirement);
+    assert_eq!(fs::read(config_path).unwrap(), before_config);
+}
+
 #[derive(Debug, Deserialize)]
 struct CurrentUgoiteCorpus {
     source: CurrentUgoiteSource,
@@ -397,6 +605,7 @@ fn cli_help_contract_fixture_matches_the_current_read_only_surface() {
             "check" => vec!["check", "--help"],
             "validate-change" => vec!["validate", "change", "--help"],
             "readiness-report" => vec!["readiness", "report", "--help"],
+            "report-pr" => vec!["report", "pr", "--help"],
             "list" => vec!["list", "--help"],
             other => panic!("unsupported help fixture command: {other}"),
         };

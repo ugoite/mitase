@@ -22,6 +22,14 @@ same level so consumers can select the contract before reading a payload.
 | `list` | `{ schema_version, items, unverified_criteria }` |
 | `readiness report` | `{ schema_version, target, inventory, verification }` |
 
+`mitase report pr --base <commit> --head <commit>` accepts two commits already
+present in the same repository and defaults to JSON. Its JSON object includes
+the normal `schema_version: "mitase/cli/v1"` envelope field and the independent
+`contract_version: "mitase/pr-context-report/v1"`. The command reads archived
+commit snapshots, does not fetch missing commits, and ignores uncommitted
+working-tree changes. It reports declared verification state; it never runs a
+test or configured verifier.
+
 The read models use the canonical specification identifiers and exact relation
 references. Their arrays are deterministic for the same workspace and command
 arguments.

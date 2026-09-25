@@ -9,3 +9,4 @@ check|--format <FORMAT>
 validate-change|--format <FORMAT>
 readiness-report|--format <FORMAT>
 list|--unverified-criteria
+report-pr|--base <BASE>
