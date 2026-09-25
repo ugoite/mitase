@@ -45,7 +45,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         )
 
         self.assertIn('version = "0.2.1"', cargo)
-        self.assertEqual(lock.count('version = "0.2.1"'), 9)
+        workspace_versions = re.findall(
+            r'(?m)^name = "mitase(?:-[^"]+)?"\nversion = "0.2.1"$', lock
+        )
+        self.assertEqual(len(workspace_versions), 9)
         self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.1"', installer)
         self.assertIn("`0.2.x` (active)", acceptance)
         self.assertIn("first stable release", release_notes)
