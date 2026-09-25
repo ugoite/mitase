@@ -141,3 +141,23 @@ Cross-language dependency scope is declared in Feature contracts, not inferred
 from import text. A binding with role `generated` must give each output a
 `generated-from` claim containing exact source target references. Generated
 artifacts remain derived context and direct edits are rejected by validation.
+
+## Review context rules
+
+The optional `review.always` section adds selected specification item IDs to a
+PR Context Report when a changed repository path matches one of the rule's
+patterns:
+
+```yaml
+review:
+  always:
+    - id: frontend-review
+      paths: ["web/src/**"]
+      items: [POL-006, PHIL-INTERACTION-001]
+```
+
+Patterns are validated when the effective configuration is loaded. Item IDs
+must resolve in the specification graph; unresolved IDs are reported as
+evidence gaps instead of being ignored. A matching rule contributes a display
+reason and its path/rule evidence, but does not declare a specification
+relation or imply direct impact. See the [PR Context Report guide](./pr-context-report.md).

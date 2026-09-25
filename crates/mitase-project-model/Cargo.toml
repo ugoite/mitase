@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+globset.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 mitase-spec-model = { path = "../mitase-spec-model" }

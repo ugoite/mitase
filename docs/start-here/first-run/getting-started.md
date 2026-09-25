@@ -23,6 +23,7 @@ The normal v1 CLI surface is specification-only:
 - `query`
 - `show`
 - `list`
+- `report pr`
 
 Execution and delivery tooling is external to the Mitase CLI. See the
 [Re-Foundation freeze](../../project/mitase-re-foundation-freeze.md) before

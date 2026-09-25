@@ -18,4 +18,6 @@ real repository, and where to look when the graph is blocked.
   failures.
 - [Structured diagnostics](./diagnostics.md) — inspect the shared diagnostic
   contract used by validation and integrations.
+- [PR Context Report](./pr-context-report.md) — trace changed commit artifacts
+  to specification responsibilities and declared verification evidence.
 - [Migration](./migration.md) — breaking changes between pre-v1 alpha releases.
