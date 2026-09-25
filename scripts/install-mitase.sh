@@ -6,7 +6,7 @@ set -euo pipefail
 DEFAULT_REPOSITORY="ugoite/mitase"
 DEFAULT_PACKAGE_HOST="ghcr.io"
 DEFAULT_PACKAGE_SCHEME="https"
-DEFAULT_VERSION_SELECTOR="v0.2.0"
+DEFAULT_VERSION_SELECTOR="v0.2.1"
 tmp_dir=""
 
 cleanup_tmp_dir() {
