@@ -305,25 +305,14 @@ fn resolve_commit(repo: &Path, revision: &str) -> Result<String> {
 
 fn snapshot_commit(repo: &Path, revision: &str) -> Result<tempfile::TempDir> {
     let snapshot = tempfile::tempdir().context("create commit snapshot directory")?;
-    let mut archive = Command::new("git")
+    let archive_file = tempfile::NamedTempFile::new().context("create commit archive file")?;
+    let archive = Command::new("git")
         .args(["archive", "--format=tar", revision])
         .current_dir(repo)
-        .stdout(std::process::Stdio::piped())
+        .stdout(archive_file.reopen()?)
         .stderr(std::process::Stdio::piped())
         .spawn()
         .context("start git archive for commit snapshot")?;
-    let mut unpack = Command::new("tar")
-        .args(["-xf", "-", "-C"])
-        .arg(snapshot.path())
-        .stdin(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .context("start tar to unpack commit snapshot")?;
-    let mut archive_output = archive.stdout.take().context("open git archive output")?;
-    let mut unpack_input = unpack.stdin.take().context("open snapshot archive input")?;
-    std::io::copy(&mut archive_output, &mut unpack_input)?;
-    drop(unpack_input);
-    let unpack_result = unpack.wait_with_output()?;
     let archive_result = archive.wait_with_output()?;
     if !archive_result.status.success() {
         bail!(
@@ -331,6 +320,13 @@ fn snapshot_commit(repo: &Path, revision: &str) -> Result<tempfile::TempDir> {
             String::from_utf8_lossy(&archive_result.stderr)
         );
     }
+    let unpack_result = Command::new("tar")
+        .args(["-xf"])
+        .arg(archive_file.path())
+        .args(["-C"])
+        .arg(snapshot.path())
+        .output()
+        .context("unpack commit snapshot")?;
     if !unpack_result.status.success() {
         bail!(
             "tar failed to unpack commit snapshot: {}",
