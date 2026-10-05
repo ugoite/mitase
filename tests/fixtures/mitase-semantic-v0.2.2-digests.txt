@@ -1,0 +1,15 @@
+# Semantic serde_yaml digests generated from the v0.2.2 Mitase corpus.
+# The regression test compares these digests with the schema-less semantic
+# projection (SpecDocument with only the top-level schema field removed)
+# derived from the checked-in mitase/authoring/v2 sources.
+da0a2c842937de4c841d52773ae8bc42a23aa2f6e268a1c1ef929abfdeb38f4d  docs/mitase/features/capabilities/core.yaml
+5e3c2a92ee42bc8b1cef6957d3b480d4bafd785d5d1ed3ec2d42ce078db87e10  docs/mitase/features/capabilities/surfaces.yaml
+b567338a59b7732ad9355ba22b756f2e36bdff7746aad845967bfd57fba2ebaa  docs/mitase/features/public-entrypoints/code-diagnostics.yaml
+d678034b30360e87a1871d80b2c5c30434cd25060b92a975d39301abde53fdb6  docs/mitase/features/public-entrypoints/inventory.yaml
+fdd0f4e44d9c3fa474f22239b4f5e7ad33dbd2a87ab38680c6bc6483160b8c3b  docs/mitase/features/public-entrypoints/spec-model.yaml
+15fe982ec9a3ea441e7ec81964d4e3af030ac8deb8f12de570f8cb591686f2cc  docs/mitase/features/public-entrypoints/validation.yaml
+b9ad70cdde6a3e53554e28f41ba819ef2042972af7908f266a5757f2a68e524c  docs/mitase/features/public-entrypoints/workspace-loading.yaml
+35dc53ea8e068f10791d3b10f4eb9af7b0d0f0317ca7c3fd14ed1157fde51d20  docs/mitase/features/public-entrypoints/workspace-resolution.yaml
+cda6ef02b9cf95f3e57c433bb9aede43da5f480a5828646cf426980c40cb1d31  docs/mitase/philosophies/foundation.yaml
+152b546995457b26f2c471c187f1e8c6770d14baf7a8d4b4f680e8211460f3b1  docs/mitase/policies/delivery.yaml
+89a2d6278bd16adf23da4e4c2fe60c310f44084e7c4badf42fd3d5ae780d5525  docs/mitase/requirements/capability-contracts.yaml

@@ -1654,6 +1654,73 @@ fn mitase_authoring_v2_preserves_the_pre_migration_canonical_graph() {
     assert_eq!(actual, expected);
 }
 
+fn semantic_projection_yaml(document: &SpecDocument) -> String {
+    let value = serde_yaml::to_value(document).expect("document value");
+    let mut mapping = match value {
+        serde_yaml::Value::Mapping(mapping) => mapping,
+        other => panic!("unexpected document shape: {other:?}"),
+    };
+    let removed = mapping.remove(serde_yaml::Value::String("schema".to_owned()));
+    assert_eq!(
+        removed,
+        Some(serde_yaml::Value::String("mitase/spec/v1".to_owned())),
+        "semantic projection strips only the legacy canonical schema marker"
+    );
+    assert!(
+        !mapping.contains_key(serde_yaml::Value::String("schema".to_owned())),
+        "semantic projection must not retain a schema field"
+    );
+    let semantic =
+        serde_yaml::to_string(&serde_yaml::Value::Mapping(mapping)).expect("semantic projection");
+    assert!(
+        !semantic.contains("schema: mitase/spec/v1"),
+        "semantic projection must not contain the legacy schema marker"
+    );
+    semantic
+}
+
+#[test]
+fn mitase_authoring_v2_preserves_v022_semantic_graph() {
+    let workspace = SpecWorkspace::load(".").expect("Mitase workspace");
+    let expected = fs::read_to_string("tests/fixtures/mitase-semantic-v0.2.2-digests.txt")
+        .expect("semantic graph baseline")
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            let (digest, path) = line.split_once("  ").expect("digest fixture entry");
+            (path.to_owned(), digest.to_owned())
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let actual = workspace
+        .documents
+        .iter()
+        .map(|loaded| {
+            let relative = loaded
+                .path
+                .strip_prefix(&workspace.root)
+                .expect("document under workspace root")
+                .to_string_lossy()
+                .into_owned();
+            let semantic = semantic_projection_yaml(&loaded.document);
+            assert!(
+                !semantic.contains("schema: mitase/spec/v1"),
+                "semantic projection must not contain the legacy schema marker"
+            );
+            let mut hasher = Sha256::new();
+            hasher.update(semantic.as_bytes());
+            let digest = hasher.finalize();
+            let digest = digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            (relative, digest)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(actual, expected);
+}
+
 #[test]
 fn self_hosted_config_preserves_the_exact_artifact_resolution_baseline() {
     let workspace = SpecWorkspace::load(".").expect("Mitase workspace");
