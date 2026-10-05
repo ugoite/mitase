@@ -3,7 +3,7 @@ use anyhow::{Result, bail};
 use clap::ValueEnum;
 use mitase_spec_model::{
     ArtifactBinding, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
-    LocalAnchorKind, SpecAnchor, SpecDocument, SpecId, TargetClaim,
+    LocalAnchorKind, SemanticDocument, SpecAnchor, SpecId, TargetClaim,
 };
 use mitase_validation::{
     VerificationAssessment, VerificationAssessmentReason, VerificationAssessmentStatus,
@@ -714,7 +714,7 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
     let mut records = Vec::new();
     for loaded in &workspace.documents {
         match &loaded.document {
-            SpecDocument::Philosophies {
+            SemanticDocument::Philosophies {
                 namespace,
                 category,
                 philosophies,
@@ -737,7 +737,7 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
                     ));
                 }
             }
-            SpecDocument::Policies {
+            SemanticDocument::Policies {
                 namespace,
                 category,
                 policies,
@@ -760,7 +760,7 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
                     ));
                 }
             }
-            SpecDocument::Requirements {
+            SemanticDocument::Requirements {
                 namespace,
                 category,
                 requirements,
@@ -783,7 +783,7 @@ fn item_records(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<ItemRecord>
                     ));
                 }
             }
-            SpecDocument::Features {
+            SemanticDocument::Features {
                 namespace,
                 category,
                 features,

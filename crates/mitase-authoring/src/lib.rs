@@ -3,8 +3,8 @@
 use mitase_spec_model::{
     ArtifactBinding, ArtifactTarget, BindingRole, BoundTargetRef, Criterion, ExactSelector,
     Feature, ItemStatus, LocalAnchorKind, LocalId, Philosophy, Policy, Priority, RepoPath,
-    Requirement as CanonicalRequirement, SPEC_SCHEMA, SpecAnchor, SpecDocument, SpecId,
-    TargetClaim, VerificationRunnerRef,
+    Requirement as CanonicalRequirement, SemanticDocument, SpecAnchor, SpecId, TargetClaim,
+    VerificationRunnerRef,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, error::Error, fmt};
@@ -77,12 +77,12 @@ impl AuthoringDocument {
         }
     }
 
-    /// Normalize authoring syntax into the canonical semantic document.
+    /// Normalize authoring syntax into the derived semantic representation.
     ///
     /// Normative text and explicit relations are never inferred. The short
     /// contract only supplies mechanical defaults and unique adapter
     /// resolution, and reports both through normalization provenance.
-    pub fn normalize(&self) -> Result<NormalizedDocument, NormalizationError> {
+    pub fn normalize(&self) -> Result<NormalizationResult, NormalizationError> {
         let (document, applied_defaults, inferred) = match self {
             Self::Philosophies {
                 namespace,
@@ -90,8 +90,7 @@ impl AuthoringDocument {
                 philosophies,
                 ..
             } => (
-                SpecDocument::Philosophies {
-                    schema: SPEC_SCHEMA.into(),
+                SemanticDocument::Philosophies {
                     namespace: namespace.clone(),
                     category: category.clone(),
                     philosophies: philosophies.clone(),
@@ -105,8 +104,7 @@ impl AuthoringDocument {
                 policies,
                 ..
             } => (
-                SpecDocument::Policies {
-                    schema: SPEC_SCHEMA.into(),
+                SemanticDocument::Policies {
                     namespace: namespace.clone(),
                     category: category.clone(),
                     policies: policies.clone(),
@@ -120,8 +118,7 @@ impl AuthoringDocument {
                 requirements,
                 ..
             } => (
-                SpecDocument::Requirements {
-                    schema: SPEC_SCHEMA.into(),
+                SemanticDocument::Requirements {
                     namespace: namespace.clone(),
                     category: category.clone(),
                     requirements: requirements.clone(),
@@ -135,8 +132,7 @@ impl AuthoringDocument {
                 features,
                 ..
             } => (
-                SpecDocument::Features {
-                    schema: SPEC_SCHEMA.into(),
+                SemanticDocument::Features {
                     namespace: namespace.clone(),
                     category: category.clone(),
                     features: features.clone(),
@@ -152,8 +148,7 @@ impl AuthoringDocument {
             } => {
                 let normalized = requirement.normalize()?;
                 (
-                    SpecDocument::Requirements {
-                        schema: SPEC_SCHEMA.into(),
+                    SemanticDocument::Requirements {
                         namespace: namespace.clone(),
                         category: category.clone(),
                         requirements: vec![normalized.requirement],
@@ -164,11 +159,10 @@ impl AuthoringDocument {
             }
         };
 
-        Ok(NormalizedDocument {
+        Ok(NormalizationResult {
             document,
             provenance: NormalizationProvenance {
                 source_schema: AUTHORING_SCHEMA.into(),
-                target_schema: SPEC_SCHEMA.into(),
                 applied_defaults,
                 inferred,
             },
@@ -544,8 +538,8 @@ struct NormalizedShortRequirement {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct NormalizedDocument {
-    pub document: SpecDocument,
+pub struct NormalizationResult {
+    pub document: SemanticDocument,
     pub provenance: NormalizationProvenance,
 }
 
@@ -553,7 +547,6 @@ pub struct NormalizedDocument {
 #[serde(deny_unknown_fields)]
 pub struct NormalizationProvenance {
     pub source_schema: String,
-    pub target_schema: String,
     pub applied_defaults: Vec<String>,
     pub inferred: Vec<String>,
 }
@@ -598,12 +591,34 @@ features: []
         for source in DOCUMENTS {
             let document = AuthoringDocument::parse(source).expect("authoring document");
             let normalized = document.normalize().expect("normalization");
-            assert_eq!(normalized.document.schema(), SPEC_SCHEMA);
+            let (namespace, category) = match &normalized.document {
+                SemanticDocument::Philosophies {
+                    namespace,
+                    category,
+                    ..
+                }
+                | SemanticDocument::Policies {
+                    namespace,
+                    category,
+                    ..
+                }
+                | SemanticDocument::Requirements {
+                    namespace,
+                    category,
+                    ..
+                }
+                | SemanticDocument::Features {
+                    namespace,
+                    category,
+                    ..
+                } => (namespace.as_str(), category.as_str()),
+            };
+            assert_eq!(namespace, "demo");
+            assert_eq!(category, "Demo");
             assert_eq!(
                 normalized.provenance,
                 NormalizationProvenance {
                     source_schema: AUTHORING_SCHEMA.into(),
-                    target_schema: SPEC_SCHEMA.into(),
                     applied_defaults: vec![],
                     inferred: vec![],
                 }
@@ -639,10 +654,18 @@ features:
 "#;
         let authoring = AuthoringDocument::parse(source).expect("authoring document");
         let normalized = authoring.normalize().expect("normalization");
-        let expected: SpecDocument =
-            serde_yaml::from_str(&source.replace(AUTHORING_SCHEMA, SPEC_SCHEMA))
-                .expect("canonical document");
-        assert_eq!(normalized.document, expected);
+        let SemanticDocument::Features {
+            namespace,
+            category,
+            features,
+        } = &normalized.document
+        else {
+            panic!("explicit features must normalize to features");
+        };
+        assert_eq!(namespace, "demo");
+        assert_eq!(category, "Demo");
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0].id, "FEAT-DEMO-001".into());
     }
 
     const SHORT_DOCUMENT: &str = r#"
@@ -681,7 +704,7 @@ requirement:
     fn short_contract_normalizes_one_requirement_without_inventing_meaning() {
         let authoring = AuthoringDocument::parse(SHORT_DOCUMENT).expect("short document");
         let normalized = authoring.normalize().expect("short normalization");
-        let SpecDocument::Requirements { requirements, .. } = normalized.document else {
+        let SemanticDocument::Requirements { requirements, .. } = normalized.document else {
             panic!("short document must normalize to requirements");
         };
         let requirement = &requirements[0];
@@ -789,8 +812,10 @@ requirement:
         let unknown = format!("{}unknown: true\n", DOCUMENTS[0]);
         assert!(AuthoringDocument::parse(&unknown).is_err());
         assert!(
-            AuthoringDocument::parse(&DOCUMENTS[0].replace(AUTHORING_SCHEMA, SPEC_SCHEMA,))
-                .is_err()
+            AuthoringDocument::parse(
+                &DOCUMENTS[0].replace(AUTHORING_SCHEMA, "mitase/authoring/v1",)
+            )
+            .is_err()
         );
     }
 }

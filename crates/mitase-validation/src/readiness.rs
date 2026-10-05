@@ -556,7 +556,7 @@ fn implemented_feature_subjects(
         .documents
         .iter()
         .flat_map(|loaded| match &loaded.document {
-            mitase_spec_model::SpecDocument::Features { features, .. } => features.clone(),
+            mitase_spec_model::SemanticDocument::Features { features, .. } => features.clone(),
             _ => Vec::new(),
         })
         .filter(|feature| feature.status == ItemStatus::Implemented)

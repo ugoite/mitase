@@ -19,8 +19,12 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct LoadedDocument {
     pub path: PathBuf,
-    pub document: SpecDocument,
+    pub document: SemanticDocument,
 }
+
+/// Legacy schema marker recognized only to route explicit migration guidance.
+/// Normal loading never parses this shape; see MITASE-SOURCE-001.
+const LEGACY_SOURCE_SCHEMA: &str = "mitase/spec/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrontendSeverity {
@@ -137,26 +141,6 @@ struct WorkspaceMatcher {
     excludes: Option<GlobSet>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SpecSourcePolicy {
-    DualSource,
-    V2Only,
-}
-
-impl SpecSourcePolicy {
-    fn current() -> Self {
-        Self::for_release(env!("CARGO_PKG_VERSION"))
-    }
-
-    fn for_release(version: &str) -> Self {
-        if version.starts_with("0.1.") {
-            Self::DualSource
-        } else {
-            Self::V2Only
-        }
-    }
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct SpecIndex {
     pub anchors: BTreeMap<SpecAnchor, AnchorValue>,
@@ -230,10 +214,6 @@ pub enum AnchorValue {
 
 impl SpecWorkspace {
     pub fn load(start: impl AsRef<Path>) -> Result<Self> {
-        Self::load_with_policy(start, SpecSourcePolicy::current())
-    }
-
-    fn load_with_policy(start: impl AsRef<Path>, source_policy: SpecSourcePolicy) -> Result<Self> {
         let root = find_root(start.as_ref())?;
         let config_path = root.join("mitase.yaml");
         let config_source = fs::read_to_string(&config_path)
@@ -272,19 +252,7 @@ impl SpecWorkspace {
         let mut documents = Vec::new();
         for path in paths {
             let source = fs::read_to_string(&path)?;
-            let document = load_spec_document(&source, &path, source_policy)?;
-            if document.schema() != SPEC_SCHEMA {
-                return Err(frontend_error(
-                    FrontendDiagnostic::error(
-                        "MITASE-SOURCE-002",
-                        format!("document schema must be {SPEC_SCHEMA}"),
-                        path.to_string_lossy(),
-                    )
-                    .with_span(1, 1, 1, 1)
-                    .with_candidates([AUTHORING_SCHEMA.to_string()])
-                    .with_help("rewrite the document using the mitase/authoring/v2 schema"),
-                ));
-            }
+            let document = load_spec_document(&source, &path)?;
             documents.push(LoadedDocument { path, document });
         }
         let frontend_diagnostics = effective_config
@@ -322,17 +290,13 @@ impl SpecWorkspace {
     }
 }
 
-fn load_spec_document(
-    source: &str,
-    path: &Path,
-    source_policy: SpecSourcePolicy,
-) -> Result<SpecDocument> {
+fn load_spec_document(source: &str, path: &Path) -> Result<SemanticDocument> {
     match declared_schema(source).as_deref() {
-        Some(SPEC_SCHEMA) if source_policy == SpecSourcePolicy::V2Only => {
+        Some(schema) if schema == LEGACY_SOURCE_SCHEMA => {
             return Err(frontend_error(
                 FrontendDiagnostic::error(
                     "MITASE-SOURCE-001",
-                    "canonical mitase/spec/v1 authoring input is not accepted in the v0.2 single-source mode",
+                    "legacy mitase/spec/v1 source is not accepted as workspace authoring input",
                     path.to_string_lossy(),
                 )
                 .with_span(schema_span(source).0, schema_span(source).1, schema_span(source).0, schema_span(source).1 + 1)
@@ -371,17 +335,33 @@ fn load_spec_document(
         _ => {}
     }
 
-    match serde_yaml::from_str(source) {
-        Ok(document) => Ok(document),
-        Err(_error) if is_obsolete_pre_release_spec(source) => Err(frontend_error(
+    if is_obsolete_pre_release_spec(source) {
+        return Err(frontend_error(
             FrontendDiagnostic::error(
                 "MITASE-SOURCE-003",
-                "document uses an obsolete pre-release mitase/spec/v1 shape",
+                "document uses an obsolete pre-release specification shape",
                 path.to_string_lossy(),
             )
             .with_span(1, 1, 1, 1)
-            .with_candidates([SPEC_SCHEMA.to_string(), AUTHORING_SCHEMA.to_string()])
-            .with_help("rewrite the document using the current mitase/spec/v1 model or migrate it to mitase/authoring/v2"),
+            .with_candidates([AUTHORING_SCHEMA.to_string()])
+            .with_help("rewrite the document using the mitase/authoring/v2 schema"),
+        ));
+    }
+    match serde_yaml::from_str::<serde_yaml::Value>(source) {
+        Ok(_) => Err(frontend_error(
+            FrontendDiagnostic::error(
+                "MITASE-SOURCE-004",
+                "specification document declares an unknown schema",
+                path.to_string_lossy(),
+            )
+            .with_span(
+                schema_span(source).0,
+                schema_span(source).1,
+                schema_span(source).0,
+                schema_span(source).1 + 1,
+            )
+            .with_candidates([AUTHORING_SCHEMA.to_string()])
+            .with_help("fix the YAML and declare mitase/authoring/v2"),
         )),
         Err(error) => Err(frontend_error(
             FrontendDiagnostic::error(
@@ -389,9 +369,14 @@ fn load_spec_document(
                 format!("specification document is not valid YAML: {error}"),
                 path.to_string_lossy(),
             )
-            .with_span(error_span(source, &error.to_string()).0, error_span(source, &error.to_string()).1, error_span(source, &error.to_string()).0, error_span(source, &error.to_string()).1 + 1)
-            .with_candidates([SPEC_SCHEMA.to_string(), AUTHORING_SCHEMA.to_string()])
-            .with_help("fix the YAML and declare either mitase/spec/v1 or mitase/authoring/v2"),
+            .with_span(
+                error_span(source, &error.to_string()).0,
+                error_span(source, &error.to_string()).1,
+                error_span(source, &error.to_string()).0,
+                error_span(source, &error.to_string()).1 + 1,
+            )
+            .with_candidates([AUTHORING_SCHEMA.to_string()])
+            .with_help("fix the YAML and declare mitase/authoring/v2"),
         )),
     }
 }
@@ -575,7 +560,7 @@ impl SpecIndex {
         let mut ids = BTreeSet::new();
         for loaded in &workspace.documents {
             match &loaded.document {
-                SpecDocument::Philosophies { philosophies, .. } => {
+                SemanticDocument::Philosophies { philosophies, .. } => {
                     for item in philosophies {
                         unique_item(&mut ids, &item.id)?;
                         out.item_paths.insert(item.id.clone(), loaded.path.clone());
@@ -592,7 +577,7 @@ impl SpecIndex {
                         }
                     }
                 }
-                SpecDocument::Policies { policies, .. } => {
+                SemanticDocument::Policies { policies, .. } => {
                     for item in policies {
                         unique_item(&mut ids, &item.id)?;
                         out.item_paths.insert(item.id.clone(), loaded.path.clone());
@@ -611,7 +596,7 @@ impl SpecIndex {
                         }
                     }
                 }
-                SpecDocument::Requirements { requirements, .. } => {
+                SemanticDocument::Requirements { requirements, .. } => {
                     for item in requirements {
                         unique_item(&mut ids, &item.id)?;
                         out.item_status.insert(item.id.clone(), item.status);
@@ -632,7 +617,7 @@ impl SpecIndex {
                         }
                     }
                 }
-                SpecDocument::Features { features, .. } => {
+                SemanticDocument::Features { features, .. } => {
                     for item in features {
                         unique_item(&mut ids, &item.id)?;
                         out.item_status.insert(item.id.clone(), item.status);
@@ -3063,17 +3048,20 @@ mod tests {
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
 
         assert_eq!(workspace.documents.len(), 6);
-        assert!(
-            workspace
-                .documents
-                .iter()
-                .all(|loaded| loaded.document.schema() == SPEC_SCHEMA)
-        );
+        assert!(workspace.documents.iter().all(|loaded| {
+            let namespace = match &loaded.document {
+                SemanticDocument::Philosophies { namespace, .. }
+                | SemanticDocument::Policies { namespace, .. }
+                | SemanticDocument::Requirements { namespace, .. }
+                | SemanticDocument::Features { namespace, .. } => namespace,
+            };
+            namespace == "test"
+        }));
         let requirement = workspace
             .documents
             .iter()
             .find_map(|loaded| match &loaded.document {
-                SpecDocument::Requirements { requirements, .. } => requirements.first(),
+                SemanticDocument::Requirements { requirements, .. } => requirements.first(),
                 _ => None,
             })
             .expect("normalized requirement");
@@ -3133,7 +3121,7 @@ mod tests {
     }
 
     #[test]
-    fn v2_only_mode_rejects_v1_with_an_explicit_migration_action() {
+    fn workspace_rejects_legacy_v1_with_an_explicit_migration_action() {
         let tempdir = tempdir().expect("tempdir");
         fs::create_dir_all(tempdir.path().join("docs/mitase")).expect("spec dir");
         fs::write(
@@ -3164,12 +3152,12 @@ mod tests {
         )
         .expect("canonical source");
 
-        let error = SpecWorkspace::load_with_policy(tempdir.path(), SpecSourcePolicy::V2Only)
+        let error = SpecWorkspace::load(tempdir.path())
             .err()
-            .expect("v1 source rejection");
+            .expect("legacy source rejection");
         let diagnostic = error
             .downcast_ref::<FrontendDiagnosticError>()
-            .expect("v1 rejection should retain its structured diagnostic");
+            .expect("legacy rejection should retain its structured diagnostic");
         assert_eq!(diagnostic.diagnostic.code, "MITASE-SOURCE-001");
         assert_eq!(
             diagnostic.diagnostic.candidates,
@@ -3178,7 +3166,7 @@ mod tests {
         assert!(diagnostic.diagnostic.help.is_some());
         let error = format!("{error:#}");
         assert!(error.contains("docs/mitase/legacy.yaml"));
-        assert!(error.contains("not accepted in the v0.2 single-source mode"));
+        assert!(error.contains("not accepted as workspace authoring input"));
         assert!(error.contains("mitase migrate"));
     }
 
@@ -3201,23 +3189,6 @@ mod tests {
                 && diagnostic.line.is_some()
                 && diagnostic.help.is_some()
         }));
-    }
-
-    #[test]
-    fn current_release_policy_is_v2_only_for_the_0_2_stable_line() {
-        assert_eq!(SpecSourcePolicy::current(), SpecSourcePolicy::V2Only);
-    }
-
-    #[test]
-    fn release_policy_switches_to_v2_only_for_the_0_2_line() {
-        assert_eq!(
-            SpecSourcePolicy::for_release("0.2.0"),
-            SpecSourcePolicy::V2Only
-        );
-        assert_eq!(
-            SpecSourcePolicy::for_release("0.1.99"),
-            SpecSourcePolicy::DualSource
-        );
     }
 
     #[test]

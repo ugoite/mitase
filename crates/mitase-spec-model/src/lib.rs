@@ -582,6 +582,84 @@ impl SpecDocument {
             | Self::Features { schema, .. } => schema,
         }
     }
+
+    /// Project this document into its schema-less semantic representation.
+    pub fn into_semantic(self) -> SemanticDocument {
+        match self {
+            Self::Philosophies {
+                namespace,
+                category,
+                philosophies,
+                ..
+            } => SemanticDocument::Philosophies {
+                namespace,
+                category,
+                philosophies,
+            },
+            Self::Policies {
+                namespace,
+                category,
+                policies,
+                ..
+            } => SemanticDocument::Policies {
+                namespace,
+                category,
+                policies,
+            },
+            Self::Requirements {
+                namespace,
+                category,
+                requirements,
+                ..
+            } => SemanticDocument::Requirements {
+                namespace,
+                category,
+                requirements,
+            },
+            Self::Features {
+                namespace,
+                category,
+                features,
+                ..
+            } => SemanticDocument::Features {
+                namespace,
+                category,
+                features,
+            },
+        }
+    }
+}
+
+/// Schema-less semantic representation derived from `mitase/authoring/v2`.
+///
+/// This is the only document shape used by workspace loading, indexing,
+/// validation, queries, reports, and editor integration. It deliberately has
+/// no `schema` field and no `Deserialize` implementation so it can never
+/// become another workspace input format. Construct it only through the
+/// authoring compiler frontend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum SemanticDocument {
+    Philosophies {
+        namespace: String,
+        category: String,
+        philosophies: Vec<Philosophy>,
+    },
+    Policies {
+        namespace: String,
+        category: String,
+        policies: Vec<Policy>,
+    },
+    Requirements {
+        namespace: String,
+        category: String,
+        requirements: Vec<Requirement>,
+    },
+    Features {
+        namespace: String,
+        category: String,
+        features: Vec<Feature>,
+    },
 }
 
 #[cfg(test)]

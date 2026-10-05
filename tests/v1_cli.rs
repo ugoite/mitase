@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 use mitase_authoring::AuthoringDocument;
-use mitase_spec_model::{BoundTargetRef, SpecDocument};
+use mitase_spec_model::{BoundTargetRef, SemanticDocument, SpecDocument};
 use mitase_workspace::SpecWorkspace;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -578,7 +578,6 @@ struct CurrentUgoiteSource {
 
 #[derive(Debug, Deserialize)]
 struct CurrentUgoiteExpected {
-    normalized_schema: String,
     implementation_path: String,
     implementation_symbol: String,
     implementation_identity: String,
@@ -641,10 +640,14 @@ fn ugoite_current_v2_corpus_normalizes_resolves_and_exposes_the_graph() {
 
     let workspace = SpecWorkspace::load(temp.path()).expect("current Ugoite workspace");
     assert!(
-        workspace
-            .documents
-            .iter()
-            .all(|loaded| loaded.document.schema() == corpus.expected.normalized_schema)
+        workspace.documents.iter().all(|loaded| {
+            let value = serde_yaml::to_value(&loaded.document).expect("semantic value");
+            match value {
+                serde_yaml::Value::Mapping(mapping) => !mapping.contains_key("schema"),
+                _ => false,
+            }
+        }),
+        "workspace documents must be schema-less semantic representations"
     );
     let index = workspace.index().expect("current Ugoite index");
     let implementation: BoundTargetRef = corpus.source.selected["implementation_target"]
@@ -1359,7 +1362,10 @@ requirements: []
     let migrated = AuthoringDocument::parse(&String::from_utf8(output.stdout).unwrap())
         .expect("v0.2 migration output");
     let canonical: SpecDocument = serde_yaml::from_str(source).unwrap();
-    assert_eq!(migrated.normalize().unwrap().document, canonical);
+    assert_eq!(
+        migrated.normalize().unwrap().document,
+        canonical.into_semantic()
+    );
 }
 
 #[test]
@@ -1420,12 +1426,17 @@ requirement:
     assert!(output.status.success());
     assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
     let normalized: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(normalized["document"]["schema"], "mitase/spec/v1");
+    assert!(normalized["document"].get("schema").is_none());
     assert_eq!(normalized["document"]["kind"], "requirements");
     assert_eq!(
         normalized["document"]["requirements"][0]["id"],
         "REQ-DEMO-001"
     );
+    assert_eq!(
+        normalized["provenance"]["source_schema"],
+        "mitase/authoring/v2"
+    );
+    assert!(normalized["provenance"].get("target_schema").is_none());
     assert!(
         normalized["provenance"]["applied_defaults"]
             .as_array()
@@ -1616,62 +1627,53 @@ fn generated_spec_reference_covers_every_source_document() {
     }
 }
 
-#[test]
-fn mitase_authoring_v2_preserves_the_pre_migration_canonical_graph() {
-    let workspace = SpecWorkspace::load(".").expect("Mitase workspace");
-    let expected = fs::read_to_string("tests/fixtures/mitase-v1-canonical-digests.txt")
-        .expect("canonical graph baseline")
-        .lines()
-        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
-        .map(|line| {
-            let (digest, path) = line.split_once("  ").expect("digest fixture entry");
-            (path.to_owned(), digest.to_owned())
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    let actual = workspace
-        .documents
-        .iter()
-        .map(|loaded| {
-            let relative = loaded
-                .path
-                .strip_prefix(&workspace.root)
-                .expect("document under workspace root")
-                .to_string_lossy()
-                .into_owned();
-            let canonical = serde_yaml::to_string(&loaded.document).expect("canonical document");
-            let mut hasher = Sha256::new();
-            hasher.update(canonical.as_bytes());
-            let digest = hasher.finalize();
-            let digest = digest
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>();
-            (relative, digest)
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    assert_eq!(actual, expected);
-}
-
-fn semantic_projection_yaml(document: &SpecDocument) -> String {
-    let value = serde_yaml::to_value(document).expect("document value");
-    let mut mapping = match value {
+/// Serialize one semantic document in the v0.2.2 baseline key order.
+///
+/// The merged `mitase-semantic-v0.2.2-digests.txt` baseline records the
+/// `SpecDocument` mapping with only the top-level `schema` entry removed.
+/// That historical projection carries one quirk: `serde_yaml::Mapping::remove`
+/// swaps the trailing items collection into the removed entry's position, so
+/// the recorded order is `kind`, items, `namespace`, `category`. This helper
+/// reproduces that exact order so the regression keeps verifying byte-level
+/// preservation of the v0.2.2 meaning. It is test-only compatibility glue and
+/// must never leak into product serialization.
+fn semantic_projection_yaml(document: &SemanticDocument) -> String {
+    let value = serde_yaml::to_value(document).expect("semantic value");
+    let mapping = match value {
         serde_yaml::Value::Mapping(mapping) => mapping,
         other => panic!("unexpected document shape: {other:?}"),
     };
-    let removed = mapping.remove(serde_yaml::Value::String("schema".to_owned()));
-    assert_eq!(
-        removed,
-        Some(serde_yaml::Value::String("mitase/spec/v1".to_owned())),
-        "semantic projection strips only the legacy canonical schema marker"
-    );
-    assert!(
-        !mapping.contains_key(serde_yaml::Value::String("schema".to_owned())),
-        "semantic projection must not retain a schema field"
-    );
+    let mut ordered = serde_yaml::Mapping::new();
+    let mut items_key: Option<serde_yaml::Value> = None;
+    for (key, val) in &mapping {
+        let name = match key {
+            serde_yaml::Value::String(name) => name.as_str(),
+            _ => "",
+        };
+        if name == "schema" {
+            panic!("semantic representation must not retain a schema field");
+        }
+        if matches!(
+            name,
+            "philosophies" | "policies" | "requirements" | "features"
+        ) {
+            items_key = Some(key.clone());
+        } else {
+            ordered.insert(key.clone(), val.clone());
+        }
+    }
+    let items_key = items_key.expect("semantic document items collection");
+    let items_value = mapping.get(&items_key).expect("items value").clone();
+    let kind_key = serde_yaml::Value::String("kind".to_owned());
+    let mut baseline = serde_yaml::Mapping::new();
+    for (key, val) in &ordered {
+        baseline.insert(key.clone(), val.clone());
+        if key == &kind_key {
+            baseline.insert(items_key.clone(), items_value.clone());
+        }
+    }
     let semantic =
-        serde_yaml::to_string(&serde_yaml::Value::Mapping(mapping)).expect("semantic projection");
+        serde_yaml::to_string(&serde_yaml::Value::Mapping(baseline)).expect("semantic projection");
     assert!(
         !semantic.contains("schema: mitase/spec/v1"),
         "semantic projection must not contain the legacy schema marker"
@@ -1759,13 +1761,13 @@ fn mitase_authoring_corpus_measurement_matches_the_short_contract_boundary() {
 
     for loaded in &workspace.documents {
         match &loaded.document {
-            SpecDocument::Philosophies { philosophies, .. } => {
+            SemanticDocument::Philosophies { philosophies, .. } => {
                 philosophy_count += philosophies.len();
             }
-            SpecDocument::Policies { policies, .. } => {
+            SemanticDocument::Policies { policies, .. } => {
                 policy_count += policies.len();
             }
-            SpecDocument::Requirements { requirements, .. } => {
+            SemanticDocument::Requirements { requirements, .. } => {
                 requirement_count += requirements.len();
                 requirement_shapes.extend(
                     requirements.iter().map(|requirement| {
@@ -1773,7 +1775,7 @@ fn mitase_authoring_corpus_measurement_matches_the_short_contract_boundary() {
                     }),
                 );
             }
-            SpecDocument::Features { features, .. } => {
+            SemanticDocument::Features { features, .. } => {
                 feature_count += features.len();
             }
         }

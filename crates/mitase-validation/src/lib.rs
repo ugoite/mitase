@@ -9,8 +9,8 @@ use mitase_inventory::ArtifactUnitKind;
 use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use mitase_spec_model::{
     ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
-    LocalAnchorKind, OwnershipSelector, RepoPath, RuleLevel, Selector, SpecAnchor, SpecDocument,
-    TargetClaim, VerificationRunnerRef,
+    LocalAnchorKind, OwnershipSelector, RepoPath, RuleLevel, Selector, SemanticDocument,
+    SpecAnchor, TargetClaim, VerificationRunnerRef,
 };
 use mitase_workspace::{
     AnchorValue, ArtifactResolution, ResolutionFailure, ResolvedTarget, SpecIndex, SpecWorkspace,
@@ -1730,7 +1730,7 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
     for loaded in &ctx.workspace.documents {
         let path = loaded.path.to_string_lossy().into_owned();
         match &loaded.document {
-            SpecDocument::Philosophies { philosophies, .. } => {
+            SemanticDocument::Philosophies { philosophies, .. } => {
                 for item in philosophies {
                     if item.principles.is_empty() {
                         push(
@@ -1757,14 +1757,14 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                     }
                 }
             }
-            SpecDocument::Policies { policies, .. } => {
+            SemanticDocument::Policies { policies, .. } => {
                 for item in policies {
                     if item.rules.is_empty() {
                         push(out, "MITASE-POLICY-001", "policy has no Rule", &path, None);
                     }
                 }
             }
-            SpecDocument::Requirements { requirements, .. } => {
+            SemanticDocument::Requirements { requirements, .. } => {
                 for item in requirements {
                     if item.status == ItemStatus::Implemented && item.criteria.is_empty() {
                         push(
@@ -1777,7 +1777,7 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                     }
                 }
             }
-            SpecDocument::Features { features, .. } => {
+            SemanticDocument::Features { features, .. } => {
                 for item in features {
                     let implementation_bindings = item
                         .bindings
