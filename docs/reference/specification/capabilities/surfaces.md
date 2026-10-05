@@ -119,6 +119,31 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.lsp-navigation
+- **id**: FEAT-FACET-PROJECTION-001
+  - **title**: Facet projection report
+  - **summary**: Project exact implementation claims by opaque Binding facet without creating a second specification model.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: query
+      - **responsibility**: Build deterministic facet projection read models.
+      - **targets**:
+        - **id**: facet-projection
+          - **adapter**: rust
+          - **path**: src/facet_projection.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: build_facet_projection
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
+- **id**: FEAT-INIT-001
+  - **title**: Bounded workspace bootstrap
+  - **summary**: Initialize missing Mitase configuration and specification-root metadata without authoring normative meaning or implementation files.
+  - **status**: planned
+  - **bindings**:
+    - (empty list)
 - **id**: FEAT-DOCS-001
   - **title**: Documentation generation
   - **summary**: Generate a navigable documentation product from the canonical specification and its guides.
@@ -231,25 +256,6 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.docs-generation
-- **id**: FEAT-FACET-PROJECTION-001
-  - **title**: Facet projection report
-  - **summary**: Project exact implementation claims by opaque Binding facet without creating a second specification model.
-  - **status**: implemented
-  - **bindings**:
-    - **id**: implementation
-      - **role**: implementation
-      - **facet**: query
-      - **responsibility**: Build deterministic facet projection read models.
-      - **targets**:
-        - **id**: facet-projection
-          - **adapter**: rust
-          - **path**: src/facet_projection.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: build_facet_projection
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
 
 ## Source YAML
 
@@ -351,6 +357,12 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-CAPABILITY-001#criterion.facet-projection
+
+  - id: FEAT-INIT-001
+    title: Bounded workspace bootstrap
+    summary: Initialize missing Mitase configuration and specification-root metadata without authoring normative meaning or implementation files.
+    status: planned
+    bindings: []
 
   - id: FEAT-DOCS-001
     title: Documentation generation

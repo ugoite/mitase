@@ -40,6 +40,16 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
           - configuration
           - documentation
           - verification
+    - **id**: bootstrap-metadata
+      - **level**: must
+      - **statement**: Mitase may create its own missing bootstrap metadata, but must not author normative repository meaning or implementation evidence.
+      - **governed_by**:
+        - PHIL-005#principle.authority-without-workflow-ownership
+      - **applies_to**:
+        - **roles**:
+          - configuration
+          - documentation
+      - **enforcement**: external repository tooling
   - **bindings**:
     - **id**: specification-validator
       - **role**: enforcement
@@ -255,6 +265,12 @@ policies:
         statement: The repository-owned specification is authoritative for declared meaning; Mitase interprets, indexes, resolves, validates, and reports that meaning without owning repository work.
         governed_by: [PHIL-005#principle.authority-without-workflow-ownership]
         applies_to: { roles: [configuration, documentation, verification] }
+      - id: bootstrap-metadata
+        level: must
+        statement: Mitase may create its own missing bootstrap metadata, but must not author normative repository meaning or implementation evidence.
+        governed_by: [PHIL-005#principle.authority-without-workflow-ownership]
+        applies_to: { roles: [configuration, documentation] }
+        enforcement: external repository tooling
     bindings:
       - id: specification-validator
         role: enforcement

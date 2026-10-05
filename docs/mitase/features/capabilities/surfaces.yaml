@@ -96,6 +96,12 @@ features:
               - kind: satisfies
                 criterion: REQ-CAPABILITY-001#criterion.facet-projection
 
+  - id: FEAT-INIT-001
+    title: Bounded workspace bootstrap
+    summary: Initialize missing Mitase configuration and specification-root metadata without authoring normative meaning or implementation files.
+    status: planned
+    bindings: []
+
   - id: FEAT-DOCS-001
     title: Documentation generation
     summary: Generate a navigable documentation product from the canonical specification and its guides.

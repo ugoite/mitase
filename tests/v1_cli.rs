@@ -1718,10 +1718,10 @@ fn mitase_authoring_corpus_measurement_matches_the_short_contract_boundary() {
             requirement_count,
             feature_count
         ),
-        (3, 7, 2, 19)
+        (3, 7, 2, 20)
     );
     requirement_shapes.sort_unstable();
-    assert_eq!(requirement_shapes, vec![(3, 1), (14, 2)]);
+    assert_eq!(requirement_shapes, vec![(3, 1), (15, 2)]);
 }
 
 fn generated_spec_path(relative: &Path) -> PathBuf {
