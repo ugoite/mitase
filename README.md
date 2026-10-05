@@ -49,7 +49,7 @@ mise run check:repo
 The normal v1 CLI is intentionally limited to specification operations:
 `mitase check`, `mitase validate`, `mitase readiness report`,
 `mitase config effective`, `mitase normalize`, `mitase query`, `mitase show`,
-`mitase list`, and `mitase report pr`. The re-foundation removes execution
+`mitase list`, `mitase report pr`, and `mitase report facets`. The re-foundation removes execution
 commands rather than replacing them with compatibility aliases. Use
 `--format text` for the default
 Balanced Hybrid human view, `--format compact` for one-line CI records, and

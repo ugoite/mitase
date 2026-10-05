@@ -374,6 +374,71 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                   - **package**: mitase
                   - **harness**: v1_cli
                   - **test**: generated_spec_reference_covers_every_source_document
+        - **id**: facet-projection-unit-test
+          - **adapter**: rust
+          - **path**: src/facet_projection.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::projects_multiple_facets_for_one_criterion
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
+              - **covers**:
+                - FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: mitase
+                  - **test**: facet_projection::tests::projects_multiple_facets_for_one_criterion
+        - **id**: facet-projection-opaque-test
+          - **adapter**: rust
+          - **path**: src/facet_projection.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::keeps_opaque_facets_and_lists_non_semantic_targets
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
+              - **covers**:
+                - FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: mitase
+                  - **test**: facet_projection::tests::keeps_opaque_facets_and_lists_non_semantic_targets
+        - **id**: facet-projection-invalid-runner-test
+          - **adapter**: rust
+          - **path**: src/facet_projection.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::invalid_runner_metadata_aggregates_to_unverified_without_passed_language
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
+              - **covers**:
+                - FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: mitase
+                  - **test**: facet_projection::tests::invalid_runner_metadata_aggregates_to_unverified_without_passed_language
+        - **id**: facet-projection-cli-test
+          - **adapter**: rust
+          - **path**: tests/v1_cli.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: report_facets_projects_explicit_facets_with_declared_verification
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
+              - **covers**:
+                - FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection
+              - **runner**:
+                - **runner**: cargo-test-integration
+                - **arguments**:
+                  - **package**: mitase
+                  - **harness**: v1_cli
+                  - **test**: report_facets_projects_explicit_facets_with_declared_verification
 - **id**: REQ-CAPABILITY-002
   - **title**: Multi-language inventory
   - **description**: Semantic inventories expose stable, profile-aware artifact identities across supported languages and structured formats.
@@ -727,6 +792,42 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.docs-generation
                 covers: [FEAT-DOCS-001#binding.implementation/target.generated-index]
                 runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
+          - id: facet-projection-unit-test
+            adapter: rust
+            path: src/facet_projection.rs
+            selector: { kind: symbol, name: tests::projects_multiple_facets_for_one_criterion }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.facet-projection
+                covers: [FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection]
+                runner: { runner: cargo-test, arguments: { package: mitase, test: facet_projection::tests::projects_multiple_facets_for_one_criterion } }
+          - id: facet-projection-opaque-test
+            adapter: rust
+            path: src/facet_projection.rs
+            selector: { kind: symbol, name: tests::keeps_opaque_facets_and_lists_non_semantic_targets }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.facet-projection
+                covers: [FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection]
+                runner: { runner: cargo-test, arguments: { package: mitase, test: facet_projection::tests::keeps_opaque_facets_and_lists_non_semantic_targets } }
+          - id: facet-projection-invalid-runner-test
+            adapter: rust
+            path: src/facet_projection.rs
+            selector: { kind: symbol, name: tests::invalid_runner_metadata_aggregates_to_unverified_without_passed_language }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.facet-projection
+                covers: [FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection]
+                runner: { runner: cargo-test, arguments: { package: mitase, test: facet_projection::tests::invalid_runner_metadata_aggregates_to_unverified_without_passed_language } }
+          - id: facet-projection-cli-test
+            adapter: rust
+            path: tests/v1_cli.rs
+            selector: { kind: symbol, name: report_facets_projects_explicit_facets_with_declared_verification }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.facet-projection
+                covers: [FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection]
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: report_facets_projects_explicit_facets_with_declared_verification } }
 
   - id: REQ-CAPABILITY-002
     title: Multi-language inventory

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+pub mod facet_projection;
 mod lsp;
 pub mod output;
 mod pr_context;
@@ -171,6 +172,14 @@ enum ReportCommand {
         #[arg(long, value_enum, default_value = "json")]
         format: ReportFormat,
     },
+    Facets {
+        /// A feature ID (FEAT-*) or requirement criterion anchor (REQ-*#criterion.*).
+        source: String,
+        #[arg(default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "json")]
+        format: ReportFormat,
+    },
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ReportFormat {
@@ -254,16 +263,43 @@ fn run_config(args: ConfigArgs) -> Result<i32> {
 }
 
 fn run_report(args: ReportArgs) -> Result<i32> {
-    let ReportCommand::Pr {
-        base,
-        head,
-        workspace,
-        format,
-    } = args.command;
-    let repo = git_output(&workspace, &["rev-parse", "--show-toplevel"])?;
+    match args.command {
+        ReportCommand::Pr {
+            base,
+            head,
+            workspace,
+            format,
+        } => run_report_pr(&base, &head, &workspace, format),
+        ReportCommand::Facets {
+            source,
+            workspace,
+            format,
+        } => run_report_facets(&source, &workspace, format),
+    }
+}
+
+fn run_report_facets(source: &str, workspace: &Path, format: ReportFormat) -> Result<i32> {
+    let loader_format = match format {
+        ReportFormat::Json => Format::Json,
+        ReportFormat::Markdown => Format::Text,
+    };
+    let Some(workspace) = load_workspace_or_report(workspace, loader_format)? else {
+        return Ok(1);
+    };
+    let index = workspace.index()?;
+    let report = facet_projection::build_facet_projection(&workspace, &index, source)?;
+    match format {
+        ReportFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        ReportFormat::Markdown => print!("{}", facet_projection::render_markdown(&report)),
+    }
+    Ok(0)
+}
+
+fn run_report_pr(base: &str, head: &str, workspace: &Path, format: ReportFormat) -> Result<i32> {
+    let repo = git_output(workspace, &["rev-parse", "--show-toplevel"])?;
     let repo = PathBuf::from(String::from_utf8(repo)?.trim());
-    let base_sha = resolve_commit(&repo, &base)?;
-    let head_sha = resolve_commit(&repo, &head)?;
+    let base_sha = resolve_commit(&repo, base)?;
+    let head_sha = resolve_commit(&repo, head)?;
     let base_snapshot = snapshot_commit(&repo, &base_sha)?;
     let head_snapshot = snapshot_commit(&repo, &head_sha)?;
     let base_workspace = SpecWorkspace::load(base_snapshot.path())?;

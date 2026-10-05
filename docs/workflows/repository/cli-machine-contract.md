@@ -21,6 +21,7 @@ same level so consumers can select the contract before reading a payload.
 | `show` | `{ schema_version, id, kind, title, summary, description, status, source, anchors, criteria, authored_relations, derived_relations, bindings, verification_claims }` |
 | `list` | `{ schema_version, items, unverified_criteria }` |
 | `readiness report` | `{ schema_version, target, inventory, verification }` |
+| `report facets` | `{ schema_version, contract_version, source, source_kind, feature_status, bindings, criteria, non_semantic_targets }` |
 
 `mitase report pr --base <commit> --head <commit>` accepts two commits already
 present in the same repository and defaults to JSON. Its JSON object includes
@@ -34,12 +35,10 @@ The read models use the canonical specification identifiers and exact relation
 references. Their arrays are deterministic for the same workspace and command
 arguments.
 
-## Facet projection report (planned v0.2.2 contract)
+## Facet projection report (v0.2.2 contract)
 
-The planned `mitase report facets <source> <workspace> --format json|markdown`
-command is a read-only projection over the unchanged graph. It is not
-implemented yet; this section fixes its contract ahead of the implementation
-so reviewers can approve the meaning before the code.
+`mitase report facets <source> <workspace> --format json|markdown` is a
+read-only projection over the unchanged graph.
 
 Accepted sources are limited to a `Feature` ID (`FEAT-*`) or a `Requirement`
 criterion anchor (`REQ-*#criterion.*`). Any other source is a top-level error

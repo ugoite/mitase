@@ -10,3 +10,4 @@ validate-change|--format <FORMAT>
 readiness-report|--format <FORMAT>
 list|--unverified-criteria
 report-pr|--base <BASE>
+report-facets|--format <FORMAT>

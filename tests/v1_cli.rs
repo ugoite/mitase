@@ -289,6 +289,279 @@ fn pr_context_report_uses_explicit_commits_and_emits_json_and_markdown() {
     assert_eq!(fs::read(config_path).unwrap(), before_config);
 }
 
+#[test]
+fn report_facets_projects_explicit_facets_with_declared_verification() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/acceptance/facet-oriented-v2");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    initialize_fixture_git(temp.path());
+
+    let json = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["report", "facets", "FEAT-FACET-001", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        json.status.success(),
+        "{}",
+        String::from_utf8_lossy(&json.stderr)
+    );
+    let repeated = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["report", "facets", "FEAT-FACET-001", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(repeated.status.success());
+    assert_eq!(
+        json.stdout, repeated.stdout,
+        "identical workspaces must render deterministically"
+    );
+    let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(report["schema_version"], "mitase/cli/v1");
+    assert_eq!(
+        report["contract_version"],
+        "mitase/facet-projection-report/v1"
+    );
+    assert_eq!(report["source"], "FEAT-FACET-001");
+    assert_eq!(report["source_kind"], "feature");
+    assert_eq!(report["feature_status"], "implemented");
+    assert_eq!(
+        report
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(
+            [
+                "bindings",
+                "contract_version",
+                "criteria",
+                "feature_status",
+                "non_semantic_targets",
+                "schema_version",
+                "source",
+                "source_kind",
+            ]
+            .map(str::to_string),
+        )
+    );
+    let creation = report["criteria"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["criterion"] == "REQ-FACET-001#criterion.creation")
+        .expect("creation criterion entry");
+    let facets = creation["facets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["facet"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        facets,
+        vec!["core", "frontend", "mcp", "weird-project-specific-name"]
+    );
+    for row in creation["facets"].as_array().unwrap() {
+        assert_eq!(row["feature"], "FEAT-FACET-001");
+        assert_eq!(row["declared_verification"]["status"], "verified");
+        assert!(
+            row["declared_verification"]["verification_targets"]
+                .as_array()
+                .is_some_and(|targets| !targets.is_empty())
+        );
+    }
+    let non_semantic = report["non_semantic_targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|target| target["id"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        non_semantic,
+        vec![
+            "FEAT-FACET-001#binding.api/target.api-contract",
+            "FEAT-FACET-001#binding.legacy/target.legacy-entry",
+            "FEAT-FACET-001#binding.ops/target.router",
+        ]
+    );
+    let legacy = report["non_semantic_targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|target| target["id"] == "FEAT-FACET-001#binding.legacy/target.legacy-entry")
+        .unwrap();
+    assert_eq!(
+        legacy["exposes"],
+        serde_json::json!(["FEAT-FACET-001#binding.core/target.create-entry"])
+    );
+
+    let criterion = Command::cargo_bin("mitase")
+        .unwrap()
+        .args([
+            "report",
+            "facets",
+            "REQ-FACET-001#criterion.creation",
+            "--format",
+            "json",
+        ])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        criterion.status.success(),
+        "{}",
+        String::from_utf8_lossy(&criterion.stderr)
+    );
+    let criterion: serde_json::Value = serde_json::from_slice(&criterion.stdout).unwrap();
+    assert_eq!(criterion["source_kind"], "criterion");
+    assert_eq!(criterion["criteria"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        criterion["criteria"][0]["facets"].as_array().unwrap().len(),
+        4
+    );
+    for row in criterion["criteria"][0]["facets"].as_array().unwrap() {
+        assert_eq!(row["feature"], "FEAT-FACET-001");
+        assert!(
+            row["binding"]
+                .as_str()
+                .is_some_and(|binding| binding.starts_with("FEAT-FACET-001#binding."))
+        );
+    }
+
+    let markdown = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["report", "facets", "FEAT-FACET-001", "--format", "markdown"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        markdown.status.success(),
+        "{}",
+        String::from_utf8_lossy(&markdown.stderr)
+    );
+    let repeated_markdown = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["report", "facets", "FEAT-FACET-001", "--format", "markdown"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(markdown.stdout, repeated_markdown.stdout);
+    let markdown = String::from_utf8_lossy(&markdown.stdout);
+    assert!(markdown.starts_with("# Facet projection: FEAT-FACET-001\n"));
+    assert!(markdown.contains("Missing facets are not validation failures."));
+    assert!(markdown.contains("weird-project-specific-name"));
+    assert!(markdown.contains("## Non-semantic targets"));
+    assert!(!markdown.contains("passed"));
+}
+
+#[test]
+fn report_facets_rejects_unsupported_sources_without_a_json_envelope() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/acceptance/facet-oriented-v2");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    initialize_fixture_git(temp.path());
+
+    for source in [
+        "REQ-FACET-001",
+        "POL-FACET-001",
+        "FEAT-FACET-001#binding.core",
+        "FEAT-DOES-NOT-EXIST",
+        "REQ-DOES-NOT-EXIST#criterion.missing",
+        "crates/facet-core/src/lib.rs",
+    ] {
+        let output = Command::cargo_bin("mitase")
+            .unwrap()
+            .args(["report", "facets", source, "--format", "json"])
+            .arg(temp.path())
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{source} must be rejected");
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{source} must be a top-level error"
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "{source} must not emit a JSON envelope"
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("facet projection source"),
+            "{source} must explain the accepted source kinds"
+        );
+    }
+}
+
+#[test]
+fn report_facets_keeps_operation_style_features_valid() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/acceptance/ugoite-current-ops-v2");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    initialize_fixture_git(temp.path());
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["report", "facets", "FEAT-OPS-001", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        report["contract_version"],
+        "mitase/facet-projection-report/v1"
+    );
+    assert_eq!(report["criteria"].as_array().unwrap().len(), 1);
+    let row = &report["criteria"][0]["facets"][0];
+    assert_eq!(row["facet"], "cli");
+    assert_eq!(row["declared_verification"]["status"], "verified");
+
+    let show = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["show", "REQ-OPS-006", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(show.status.success());
+    let show: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(
+        show.as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(
+            [
+                "anchors",
+                "authored_relations",
+                "bindings",
+                "criteria",
+                "description",
+                "derived_relations",
+                "id",
+                "kind",
+                "source",
+                "status",
+                "schema_version",
+                "summary",
+                "title",
+                "verification_claims",
+            ]
+            .map(str::to_string),
+        )
+    );
+}
+
 #[derive(Debug, Deserialize)]
 struct CurrentUgoiteCorpus {
     source: CurrentUgoiteSource,
@@ -606,6 +879,7 @@ fn cli_help_contract_fixture_matches_the_current_read_only_surface() {
             "validate-change" => vec!["validate", "change", "--help"],
             "readiness-report" => vec!["readiness", "report", "--help"],
             "report-pr" => vec!["report", "pr", "--help"],
+            "report-facets" => vec!["report", "facets", "--help"],
             "list" => vec!["list", "--help"],
             other => panic!("unsupported help fixture command: {other}"),
         };
