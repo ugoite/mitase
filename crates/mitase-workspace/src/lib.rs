@@ -329,7 +329,7 @@ fn load_spec_document(source: &str, path: &Path) -> Result<SemanticDocument> {
             })?;
             return authoring
                 .normalize()
-                .map(|normalized| normalized.document)
+                .map(|normalized| normalized.semantic)
                 .map_err(|error| frontend_error(normalization_diagnostic(source, path, &error)));
         }
         _ => {}

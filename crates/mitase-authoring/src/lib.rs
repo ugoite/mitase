@@ -160,7 +160,7 @@ impl AuthoringDocument {
         };
 
         Ok(NormalizationResult {
-            document,
+            semantic: document,
             provenance: NormalizationProvenance {
                 source_schema: AUTHORING_SCHEMA.into(),
                 applied_defaults,
@@ -536,10 +536,24 @@ struct NormalizedShortRequirement {
     inferred: Vec<String>,
 }
 
+/// Machine contract version emitted by `mitase normalize`.
+///
+/// The normalize output is an inspection surface, not an authoring source:
+///
+/// ```text
+/// contract_version: mitase/normalization-result/v1
+/// semantic: <schema-less semantic representation>
+/// provenance:
+///   source_schema: mitase/authoring/v2
+///   applied_defaults: [...]
+///   inferred: [...]
+/// ```
+pub const NORMALIZATION_CONTRACT_VERSION: &str = "mitase/normalization-result/v1";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NormalizationResult {
-    pub document: SemanticDocument,
+    pub semantic: SemanticDocument,
     pub provenance: NormalizationProvenance,
 }
 
@@ -549,6 +563,25 @@ pub struct NormalizationProvenance {
     pub source_schema: String,
     pub applied_defaults: Vec<String>,
     pub inferred: Vec<String>,
+}
+
+/// Versioned machine envelope for `mitase normalize --stdout` output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NormalizationContract {
+    pub contract_version: String,
+    pub semantic: SemanticDocument,
+    pub provenance: NormalizationProvenance,
+}
+
+impl From<NormalizationResult> for NormalizationContract {
+    fn from(result: NormalizationResult) -> Self {
+        Self {
+            contract_version: NORMALIZATION_CONTRACT_VERSION.into(),
+            semantic: result.semantic,
+            provenance: result.provenance,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -587,11 +620,38 @@ features: []
     ];
 
     #[test]
+    fn normalization_contract_carries_versioned_semantic_payload() {
+        let document = AuthoringDocument::parse(DOCUMENTS[2]).expect("authoring document");
+        let contract = NormalizationContract::from(document.normalize().expect("normalization"));
+        assert_eq!(contract.contract_version, NORMALIZATION_CONTRACT_VERSION);
+        assert_eq!(contract.provenance.source_schema, AUTHORING_SCHEMA);
+        let value = serde_yaml::to_value(&contract).expect("contract value");
+        let serde_yaml::Value::Mapping(mapping) = value else {
+            panic!("contract must serialize as a mapping");
+        };
+        let key = |name: &str| serde_yaml::Value::String(name.into());
+        assert!(mapping.contains_key(key("contract_version")));
+        assert!(mapping.contains_key(key("semantic")));
+        assert!(mapping.contains_key(key("provenance")));
+        assert!(!mapping.contains_key(key("document")));
+        assert!(!mapping.contains_key(key("target_schema")));
+        let semantic = mapping.get(key("semantic")).expect("semantic payload");
+        let serde_yaml::Value::Mapping(semantic) = semantic else {
+            panic!("semantic payload must serialize as a mapping");
+        };
+        assert_eq!(
+            semantic.get(key("kind")),
+            Some(key("requirements")).as_ref()
+        );
+        assert!(!semantic.contains_key(key("schema")));
+    }
+
+    #[test]
     fn parses_and_normalizes_each_document_kind() {
         for source in DOCUMENTS {
             let document = AuthoringDocument::parse(source).expect("authoring document");
             let normalized = document.normalize().expect("normalization");
-            let (namespace, category) = match &normalized.document {
+            let (namespace, category) = match &normalized.semantic {
                 SemanticDocument::Philosophies {
                     namespace,
                     category,
@@ -658,7 +718,7 @@ features:
             namespace,
             category,
             features,
-        } = &normalized.document
+        } = &normalized.semantic
         else {
             panic!("explicit features must normalize to features");
         };
@@ -704,7 +764,7 @@ requirement:
     fn short_contract_normalizes_one_requirement_without_inventing_meaning() {
         let authoring = AuthoringDocument::parse(SHORT_DOCUMENT).expect("short document");
         let normalized = authoring.normalize().expect("short normalization");
-        let SemanticDocument::Requirements { requirements, .. } = normalized.document else {
+        let SemanticDocument::Requirements { requirements, .. } = normalized.semantic else {
             panic!("short document must normalize to requirements");
         };
         let requirement = &requirements[0];

@@ -2,18 +2,15 @@
 title: v0.2 short authoring
 ---
 
-Mitase v0.2 introduces a short authoring contract at the frontend boundary.
-It normalizes into the existing `mitase/spec/v1` canonical graph; it does not
-replace the semantic model.
+Mitase `mitase/authoring/v2` is the repository source authority. Mitase
+compiles it into a schema-less semantic representation used for indexing,
+validation, diagnostics, queries, and editor integration.
 
-During the 0.1.x dogfood period, normal workspace loading accepts both
-`mitase/spec/v1` documents and `mitase/authoring/v2` documents. The latter are
-parsed and normalized before indexing and validation, so downstream consumers
-always receive the canonical graph.
-
-The loader derives the source policy from the Mitase release line: 0.1.x uses
-the dual-source policy, and 0.2.x uses the v2-only policy. The 0.2 policy
-rejects v1 source at the workspace boundary with an explicit migration action.
+`mitase/authoring/v2` is the only normal repository authoring source.
+`mitase/spec/v1` is a legacy migration input: the explicit read-only
+`mitase migrate <source> --stdout` command reads it and emits v2 source.
+Normal workspace loading rejects legacy sources at the boundary with
+`MITASE-SOURCE-001` and an explicit migration action.
 
 The first short form describes one requirement, one criterion, one
 implementation target, and one verification target:
@@ -54,8 +51,8 @@ requirement:
 
 Requirement and criterion meaning, binding responsibilities, claims, and the
 verification runner metadata are explicit. A standalone short requirement is
-a valid seed workspace: its implementation and verification bindings are
-normalized into the canonical requirement graph, and an empty
+a valid seed workspace: its implementation and verification bindings
+compile into the semantic requirements representation, and an empty
 `criterion.governed_by` relation means that the slice has not yet introduced a
 policy layer. The normalizer may only infer mechanics:
 
@@ -77,10 +74,12 @@ Inspect one source without changing it:
 mitase normalize docs/mitase/requirements/example.yaml --stdout --format json
 ```
 
-The output contains `document`, the canonical `mitase/spec/v1` graph, and
-`provenance`, the defaults and unique adapter inferences applied by the
-frontend. The command is read-only; it never replaces the source or writes to
-the workspace.
+The output carries `contract_version: mitase/normalization-result/v1` with
+`semantic`, the schema-less semantic representation, and `provenance`, the
+defaults and unique adapter inferences applied by the frontend. The command
+is read-only; it never replaces the source or writes to the workspace. The
+normalize output is an inspection surface, not an authoring source: it cannot
+be loaded back as workspace input.
 
 Authoring frontend failures use the shared diagnostic object used by semantic
 validation. A v1 source rejected by the v0.2 loader is reported as

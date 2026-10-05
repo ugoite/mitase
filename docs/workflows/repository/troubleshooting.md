@@ -2,7 +2,16 @@
 
 ## `missing field \`kind\`` when validating a spec document
 
-A v1 document must declare both `schema: mitase/spec/v1` and a plural `kind` such as `philosophies`, `policies`, `requirements`, or `features`.
+Legacy v1 documents are not workspace input. Migrate one explicitly and keep
+the emitted v0.2 source under the configured `spec_roots`:
+
+```bash
+mitase migrate docs/mitase/legacy.yaml --stdout > docs/mitase/migrated.yaml
+```
+
+A v2 document must declare `schema: mitase/authoring/v2` and a `kind` such
+as `philosophies`, `policies`, `requirements`, `features`, or the short
+`requirement` contract.
 
 ## `unknown adapter ...`
 

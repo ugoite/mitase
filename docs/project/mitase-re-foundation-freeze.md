@@ -120,12 +120,13 @@ mitase report facets
 ```
 
 `mitase check` is the CI-facing whole-repository gate. `mitase normalize` is
-a read-only frontend inspection surface for the canonical graph and authoring
-provenance. `mitase show` exposes a specification's forward relations and
-derived reverse relations. The CLI does not run tests or apply changes, except
-for the bounded bootstrap initialization of Mitase-owned metadata decided in
+a read-only frontend inspection surface for the derived semantic
+representation and authoring provenance. `mitase show` exposes a
+specification's forward relations and derived reverse relations. The CLI does
+not run tests or apply changes, except for the bounded bootstrap
+initialization of Mitase-owned metadata decided in
 [ADR 0003](./adr-0003-bounded-bootstrap-initialization.md). The explicit read-only
-`mitase migrate <source> --stdout` transition converts a canonical v1
+`mitase migrate <source> --stdout` transition converts a legacy v1
 document into v0.2 authoring syntax; it is not a compatibility alias and does
 not write to the workspace.
 

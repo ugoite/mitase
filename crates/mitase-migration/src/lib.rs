@@ -188,7 +188,7 @@ pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocumen
     let normalized = authoring
         .normalize()
         .map_err(MigrationError::NormalizationFailed)?;
-    if normalized.document != legacy.clone().into_semantic() {
+    if normalized.semantic != legacy.clone().into_semantic() {
         return Err(MigrationError::SemanticMismatch);
     }
     Ok(authoring)
@@ -274,7 +274,7 @@ features: []
             let legacy = LegacyV1Document::parse(source).expect("legacy source");
             let migrated = migrate_v1_document(&legacy).expect("migration");
             let normalized = migrated.normalize().expect("normalization");
-            assert_eq!(normalized.document, legacy.clone().into_semantic());
+            assert_eq!(normalized.semantic, legacy.clone().into_semantic());
             assert_eq!(migrated.schema(), AUTHORING_SCHEMA);
         }
     }
