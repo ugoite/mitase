@@ -1,11 +1,14 @@
-# command|stable help text that documents the supported read-only CLI
+# command|stable help text that documents the supported CLI surface
 root|Exact specification validation
 root|readiness
 root|normalize
 root|query
 root|show
 root|list
+root|init
 check|--format <FORMAT>
+init|--spec-root <SPEC_ROOT>
+init|--dry-run
 validate-change|--format <FORMAT>
 readiness-report|--format <FORMAT>
 list|--unverified-criteria

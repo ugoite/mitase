@@ -876,6 +876,7 @@ fn cli_help_contract_fixture_matches_the_current_read_only_surface() {
         let args = match command {
             "root" => vec!["--help"],
             "check" => vec!["check", "--help"],
+            "init" => vec!["init", "--help"],
             "validate-change" => vec!["validate", "change", "--help"],
             "readiness-report" => vec!["readiness", "report", "--help"],
             "report-pr" => vec!["report", "pr", "--help"],
@@ -1721,7 +1722,7 @@ fn mitase_authoring_corpus_measurement_matches_the_short_contract_boundary() {
         (3, 7, 2, 20)
     );
     requirement_shapes.sort_unstable();
-    assert_eq!(requirement_shapes, vec![(3, 1), (15, 2)]);
+    assert_eq!(requirement_shapes, vec![(3, 1), (15, 3)]);
 }
 
 fn generated_spec_path(relative: &Path) -> PathBuf {
@@ -1914,4 +1915,154 @@ fn staged_change_validation_rejects_invalid_index_content_and_invalid_options() 
         .args(["--staged", "--baseline", "parent"])
         .assert()
         .failure();
+}
+
+#[test]
+fn init_bootstraps_minimal_workspace() {
+    let temp = tempdir().unwrap();
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("init")
+        .arg(temp.path())
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(temp.path().join("mitase.yaml")).unwrap(),
+        "schema: mitase/config/v1\n"
+    );
+    assert!(temp.path().join("docs/mitase/.gitkeep").is_file());
+}
+
+#[test]
+fn init_is_idempotent() {
+    let temp = tempdir().unwrap();
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("init")
+        .arg(temp.path())
+        .assert()
+        .success();
+    let config_before = fs::read(temp.path().join("mitase.yaml")).unwrap();
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("init")
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("already initialized"));
+    assert_eq!(
+        fs::read(temp.path().join("mitase.yaml")).unwrap(),
+        config_before
+    );
+}
+
+#[test]
+fn init_supports_custom_spec_root() {
+    let temp = tempdir().unwrap();
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["init", "--spec-root", "spec/contracts"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    let config = fs::read_to_string(temp.path().join("mitase.yaml")).unwrap();
+    assert!(config.contains("spec_roots: [spec/contracts]"));
+    assert!(temp.path().join("spec/contracts/.gitkeep").is_file());
+    assert!(!temp.path().join("docs/mitase").exists());
+}
+
+#[test]
+fn init_dry_run_writes_nothing() {
+    let temp = tempdir().unwrap();
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["init", "--dry-run", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["status"], "planned");
+    assert!(!temp.path().join("mitase.yaml").exists());
+    assert!(!temp.path().join("docs/mitase").exists());
+}
+
+#[test]
+fn init_json_uses_cli_v1_schema() {
+    let temp = tempdir().unwrap();
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["init", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["schema_version"], "mitase/cli/v1");
+    assert_eq!(report["status"], "initialized");
+    assert_eq!(report["spec_root"], "docs/mitase");
+    assert_eq!(report["created"].as_array().unwrap().len(), 2);
+
+    let again = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["init", "--format", "json"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(again.status.success());
+    let again: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
+    assert_eq!(again["schema_version"], "mitase/cli/v1");
+    assert_eq!(again["status"], "already_initialized");
+    assert!(again["created"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn init_rejects_workspace_escape() {
+    let temp = tempdir().unwrap();
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["init", "--spec-root", "../escape"])
+        .arg(temp.path())
+        .assert()
+        .code(2);
+    assert!(!temp.path().join("mitase.yaml").exists());
+    assert!(!temp.path().parent().unwrap().join("escape").exists());
+}
+
+#[test]
+fn init_does_not_generate_semantic_spec_documents() {
+    let temp = tempdir().unwrap();
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("init")
+        .arg(temp.path())
+        .assert()
+        .success();
+    let mut files = Vec::new();
+    collect_spec_yaml_files(&temp.path().join("docs/mitase"), &mut files);
+    assert!(
+        files.is_empty(),
+        "init must not author specification documents"
+    );
+    assert!(!temp.path().join("src").exists());
+    assert!(!temp.path().join("tests").exists());
+}
+
+#[test]
+fn initialized_workspace_passes_check_after_commit() {
+    let temp = tempdir().unwrap();
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("init")
+        .arg(temp.path())
+        .assert()
+        .success();
+    initialize_fixture_git(temp.path());
+    Command::cargo_bin("mitase")
+        .unwrap()
+        .arg("check")
+        .arg(temp.path())
+        .assert()
+        .success();
 }

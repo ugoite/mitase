@@ -65,6 +65,20 @@ description: "Generated reference for docs/mitase/policies/delivery.yaml"
           - **claims**:
             - **kind**: enforces
               - **rule**: POL-AUTHORITY-001#rule.repository-meaning
+    - **id**: bootstrap-enforcement
+      - **role**: enforcement
+      - **facet**: authority
+      - **responsibility**: Constrain workspace bootstrap to Mitase-owned metadata through the init plan boundary.
+      - **targets**:
+        - **id**: init-boundary
+          - **adapter**: rust
+          - **path**: src/init.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: plan_init
+          - **claims**:
+            - **kind**: enforces
+              - **rule**: POL-AUTHORITY-001#rule.bootstrap-metadata
 - **id**: POL-RESOLUTION-001
   - **title**: Exact Resolution Before Authority
   - **summary**: A relationship is authoritative only when its exact repository target resolves.
@@ -284,6 +298,18 @@ policies:
             claims:
               - kind: enforces
                 rule: POL-AUTHORITY-001#rule.repository-meaning
+      - id: bootstrap-enforcement
+        role: enforcement
+        facet: authority
+        responsibility: Constrain workspace bootstrap to Mitase-owned metadata through the init plan boundary.
+        targets:
+          - id: init-boundary
+            adapter: rust
+            path: src/init.rs
+            selector: { kind: symbol, name: plan_init }
+            claims:
+              - kind: enforces
+                rule: POL-AUTHORITY-001#rule.bootstrap-metadata
 
   - id: POL-RESOLUTION-001
     title: Exact Resolution Before Authority

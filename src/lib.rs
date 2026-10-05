@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 pub mod facet_projection;
+pub mod init;
 mod lsp;
 pub mod output;
 mod pr_context;
@@ -65,6 +66,7 @@ enum CommandKind {
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
     Config(ConfigArgs),
+    Init(InitArgs),
     Migrate(MigrateArgs),
     Normalize(NormalizeArgs),
     Query(QueryArgs),
@@ -95,6 +97,20 @@ struct ConfigEffectiveArgs {
     workspace: PathBuf,
     #[arg(long, value_enum, default_value = "yaml")]
     format: ConfigFormat,
+}
+#[derive(Debug, Args)]
+struct InitArgs {
+    /// Workspace directory to initialize.
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    /// Specification root directory, relative to the workspace.
+    #[arg(long)]
+    spec_root: Option<PathBuf>,
+    /// Show the planned files without writing anything.
+    #[arg(long)]
+    dry_run: bool,
+    #[arg(long, value_enum, default_value = "text")]
+    format: Format,
 }
 #[derive(Debug, Args)]
 struct MigrateArgs {
@@ -235,6 +251,7 @@ pub fn run() -> Result<i32> {
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
         CommandKind::Config(args) => run_config(args),
+        CommandKind::Init(args) => run_init(args),
         CommandKind::Migrate(args) => run_migrate(args),
         CommandKind::Normalize(args) => run_normalize(args),
         CommandKind::Query(args) => run_query(args),
@@ -387,6 +404,73 @@ fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     }
     Ok(output.stdout)
 }
+fn run_init(args: InitArgs) -> Result<i32> {
+    let plan = init::plan_init(&args.workspace, args.spec_root.as_deref(), args.dry_run)?;
+    if !args.dry_run {
+        init::apply_init(&plan)?;
+    }
+    let report = plan.report();
+    match args.format {
+        Format::Json => print_json(&report)?,
+        Format::Compact => println!(
+            "init | status={} | created={}",
+            report.status,
+            report.created.len()
+        ),
+        Format::Text => print!("{}", render_init_text(&report)),
+    }
+    Ok(0)
+}
+
+fn render_init_text(report: &init::InitReport) -> String {
+    let mut out = String::new();
+    match report.status {
+        init::InitStatus::Planned => {
+            out.push_str(&format!(
+                "Planned Mitase initialization in {}\n",
+                report.workspace
+            ));
+            if report.created.is_empty() {
+                out.push_str("Nothing to create.\n");
+            } else {
+                out.push_str("Would create:\n");
+                for path in &report.created {
+                    out.push_str(&format!("  {path}\n"));
+                }
+            }
+            out.push_str("Dry run; nothing was written.\n");
+        }
+        init::InitStatus::AlreadyInitialized => {
+            out.push_str(&format!(
+                "Mitase is already initialized in {}\n",
+                report.workspace
+            ));
+            if !report.created.is_empty() {
+                out.push_str("Created:\n");
+                for path in &report.created {
+                    out.push_str(&format!("  {path}\n"));
+                }
+            }
+        }
+        init::InitStatus::Initialized => {
+            out.push_str(&format!("Initialized Mitase in {}\n", report.workspace));
+            out.push_str("Created:\n");
+            for path in &report.created {
+                out.push_str(&format!("  {path}\n"));
+            }
+            out.push_str("Mitase did not create specification meaning or implementation files.\n");
+            out.push_str("Next:\n");
+            out.push_str("  1. Run `mitase check .`\n");
+            out.push_str(&format!(
+                "  2. Add your first Requirement under {}/\n",
+                report.spec_root
+            ));
+            out.push_str("  3. Run `mitase check .` again\n");
+        }
+    }
+    out
+}
+
 fn run_migrate(args: MigrateArgs) -> Result<i32> {
     if !args.stdout {
         bail!("migration is read-only; pass --stdout to write the v0.2 document to stdout");

@@ -141,9 +141,22 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
 - **id**: FEAT-INIT-001
   - **title**: Bounded workspace bootstrap
   - **summary**: Initialize missing Mitase configuration and specification-root metadata without authoring normative meaning or implementation files.
-  - **status**: planned
+  - **status**: implemented
   - **bindings**:
-    - (empty list)
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: bootstrap
+      - **responsibility**: Plan and apply deterministic workspace bootstrap writes inside the target workspace only.
+      - **targets**:
+        - **id**: init-plan
+          - **adapter**: rust
+          - **path**: src/init.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: plan_init
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.workspace-bootstrap
 - **id**: FEAT-DOCS-001
   - **title**: Documentation generation
   - **summary**: Generate a navigable documentation product from the canonical specification and its guides.
@@ -361,8 +374,20 @@ features:
   - id: FEAT-INIT-001
     title: Bounded workspace bootstrap
     summary: Initialize missing Mitase configuration and specification-root metadata without authoring normative meaning or implementation files.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: bootstrap
+        responsibility: Plan and apply deterministic workspace bootstrap writes inside the target workspace only.
+        targets:
+          - id: init-plan
+            adapter: rust
+            path: src/init.rs
+            selector: { kind: symbol, name: plan_init }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.workspace-bootstrap
 
   - id: FEAT-DOCS-001
     title: Documentation generation

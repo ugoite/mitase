@@ -264,6 +264,29 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.facet-projection
                 covers: [FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection]
                 runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: report_facets_projects_explicit_facets_with_declared_verification } }
+      - id: bootstrap-verification
+        role: verification
+        facet: capability-verification
+        responsibility: Verify bounded workspace bootstrap behavior.
+        targets:
+          - id: init-plan-test
+            adapter: rust
+            path: src/init.rs
+            selector: { kind: symbol, name: tests::default_plan_creates_minimal_config_and_marker }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.workspace-bootstrap
+                covers: [FEAT-INIT-001#binding.implementation/target.init-plan]
+                runner: { runner: cargo-test, arguments: { package: mitase, test: init::tests::default_plan_creates_minimal_config_and_marker } }
+          - id: init-acceptance-test
+            adapter: rust
+            path: tests/v1_cli.rs
+            selector: { kind: symbol, name: initialized_workspace_passes_check_after_commit }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.workspace-bootstrap
+                covers: [FEAT-INIT-001#binding.implementation/target.init-plan]
+                runner: { runner: cargo-test-integration, arguments: { package: mitase, harness: v1_cli, test: initialized_workspace_passes_check_after_commit } }
 
   - id: REQ-CAPABILITY-002
     title: Multi-language inventory

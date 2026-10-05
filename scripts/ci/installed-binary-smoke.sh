@@ -116,6 +116,12 @@ main() {
 
   actual_version="$("${installed_binary}" --version)"
   test "${actual_version}" = "mitase ${expected_version}"
+  "${installed_binary}" init --help >/dev/null
+  init_workspace="${temp_root}/init-workspace"
+  mkdir -p "$init_workspace"
+  "${installed_binary}" init "$init_workspace" >/dev/null
+  test -f "${init_workspace}/mitase.yaml"
+  test -f "${init_workspace}/docs/mitase/.gitkeep"
   setup_workspace "$fixture" "$workspace"
 
   validation_report="${temp_root}/validation.json"

@@ -5,6 +5,7 @@ FEAT-DOCS-001#binding.implementation/target.generated-index  declared:docs/refer
 FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection  rust:src/facet_projection.rs::facet_projection::build_facet_projection
 FEAT-IDENTITY-001#binding.implementation/target.target-resolver  rust:crates/mitase-workspace/src/lib.rs::lib::resolve_target_in_workspace
 FEAT-INDEX-001#binding.implementation/target.spec-index  rust:crates/mitase-workspace/src/lib.rs::lib::SpecIndex
+FEAT-INIT-001#binding.implementation/target.init-plan  rust:src/init.rs::init::plan_init
 FEAT-INVENTORY-001#binding.implementation/target.inventory-registry  rust:crates/mitase-inventory/src/lib.rs::lib::InventoryRegistry
 FEAT-INVENTORY-001#binding.implementation/target.semantic-diff  rust:crates/mitase-inventory/src/lib.rs::lib::semantic_diff
 FEAT-LSP-001#binding.implementation/target.lsp-server  rust:src/lsp/mod.rs::mod::run_lsp_server
@@ -56,11 +57,14 @@ PHIL-005#binding.authority-boundary-guide/target.architecture  markdown:docs/und
 PHIL-006#binding.evidence-boundary-guide/target.architecture  markdown:docs/understand/model/v1-architecture.md::heading::Evidence and derived state
 POL-009#binding.quality-gate-evidence/target.ci-workflow  declared:.github/workflows/ci.yml
 POL-013#binding.iteration-documentation/target.architecture  markdown:docs/understand/model/v1-architecture.md::heading::Foundation hierarchy
+POL-AUTHORITY-001#binding.bootstrap-enforcement/target.init-boundary  rust:src/init.rs::init::plan_init
 POL-AUTHORITY-001#binding.specification-validator/target.validation-entry  rust:crates/mitase-validation/src/lib.rs::lib::validate
 POL-EVIDENCE-001#binding.evidence-validation/target.workspace-validation  rust:crates/mitase-validation/src/lib.rs::lib::validate_workspace
 POL-GRAPH-001#binding.graph-index/target.specification-index  rust:crates/mitase-workspace/src/lib.rs::lib::SpecIndex
 POL-RELATION-001#binding.relation-validation/target.document-shapes  rust:crates/mitase-validation/src/lib.rs::lib::validate_document_shapes
 POL-RESOLUTION-001#binding.target-resolution/target.resolve-target  rust:crates/mitase-workspace/src/lib.rs::lib::resolve_target
+REQ-CAPABILITY-001#binding.bootstrap-verification/target.init-acceptance-test  rust:tests/v1_cli.rs::v1_cli::initialized_workspace_passes_check_after_commit
+REQ-CAPABILITY-001#binding.bootstrap-verification/target.init-plan-test  rust:src/init.rs::init::tests::default_plan_creates_minimal_config_and_marker
 REQ-CAPABILITY-001#binding.core-verification/target.change-validation-test  rust:crates/mitase-validation/src/lib.rs::lib::tests::validate_reports_deleted_criterion_without_artifact_update
 REQ-CAPABILITY-001#binding.core-verification/target.contract-test  rust:crates/mitase-spec-model/src/lib.rs::lib::tests::binding_level_relations_and_non_target_contract_refs_are_rejected
 REQ-CAPABILITY-001#binding.core-verification/target.digest-format-test  rust:crates/mitase-spec-model/src/lib.rs::lib::tests::sha256_digests_use_the_canonical_lowercase_representation
