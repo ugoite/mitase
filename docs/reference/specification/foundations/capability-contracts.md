@@ -33,7 +33,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
   - **criteria**:
     - **id**: spec-model
       - **kind**: behavior
-      - **statement**: Canonical specification documents accept the v1 shape and reject obsolete or ambiguous identities.
+      - **statement**: Semantic specification documents carry the typed domain graph and reject unknown fields and ambiguous identities.
       - **governed_by**:
         - POL-AUTHORITY-001#rule.repository-meaning
     - **id**: digest-format
@@ -122,7 +122,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
           - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: tests::old_shape_is_rejected
+            - **name**: tests::semantic_documents_serialize_without_a_schema_field
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
@@ -132,7 +132,7 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
                 - **runner**: cargo-test
                 - **arguments**:
                   - **package**: mitase-spec-model
-                  - **test**: tests::old_shape_is_rejected
+                  - **test**: tests::semantic_documents_serialize_without_a_schema_field
         - **id**: target-lifecycle-test
           - **adapter**: rust
           - **path**: crates/mitase-spec-model/src/lib.rs
@@ -624,7 +624,7 @@ requirements:
     criteria:
       - id: spec-model
         kind: behavior
-        statement: Canonical specification documents accept the v1 shape and reject obsolete or ambiguous identities.
+        statement: Semantic specification documents carry the typed domain graph and reject unknown fields and ambiguous identities.
         governed_by: [POL-AUTHORITY-001#rule.repository-meaning]
       - id: digest-format
         kind: behavior
@@ -695,12 +695,12 @@ requirements:
           - id: spec-model-test
             adapter: rust
             path: crates/mitase-spec-model/src/lib.rs
-            selector: { kind: symbol, name: tests::old_shape_is_rejected }
+            selector: { kind: symbol, name: tests::semantic_documents_serialize_without_a_schema_field }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.spec-model
                 covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document]
-                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::old_shape_is_rejected } }
+                runner: { runner: cargo-test, arguments: { package: mitase-spec-model, test: tests::semantic_documents_serialize_without_a_schema_field } }
           - id: target-lifecycle-test
             adapter: rust
             path: crates/mitase-spec-model/src/lib.rs

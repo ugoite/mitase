@@ -23,7 +23,7 @@ FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-036/target.entrypoint-037-rust-cra
 FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-037/target.entrypoint-038-rust-crates-mitase-spec-model-src-lib-rs-repopath-display  rust:crates/mitase-spec-model/src/lib.rs::lib::impl(RepoPath)::display
 FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-038/target.entrypoint-039-rust-crates-mitase-spec-model-src-lib-rs-repopath-new  rust:crates/mitase-spec-model/src/lib.rs::lib::impl(RepoPath)::new
 FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-039/target.entrypoint-040-rust-crates-mitase-spec-model-src-lib-rs-repopath-to-strin  rust:crates/mitase-spec-model/src/lib.rs::lib::impl(RepoPath)::to_string_lossy
-FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-040/target.entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-specdocument-sche  rust:crates/mitase-spec-model/src/lib.rs::lib::impl(SpecDocument)::schema
+FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-040/target.entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-requirement  rust:crates/mitase-spec-model/src/lib.rs::lib::Requirement
 FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-lowercase-hex/target.entrypoint-lowercase-hex  rust:crates/mitase-spec-model/src/lib.rs::lib::lowercase_hex
 FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-repo-path-from-path/target.entrypoint-repo-path-from-path  rust:crates/mitase-spec-model/src/lib.rs::lib::impl(RepoPath)::from_path
 FEAT-PUBLIC-VALIDATION-001#binding.public-api-041/target.entrypoint-044-rust-crates-mitase-validation-src-lib-rs-phase-for-rule  rust:crates/mitase-validation/src/lib.rs::lib::phase_for_rule
@@ -50,7 +50,7 @@ FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-076/target.entrypoint-08
 FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-077/target.entrypoint-083-rust-crates-mitase-workspace-src-lib-rs-selector-supports  rust:crates/mitase-workspace/src/lib.rs::lib::selector_supports_editable
 FEAT-READINESS-001#binding.implementation/target.readiness-evaluate  rust:crates/mitase-validation/src/readiness.rs::readiness::evaluate
 FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format  rust:crates/mitase-spec-model/src/lib.rs::lib::format_sha256
-FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document  rust:crates/mitase-spec-model/src/lib.rs::lib::SpecDocument
+FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document  rust:crates/mitase-spec-model/src/lib.rs::lib::SemanticDocument
 FEAT-SPEC-MODEL-001#binding.implementation/target.target-lifecycle  rust:crates/mitase-spec-model/src/lib.rs::lib::ArtifactTargetLifecycle
 PHIL-003#binding.architecture-guide/target.architecture  markdown:docs/understand/model/v1-architecture.md::heading::Foundation hierarchy
 PHIL-005#binding.authority-boundary-guide/target.architecture  markdown:docs/understand/model/v1-architecture.md::heading::Authority boundary
@@ -74,7 +74,7 @@ REQ-CAPABILITY-001#binding.core-verification/target.inventory-test  rust:crates/
 REQ-CAPABILITY-001#binding.core-verification/target.ownership-test  rust:crates/mitase-workspace/src/lib.rs::lib::tests::planned_features_do_not_own_active_artifacts
 REQ-CAPABILITY-001#binding.core-verification/target.project-config-test  rust:crates/mitase-project-model/src/lib.rs::lib::tests::project_config_preserves_readiness_configuration
 REQ-CAPABILITY-001#binding.core-verification/target.readiness-test  rust:crates/mitase-validation/src/readiness.rs::readiness::tests::readiness_levels_add_axes_monotonically
-REQ-CAPABILITY-001#binding.core-verification/target.spec-model-test  rust:crates/mitase-spec-model/src/lib.rs::lib::tests::old_shape_is_rejected
+REQ-CAPABILITY-001#binding.core-verification/target.spec-model-test  rust:crates/mitase-spec-model/src/lib.rs::lib::tests::semantic_documents_serialize_without_a_schema_field
 REQ-CAPABILITY-001#binding.core-verification/target.target-lifecycle-test  rust:crates/mitase-spec-model/src/lib.rs::lib::tests::artifact_target_lifecycle_defaults_to_present_and_accepts_absent
 REQ-CAPABILITY-001#binding.delivery-verification/target.cli-test  rust:tests/v1_cli.rs::v1_cli::current_workspace_checks_and_reports_configured_readiness
 REQ-CAPABILITY-001#binding.delivery-verification/target.docs-path-helper  rust:tests/v1_cli.rs::v1_cli::generated_spec_path

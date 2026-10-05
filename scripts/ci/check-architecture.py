@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -75,6 +76,72 @@ def relative(path: str | Path) -> str:
     return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
 
 
+# The removed v1 canonical model must never re-enter normal Rust code.
+# Only the migration crate may name it; every other production surface and
+# test must use the semantic representation or the legacy-only migration AST.
+LEGACY_FORBIDDEN_IDENTIFIERS = ("SPEC_SCHEMA", "SpecSourcePolicy", "SpecDocument")
+
+LEGACY_SCHEMA_LITERAL = "mitase/spec/v1"
+
+# Production files allowed to name the legacy schema, with the only permitted
+# line shapes. The workspace loader recognizes the legacy schema solely to
+# route MITASE-SOURCE-001 migration guidance; it never parses that shape.
+LEGACY_LITERAL_ALLOWLIST = {
+    "crates/mitase-workspace/src/lib.rs": (
+        "LEGACY_SOURCE_SCHEMA",
+        "legacy mitase/spec/v1 source is not accepted",
+    ),
+}
+
+
+def production_lines(path: Path) -> list[str]:
+    """Return the non-test lines of a Rust source file."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    production = []
+    for line in lines:
+        if line.strip() == "#[cfg(test)]":
+            break
+        production.append(line)
+    return production
+
+
+def rust_sources(root: Path) -> list[Path]:
+    return sorted(root.rglob("*.rs"))
+
+
+def check_legacy_leakage(errors: list[str]) -> None:
+    identifier_pattern = re.compile(
+        r"\b(?:" + "|".join(LEGACY_FORBIDDEN_IDENTIFIERS) + r")\b"
+    )
+    for source in (
+        rust_sources(REPO_ROOT / "src")
+        + rust_sources(REPO_ROOT / "crates")
+        + rust_sources(REPO_ROOT / "tests")
+    ):
+        if "mitase-migration" in source.parts:
+            continue
+        relative_path = relative(source)
+        if relative_path.startswith("tests/"):
+            lines = source.read_text(encoding="utf-8").splitlines()
+            for number, line in enumerate(lines, start=1):
+                if identifier_pattern.search(line):
+                    errors.append(
+                        f"{relative_path}:{number} reintroduces the removed canonical model"
+                    )
+            continue
+        for number, line in enumerate(production_lines(source), start=1):
+            if identifier_pattern.search(line):
+                errors.append(
+                    f"{relative_path}:{number} reintroduces the removed canonical model"
+                )
+            if LEGACY_SCHEMA_LITERAL in line:
+                allowed = LEGACY_LITERAL_ALLOWLIST.get(relative_path, ())
+                if not any(shape in line for shape in allowed):
+                    errors.append(
+                        f"{relative_path}:{number} names the legacy schema outside the allowlist"
+                    )
+
+
 def check() -> None:
     data = metadata()
     packages = {package["name"]: package for package in data["packages"]}
@@ -111,6 +178,8 @@ def check() -> None:
             errors.append(
                 f"{name} has disallowed internal dependencies: {', '.join(disallowed)}"
             )
+
+    check_legacy_leakage(errors)
 
     if errors:
         raise ArchitectureError("\n".join(f"- {error}" for error in errors))
