@@ -105,6 +105,26 @@ PY
     cargo test --locked --quiet -p mitase-workspace release_policy_switches_to_v2_only_for_the_0_2_line
     run_focused_test mitase_authoring_v2_preserves_the_pre_migration_canonical_graph
     run_focused_test self_hosted_config_preserves_the_exact_artifact_resolution_baseline
+    run_focused_test report_facets_projects_explicit_facets_with_declared_verification
+    run_focused_test report_facets_keeps_operation_style_features_valid
+    run_mitase report facets FEAT-FACET-001 fixtures/acceptance/facet-oriented-v2 --format json >"$tmp_dir/facets.json"
+    run_mitase report facets FEAT-OPS-001 fixtures/acceptance/ugoite-current-ops-v2 --format json >"$tmp_dir/ugoite-facets.json"
+    OUTPUT_PATH="$tmp_dir/facets.json" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+report = json.loads(Path(os.environ["OUTPUT_PATH"]).read_text(encoding="utf-8"))
+if report.get("contract_version") != "mitase/facet-projection-report/v1":
+    raise SystemExit("facet report has an unexpected contract version")
+criteria = {entry["criterion"]: entry for entry in report.get("criteria", [])}
+creation = criteria.get("REQ-FACET-001#criterion.creation", {}).get("facets", [])
+facets = sorted(row["facet"] for row in creation)
+if facets != ["core", "frontend", "mcp", "weird-project-specific-name"]:
+    raise SystemExit(f"facet report dropped an opaque facet: {facets}")
+if any(row["declared_verification"]["status"] != "verified" for row in creation):
+    raise SystemExit("facet report lost declared verification")
+PY
     python3 scripts/ci/check-architecture.py
     run_boundary_test
     ;;

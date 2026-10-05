@@ -234,18 +234,19 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
 - **id**: FEAT-FACET-PROJECTION-001
   - **title**: Facet projection report
   - **summary**: Project exact implementation claims by opaque Binding facet without creating a second specification model.
-  - **status**: planned
+  - **status**: implemented
   - **bindings**:
     - **id**: implementation
       - **role**: implementation
       - **facet**: query
-      - **responsibility**: Build deterministic facet projection read models. The executable projection lands with the M-2 implementation; this planned binding keeps the new criterion addressable without claiming current evidence.
+      - **responsibility**: Build deterministic facet projection read models.
       - **targets**:
-        - **id**: facet-projection-contract
-          - **adapter**: declared
-          - **path**: docs/workflows/repository/facet-oriented-authoring.md
+        - **id**: facet-projection
+          - **adapter**: rust
+          - **path**: src/facet_projection.rs
           - **selector**:
-            - **kind**: file
+            - **kind**: symbol
+            - **name**: build_facet_projection
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
@@ -336,17 +337,17 @@ features:
   - id: FEAT-FACET-PROJECTION-001
     title: Facet projection report
     summary: Project exact implementation claims by opaque Binding facet without creating a second specification model.
-    status: planned
+    status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: query
-        responsibility: Build deterministic facet projection read models. The executable projection lands with the M-2 implementation; this planned binding keeps the new criterion addressable without claiming current evidence.
+        responsibility: Build deterministic facet projection read models.
         targets:
-          - id: facet-projection-contract
-            adapter: declared
-            path: docs/workflows/repository/facet-oriented-authoring.md
-            selector: { kind: file }
+          - id: facet-projection
+            adapter: rust
+            path: src/facet_projection.rs
+            selector: { kind: symbol, name: build_facet_projection }
             claims:
               - kind: satisfies
                 criterion: REQ-CAPABILITY-001#criterion.facet-projection

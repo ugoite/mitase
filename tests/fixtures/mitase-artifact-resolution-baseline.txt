@@ -2,6 +2,7 @@ FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate  rust:c
 FEAT-CLI-001#binding.implementation/target.cli-run  rust:src/lib.rs::lib::run
 FEAT-CONTRACT-001#binding.implementation/target.contract-model  rust:crates/mitase-spec-model/src/lib.rs::lib::Contract
 FEAT-DOCS-001#binding.implementation/target.generated-index  declared:docs/reference/specification/index.md
+FEAT-FACET-PROJECTION-001#binding.implementation/target.facet-projection  rust:src/facet_projection.rs::facet_projection::build_facet_projection
 FEAT-IDENTITY-001#binding.implementation/target.target-resolver  rust:crates/mitase-workspace/src/lib.rs::lib::resolve_target_in_workspace
 FEAT-INDEX-001#binding.implementation/target.spec-index  rust:crates/mitase-workspace/src/lib.rs::lib::SpecIndex
 FEAT-INVENTORY-001#binding.implementation/target.inventory-registry  rust:crates/mitase-inventory/src/lib.rs::lib::InventoryRegistry
@@ -74,6 +75,10 @@ REQ-CAPABILITY-001#binding.core-verification/target.target-lifecycle-test  rust:
 REQ-CAPABILITY-001#binding.delivery-verification/target.cli-test  rust:tests/v1_cli.rs::v1_cli::current_workspace_checks_and_reports_configured_readiness
 REQ-CAPABILITY-001#binding.delivery-verification/target.docs-path-helper  rust:tests/v1_cli.rs::v1_cli::generated_spec_path
 REQ-CAPABILITY-001#binding.delivery-verification/target.docs-test  rust:tests/v1_cli.rs::v1_cli::generated_spec_reference_covers_every_source_document
+REQ-CAPABILITY-001#binding.delivery-verification/target.facet-projection-cli-test  rust:tests/v1_cli.rs::v1_cli::report_facets_projects_explicit_facets_with_declared_verification
+REQ-CAPABILITY-001#binding.delivery-verification/target.facet-projection-invalid-runner-test  rust:src/facet_projection.rs::facet_projection::tests::invalid_runner_metadata_aggregates_to_unverified_without_passed_language
+REQ-CAPABILITY-001#binding.delivery-verification/target.facet-projection-opaque-test  rust:src/facet_projection.rs::facet_projection::tests::keeps_opaque_facets_and_lists_non_semantic_targets
+REQ-CAPABILITY-001#binding.delivery-verification/target.facet-projection-unit-test  rust:src/facet_projection.rs::facet_projection::tests::projects_multiple_facets_for_one_criterion
 REQ-CAPABILITY-001#binding.delivery-verification/target.lsp-diagnostics-test  rust:src/lsp/handlers.rs::handlers::tests::handle_initialized_publishes_deterministic_notifications_for_known_documents
 REQ-CAPABILITY-001#binding.delivery-verification/target.lsp-test  rust:src/lsp/handlers.rs::handlers::tests::handle_hover_renders_each_spec_layer
 REQ-CAPABILITY-002#binding.dependency-verification/target.javascript-export-test  rust:crates/mitase-inventory/src/lib.rs::lib::tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly

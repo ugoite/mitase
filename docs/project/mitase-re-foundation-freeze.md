@@ -110,6 +110,7 @@ mitase query
 mitase show
 mitase list
 mitase report pr
+mitase report facets
 ```
 
 `mitase check` is the CI-facing whole-repository gate. `mitase normalize` is
