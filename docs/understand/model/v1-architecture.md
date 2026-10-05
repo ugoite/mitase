@@ -164,7 +164,7 @@ The production crates have one canonical responsibility each:
 | Crate | Canonical responsibility | Allowed internal dependencies |
 | --- | --- | --- |
 | `mitase-spec-model` | Typed Philosophy, Policy, Requirement, Criterion, Feature, Binding, Artifact, and claim model | none |
-| `mitase-authoring` | Strict v0.2 authoring AST and normalization into the canonical spec model | `mitase-spec-model` |
+| `mitase-authoring` | Strict v0.2 authoring AST and normalization into the derived semantic representation | `mitase-spec-model` |
 | `mitase-migration` | Legacy `mitase/spec/v1` migration input isolated for the explicit read-only `mitase migrate` command | `mitase-authoring`, `mitase-spec-model` |
 | `mitase-project-model` | Typed `mitase/config/v1` project configuration | `mitase-spec-model` |
 | `mitase-code-intel` | Language-aware symbol resolution supporting artifact adapters | `mitase-spec-model` |

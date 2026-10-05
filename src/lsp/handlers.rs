@@ -2,7 +2,7 @@
 // REQ-CORE-001
 
 use mitase_diagnostics::{Diagnostic as CanonicalDiagnostic, Location, Severity};
-use mitase_spec_model::{BoundTargetRef, LocalAnchorKind, SpecAnchor, SpecDocument, SpecId};
+use mitase_spec_model::{BoundTargetRef, LocalAnchorKind, SemanticDocument, SpecAnchor, SpecId};
 use mitase_workspace::{FrontendDiagnosticError, SpecIndex, SpecWorkspace};
 use regex::Regex;
 use serde_json::Value;
@@ -891,7 +891,7 @@ fn source_span_to_range(line: &str, span: SourceSpan) -> Range {
 fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<Hover> {
     for loaded in &workspace.documents {
         match &loaded.document {
-            SpecDocument::Philosophies { philosophies, .. } => {
+            SemanticDocument::Philosophies { philosophies, .. } => {
                 if let Some(philosophy) = philosophies.iter().find(|item| item.id.0 == spec_id) {
                     return Some(Hover {
                         contents: MarkupContent::markdown(format!(
@@ -905,7 +905,7 @@ fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<
                     });
                 }
             }
-            SpecDocument::Policies { policies, .. } => {
+            SemanticDocument::Policies { policies, .. } => {
                 if let Some(policy) = policies.iter().find(|item| item.id.0 == spec_id) {
                     return Some(Hover {
                         contents: MarkupContent::markdown(format!(
@@ -916,7 +916,7 @@ fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<
                     });
                 }
             }
-            SpecDocument::Requirements { requirements, .. } => {
+            SemanticDocument::Requirements { requirements, .. } => {
                 if let Some(requirement) = requirements.iter().find(|item| item.id.0 == spec_id) {
                     return Some(Hover {
                         contents: MarkupContent::markdown(format!(
@@ -931,7 +931,7 @@ fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<
                     });
                 }
             }
-            SpecDocument::Features { features, .. } => {
+            SemanticDocument::Features { features, .. } => {
                 if let Some(feature) = features.iter().find(|item| item.id.0 == spec_id) {
                     return Some(Hover {
                         contents: MarkupContent::markdown(format!(

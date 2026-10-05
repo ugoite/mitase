@@ -1,7 +1,9 @@
 use crate::{VerificationAssessment, VerificationAssessmentStatus, assess_verification_claim};
 use globset::{Glob, GlobSetBuilder};
 use mitase_inventory::{ArtifactUnitKind, SemanticChange, SemanticChangeKind};
-use mitase_spec_model::{ExactSelector, LocalAnchorKind, SpecAnchor, SpecDocument, TargetClaim};
+use mitase_spec_model::{
+    ExactSelector, LocalAnchorKind, SemanticDocument, SpecAnchor, TargetClaim,
+};
 use mitase_workspace::{AnchorValue, SpecIndex, SpecWorkspace};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -773,7 +775,7 @@ fn add_item(
 fn item_entry(workspace: &SpecWorkspace, id: &str) -> Option<SpecEntry> {
     for loaded in &workspace.documents {
         match &loaded.document {
-            SpecDocument::Philosophies { philosophies, .. } => {
+            SemanticDocument::Philosophies { philosophies, .. } => {
                 if let Some(x) = philosophies.iter().find(|x| x.id.0 == id) {
                     return Some(SpecEntry {
                         kind: "philosophy".into(),
@@ -781,7 +783,7 @@ fn item_entry(workspace: &SpecWorkspace, id: &str) -> Option<SpecEntry> {
                     });
                 }
             }
-            SpecDocument::Policies { policies, .. } => {
+            SemanticDocument::Policies { policies, .. } => {
                 if let Some(x) = policies.iter().find(|x| x.id.0 == id) {
                     return Some(SpecEntry {
                         kind: "policy".into(),
@@ -789,7 +791,7 @@ fn item_entry(workspace: &SpecWorkspace, id: &str) -> Option<SpecEntry> {
                     });
                 }
             }
-            SpecDocument::Requirements { requirements, .. } => {
+            SemanticDocument::Requirements { requirements, .. } => {
                 if let Some(x) = requirements.iter().find(|x| x.id.0 == id) {
                     return Some(SpecEntry {
                         kind: "requirement".into(),
@@ -797,7 +799,7 @@ fn item_entry(workspace: &SpecWorkspace, id: &str) -> Option<SpecEntry> {
                     });
                 }
             }
-            SpecDocument::Features { features, .. } => {
+            SemanticDocument::Features { features, .. } => {
                 if let Some(x) = features.iter().find(|x| x.id.0 == id) {
                     return Some(SpecEntry {
                         kind: "feature".into(),

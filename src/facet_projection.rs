@@ -9,7 +9,7 @@
 use anyhow::{Result, bail};
 use mitase_spec_model::{
     ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus, RepoPath, Selector,
-    SpecAnchor, SpecDocument, SpecId, TargetClaim,
+    SemanticDocument, SpecAnchor, SpecId, TargetClaim,
 };
 use mitase_validation::{VerificationAssessmentStatus, assess_verification_claim};
 use mitase_workspace::{AnchorValue, SpecIndex, SpecWorkspace};
@@ -143,7 +143,7 @@ pub fn build_facet_projection(
 
 fn feature_record(workspace: &SpecWorkspace, id: &SpecId) -> Option<ItemStatus> {
     for loaded in &workspace.documents {
-        let SpecDocument::Features { features, .. } = &loaded.document else {
+        let SemanticDocument::Features { features, .. } = &loaded.document else {
             continue;
         };
         for feature in features {

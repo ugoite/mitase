@@ -65,7 +65,7 @@ pub fn migrate_v1_to_v2(source: &str) -> Result<AuthoringDocument, MigrationErro
 }
 
 /// Convert a parsed legacy document and prove that the v0.2 result
-/// normalizes back to the exact source graph.
+/// carries the exact source meaning.
 pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocument, MigrationError> {
     let canonical = legacy.document();
     let authoring = match canonical {
@@ -117,7 +117,7 @@ pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocumen
     let normalized = authoring
         .normalize()
         .map_err(MigrationError::NormalizationFailed)?;
-    if &normalized.document != canonical {
+    if normalized.document != legacy.document().clone().into_semantic() {
         return Err(MigrationError::SemanticMismatch);
     }
     Ok(authoring)
@@ -149,10 +149,7 @@ impl fmt::Display for MigrationError {
                 )
             }
             Self::SemanticMismatch => {
-                write!(
-                    formatter,
-                    "migration changed the canonical semantic document"
-                )
+                write!(formatter, "migration changed the source semantic document")
             }
         }
     }
@@ -206,7 +203,10 @@ features: []
             let legacy = LegacyV1Document::parse(source).expect("legacy source");
             let migrated = migrate_v1_document(&legacy).expect("migration");
             let normalized = migrated.normalize().expect("normalization");
-            assert_eq!(&normalized.document, legacy.document());
+            assert_eq!(
+                normalized.document,
+                legacy.document().clone().into_semantic()
+            );
             assert_eq!(migrated.schema(), AUTHORING_SCHEMA);
         }
     }
