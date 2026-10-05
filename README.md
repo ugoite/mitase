@@ -1,10 +1,24 @@
 # Mitase
 
-Mitase is a compiler for executable software specifications. It connects a
-repository's intent to its implementation and verifies that the repository
-still satisfies its own specification.
+Keep what a repository promises connected to the code that implements it and
+the evidence designated to verify it.
+
+Mitase is a repository-native compiler and validator for executable software
+specifications. It turns declared intent, requirements, implementation
+ownership, and verification claims into a semantic graph, resolves their exact
+repository targets, and checks that those relationships still hold.
 
 > Mitase tells you what must be true. It does not make it true.
+
+Requirements, code, and tests drift when the relationships between them live
+only in documents, conventions, or reviewer memory. Mitase makes those
+relationships explicit and machine-checkable. Once declared, exact bindings
+can be checked again as the repository changes instead of being rediscovered
+by hand.
+
+Mitase does not plan work, write code, run tests, review changes, retry agents,
+or deliver software. External tools do those jobs. Mitase checks whether the
+resulting repository still agrees with what it says must be true.
 
 Mitase owns the specification graph, exact artifact bindings, repository
 inventory, artifact resolution, validation, verification claims, coverage,
@@ -18,7 +32,7 @@ declared relationships and evidence are structurally satisfied, but it does
 not own planning, implementation, execution, testing, review, retries, or
 delivery.
 
-## Frozen product boundary
+## Product boundary
 
 The canonical model is:
 

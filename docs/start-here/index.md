@@ -6,8 +6,10 @@ sidebar_position: 1
 
 # Start here
 
-`mitase` is for repositories that want the reason for a change, the exact code
-that implements it, and the evidence that verifies it to remain connected.
+`mitase` is for repositories that want declared intent, exact implementation
+targets, and verification evidence to remain connected in the repository
+instead of relying on people to reconstruct those relationships during every
+change.
 Start with the first-run story, or jump to adoption if the repository already
 has code and tests.
 
