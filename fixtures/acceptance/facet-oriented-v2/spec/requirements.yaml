@@ -1,0 +1,95 @@
+schema: mitase/authoring/v2
+kind: requirements
+namespace: demo
+category: Facet demonstration
+requirements:
+  - id: REQ-FACET-001
+    title: Facet demo capability
+    description: One surface-independent capability reached through several opaque facets.
+    priority: medium
+    status: implemented
+    criteria:
+      - id: creation
+        kind: behavior
+        statement: Creating an entry appends a new revision without replacing history.
+        governed_by: [POL-FACET-001#rule.facet-governance]
+      - id: recovery
+        kind: behavior
+        statement: Deleting an entry keeps a recoverable record.
+        governed_by: [POL-FACET-001#rule.facet-governance]
+    bindings:
+      - id: verification
+        role: verification
+        facet: verification
+        responsibility: Verify each facet target with the exact test that exercises it.
+        targets:
+          - id: core-creation-case
+            adapter: rust
+            path: crates/facet-tests/tests/test_facet.rs
+            selector: { kind: symbol, name: test_core_creation }
+            claims:
+              - kind: verifies
+                criterion: REQ-FACET-001#criterion.creation
+                covers: [FEAT-FACET-001#binding.core/target.create-entry]
+                runner:
+                  runner: cargo-test
+                  arguments:
+                    package: facet-tests
+                    harness: test_facet
+                    test: test_core_creation
+          - id: core-recovery-case
+            adapter: rust
+            path: crates/facet-tests/tests/test_facet.rs
+            selector: { kind: symbol, name: test_core_recovery }
+            claims:
+              - kind: verifies
+                criterion: REQ-FACET-001#criterion.recovery
+                covers: [FEAT-FACET-001#binding.core/target.delete-entry]
+                runner:
+                  runner: cargo-test
+                  arguments:
+                    package: facet-tests
+                    harness: test_facet
+                    test: test_core_recovery
+          - id: frontend-creation-case
+            adapter: rust
+            path: crates/facet-tests/tests/test_facet.rs
+            selector: { kind: symbol, name: test_frontend_creation }
+            claims:
+              - kind: verifies
+                criterion: REQ-FACET-001#criterion.creation
+                covers: [FEAT-FACET-001#binding.frontend/target.entry-api]
+                runner:
+                  runner: cargo-test
+                  arguments:
+                    package: facet-tests
+                    harness: test_facet
+                    test: test_frontend_creation
+          - id: mcp-creation-case
+            adapter: rust
+            path: crates/facet-tests/tests/test_facet.rs
+            selector: { kind: symbol, name: test_mcp_save }
+            claims:
+              - kind: verifies
+                criterion: REQ-FACET-001#criterion.creation
+                covers: [FEAT-FACET-001#binding.mcp/target.save]
+                runner:
+                  runner: cargo-test
+                  arguments:
+                    package: facet-tests
+                    harness: test_facet
+                    test: test_mcp_save
+          - id: batch-creation-case
+            adapter: rust
+            path: crates/facet-tests/tests/test_facet.rs
+            selector: { kind: symbol, name: test_batch_tool }
+            claims:
+              - kind: verifies
+                criterion: REQ-FACET-001#criterion.creation
+                covers: [FEAT-FACET-001#binding.weird/target.batch-tool]
+                runner:
+                  runner: cargo-test
+                  arguments:
+                    package: facet-tests
+                    harness: test_facet
+                    test: test_batch_tool

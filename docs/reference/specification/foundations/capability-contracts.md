@@ -99,6 +99,11 @@ description: "Generated reference for docs/mitase/requirements/capability-contra
       - **statement**: Every canonical specification source has a current generated reference page and index entry.
       - **governed_by**:
         - POL-013#rule.specification-before-implementation
+    - **id**: facet-projection
+      - **kind**: behavior
+      - **statement**: Read-only specification inspection projects current implementation targets by their explicit Binding facet and direct satisfies claims, preserves exact verification references, and never infers required facets or project-specific facet meaning.
+      - **governed_by**:
+        - POL-AUTHORITY-001#rule.repository-meaning
   - **bindings**:
     - **id**: core-verification
       - **role**: verification
@@ -559,6 +564,14 @@ requirements:
         kind: documentation
         statement: Every canonical specification source has a current generated reference page and index entry.
         governed_by: [POL-013#rule.specification-before-implementation]
+      - id: facet-projection
+        kind: behavior
+        statement: >
+          Read-only specification inspection projects current implementation
+          targets by their explicit Binding facet and direct satisfies claims,
+          preserves exact verification references, and never infers required
+          facets or project-specific facet meaning.
+        governed_by: [POL-AUTHORITY-001#rule.repository-meaning]
     bindings:
       - id: core-verification
         role: verification

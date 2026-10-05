@@ -12,6 +12,8 @@ real repository, and where to look when the graph is blocked.
 
 - [Configuration](./configuration.md) — the strict `mitase/config/v1` workspace
   contract.
+- [Facet-oriented authoring](./facet-oriented-authoring.md) — an optional
+  pattern for projecting one capability across opaque Binding facets.
 - [Existing repository](../../start-here/adopt/existing-repository.md) — the
   incremental adoption path.
 - [Troubleshooting](./troubleshooting.md) — repair validation and traceability

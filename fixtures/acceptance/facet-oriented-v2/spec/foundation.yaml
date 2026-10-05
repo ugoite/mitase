@@ -1,0 +1,12 @@
+schema: mitase/authoring/v2
+kind: philosophies
+namespace: foundation
+category: Foundation
+philosophies:
+  - id: PHIL-FACET-001
+    title: Facets stay opaque
+    summary: Projection reads explicit bindings without inventing product meaning.
+    principles:
+      - id: explicit-projection
+        statement: Reports project only declared targets, claims, and verification.
+        applies_to: [specification, implementation, verification]

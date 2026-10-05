@@ -34,6 +34,27 @@ The read models use the canonical specification identifiers and exact relation
 references. Their arrays are deterministic for the same workspace and command
 arguments.
 
+## Facet projection report (planned v0.2.2 contract)
+
+The planned `mitase report facets <source> <workspace> --format json|markdown`
+command is a read-only projection over the unchanged graph. It is not
+implemented yet; this section fixes its contract ahead of the implementation
+so reviewers can approve the meaning before the code.
+
+Accepted sources are limited to a `Feature` ID (`FEAT-*`) or a `Requirement`
+criterion anchor (`REQ-*#criterion.*`). Any other source is a top-level error
+(exit `2`) with no JSON error envelope, matching the existing CLI policy.
+
+JSON keeps the normal `schema_version: "mitase/cli/v1"` envelope and adds the
+independent `contract_version: "mitase/facet-projection-report/v1"`. The
+payload groups current `role: implementation` exact targets with direct
+`satisfies` claims by criterion and opaque facet, carries exact verification
+references as `declared_verification` (`verified` / `partial` / `unverified`),
+and lists every other current target under `non_semantic_targets` without
+calling it a gap. Facet names are passed through untouched. Missing facets
+are never validation failures, and `declared_verification` never claims a
+runner ran. Existing `show` / `query` / `list` JSON shapes are unchanged.
+
 ## Compact output
 
 Pass `--format compact` when a stable one-line-per-record stream is preferred

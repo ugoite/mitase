@@ -1,0 +1,105 @@
+schema: mitase/authoring/v2
+kind: features
+namespace: demo
+category: Facet demonstration
+features:
+  - id: FEAT-FACET-001
+    title: Facet demo feature
+    summary: Reach one capability through core, frontend, mcp, and project-specific facets.
+    status: implemented
+    contracts:
+      - id: facet-coherence
+        kind: custom
+        source: FEAT-FACET-001#binding.api/target.api-contract
+        participants:
+          - { target: FEAT-FACET-001#binding.core/target.create-entry, role: core }
+          - { target: FEAT-FACET-001#binding.frontend/target.entry-api, role: frontend }
+          - { target: FEAT-FACET-001#binding.mcp/target.save, role: mcp }
+          - { target: FEAT-FACET-001#binding.weird/target.batch-tool, role: batch }
+        guarantees: [REQ-FACET-001#criterion.creation]
+    bindings:
+      - id: core
+        role: implementation
+        facet: core
+        responsibility: Own the canonical durable behavior.
+        targets:
+          - id: create-entry
+            adapter: rust
+            path: crates/facet-core/src/lib.rs
+            selector: { kind: symbol, name: create_entry_core }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FACET-001#criterion.creation
+          - id: delete-entry
+            adapter: rust
+            path: crates/facet-core/src/lib.rs
+            selector: { kind: symbol, name: delete_entry_core }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FACET-001#criterion.recovery
+      - id: frontend
+        role: implementation
+        facet: frontend
+        responsibility: Expose creation through the browser client.
+        targets:
+          - id: entry-api
+            adapter: rust
+            path: crates/facet-frontend/src/lib.rs
+            selector: { kind: symbol, name: entry_api_frontend }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FACET-001#criterion.creation
+      - id: mcp
+        role: implementation
+        facet: mcp
+        responsibility: Expose creation through the semantic facade.
+        targets:
+          - id: save
+            adapter: rust
+            path: crates/facet-mcp/src/lib.rs
+            selector: { kind: symbol, name: save_entry_mcp }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FACET-001#criterion.creation
+      - id: weird
+        role: implementation
+        facet: weird-project-specific-name
+        responsibility: Keep project-specific facet names opaque and sorted.
+        targets:
+          - id: batch-tool
+            adapter: rust
+            path: crates/facet-batch/src/lib.rs
+            selector: { kind: symbol, name: batch_tool }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FACET-001#criterion.creation
+      - id: ops
+        role: operation
+        facet: frontend
+        responsibility: Route entry traffic without claiming semantic ownership.
+        targets:
+          - id: router
+            adapter: rust
+            path: crates/facet-ops/src/lib.rs
+            selector: { kind: symbol, name: route_entry }
+      - id: api
+        role: contract-source
+        facet: api
+        responsibility: Hold the shared facet coherence contract source.
+        targets:
+          - id: api-contract
+            adapter: declared
+            path: spec/api-contract.md
+            selector: { kind: file }
+      - id: legacy
+        role: implementation
+        facet: backend
+        responsibility: Keep the exposes-only target visible without projecting coverage.
+        targets:
+          - id: legacy-entry
+            adapter: rust
+            path: crates/facet-legacy/src/lib.rs
+            selector: { kind: symbol, name: legacy_entry }
+            claims:
+              - kind: exposes
+                target: FEAT-FACET-001#binding.core/target.create-entry
