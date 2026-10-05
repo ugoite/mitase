@@ -2,8 +2,8 @@
 
 <!-- FEAT-DOCS-001 -->
 
-Passing `mitase validate workspace .` is the floor, not the finish line. A workspace can
-stay green while the four-layer design still drifts toward churn,
+Passing `mitase check .` is the floor, not the finish line. A workspace can
+stay green while the specification graph still drifts toward churn,
 duplication, or vague ownership. This guide calls out common
 **bad-but-valid** shapes and the refactors that usually help.
 
@@ -199,13 +199,13 @@ Before accepting a spec item that validates, ask:
    because the relationship is real, not because the graph demanded a token
    edge.
 
-A healthy four-layer spec does not only pass validation. It also makes future
+A healthy specification graph does not only pass validation. It also makes future
 change easier to reason about.
 
 ## Continue with these pages
 
 - [mitase concepts](../model/concepts.md) for the layer definitions and authoring basics
 - [Getting started](../../start-here/first-run/getting-started.md) to scaffold a workspace and practice
-  the four-layer flow
+  the intent-to-evidence flow
 - [Troubleshooting](../../workflows/repository/troubleshooting.md) when validation is failing, not just
   the structure

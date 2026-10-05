@@ -30,13 +30,13 @@ const chooseYourPath = [
   {
     title: 'Getting started',
     description:
-      'Choose this if you are new to mitase, want the guided first-run path, and do not already know the four-layer model.',
+      'Choose this if you are new to mitase, want the guided first-run path, and do not already know the specification graph.',
     to: '/docs/start-here/first-run/getting-started'
   },
   {
     title: 'Quick start',
     description:
-      'Stay on the shortest site-local install-to-validate path when you want the fastest route into `mitase validate workspace .`.',
+      'Stay on the shortest site-local install-to-check path when you want the fastest route into `mitase check .`.',
     to: '/docs/start-here/first-run/getting-started#quick-start-commands'
   },
   {
@@ -92,7 +92,7 @@ const journeys = [
   {
     title: 'Avoid spec anti-patterns',
     description:
-      'Learn the common bad-but-valid four-layer shapes before a green spec turns into a painful rewrite.',
+      'Learn the common bad-but-valid specification-graph shapes before a green spec turns into a painful rewrite.',
     to: '/docs/understand/quality/spec-antipatterns'
   },
   {
@@ -103,12 +103,12 @@ const journeys = [
   },
   {
     title: 'Start a workspace',
-    description: 'Scaffold a project, fill in the layered spec, and run validate without guessing the layout.',
+    description: 'Scaffold a project, fill in the connected spec, and run check without guessing the layout.',
     to: '/docs/start-here/first-run/getting-started'
   },
   {
     title: 'Follow a full tutorial',
-    description: 'Build a realistic four-layer example from scratch when you want the full repository story.',
+    description: 'Build a realistic intent-to-evidence example from scratch when you want the full repository story.',
     to: '/docs/start-here/first-run/tutorial'
   },
   {
@@ -129,7 +129,7 @@ const journeys = [
   },
   {
     title: 'Tune validation',
-    description: 'Review config switches for autofix, planned work, orphan checks, and runtime behavior.',
+    description: 'Review configuration for validation, orphan checks, and runtime behavior.',
     to: '/docs/workflows/repository/configuration'
   },
   {

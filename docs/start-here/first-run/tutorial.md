@@ -3,7 +3,7 @@
 This tutorial creates a minimal v2 authoring workspace by hand. The v2
 documents are normalized into Mitase's canonical specification graph before
 validation. The first successful workspace is intentionally smaller than the
-full four-layer story: one config file and one short requirement document are
+full intent-to-evidence story: one config file and one short requirement document are
 enough to check a connected criterion, implementation target, and verification
 target.
 

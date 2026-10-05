@@ -18,4 +18,4 @@ making a broad ownership claim.
 - [Examples and templates](./examples-and-templates.md) — compare the checked-in
   starter layouts.
 
-For the underlying four-layer model, read [Understand the model](../../understand/index.md).
+For the underlying specification graph, read [Understand the model](../../understand/index.md).
