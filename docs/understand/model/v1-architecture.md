@@ -153,7 +153,11 @@ The intended dependency direction is:
 ```text
 spec-model → authoring / project-model → workspace / inventory → validation → CLI
                                   ↘ code-intel
+         spec-model + authoring → migration → CLI (explicit migrate only)
 ```
+
+Only the root `mitase` binary may depend on `mitase-migration`. Workspace,
+validation, inventory, code-intel, and diagnostics must never depend on it.
 
 The production crates have one canonical responsibility each:
 
@@ -161,6 +165,7 @@ The production crates have one canonical responsibility each:
 | --- | --- | --- |
 | `mitase-spec-model` | Typed Philosophy, Policy, Requirement, Criterion, Feature, Binding, Artifact, and claim model | none |
 | `mitase-authoring` | Strict v0.2 authoring AST and normalization into the canonical spec model | `mitase-spec-model` |
+| `mitase-migration` | Legacy `mitase/spec/v1` migration input isolated for the explicit read-only `mitase migrate` command | `mitase-authoring`, `mitase-spec-model` |
 | `mitase-project-model` | Typed `mitase/config/v1` project configuration | `mitase-spec-model` |
 | `mitase-code-intel` | Language-aware symbol resolution supporting artifact adapters | `mitase-spec-model` |
 | `mitase-inventory` | Repository artifact inventory and semantic comparison | `mitase-project-model`, `mitase-spec-model` |
