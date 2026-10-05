@@ -13,10 +13,10 @@ has while adopting and using that model, not around the names of the folders
 that happen to store the source files.
 
 The [Mitase Re-Foundation freeze](./project/mitase-re-foundation-freeze.md) is
-the source of truth for the product boundary. Some workflow and reference
-pages still describe the transitional execution-oriented alpha surface; those
-pages are retained until the follow-up removal phases and are not the target
-Mitase product definition.
+the source of truth for the product boundary. The former execution-oriented
+surfaces have been removed from the current checkout; the
+[historical migration notes](./workflows/repository/migration.md) remain only
+for old v0.1 to v0.2 workspaces.
 
 ## Pick a path
 

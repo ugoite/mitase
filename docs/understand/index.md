@@ -19,4 +19,4 @@ configuration so the specification and the repository remain aligned.
 - [The domain glossary](./model/domain-glossary.md) defines the stable terms
   used in the specification graph.
 - [Quality and anti-patterns](./quality/index.md) explains the shapes that are
-  technically valid but work against traceable delivery.
+  technically valid but work against traceable implementation and verification.
