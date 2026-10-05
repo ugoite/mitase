@@ -1,6 +1,6 @@
 ---
 title: "Understand the model"
-description: "Learn how mitase connects stable intent to executable, verifiable work."
+description: "Learn how mitase connects repository-owned intent to exact implementation and verification evidence."
 sidebar_position: 1
 ---
 

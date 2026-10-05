@@ -3,7 +3,7 @@
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'mitase',
-  tagline: 'Specification-driven development that stays close to the repository',
+  tagline: 'Repository-native specification validation from intent to implementation and evidence',
   favicon: 'img/favicon.svg',
   url: 'https://ugoite.github.io',
   baseUrl: '/mitase/',

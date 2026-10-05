@@ -3,26 +3,26 @@
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
 
-const layers = [
+const intentToEvidence = [
   {
-    title: 'Philosophy',
-    description: 'Capture the stable ideals and trade-offs that should survive implementation changes.',
+    title: 'Principles',
+    description: 'Philosophy and Policy preserve durable ideals and repository-wide rules.',
     to: '/docs/understand/model/concepts#philosophy'
   },
   {
-    title: 'Policy',
-    description: 'Turn those ideals into repository-wide rules that contributors can follow consistently.',
-    to: '/docs/understand/model/concepts#policy'
+    title: 'Obligations',
+    description: 'Requirements and Criteria state observable behavior and independently verifiable conditions.',
+    to: '/docs/understand/model/concepts#criterion'
   },
   {
-    title: 'Requirements',
-    description: 'Define concrete obligations that can be verified through tests and repository evidence.',
-    to: '/docs/understand/model/concepts#requirements'
+    title: 'Implementation',
+    description: 'Features and Bindings connect those obligations to exact repository targets.',
+    to: '/docs/understand/model/concepts#binding'
   },
   {
-    title: 'Features',
-    description: 'Connect implemented behavior back to requirements and forward to the code that proves it exists.',
-    to: '/docs/understand/model/concepts#features'
+    title: 'Verification',
+    description: 'Verification Claims identify the exact evidence designated to verify each Criterion.',
+    to: '/docs/understand/model/domain-glossary'
   }
 ];
 
@@ -154,16 +154,16 @@ export default function Home() {
   return (
     <Layout
       title="mitase documentation"
-      description="Browse the four-layer model, contributor workflows, and the self-hosted mitase specification."
+      description="Browse the intent-to-evidence model, contributor workflows, and the self-hosted mitase specification."
     >
       <header className="hero hero--primary siteHero">
         <div className="container">
-          <p className="siteHeroEyebrow">Specification-driven development for real repositories</p>
-          <h1 className="siteHeroTitle">Keep the spec close to the repository</h1>
+          <p className="siteHeroEyebrow">Repository-native executable specifications</p>
+          <h1 className="siteHeroTitle">Keep repository promises connected to implementation and verification</h1>
           <p className="siteHeroLead">
-            Decide whether repository-native traceability fits your repo, then browse
-            the four specification layers, common contributor journeys, and self-hosted
-            validation output in one place.
+            Declare what must be true, bind it to exact implementation and verification
+            targets, and let Mitase check that those relationships still resolve as the
+            repository changes.
           </p>
           <div className="siteHeroActions">
             <Link className="button button--secondary button--lg" to="/docs/start-here/first-run/getting-started">
@@ -215,22 +215,38 @@ export default function Home() {
         <section className="siteSection siteSectionAlt">
           <div className="container">
             <div className="siteSectionHeader">
-              <h2>Four specification layers</h2>
+              <h2>From intent to evidence</h2>
               <p>
-                <code>mitase</code> keeps philosophy, policy, requirements, and features separate
-                so the repository can explain itself from intent down to code and tests.
+                <code>mitase</code> keeps declared intent, exact implementation targets, and
+                verification evidence connected so those relationships can be checked
+                mechanically as the repository changes.
               </p>
             </div>
             <div className="siteCardGrid">
-              {layers.map((layer) => (
-                <article className="siteCard" key={layer.title}>
-                  <h3>{layer.title}</h3>
-                  <p>{layer.description}</p>
-                  <Link className="siteCardLink" to={layer.to}>
-                    {`Open the ${layer.title} layer`}
+              {intentToEvidence.map((item) => (
+                <article className="siteCard" key={item.title}>
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                  <Link className="siteCardLink" to={item.to}>
+                    {`Open ${item.title}`}
                   </Link>
                 </article>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="siteSection">
+          <div className="container">
+            <div className="siteSectionHeader">
+              <h2>Why exact relationships?</h2>
+              <p>
+                Exact relationships reduce rediscovery. Once a Criterion is connected to
+                its implementation and verification targets, contributors, CI, IDEs, and
+                external agents can inspect the same repository-owned structure instead
+                of reconstructing those relationships from memory every time the code
+                changes.
+              </p>
             </div>
           </div>
         </section>
