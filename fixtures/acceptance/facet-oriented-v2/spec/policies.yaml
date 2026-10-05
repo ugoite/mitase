@@ -1,0 +1,15 @@
+schema: mitase/authoring/v2
+kind: policies
+namespace: product
+category: Facet policies
+policies:
+  - id: POL-FACET-001
+    title: Facet projection stays non-normative
+    summary: Missing facets are product decisions, never validation failures.
+    description: The facet fixture policy governs the demo capability slice.
+    rules:
+      - id: facet-governance
+        level: must
+        statement: Facet reports never require any facet to exist.
+        governed_by: [PHIL-FACET-001#principle.explicit-projection]
+        enforcement: external repository tooling

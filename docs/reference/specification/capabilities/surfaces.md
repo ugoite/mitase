@@ -231,6 +231,24 @@ description: "Generated reference for docs/mitase/features/capabilities/surfaces
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.docs-generation
+- **id**: FEAT-FACET-PROJECTION-001
+  - **title**: Facet projection report
+  - **summary**: Project exact implementation claims by opaque Binding facet without creating a second specification model.
+  - **status**: planned
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: query
+      - **responsibility**: Build deterministic facet projection read models. The executable projection lands with the M-2 implementation; this planned binding keeps the new criterion addressable without claiming current evidence.
+      - **targets**:
+        - **id**: facet-projection-contract
+          - **adapter**: declared
+          - **path**: docs/workflows/repository/facet-oriented-authoring.md
+          - **selector**:
+            - **kind**: file
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.facet-projection
 
 ## Source YAML
 
@@ -314,6 +332,24 @@ features:
             path: src/lsp/mod.rs
             selector: { kind: symbol, name: run_lsp_server }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.lsp-navigation }]
+
+  - id: FEAT-FACET-PROJECTION-001
+    title: Facet projection report
+    summary: Project exact implementation claims by opaque Binding facet without creating a second specification model.
+    status: planned
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: query
+        responsibility: Build deterministic facet projection read models. The executable projection lands with the M-2 implementation; this planned binding keeps the new criterion addressable without claiming current evidence.
+        targets:
+          - id: facet-projection-contract
+            adapter: declared
+            path: docs/workflows/repository/facet-oriented-authoring.md
+            selector: { kind: file }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.facet-projection
 
   - id: FEAT-DOCS-001
     title: Documentation generation

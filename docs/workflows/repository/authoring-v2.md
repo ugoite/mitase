@@ -92,12 +92,21 @@ path/span, a reason, any candidates, and a suggested next action. `check` and
 publishes it in `publishDiagnostics.data` without introducing a separate
 editor-specific semantic model.
 
+## Facet-oriented authoring (optional pattern)
+
+The same `mitase/authoring/v2` contract supports an optional facet-oriented
+style: one capability `Feature` holds `role: implementation` bindings per
+project-defined opaque `facet`, each with direct `kind: satisfies` claims
+against the same surface-independent `Criterion`. No new schema, style flag,
+or `authoring/v3` exists; missing facets are never validation failures. See
+[facet-oriented authoring](./facet-oriented-authoring.md).
+
 ## Corpus boundary
 
 The Mitase corpus is the measurement boundary for this contract. The current
-corpus contains 11 authoring-v2 documents and 30 top-level semantic items:
-3 philosophies, 7 policies, 2 requirements, and 18 features. Neither
-requirement fits the minimal short shape because the first has 13 criteria and
+corpus contains 11 authoring-v2 documents and 31 top-level semantic items:
+3 philosophies, 7 policies, 2 requirements, and 19 features. Neither
+requirement fits the minimal short shape because the first has 14 criteria and
 two verification bindings, while the second has three criteria and six
 verification targets. The corpus therefore stays in the explicit collection
 forms; it is not rewritten into a short form that would discard relations or
