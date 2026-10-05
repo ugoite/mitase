@@ -298,8 +298,8 @@ fn run_report_facets(source: &str, workspace: &Path, format: ReportFormat) -> Re
 fn run_report_pr(base: &str, head: &str, workspace: &Path, format: ReportFormat) -> Result<i32> {
     let repo = git_output(workspace, &["rev-parse", "--show-toplevel"])?;
     let repo = PathBuf::from(String::from_utf8(repo)?.trim());
-    let base_sha = resolve_commit(&repo, &base)?;
-    let head_sha = resolve_commit(&repo, &head)?;
+    let base_sha = resolve_commit(&repo, base)?;
+    let head_sha = resolve_commit(&repo, head)?;
     let base_snapshot = snapshot_commit(&repo, &base_sha)?;
     let head_snapshot = snapshot_commit(&repo, &head_sha)?;
     let base_workspace = SpecWorkspace::load(base_snapshot.path())?;

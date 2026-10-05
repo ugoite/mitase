@@ -111,6 +111,10 @@ struct SemanticTarget {
     target: BoundTargetRef,
 }
 
+type FacetRowKey = (String, SpecId, SpecAnchor);
+type FacetRowTargets = BTreeMap<FacetRowKey, BTreeSet<BoundTargetRef>>;
+type CriterionGrouping = BTreeMap<SpecAnchor, FacetRowTargets>;
+
 /// Build a deterministic facet projection for one feature or criterion.
 ///
 /// Accepted sources are a feature ID (`FEAT-*`) or a requirement criterion
@@ -313,10 +317,7 @@ fn criterion_entries(
     index: &SpecIndex,
     semantic: &[SemanticTarget],
 ) -> Vec<FacetCriterionEntry> {
-    let mut grouped: BTreeMap<
-        SpecAnchor,
-        BTreeMap<(String, SpecId, SpecAnchor), BTreeSet<BoundTargetRef>>,
-    > = BTreeMap::new();
+    let mut grouped: CriterionGrouping = BTreeMap::new();
     for entry in semantic {
         let Some(target) = index.target(&entry.target) else {
             continue;
