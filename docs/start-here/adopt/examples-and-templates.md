@@ -1,17 +1,25 @@
 # Examples and templates
 
-The active v1 CLI ships executable validation and readiness commands. It does not currently expose a scaffold generator.
+`mitase init` creates the minimal workspace: one `mitase.yaml` and the
+spec-root marker. Use the checked-in `examples/` directories as reference
+patterns for comparison and learning once the workspace exists, not as
+bootstrap sources to copy.
 
-Use the checked-in `examples/` directories as the source of truth for starter layouts.
-
-Do not copy the repository root `mitase.yaml` as a starter. It is Mitase's self-hosting dogfood profile: it governs a mature, multi-language repository with explicit inventory and readiness probes. Start from the closest example, then expand its scope only as exact ownership, verification, and plans become real.
+Do not copy the repository root `mitase.yaml` as a starter. It is Mitase's
+self-hosting dogfood profile: it governs a mature, multi-language repository
+with explicit inventory and readiness probes. Start from `mitase init`, inspect
+the resolved conventions with `mitase config effective .`, and consult the
+closest example only when you need a concrete shape for a larger layout.
 
 Recommended flow:
 
-- copy the closest example into your repository structure
-- update `mitase.yaml` with your real `workspace.spec_roots` and `workspace.excludes`
-- rewrite the four spec layers in `docs/mitase`
-- run `cargo run --quiet -- validate <workspace>` until clean
+- run `mitase init .` in your repository
+- run `mitase config effective .` and add explicit settings only for what the
+  conventions miss
+- write the first Requirement by hand, following the
+  [tutorial](../first-run/tutorial.md)
+- compare against the closest example when the layout grows beyond one
+  capability
 
 Example families:
 

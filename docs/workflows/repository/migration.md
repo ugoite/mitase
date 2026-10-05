@@ -74,7 +74,7 @@ backward-compatible.
 
 | Field | Default | Notes |
 |---|---|---|
-| `validate.require_reciprocal_links` | `true` | New. Adjacent-layer links must be reciprocal. See [Understanding validation output](../../start-here/first-run/getting-started.md#understanding-validation-output). |
+| `validate.require_reciprocal_links` | `true` | New. Adjacent-layer links must be reciprocal. See the [troubleshooting workflow](./troubleshooting.md). |
 
 ### Action required
 

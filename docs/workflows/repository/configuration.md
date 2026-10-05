@@ -2,7 +2,9 @@
 
 `mitase` v1 uses one strict `mitase/config/v1` repository configuration. Unknown fields are rejected.
 
-The repository root `mitase.yaml` is Mitase's mature self-hosting dogfood profile, not a starter configuration. New repositories should copy the closest checked-in example and adopt one connected capability at a time; the root profile deliberately applies the strictest current v1 validation boundary to itself.
+For a new repository, run `mitase init`. This page documents the complete configuration contract.
+
+The repository root `mitase.yaml` is Mitase's mature self-hosting dogfood profile, not a starter configuration. New repositories start from the minimal `init` output and adopt one connected capability at a time; the root profile deliberately applies the strictest current v1 validation boundary to itself.
 
 Configuration controls how Mitase interprets and validates the repository-owned
 specification; it does not transfer authority over repository work to Mitase.

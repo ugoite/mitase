@@ -28,58 +28,28 @@ const intentToEvidence = [
 
 const chooseYourPath = [
   {
-    title: 'Getting started',
+    title: 'Get started',
     description:
-      'Choose this if you are new to mitase, want the guided first-run path, and do not already know the specification graph.',
+      'Install mitase, run `mitase init .`, and confirm your first `mitase check .` when you are new to the specification model.',
     to: '/docs/start-here/first-run/getting-started'
   },
   {
-    title: 'Quick start',
+    title: 'Adopt an existing repository',
     description:
-      'Stay on the shortest site-local install-to-check path when you want the fastest route into `mitase check .`.',
-    to: '/docs/start-here/first-run/getting-started#quick-start-commands'
+      'Phase mitase into a repo that already has code and tests: init, inspect the effective configuration, then connect one bounded capability.',
+    to: '/docs/start-here/adopt/existing-repository'
   },
   {
-    title: 'Tutorial',
+    title: 'Understand Mitase',
     description:
-      'Follow the longer repository story when you want more narrative context than a first-run checklist.',
-    to: '/docs/start-here/first-run/tutorial'
+      'Read the model, philosophy, and architecture when you want the durable ideas behind the specification graph.',
+    to: '/docs/understand/model/concepts'
   },
   {
-    title: 'Editor-first path',
+    title: 'Use and troubleshoot',
     description:
-      'Open the VS Code extension guide when you want diagnostics, spec navigation, and trace lookups before you memorize the CLI.',
-    to: '/docs/workflows/integrations/vscode-extension'
-  },
-  {
-    title: 'Historical migration',
-    description:
-      'Read the historical v0.1 to v0.2 notes only when an old workspace still mentions legacy fields or removed commands.',
-    to: '/docs/workflows/repository/migration'
-  },
-  {
-    title: 'Visual explorer',
-    description:
-      'Compare template-backed and example-backed paths when you want to see the main shapes before choosing one.',
-    to: '/docs/start-here/adopt/examples-and-templates'
-  },
-  {
-    title: 'Reviewer workflow',
-    description:
-      'Open the review loop guide when a pull request already exists and you need one concrete path through spec IDs, traced code, and git history.',
-    to: '/docs/contribute/reviewing/reviewer-workflow'
-  },
-  {
-    title: 'Trace adapter matrix',
-    description:
-      'Check which built-in languages support symbol validation only versus richer `doc_contains` and strict coverage checks.',
-    to: '/docs/workflows/integrations/trace-adapter-support'
-  },
-  {
-    title: 'Troubleshooting',
-    description:
-      'Jump straight to validation and traceability repair guidance when an existing workspace is already blocked.',
-    to: '/docs/workflows/repository/troubleshooting'
+      'Open workflows, reference, and diagnostics when a workspace already exists and something needs repair or tuning.',
+    to: '/docs/workflows'
   }
 ];
 
@@ -94,27 +64,6 @@ const journeys = [
     description:
       'Learn the common bad-but-valid specification-graph shapes before a green spec turns into a painful rewrite.',
     to: '/docs/understand/quality/spec-antipatterns'
-  },
-  {
-    title: 'Adopt an existing repository',
-    description:
-      'Phase mitase into a repo that already has code, tests, and docs instead of translating the greenfield flow by hand.',
-    to: '/docs/start-here/adopt/existing-repository'
-  },
-  {
-    title: 'Start a workspace',
-    description: 'Scaffold a project, fill in the connected spec, and run check without guessing the layout.',
-    to: '/docs/start-here/first-run/getting-started'
-  },
-  {
-    title: 'Follow a full tutorial',
-    description: 'Trace a realistic specification from durable intent to implementation and verification evidence when you want the full repository story.',
-    to: '/docs/start-here/first-run/tutorial'
-  },
-  {
-    title: 'Troubleshoot a broken workspace',
-    description: 'Jump straight to the common validation, traceability, and workflow failure patterns.',
-    to: '/docs/workflows/repository/troubleshooting'
   },
   {
     title: 'Historical migration notes',
