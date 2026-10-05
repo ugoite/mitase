@@ -48,7 +48,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         workspace_versions = re.findall(
             r'(?m)^name = "mitase(?:-[^"]+)?"\nversion = "0.2.2"$', lock
         )
-        self.assertEqual(len(workspace_versions), 9)
+        self.assertEqual(len(workspace_versions), 10)
         self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.2"', installer)
         self.assertIn("`0.2.x` (active)", acceptance)
         self.assertIn("first stable release", release_notes)
@@ -191,23 +191,28 @@ class ReleaseWorkflowTests(unittest.TestCase):
                 if "uses:" in line and "./" not in line:
                     self.assertRegex(line, PINNED_ACTION)
 
-    def test_release_acceptance_gate_covers_both_release_lines(self) -> None:
+    def test_release_acceptance_gate_covers_the_semantic_release_line(self) -> None:
         self.assertTrue(ACCEPTANCE.is_file())
         self.assertTrue(ACCEPTANCE.stat().st_mode & 0o111)
         script = ACCEPTANCE.read_text(encoding="utf-8")
         for required in (
-            '0.1.*)',
             '0.2.*)',
-            "current_release_policy_keeps_dual_source_during_0_1_x",
             "MITASE-SOURCE-001",
             "mitase migrate",
-            "mitase_authoring_v2_preserves_the_pre_migration_canonical_graph",
+            "mitase_authoring_v2_preserves_v022_semantic_graph",
             "self_hosted_config_preserves_the_exact_artifact_resolution_baseline",
-            "ugoite_current_v2_corpus_covers_all_output_contracts",
+            "mitase/normalization-result/v1",
             "cli_help_contract_fixture_matches_the_current_read_only_surface",
+            "public_cli_does_not_expose",
             "check-architecture.py",
         ):
             self.assertIn(required, script)
+        for retired in (
+            "current_release_policy_keeps_dual_source_during_0_1_x",
+            "release_policy_switches_to_v2_only_for_the_0_2_line",
+            "mitase_authoring_v2_preserves_the_pre_migration_canonical_graph",
+        ):
+            self.assertNotIn(retired, script)
 
 
 if __name__ == "__main__":

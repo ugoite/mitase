@@ -66,21 +66,49 @@ if not diagnostic.get("primary", {}).get("path"):
 PY
 }
 
+assert_normalize_contract() {
+  local source="$1"
+  local json_path="$2"
+  local yaml_path="$3"
+
+  run_mitase normalize "$source" --stdout --format json >"$json_path"
+  run_mitase normalize "$source" --stdout --format yaml >"$yaml_path"
+
+  SOURCE="$source" JSON_PATH="$json_path" YAML_PATH="$yaml_path" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(Path(os.environ["JSON_PATH"]).read_text(encoding="utf-8"))
+if payload.get("contract_version") != "mitase/normalization-result/v1":
+    raise SystemExit(f"{os.environ['SOURCE']} did not emit the normalization contract")
+semantic = payload.get("semantic")
+if not isinstance(semantic, dict) or "kind" not in semantic:
+    raise SystemExit(f"{os.environ['SOURCE']} normalize output has no semantic payload")
+if "schema" in semantic:
+    raise SystemExit(f"{os.environ['SOURCE']} semantic payload retains a schema field")
+if "target_schema" in payload.get("provenance", {}):
+    raise SystemExit(f"{os.environ['SOURCE']} provenance retains target_schema")
+if payload.get("provenance", {}).get("source_schema") != "mitase/authoring/v2":
+    raise SystemExit(f"{os.environ['SOURCE']} provenance has an unexpected source schema")
+if "document" in payload:
+    raise SystemExit(f"{os.environ['SOURCE']} normalize output retains the document key")
+
+text = Path(os.environ["YAML_PATH"]).read_text(encoding="utf-8")
+if "contract_version: mitase/normalization-result/v1" not in text:
+    raise SystemExit(f"{os.environ['SOURCE']} yaml output lacks the contract version")
+if "mitase/spec/v1" in text:
+    raise SystemExit(f"{os.environ['SOURCE']} yaml output contains the legacy schema")
+PY
+}
+
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 case "$version" in
-  0.1.*)
-    echo "checking 0.1.x dual-source dogfood acceptance for $version"
-    run_focused_test show_does_not_mark_invalid_runner_metadata_as_verified
-    cargo test --locked --quiet -p mitase-workspace current_release_policy_keeps_dual_source_during_0_1_x
-    run_focused_test mitase_authoring_v2_preserves_the_pre_migration_canonical_graph
-    run_focused_test self_hosted_config_preserves_the_exact_artifact_resolution_baseline
-    run_focused_test ugoite_current_v2_corpus_covers_all_output_contracts
-    run_focused_test cli_help_contract_fixture_matches_the_current_read_only_surface
-    ;;
   0.2.*)
-    echo "checking 0.2.x single-source cutover acceptance for $version"
+    echo "checking 0.2.x semantic acceptance for $version"
+    run_mitase check .
     assert_v1_rejected \
       check \
       "$tmp_dir/check.json" \
@@ -92,6 +120,10 @@ case "$version" in
       "$tmp_dir/validate.stderr" \
       validate workspace fixtures/v1/valid-web-app --format json
 
+    if run_mitase migrate fixtures/v1/valid-web-app/spec/feature.yaml >"$tmp_dir/migrate.stdout" 2>"$tmp_dir/migrate.stderr"; then
+      echo "migrate unexpectedly wrote without --stdout" >&2
+      exit 1
+    fi
     run_mitase migrate fixtures/v1/valid-web-app/spec/feature.yaml --stdout >"$tmp_dir/migrated.yaml"
     OUTPUT_PATH="$tmp_dir/migrated.yaml" python3 - <<'PY'
 import os
@@ -102,8 +134,12 @@ if "schema: mitase/authoring/v2" not in source:
     raise SystemExit("migrate did not emit mitase/authoring/v2 source")
 PY
 
-    cargo test --locked --quiet -p mitase-workspace release_policy_switches_to_v2_only_for_the_0_2_line
-    run_focused_test mitase_authoring_v2_preserves_the_pre_migration_canonical_graph
+    assert_normalize_contract \
+      fixtures/first-run-short/docs/mitase/requirement.yaml \
+      "$tmp_dir/normalized.json" \
+      "$tmp_dir/normalized.yaml"
+
+    run_focused_test mitase_authoring_v2_preserves_v022_semantic_graph
     run_focused_test self_hosted_config_preserves_the_exact_artifact_resolution_baseline
     run_focused_test report_facets_projects_explicit_facets_with_declared_verification
     run_focused_test report_facets_keeps_operation_style_features_valid
@@ -127,6 +163,7 @@ if any(row["declared_verification"]["status"] != "verified" for row in creation)
 PY
     python3 scripts/ci/check-architecture.py
     run_boundary_test
+    run_focused_test cli_help_contract_fixture_matches_the_current_read_only_surface
     ;;
   *)
     echo "unsupported release line for acceptance gate: $version" >&2

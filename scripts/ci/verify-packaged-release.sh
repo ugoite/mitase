@@ -131,6 +131,23 @@ case "$release_line" in
 
     "$binary" migrate "$v1_fixture/spec/feature.yaml" --stdout >"$temp_dir/migrated.yaml"
     grep -F "schema: mitase/authoring/v2" "$temp_dir/migrated.yaml" >/dev/null
+
+    "$binary" normalize "${repo_root}/fixtures/first-run-short/docs/mitase/requirement.yaml" --stdout --format json >"$temp_dir/normalized.json"
+    CONTRACT_PATH="$temp_dir/normalized.json" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(Path(os.environ["CONTRACT_PATH"]).read_text(encoding="utf-8"))
+if payload.get("contract_version") != "mitase/normalization-result/v1":
+    raise SystemExit("package smoke normalize output lacks the contract version")
+if not isinstance(payload.get("semantic"), dict) or "kind" not in payload["semantic"]:
+    raise SystemExit("package smoke normalize output has no semantic payload")
+if "schema" in payload["semantic"] or "target_schema" in payload.get("provenance", {}):
+    raise SystemExit("package smoke normalize output retains the legacy schema")
+if "mitase/spec/v1" in Path(os.environ["CONTRACT_PATH"]).read_text(encoding="utf-8"):
+    raise SystemExit("package smoke normalize output contains the legacy schema")
+PY
     ;;
   *)
     echo "unsupported release line for package smoke: $version" >&2
