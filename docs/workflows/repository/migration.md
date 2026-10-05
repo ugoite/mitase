@@ -26,9 +26,9 @@ roots.
 
 ## Explicit v0.1 to v0.2 authoring migration
 
-The v0.2 authoring contract is a separate frontend from the canonical graph.
-When an existing canonical specification needs to become v0.2 authoring
-source, run the explicit read-only migration command for each document:
+The v0.2 authoring contract is a separate frontend for the derived semantic
+representation. When existing specification source needs to become v0.2
+authoring source, run the explicit read-only migration command for each document:
 
 ```bash
 mitase migrate docs/mitase/requirements/example.yaml --stdout \
@@ -37,7 +37,7 @@ mitase migrate docs/mitase/requirements/example.yaml --stdout \
 
 The source must declare `schema: mitase/spec/v1`. The output declares
 `schema: mitase/authoring/v2`, is deterministic, and is checked by Mitase by
-normalizing it back to the exact source `SpecDocument`, including IDs,
+normalizing it back to the exact source meaning, including IDs,
 anchors, binding targets, claims, and verification claims. The command never
 overwrites the source or writes to the workspace itself.
 
@@ -49,6 +49,24 @@ authoring source; place reviewed v2 documents under the configured
 the documented v0.2 short contract. In the 0.2.x release line, the normal
 workspace loader closes the v1 authoring entrance; `mitase migrate` remains the
 explicit path that reads v1 and emits v2.
+
+## Upgrading to `v0.2.3`
+
+`mitase normalize` no longer returns `document.schema = mitase/spec/v1`.
+Consumers parsing `normalize --format json|yaml` output must read the
+versioned contract instead:
+
+| Before | After |
+|---|---|
+| `document` | `semantic` |
+| `document.schema = mitase/spec/v1` | absent (semantic payloads carry no schema) |
+| `provenance.target_schema` | absent |
+| no version marker | `contract_version = mitase/normalization-result/v1` |
+| `provenance.source_schema` | unchanged (`mitase/authoring/v2`) |
+
+Existing `mitase/authoring/v2` repositories require no source migration.
+Legacy `mitase/spec/v1` remains accepted only by the explicit read-only
+`mitase migrate <source> --stdout` command.
 
 ## Current pre-v1 cutover
 

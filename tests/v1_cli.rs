@@ -1364,7 +1364,7 @@ requirements: []
         .expect("v0.2 migration output");
     let legacy = LegacyV1Document::parse(source).expect("legacy source");
     assert_eq!(
-        migrated.normalize().unwrap().document,
+        migrated.normalize().unwrap().semantic,
         legacy.into_semantic()
     );
 }
@@ -1427,10 +1427,15 @@ requirement:
     assert!(output.status.success());
     assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
     let normalized: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(normalized["document"].get("schema").is_none());
-    assert_eq!(normalized["document"]["kind"], "requirements");
     assert_eq!(
-        normalized["document"]["requirements"][0]["id"],
+        normalized["contract_version"],
+        "mitase/normalization-result/v1"
+    );
+    assert!(normalized.get("document").is_none());
+    assert!(normalized["semantic"].get("schema").is_none());
+    assert_eq!(normalized["semantic"]["kind"], "requirements");
+    assert_eq!(
+        normalized["semantic"]["requirements"][0]["id"],
         "REQ-DEMO-001"
     );
     assert_eq!(
@@ -1438,6 +1443,10 @@ requirement:
         "mitase/authoring/v2"
     );
     assert!(normalized["provenance"].get("target_schema").is_none());
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("mitase/spec/v1"),
+        "normalize output must not contain the legacy schema"
+    );
     assert!(
         normalized["provenance"]["applied_defaults"]
             .as_array()
@@ -1451,6 +1460,32 @@ requirement:
             .unwrap()
             .iter()
             .any(|value| value == "requirement.implementation.target.adapter=rust")
+    );
+
+    let yaml_output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["normalize"])
+        .arg(&source_path)
+        .args(["--stdout", "--format", "yaml"])
+        .output()
+        .unwrap();
+    assert!(yaml_output.status.success());
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
+    let stdout = String::from_utf8(yaml_output.stdout).unwrap();
+    assert!(
+        stdout.contains("contract_version: mitase/normalization-result/v1"),
+        "yaml output must carry the contract version"
+    );
+    assert!(
+        !stdout.contains("mitase/spec/v1"),
+        "yaml output must not contain the legacy schema"
+    );
+    let contract: serde_yaml::Value = serde_yaml::from_str(&stdout).unwrap();
+    assert!(contract.get("document").is_none());
+    assert!(contract["semantic"].get("schema").is_none());
+    assert_eq!(
+        contract["provenance"]["source_schema"].as_str().unwrap(),
+        "mitase/authoring/v2"
     );
 }
 

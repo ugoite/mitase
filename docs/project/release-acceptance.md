@@ -21,7 +21,7 @@ the Mitase executable.
 | Release line | Normal source policy | Required acceptance |
 | --- | --- | --- |
 | `0.1.x` (historical) | Dual-source | v2 self-hosted dogfood, v1 fixture loading, canonical graph regression, and exact artifact-resolution regression |
-| `0.2.x` (active) | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, facet projection smoke on old and new fixtures, and the frozen architecture boundary |
+| `0.2.x` (active) | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, semantic graph and artifact-resolution regressions, facet projection smoke on old and new fixtures, and the frozen architecture boundary |
 
 The active release contract is stable tags only. Historical alpha and beta
 tags remain part of the release history, but they are not supported selectors
@@ -39,11 +39,11 @@ source. Both normal workspace commands must reject it and point to
 `mitase migrate <source> --stdout`. The migration check only reads the source
 and verifies that it emits `schema: mitase/authoring/v2`.
 
-Canonical graph preservation is covered by the checked-in digest regression in
-`tests/v1_cli.rs`, which compares the normalized v2 corpus with the pre-v2
-canonical baseline. The same release gate checks the self-hosted exact target
-resolution baseline. These checks verify meaning and repository identity
-without introducing a second semantic model.
+Semantic graph preservation is covered by the checked-in digest regression in
+`tests/v1_cli.rs`, which compares the schema-less semantic projection of the
+v2 corpus with the v0.2.2 semantic baseline. The same release gate checks the
+self-hosted exact target resolution baseline. These checks verify meaning and
+repository identity without introducing a second semantic model.
 
 Promotion remains separate: `release-publish` downloads and verifies the
 candidate identified by its run ID and candidate ID, then publishes those exact

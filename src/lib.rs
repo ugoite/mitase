@@ -9,7 +9,7 @@ mod render;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use mitase_authoring::AuthoringDocument;
+use mitase_authoring::{AuthoringDocument, NormalizationContract};
 use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use mitase_inventory::{InventoryContext, InventoryRegistry};
 use mitase_migration::migrate_v1_to_v2;
@@ -115,7 +115,7 @@ struct InitArgs {
 }
 #[derive(Debug, Args)]
 struct MigrateArgs {
-    /// A canonical v1 document to convert.
+    /// A legacy v1 document to convert.
     source: PathBuf,
     /// Migration is deliberately read-only; output is written only to stdout.
     #[arg(long)]
@@ -503,9 +503,10 @@ fn run_normalize(args: NormalizeArgs) -> Result<i32> {
             args.source.display()
         )
     })?;
+    let contract = NormalizationContract::from(normalized);
     match args.format {
-        NormalizeFormat::Yaml => print!("{}", serde_yaml::to_string(&normalized)?),
-        NormalizeFormat::Json => println!("{}", serde_json::to_string_pretty(&normalized)?),
+        NormalizeFormat::Yaml => print!("{}", serde_yaml::to_string(&contract)?),
+        NormalizeFormat::Json => println!("{}", serde_json::to_string_pretty(&contract)?),
     }
     Ok(0)
 }
