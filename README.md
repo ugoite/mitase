@@ -45,7 +45,10 @@ Work requests and plans, execution slices, shell or test execution, patch
 application, agents, retries, delivery state, task queues, and workspace
 mutation are outside Mitase. The former implementation surfaces for that
 earlier direction have been removed from the current checkout and must not be
-reintroduced into the frozen product boundary.
+reintroduced into the frozen product boundary. The narrow exception is bounded
+bootstrap initialization of missing Mitase-owned metadata, which never authors
+normative specification meaning or implementation evidence; see
+[ADR 0003](docs/project/adr-0003-bounded-bootstrap-initialization.md).
 
 Read the [Mitase Re-Foundation freeze](docs/project/mitase-re-foundation-freeze.md)
 for the decision, acceptance gates, and follow-up sequence.
@@ -58,7 +61,10 @@ The normal v1 CLI is intentionally limited to specification operations:
 `mitase check`, `mitase validate`, `mitase readiness report`,
 `mitase config effective`, `mitase normalize`, `mitase query`, `mitase show`,
 `mitase list`, `mitase report pr`, and `mitase report facets`. The re-foundation removes execution
-commands rather than replacing them with compatibility aliases. Use
+commands rather than replacing them with compatibility aliases. Bounded
+bootstrap initialization of Mitase-owned metadata is the single
+workspace-writing exception to this specification-only posture
+([ADR 0003](docs/project/adr-0003-bounded-bootstrap-initialization.md)). Use
 `--format text` for the default
 Balanced Hybrid human view, `--format compact` for one-line CI records, and
 `--format json` for the stable machine contract.

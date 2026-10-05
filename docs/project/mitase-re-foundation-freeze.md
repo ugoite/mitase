@@ -52,6 +52,12 @@ The current checkout no longer includes the former execution-oriented runtime
 surfaces. Their removal was a required cutover step; this freeze remains the
 design constraint for the later core, consumer-migration, and browser phases.
 
+The single narrow exception is bounded bootstrap initialization: Mitase may
+create missing Mitase-owned bootstrap metadata (`mitase.yaml` and the
+spec-root marker) when initializing a workspace. It must not author normative
+specification meaning or create implementation and verification artifacts. See
+[ADR 0003](./adr-0003-bounded-bootstrap-initialization.md).
+
 ## Canonical domain model
 
 ```text
@@ -116,7 +122,9 @@ mitase report facets
 `mitase check` is the CI-facing whole-repository gate. `mitase normalize` is
 a read-only frontend inspection surface for the canonical graph and authoring
 provenance. `mitase show` exposes a specification's forward relations and
-derived reverse relations. The CLI does not run tests or apply changes. The explicit read-only
+derived reverse relations. The CLI does not run tests or apply changes, except
+for the bounded bootstrap initialization of Mitase-owned metadata decided in
+[ADR 0003](./adr-0003-bounded-bootstrap-initialization.md). The explicit read-only
 `mitase migrate <source> --stdout` transition converts a canonical v1
 document into v0.2 authoring syntax; it is not a compatibility alias and does
 not write to the workspace.
@@ -194,7 +202,9 @@ repository; it does not grant Mitase authority to change that repository.
 The re-foundation does not add an AI implementation agent, task planner,
 automatic source modification, patch generation, shell runner, test runner,
 workflow orchestration, cloud service, collaboration server, Git hosting,
-project management, or issue tracking to Mitase.
+project management, or issue tracking to Mitase. The only workspace-writing
+exception is bounded bootstrap initialization of Mitase-owned metadata under
+[ADR 0003](./adr-0003-bounded-bootstrap-initialization.md).
 
 For the complete vocabulary and the architectural consequences, see the
 [domain glossary](../understand/model/domain-glossary.md), [architecture

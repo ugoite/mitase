@@ -16,6 +16,9 @@ making architecture jargon the first thing a new user sees.
   superseded by ADR 0002.
 - [ADR 0002: Remove Work execution](./adr-0002-remove-work-execution.md) — the
   decision to keep execution lifecycle concerns outside Mitase.
+- [ADR 0003: Bounded bootstrap initialization](./adr-0003-bounded-bootstrap-initialization.md) —
+  the narrow exception that permits creating missing Mitase-owned bootstrap
+  metadata without reopening workspace mutation.
 - [Release candidate identity](./release-candidate-contract.md) — the
   reproducible source and artifact identity contract for release promotion.
 - [Release train acceptance](./release-acceptance.md) — the 0.1.x dogfood and

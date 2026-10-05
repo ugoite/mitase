@@ -20,6 +20,13 @@ The product boundary is deliberately smaller than a development agent:
 | Structural, semantic, and repository validation | Delivery state and execution persistence |
 | Verification Claims, coverage, drift, diagnostics, and queries | Codex, Claude, or other implementation sessions |
 
+The single narrow exception is bounded bootstrap initialization: Mitase may
+create missing Mitase-owned bootstrap metadata (`mitase.yaml` and the
+spec-root marker) when initializing a workspace, but it must not author
+normative specification meaning or create implementation and verification
+artifacts. See [ADR
+0003](../../project/adr-0003-bounded-bootstrap-initialization.md).
+
 The table is a product boundary, not a claim that every row is already
 implemented in the current checkout. Transitional execution surfaces are
 follow-up removal work, not a reason to expand the frozen core.
@@ -58,6 +65,9 @@ testing, reviewing, retrying, or delivering repository work.
 The distinction is intentional: an external tool may change the repository,
 while Mitase reports whether the resulting repository still agrees with its
 specification. Neither side silently becomes the other's source of truth.
+The only workspace-writing exception is bounded bootstrap initialization of
+missing Mitase-owned metadata, which never authors normative meaning or
+implementation evidence.
 
 ## Canonical model
 
@@ -167,6 +177,7 @@ core library may require a planner, agent runtime, delivery store, or execution
 lifecycle.
 
 See the [domain glossary](./domain-glossary.md), the [product-boundary
-freeze](../../project/mitase-re-foundation-freeze.md), and [ADR
-0002](../../project/adr-0002-remove-work-execution.md) for the terms and
+freeze](../../project/mitase-re-foundation-freeze.md), [ADR
+0002](../../project/adr-0002-remove-work-execution.md), and [ADR
+0003](../../project/adr-0003-bounded-bootstrap-initialization.md) for the terms and
 decisions that govern the re-foundation.
