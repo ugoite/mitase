@@ -21,7 +21,7 @@ the Mitase executable.
 | Release line | Normal source policy | Required acceptance |
 | --- | --- | --- |
 | `0.1.x` (historical) | Dual-source | v2 self-hosted dogfood, v1 fixture loading, canonical graph regression, and exact artifact-resolution regression |
-| `0.2.x` (active) | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, and the frozen architecture boundary |
+| `0.2.x` (active) | v2-only | v1 rejection from `check` and `validate`, actionable `MITASE-SOURCE-001`, read-only `migrate`, canonical graph and artifact-resolution regressions, facet projection smoke on old and new fixtures, and the frozen architecture boundary |
 
 The active release contract is stable tags only. Historical alpha and beta
 tags remain part of the release history, but they are not supported selectors
