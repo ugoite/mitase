@@ -9,9 +9,10 @@ mod render;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use mitase_authoring::{AuthoringDocument, migrate_v1_to_v2};
+use mitase_authoring::AuthoringDocument;
 use mitase_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use mitase_inventory::{InventoryContext, InventoryRegistry};
+use mitase_migration::migrate_v1_to_v2;
 use mitase_project_model::{ChangeBaseline, EffectiveProjectConfig, GitRef};
 use mitase_spec_model::RepoPath;
 use mitase_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationContext, validate};

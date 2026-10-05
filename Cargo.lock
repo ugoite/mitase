@@ -688,6 +688,7 @@ dependencies = [
  "mitase-code-intel",
  "mitase-diagnostics",
  "mitase-inventory",
+ "mitase-migration",
  "mitase-project-model",
  "mitase-spec-model",
  "mitase-validation",
@@ -750,6 +751,16 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-javascript",
  "tree-sitter-typescript",
+]
+
+[[package]]
+name = "mitase-migration"
+version = "0.2.2"
+dependencies = [
+ "mitase-authoring",
+ "mitase-spec-model",
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]
