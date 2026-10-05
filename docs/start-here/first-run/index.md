@@ -16,7 +16,8 @@ exists.
 1. [Getting started](./getting-started.md) — install `mitase` and run the first
    validation.
 2. [Tutorial](./tutorial.md) — start with the smallest v2 requirement slice,
-   then build a realistic intent-to-evidence specification from intent through evidence.
+   then trace a realistic specification from durable intent to implementation
+   and verification evidence.
 
 If you already have a repository with implementation and tests, use the
 [adoption path](../adopt/index.md) instead.

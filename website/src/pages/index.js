@@ -52,9 +52,9 @@ const chooseYourPath = [
     to: '/docs/workflows/integrations/vscode-extension'
   },
   {
-    title: 'Migration / upgrade',
+    title: 'Historical migration',
     description:
-      'Use the release-specific upgrade steps when you already have a mitase workspace and need to move between alpha versions safely.',
+      'Read the historical v0.1 to v0.2 notes only when an old workspace still mentions legacy fields or removed commands.',
     to: '/docs/workflows/repository/migration'
   },
   {
@@ -108,7 +108,7 @@ const journeys = [
   },
   {
     title: 'Follow a full tutorial',
-    description: 'Build a realistic intent-to-evidence example from scratch when you want the full repository story.',
+    description: 'Trace a realistic specification from durable intent to implementation and verification evidence when you want the full repository story.',
     to: '/docs/start-here/first-run/tutorial'
   },
   {
@@ -117,9 +117,9 @@ const journeys = [
     to: '/docs/workflows/repository/troubleshooting'
   },
   {
-    title: 'Upgrade an existing workspace',
+    title: 'Historical migration notes',
     description:
-      'Jump straight to the migration guide when a new alpha release changes config, validation defaults, or guide structure.',
+      'Open the historical migration notes when an old workspace still references v0.1 sources or removed CLI shapes.',
     to: '/docs/workflows/repository/migration'
   },
   {
@@ -129,7 +129,7 @@ const journeys = [
   },
   {
     title: 'Tune validation',
-    description: 'Review configuration for validation, orphan checks, and runtime behavior.',
+    description: 'Review configuration for validation, orphan checks, and validation behavior.',
     to: '/docs/workflows/repository/configuration'
   },
   {
