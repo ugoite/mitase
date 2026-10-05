@@ -1,13 +1,15 @@
 # Tutorial
 
-This tutorial creates a minimal v2 authoring workspace by hand. The v2
-documents are normalized into Mitase's canonical specification graph before
-validation. The first successful workspace is intentionally smaller than the
-full intent-to-evidence story: one config file and one short requirement document are
-enough to check a connected criterion, implementation target, and verification
-target.
+This tutorial starts from a workspace that `mitase init .` already created:
+`mitase.yaml` exists and `docs/mitase/` is ready. The first thing you write by
+hand is a meaningful Requirement. The v2 documents are normalized into
+Mitase's canonical specification graph before validation. The first successful
+workspace is intentionally smaller than the full intent-to-evidence story: one
+short requirement document is enough to check a connected criterion,
+implementation target, and verification target.
 
-1. Add `mitase.yaml` with one line: `schema: mitase/config/v1`.
+1. Run `mitase init .` and confirm `mitase check .` is green on the empty
+   workspace.
 2. Create `docs/mitase/requirement.yaml` using the short form below.
 3. Add the referenced `src/example.rs` and `tests/example.rs` files.
 4. Run `mitase check .`.
@@ -68,7 +70,6 @@ verification runner remain explicit. The checked-in
 [`fixtures/first-run-short`](https://github.com/ugoite/mitase/tree/main/fixtures/first-run-short)
 is the CI acceptance copy of this tutorial path.
 
-Existing v1 source can still be converted during the 0.1.x dogfood period with
-the read-only `mitase migrate <source> --stdout` command. Use the checked-in
-examples and the [short authoring contract](../../workflows/repository/authoring-v2.md)
-for larger v2 layouts.
+Use the [short authoring contract](../../workflows/repository/authoring-v2.md)
+for larger v2 layouts, and keep using `mitase check .` as the gate while the
+specification grows.

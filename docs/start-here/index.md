@@ -10,16 +10,19 @@ sidebar_position: 1
 targets, and verification evidence to remain connected in the repository
 instead of relying on people to reconstruct those relationships during every
 change.
-Start with the first-run story, or jump to adoption if the repository already
-has code and tests.
+
+Every path starts the same way: `mitase init .`, then `mitase check .`.
+`init` creates the mechanical workspace files; what differs is what you do
+next.
 
 ## Choose your next step
 
-- [First run](./first-run/index.md) walks through installation, the first
-  validation, and a complete tutorial.
-- [Adopt an existing repository](./adopt/index.md) explains how to add `mitase`
-  without pretending an established repository is greenfield.
+- [First run](./first-run/index.md). A new workspace: install, run `init`,
+  confirm the first check, then write your first Requirement in the tutorial.
+- [Adopt an existing repository](./adopt/index.md). A repository that already
+  has code and tests: run `init`, inspect the discovered conventions with
+  `mitase config effective .`, then connect one bounded capability.
 
-These are deliberately separate paths. A new workspace needs a small,
-connected specification; an existing repository needs inventory and a bounded
-first capability before it claims ownership.
+A new workspace needs a small, connected specification; an existing repository
+needs inventory and a bounded first capability before it claims ownership.
+Neither path starts by hand-writing configuration files.

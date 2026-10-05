@@ -8,35 +8,27 @@ that specification, indexes its relationships, resolves exact Artifact
 targets, and validates the evidence. Adoption does not give Mitase ownership
 of planning, implementation, execution, testing, review, retries, or delivery.
 
-## 1. Inventory without claiming ownership
+## 1. Initialize, then inspect what was discovered
 
-Create `mitase.yaml` with the real specification root and only the providers needed for the first capability. Keep readiness off while inspecting inventory:
+Start the same way as a new workspace:
 
-```yaml
-schema: mitase/config/v1
-workspace:
-  spec_roots: [docs/mitase]
-  excludes: [target/**, node_modules/**]
-inventory:
-  active_profile: adoption
-  profiles:
-    - id: adoption
-      providers:
-        rust: { mode: test, include_tests: true }
-validation:
-  preset: strict
-  readiness:
-    target: off
-    limits: { max_ownership_scope_units: 64 }
-  changed: { require_owned_changes: false }
-verification:
-  runners:
-    cargo-test:
-      executable: cargo
-      arguments: [test, -p, "{package}", "{test}", --, --exact]
+```bash
+mitase init .
+mitase config effective .
 ```
 
-Run `mitase readiness report . --format json` and use the inventory subjects as discovery evidence only. Do not create a planned Feature that owns the repository, a source tree, or every discovered file.
+`init` writes the minimal `mitase.yaml` and the spec-root marker. Repository
+conventions resolve the standard spec root, excludes, inventory discovery,
+validation defaults, and runner presets from the existing checkout, so `config
+effective` shows what Mitase already recognizes before you write any
+configuration. Add explicit settings to `mitase.yaml` only where the resolved
+output misses something your first capability needs, such as a non-default
+spec root or an inventory provider the discovery did not pick up.
+
+Keep readiness off while inspecting inventory, and use the inventory subjects
+from `mitase readiness report . --format json` as discovery evidence only. Do
+not create a planned Feature that owns the repository, a source tree, or every
+discovered file.
 
 ## 2. Connect one implemented capability
 
