@@ -7,7 +7,6 @@ use std::{
     str::FromStr,
 };
 
-pub const SPEC_SCHEMA: &str = "mitase/spec/v1";
 pub const SHA256_PREFIX: &str = "sha256:";
 
 /// Encodes bytes as lowercase hexadecimal for stable serialized identifiers.
@@ -545,91 +544,6 @@ pub struct Feature {
     pub contracts: Vec<Contract>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum SpecDocument {
-    Philosophies {
-        schema: String,
-        namespace: String,
-        category: String,
-        philosophies: Vec<Philosophy>,
-    },
-    Policies {
-        schema: String,
-        namespace: String,
-        category: String,
-        policies: Vec<Policy>,
-    },
-    Requirements {
-        schema: String,
-        namespace: String,
-        category: String,
-        requirements: Vec<Requirement>,
-    },
-    Features {
-        schema: String,
-        namespace: String,
-        category: String,
-        features: Vec<Feature>,
-    },
-}
-impl SpecDocument {
-    pub fn schema(&self) -> &str {
-        match self {
-            Self::Philosophies { schema, .. }
-            | Self::Policies { schema, .. }
-            | Self::Requirements { schema, .. }
-            | Self::Features { schema, .. } => schema,
-        }
-    }
-
-    /// Project this document into its schema-less semantic representation.
-    pub fn into_semantic(self) -> SemanticDocument {
-        match self {
-            Self::Philosophies {
-                namespace,
-                category,
-                philosophies,
-                ..
-            } => SemanticDocument::Philosophies {
-                namespace,
-                category,
-                philosophies,
-            },
-            Self::Policies {
-                namespace,
-                category,
-                policies,
-                ..
-            } => SemanticDocument::Policies {
-                namespace,
-                category,
-                policies,
-            },
-            Self::Requirements {
-                namespace,
-                category,
-                requirements,
-                ..
-            } => SemanticDocument::Requirements {
-                namespace,
-                category,
-                requirements,
-            },
-            Self::Features {
-                namespace,
-                category,
-                features,
-                ..
-            } => SemanticDocument::Features {
-                namespace,
-                category,
-                features,
-            },
-        }
-    }
-}
-
 /// Schema-less semantic representation derived from `mitase/authoring/v2`.
 ///
 /// This is the only document shape used by workspace loading, indexing,
@@ -695,10 +609,6 @@ mod tests {
         assert_eq!(text.parse::<BoundTargetRef>().unwrap().to_string(), text);
     }
     #[test]
-    fn old_shape_is_rejected() {
-        assert!(serde_yaml::from_str::<SpecDocument>("schema: mitase/spec/v1\nkind: requirements\nnamespace: x\ncategory: X\nrequirements:\n- id: REQ-1\n  title: x\n  description: x\n  priority: high\n  status: implemented\n  tests: {}\n").is_err());
-    }
-    #[test]
     fn invalid_ids_and_repository_paths_are_rejected() {
         assert!(serde_yaml::from_str::<SpecId>("bad-id").is_err());
         assert!(serde_yaml::from_str::<LocalId>("Bad_ID").is_err());
@@ -758,24 +668,68 @@ mod tests {
     #[test]
     fn binding_level_relations_and_non_target_contract_refs_are_rejected() {
         let binding_relation = r#"
-schema: mitase/spec/v1
-kind: features
-namespace: x
-category: X
-features:
-  - id: FEAT-1
-    title: x
-    summary: x
-    status: planned
-    bindings:
-      - id: b
-        role: implementation
-        facet: x
-        responsibility: x
-        satisfies: [REQ-1#criterion.x]
-        targets: []
+id: b
+role: implementation
+facet: x
+responsibility: x
+satisfies: [REQ-1#criterion.x]
+targets: []
 "#;
-        assert!(serde_yaml::from_str::<SpecDocument>(binding_relation).is_err());
+        assert!(serde_yaml::from_str::<ArtifactBinding>(binding_relation).is_err());
         assert!("FEAT-1#binding.b".parse::<BoundTargetRef>().is_err());
+    }
+
+    #[test]
+    fn semantic_documents_serialize_without_a_schema_field() {
+        let documents = [
+            (
+                SemanticDocument::Philosophies {
+                    namespace: "demo".into(),
+                    category: "Demo".into(),
+                    philosophies: vec![],
+                },
+                "philosophies",
+                "philosophies",
+            ),
+            (
+                SemanticDocument::Policies {
+                    namespace: "demo".into(),
+                    category: "Demo".into(),
+                    policies: vec![],
+                },
+                "policies",
+                "policies",
+            ),
+            (
+                SemanticDocument::Requirements {
+                    namespace: "demo".into(),
+                    category: "Demo".into(),
+                    requirements: vec![],
+                },
+                "requirements",
+                "requirements",
+            ),
+            (
+                SemanticDocument::Features {
+                    namespace: "demo".into(),
+                    category: "Demo".into(),
+                    features: vec![],
+                },
+                "features",
+                "features",
+            ),
+        ];
+        for (document, kind, items) in documents {
+            let value = serde_yaml::to_value(&document).expect("semantic value");
+            let serde_yaml::Value::Mapping(mapping) = value else {
+                panic!("semantic document must serialize as a mapping");
+            };
+            assert!(!mapping.contains_key("schema"));
+            let key = |name: &str| serde_yaml::Value::String(name.into());
+            assert_eq!(mapping.get(key("kind")), Some(key(kind)).as_ref());
+            assert!(mapping.contains_key(key("namespace")));
+            assert!(mapping.contains_key(key("category")));
+            assert!(mapping.contains_key(key(items)));
+        }
     }
 }

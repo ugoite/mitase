@@ -27,7 +27,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
 
 - **id**: FEAT-SPEC-MODEL-001
   - **title**: Spec model
-  - **summary**: Parse and validate the canonical mitase/spec/v1 model, including explicit present and absent target lifecycle declarations.
+  - **summary**: Provide the typed semantic specification model, including explicit present and absent target lifecycle declarations.
   - **status**: implemented
   - **bindings**:
     - **id**: implementation
@@ -59,7 +59,7 @@ description: "Generated reference for docs/mitase/features/capabilities/core.yam
           - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: SpecDocument
+            - **name**: SemanticDocument
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
@@ -485,7 +485,7 @@ category: Mitase functional units
 features:
   - id: FEAT-SPEC-MODEL-001
     title: Spec model
-    summary: Parse and validate the canonical mitase/spec/v1 model, including explicit present and absent target lifecycle declarations.
+    summary: Provide the typed semantic specification model, including explicit present and absent target lifecycle declarations.
     status: implemented
     bindings:
       - id: implementation
@@ -509,7 +509,7 @@ features:
           - id: spec-document
             adapter: rust
             path: crates/mitase-spec-model/src/lib.rs
-            selector: { kind: symbol, name: SpecDocument }
+            selector: { kind: symbol, name: SemanticDocument }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
           - id: digest-format
             adapter: rust

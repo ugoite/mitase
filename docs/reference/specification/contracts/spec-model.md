@@ -27,7 +27,7 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/sp
 
 - **id**: FEAT-PUBLIC-SPEC-MODEL-001
   - **title**: Specification model
-  - **summary**: Govern repository-path, anchor, and schema entrypoints.
+  - **summary**: Govern repository-path, anchor, and semantic document entrypoints.
   - **status**: implemented
   - **bindings**:
     - **id**: public-api-035
@@ -105,12 +105,12 @@ description: "Generated reference for docs/mitase/features/public-entrypoints/sp
       - **facet**: public
       - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
-        - **id**: entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-specdocument-sche
+        - **id**: entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-requirement
           - **adapter**: rust
           - **path**: crates/mitase-spec-model/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: SpecDocument::schema
+            - **name**: Requirement
           - **claims**:
             - **kind**: exposes
               - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
@@ -153,7 +153,7 @@ category: Public entrypoint contracts
 features:
 - id: FEAT-PUBLIC-SPEC-MODEL-001
   title: Specification model
-  summary: Govern repository-path, anchor, and schema entrypoints.
+  summary: Govern repository-path, anchor, and semantic document entrypoints.
   status: implemented
   bindings:
   - id: public-api-035
@@ -231,12 +231,12 @@ features:
     facet: public
     responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
-    - id: entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-specdocument-sche
+    - id: entrypoint-041-rust-crates-mitase-spec-model-src-lib-rs-requirement
       adapter: rust
       path: crates/mitase-spec-model/src/lib.rs
       selector:
         kind: symbol
-        name: SpecDocument::schema
+        name: Requirement
       claims:
       - kind: exposes
         target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document

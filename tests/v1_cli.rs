@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use mitase_authoring::AuthoringDocument;
-use mitase_spec_model::{BoundTargetRef, SemanticDocument, SpecDocument};
+use mitase_migration::LegacyV1Document;
+use mitase_spec_model::{BoundTargetRef, SemanticDocument};
 use mitase_workspace::SpecWorkspace;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -1361,10 +1362,10 @@ requirements: []
     assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
     let migrated = AuthoringDocument::parse(&String::from_utf8(output.stdout).unwrap())
         .expect("v0.2 migration output");
-    let canonical: SpecDocument = serde_yaml::from_str(source).unwrap();
+    let legacy = LegacyV1Document::parse(source).expect("legacy source");
     assert_eq!(
         migrated.normalize().unwrap().document,
-        canonical.into_semantic()
+        legacy.into_semantic()
     );
 }
 
@@ -1630,7 +1631,7 @@ fn generated_spec_reference_covers_every_source_document() {
 /// Serialize one semantic document in the v0.2.2 baseline key order.
 ///
 /// The merged `mitase-semantic-v0.2.2-digests.txt` baseline records the
-/// `SpecDocument` mapping with only the top-level `schema` entry removed.
+/// legacy v1 mapping with only the top-level `schema` entry removed.
 /// That historical projection carries one quirk: `serde_yaml::Mapping::remove`
 /// swaps the trailing items collection into the removed entry's position, so
 /// the recorded order is `kind`, items, `namespace`, `category`. This helper

@@ -7,7 +7,8 @@
 #![forbid(unsafe_code)]
 
 use mitase_authoring::{AUTHORING_SCHEMA, AuthoringDocument, NormalizationError};
-use mitase_spec_model::SpecDocument;
+use mitase_spec_model::{Feature, Philosophy, Policy, Requirement, SemanticDocument};
+use serde::Deserialize;
 use std::{error::Error, fmt};
 
 /// Schema identifier for legacy v1 migration input.
@@ -22,35 +23,106 @@ pub const LEGACY_V1_SCHEMA: &str = "mitase/spec/v1";
 /// This is a migration-only input representation. It is never a canonical or
 /// semantic document: callers convert it into an [`AuthoringDocument`] and
 /// normalize from there.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LegacyV1Document {
-    document: SpecDocument,
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum LegacyV1Document {
+    Philosophies {
+        schema: String,
+        namespace: String,
+        category: String,
+        philosophies: Vec<Philosophy>,
+    },
+    Policies {
+        schema: String,
+        namespace: String,
+        category: String,
+        policies: Vec<Policy>,
+    },
+    Requirements {
+        schema: String,
+        namespace: String,
+        category: String,
+        requirements: Vec<Requirement>,
+    },
+    Features {
+        schema: String,
+        namespace: String,
+        category: String,
+        features: Vec<Feature>,
+    },
 }
 
 impl LegacyV1Document {
     /// Parse one legacy v1 source document.
     pub fn parse(source: &str) -> Result<Self, MigrationError> {
-        let document: SpecDocument =
+        let document: Self =
             serde_yaml::from_str(source).map_err(|error| MigrationError::InvalidSource {
                 message: error.to_string(),
             })?;
-        Self::validate_schema(&document)?;
-        Ok(Self { document })
+        document.validate_schema()?;
+        Ok(document)
     }
 
-    /// Borrow the parsed legacy input.
-    pub fn document(&self) -> &SpecDocument {
-        &self.document
-    }
-
-    fn validate_schema(document: &SpecDocument) -> Result<(), MigrationError> {
-        if document.schema() != LEGACY_V1_SCHEMA {
+    fn validate_schema(&self) -> Result<(), MigrationError> {
+        let schema = match self {
+            Self::Philosophies { schema, .. }
+            | Self::Policies { schema, .. }
+            | Self::Requirements { schema, .. }
+            | Self::Features { schema, .. } => schema,
+        };
+        if schema != LEGACY_V1_SCHEMA {
             return Err(MigrationError::WrongSourceSchema {
                 expected: LEGACY_V1_SCHEMA.into(),
-                actual: document.schema().into(),
+                actual: schema.clone(),
             });
         }
         Ok(())
+    }
+
+    /// Project this legacy input into its schema-less semantic representation.
+    pub fn into_semantic(self) -> SemanticDocument {
+        match self {
+            Self::Philosophies {
+                namespace,
+                category,
+                philosophies,
+                ..
+            } => SemanticDocument::Philosophies {
+                namespace,
+                category,
+                philosophies,
+            },
+            Self::Policies {
+                namespace,
+                category,
+                policies,
+                ..
+            } => SemanticDocument::Policies {
+                namespace,
+                category,
+                policies,
+            },
+            Self::Requirements {
+                namespace,
+                category,
+                requirements,
+                ..
+            } => SemanticDocument::Requirements {
+                namespace,
+                category,
+                requirements,
+            },
+            Self::Features {
+                namespace,
+                category,
+                features,
+                ..
+            } => SemanticDocument::Features {
+                namespace,
+                category,
+                features,
+            },
+        }
     }
 
     /// Convert legacy input into explicit v0.2 authoring syntax.
@@ -67,9 +139,8 @@ pub fn migrate_v1_to_v2(source: &str) -> Result<AuthoringDocument, MigrationErro
 /// Convert a parsed legacy document and prove that the v0.2 result
 /// carries the exact source meaning.
 pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocument, MigrationError> {
-    let canonical = legacy.document();
-    let authoring = match canonical {
-        SpecDocument::Philosophies {
+    let authoring = match legacy {
+        LegacyV1Document::Philosophies {
             namespace,
             category,
             philosophies,
@@ -80,7 +151,7 @@ pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocumen
             category: category.clone(),
             philosophies: philosophies.clone(),
         },
-        SpecDocument::Policies {
+        LegacyV1Document::Policies {
             namespace,
             category,
             policies,
@@ -91,7 +162,7 @@ pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocumen
             category: category.clone(),
             policies: policies.clone(),
         },
-        SpecDocument::Requirements {
+        LegacyV1Document::Requirements {
             namespace,
             category,
             requirements,
@@ -102,7 +173,7 @@ pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocumen
             category: category.clone(),
             requirements: requirements.clone(),
         },
-        SpecDocument::Features {
+        LegacyV1Document::Features {
             namespace,
             category,
             features,
@@ -117,7 +188,7 @@ pub fn migrate_v1_document(legacy: &LegacyV1Document) -> Result<AuthoringDocumen
     let normalized = authoring
         .normalize()
         .map_err(MigrationError::NormalizationFailed)?;
-    if normalized.document != legacy.document().clone().into_semantic() {
+    if normalized.document != legacy.clone().into_semantic() {
         return Err(MigrationError::SemanticMismatch);
     }
     Ok(authoring)
@@ -203,10 +274,7 @@ features: []
             let legacy = LegacyV1Document::parse(source).expect("legacy source");
             let migrated = migrate_v1_document(&legacy).expect("migration");
             let normalized = migrated.normalize().expect("normalization");
-            assert_eq!(
-                normalized.document,
-                legacy.document().clone().into_semantic()
-            );
+            assert_eq!(normalized.document, legacy.clone().into_semantic());
             assert_eq!(migrated.schema(), AUTHORING_SCHEMA);
         }
     }

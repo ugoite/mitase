@@ -1100,7 +1100,7 @@ mod tests {
     #[test]
     fn declaration_ranges_follow_yaml_structure_and_quoted_ids() {
         let source = concat!(
-            "schema: mitase/spec/v1\n",
+            "schema: mitase/authoring/v2\n",
             "kind: requirements\n",
             "requirements:\n",
             "  - id: \"REQ-NAV-001\"\n",
