@@ -27,7 +27,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse((ROOT / ".release-please-manifest.json").exists())
         self.assertFalse((ROOT / "release-please-config.json").exists())
         installer = (ROOT / "scripts/install-mitase.sh").read_text(encoding="utf-8")
-        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.2"', installer)
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.3"', installer)
         self.assertNotIn("__MITASE_RELEASE_TAG__", installer)
         candidate = CANDIDATE.read_text(encoding="utf-8")
         self.assertIn('Path("Cargo.toml")', candidate)
@@ -44,12 +44,12 @@ class ReleaseWorkflowTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn('version = "0.2.2"', cargo)
+        self.assertIn('version = "0.2.3"', cargo)
         workspace_versions = re.findall(
-            r'(?m)^name = "mitase(?:-[^"]+)?"\nversion = "0.2.2"$', lock
+            r'(?m)^name = "mitase(?:-[^"]+)?"\nversion = "0.2.3"$', lock
         )
         self.assertEqual(len(workspace_versions), 10)
-        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.2"', installer)
+        self.assertIn('DEFAULT_VERSION_SELECTOR="v0.2.3"', installer)
         self.assertIn("`0.2.x` (active)", acceptance)
         self.assertIn("first stable release", release_notes)
         self.assertIn("not supported release channels", release_notes)
