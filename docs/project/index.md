@@ -27,3 +27,5 @@ making architecture jargon the first thing a new user sees.
   line, explicit migration path, and release boundary.
 - [0.2.2 release notes](./release-notes-0.2.2.md) — the Facet Projection
   report on the stable v2-only line.
+- [0.2.3 release notes](./release-notes-0.2.3.md) — the Authoring Authority /
+  Semantic IR Re-Foundation on the stable v2-only line.
