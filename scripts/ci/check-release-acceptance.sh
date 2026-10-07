@@ -109,6 +109,48 @@ case "$version" in
   0.2.*)
     echo "checking 0.2.x semantic acceptance for $version"
     run_mitase check .
+
+    cp -R fixtures/first-run-short "$tmp_dir/oversized-authoring"
+    git -C "$tmp_dir/oversized-authoring" init --quiet
+    git -C "$tmp_dir/oversized-authoring" add .
+    git -C "$tmp_dir/oversized-authoring" \
+      -c user.name="Mitase release acceptance" \
+      -c user.email="release-acceptance@mitase.invalid" \
+      commit --quiet -m "Prepare authoring budget acceptance fixture"
+    OVERSIZED_SOURCE="$tmp_dir/oversized-authoring/docs/mitase/requirement.yaml" python3 - <<'PY'
+import os
+from pathlib import Path
+
+source = Path(os.environ["OVERSIZED_SOURCE"])
+with source.open("a", encoding="utf-8") as handle:
+    for index in range(1001):
+        handle.write(f"# release acceptance size guard {index}\n")
+PY
+
+    if run_mitase check "$tmp_dir/oversized-authoring" --format json >"$tmp_dir/oversized.json" 2>"$tmp_dir/oversized.stderr"; then
+      echo "0.2.x release acceptance unexpectedly accepted an oversized authoring document" >&2
+      exit 1
+    fi
+    OUTPUT_PATH="$tmp_dir/oversized.json" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(Path(os.environ["OUTPUT_PATH"]).read_text(encoding="utf-8"))
+diagnostics = payload.get("diagnostics", [])
+matching = [item for item in diagnostics if item.get("code") == "MITASE-AUTHORING-005"]
+if len(matching) != 1:
+    raise SystemExit("0.2.x release acceptance did not report exactly one MITASE-AUTHORING-005")
+diagnostic = matching[0]
+if diagnostic.get("severity") != "error":
+    raise SystemExit("oversized authoring diagnostic is not an error")
+evidence = {item["kind"]: item["value"] for item in diagnostic.get("evidence", [])}
+if evidence.get("configured-limit") != "1000" or int(evidence.get("actual", "0")) <= 1000:
+    raise SystemExit("oversized authoring diagnostic does not prove the default 1000-line limit")
+if not diagnostic.get("primary", {}).get("path", "").endswith("docs/mitase/requirement.yaml"):
+    raise SystemExit("oversized authoring diagnostic points at an unexpected source path")
+PY
+
     assert_v1_rejected \
       check \
       "$tmp_dir/check.json" \

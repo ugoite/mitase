@@ -29,3 +29,5 @@ making architecture jargon the first thing a new user sees.
   report on the stable v2-only line.
 - [0.2.3 release notes](./release-notes-0.2.3.md) — the Authoring Authority /
   Semantic IR Re-Foundation on the stable v2-only line.
+- [0.2.4 release notes](./release-notes-0.2.4.md) — default authoring document
+  safety limits for bounded specification files.
