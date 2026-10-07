@@ -6,7 +6,9 @@ use mitase_diagnostics::{
     Diagnostic, DiagnosticSubject, Evidence, RelationRef, ValidationPhase, ValidationResult,
 };
 use mitase_inventory::ArtifactUnitKind;
-use mitase_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
+use mitase_project_model::{
+    EffectiveProjectConfig, ProjectConfig, ReadinessLevel, ValidationPreset,
+};
 use mitase_spec_model::{
     ArtifactTarget, ArtifactTargetLifecycle, BindingRole, BoundTargetRef, ItemStatus,
     LocalAnchorKind, OwnershipSelector, RepoPath, RuleLevel, Selector, SemanticDocument,
@@ -134,6 +136,8 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("MITASE-ANCHOR-001"),
     fixed_metadata!("MITASE-ANCHOR-002"),
     fixed_metadata!("MITASE-ANCHOR-003"),
+    fixed_metadata!("MITASE-AUTHORING-005"),
+    fixed_metadata!("MITASE-AUTHORING-006"),
     metadata!("MITASE-PHILOSOPHY-001"),
     metadata!("MITASE-POLICY-001"),
     metadata!("MITASE-POLICY-002"),
@@ -199,6 +203,7 @@ pub fn phase_for_rule(rule: &str) -> ValidationPhase {
     } else if [
         "MITASE-ID-",
         "MITASE-ANCHOR-",
+        "MITASE-AUTHORING-",
         "MITASE-PHILOSOPHY-",
         "MITASE-POLICY-",
         "MITASE-REQUIREMENT-",
@@ -564,6 +569,9 @@ fn validate_inner(ctx: &ValidationContext<'_>, include_readiness: bool) -> Valid
     let start = diagnostics.len();
     validate_config(ctx, &mut diagnostics);
     set_phase(&mut diagnostics[start..], ValidationPhase::Config);
+    let start = diagnostics.len();
+    validate_authoring_limits(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
     let start = diagnostics.len();
     validate_document_shapes(ctx, &mut diagnostics);
     set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
@@ -1310,36 +1318,16 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
     let mitase_config = git_show(root, revision, Path::new("mitase.yaml"))
         .map_err(anyhow::Error::msg)
         .context("read baseline mitase.yaml")?;
-    // A pre-v1 cutover may remove configuration fields in the same change as
-    // the implementation that stopped using them. Normalize only this
-    // historical baseline snapshot; the current product parser remains
-    // strict and does not accept the retired shape.
-    let config = parse_baseline_config(&mitase_config)?;
-    let normalized_config = serde_yaml::to_string(&config).context("serialize baseline config")?;
     let tempdir = tempfile::Builder::new()
         .prefix("mitase-baseline-")
         .tempdir()
         .context("create baseline workspace")?;
     let workspace_dir = tempdir.path();
-    fs::write(workspace_dir.join("mitase.yaml"), normalized_config)
-        .context("write normalized baseline config")?;
     let files = git_ls_tree(root, revision)
         .map_err(anyhow::Error::msg)
         .context("list baseline files")?;
     for relative in &files {
         if relative == Path::new("mitase.yaml") {
-            // Keep the normalized baseline config written above. Copying the
-            // historical source here would reintroduce its legacy shape.
-            continue;
-        }
-        let include = relative == Path::new("mitase.yaml")
-            || config
-                .workspace
-                .spec_roots
-                .iter()
-                .any(|root| relative.starts_with(root.as_path()))
-            || !relative.as_os_str().is_empty();
-        if !include {
             continue;
         }
         let contents = match git_show(root, revision, relative) {
@@ -1352,6 +1340,14 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
         }
         fs::write(destination, contents).context("write baseline file")?;
     }
+    // Resolve the historical snapshot as current strict config input so its
+    // omitted convention-backed fields receive the same defaults as a normal
+    // workspace load. The snapshot files are present first, allowing provider
+    // discovery to use the baseline revision itself.
+    let config = parse_baseline_config(&mitase_config, workspace_dir)?;
+    let normalized_config = serde_yaml::to_string(&config).context("serialize baseline config")?;
+    fs::write(workspace_dir.join("mitase.yaml"), normalized_config)
+        .context("write normalized baseline config")?;
     let workspace = SpecWorkspace::load(workspace_dir).context("load baseline workspace")?;
     let index = workspace.index().context("index baseline workspace")?;
     Ok(BaselineWorkspace {
@@ -1361,15 +1357,15 @@ fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<Baselin
     })
 }
 
-fn parse_baseline_config(source: &str) -> Result<ProjectConfig> {
+fn parse_baseline_config(source: &str, root: &Path) -> Result<ProjectConfig> {
     let mut value: serde_yaml::Value =
         serde_yaml::from_str(source).context("parse baseline mitase.yaml as YAML")?;
-    let Some(root) = value.as_mapping_mut() else {
+    let Some(config_mapping) = value.as_mapping_mut() else {
         bail!("baseline mitase.yaml must be a mapping");
     };
-    root.remove(serde_yaml::Value::String("work".into()));
+    config_mapping.remove(serde_yaml::Value::String("work".into()));
     if let Some(serde_yaml::Value::Mapping(validation)) =
-        root.get_mut(serde_yaml::Value::String("validation".into()))
+        config_mapping.get_mut(serde_yaml::Value::String("validation".into()))
     {
         if let Some(serde_yaml::Value::Mapping(readiness)) =
             validation.get_mut(serde_yaml::Value::String("readiness".into()))
@@ -1385,7 +1381,10 @@ fn parse_baseline_config(source: &str) -> Result<ProjectConfig> {
             changed.remove(serde_yaml::Value::String("require_plan".into()));
         }
     }
-    serde_yaml::from_value(value).context("parse v1 baseline mitase.yaml")
+    let source = serde_yaml::to_string(&value).context("serialize baseline config input")?;
+    EffectiveProjectConfig::from_source(root, &source)
+        .map(|effective| effective.config)
+        .map_err(anyhow::Error::msg)
 }
 
 fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, String> {
@@ -1903,6 +1902,64 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                     }
                 }
             }
+        }
+    }
+}
+
+fn validate_authoring_limits(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    let limits = &ctx.config.validation.authoring.limits;
+    for loaded in &ctx.workspace.documents {
+        let path = workspace_relative_display(&loaded.path, &ctx.workspace.root)
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| loaded.path.to_string_lossy().into_owned());
+        let metrics = loaded.authoring_metrics;
+        if metrics.nonblank_lines > limits.max_nonblank_lines {
+            let mut diagnostic = Diagnostic::error(
+                "MITASE-AUTHORING-005",
+                format!(
+                    "authoring document has {} nonblank lines; configured maximum is {}",
+                    metrics.nonblank_lines, limits.max_nonblank_lines
+                ),
+                &path,
+            )
+            .with_help(
+                "split this authoring document, or raise validation.authoring.limits.max_nonblank_lines in mitase.yaml",
+            );
+            diagnostic.evidence.extend([
+                Evidence {
+                    kind: "actual".into(),
+                    value: metrics.nonblank_lines.to_string(),
+                },
+                Evidence {
+                    kind: "configured-limit".into(),
+                    value: limits.max_nonblank_lines.to_string(),
+                },
+            ]);
+            out.push(diagnostic);
+        }
+        if metrics.top_level_items > limits.max_top_level_items {
+            let mut diagnostic = Diagnostic::error(
+                "MITASE-AUTHORING-006",
+                format!(
+                    "authoring document has {} top-level items; configured maximum is {}",
+                    metrics.top_level_items, limits.max_top_level_items
+                ),
+                &path,
+            )
+            .with_help(
+                "split this authoring document, or raise validation.authoring.limits.max_top_level_items in mitase.yaml",
+            );
+            diagnostic.evidence.extend([
+                Evidence {
+                    kind: "actual".into(),
+                    value: metrics.top_level_items.to_string(),
+                },
+                Evidence {
+                    kind: "configured-limit".into(),
+                    value: limits.max_top_level_items.to_string(),
+                },
+            ]);
+            out.push(diagnostic);
         }
     }
 }
@@ -3254,7 +3311,7 @@ fn normalize_end(start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mitase_project_model::EffectiveProjectConfig;
+    use mitase_workspace::AuthoringMetrics;
     use std::fs;
     use std::process::Command;
     use tempfile::tempdir;
@@ -3308,6 +3365,94 @@ mod tests {
             revision: None,
             change_base_revision: None,
         })
+    }
+
+    #[test]
+    fn authoring_limit_diagnostics_are_fixed_graph_errors_in_both_presets() {
+        let (_tempdir, mut workspace, _) = load_fixture_workspace();
+        let index = workspace.index().expect("index");
+        let Some((first, rest)) = workspace.documents.split_first_mut() else {
+            panic!("fixture should contain authoring documents");
+        };
+        first.authoring_metrics = AuthoringMetrics {
+            nonblank_lines: 2,
+            top_level_items: 2,
+        };
+        for loaded in rest {
+            loaded.authoring_metrics = AuthoringMetrics {
+                nonblank_lines: 1,
+                top_level_items: 1,
+            };
+        }
+        workspace
+            .config
+            .validation
+            .authoring
+            .limits
+            .max_nonblank_lines = 1;
+        workspace
+            .config
+            .validation
+            .authoring
+            .limits
+            .max_top_level_items = 1;
+
+        for preset in [ValidationPreset::Standard, ValidationPreset::Strict] {
+            let result = validate(&ValidationContext {
+                config: &workspace.config,
+                workspace: &workspace,
+                index: &index,
+                changed_files: None,
+                reported_changed_files: None,
+                preset,
+                revision: None,
+                change_base_revision: None,
+            });
+            let diagnostics = result
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.rule_id.starts_with("MITASE-AUTHORING-00"))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.rule_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["MITASE-AUTHORING-005", "MITASE-AUTHORING-006"]
+            );
+            for diagnostic in diagnostics {
+                assert_eq!(diagnostic.phase, ValidationPhase::Graph);
+                assert_eq!(
+                    diagnostic
+                        .evidence
+                        .iter()
+                        .map(|evidence| (evidence.kind.as_str(), evidence.value.as_str()))
+                        .collect::<Vec<_>>(),
+                    [("actual", "2"), ("configured-limit", "1")]
+                );
+                assert!(diagnostic.help.as_deref().unwrap().contains("mitase.yaml"));
+            }
+        }
+
+        workspace
+            .config
+            .validation
+            .authoring
+            .limits
+            .max_nonblank_lines = 2;
+        workspace
+            .config
+            .validation
+            .authoring
+            .limits
+            .max_top_level_items = 2;
+        let relaxed = validate_loaded_workspace(&workspace, &index);
+        assert!(!relaxed.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic.rule_id.as_str(),
+                "MITASE-AUTHORING-005" | "MITASE-AUTHORING-006"
+            )
+        }));
     }
 
     #[test]
@@ -4318,7 +4463,9 @@ requirements:
             result
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.rule_id == "MITASE-CHANGE-003")
+                .any(|diagnostic| diagnostic.rule_id == "MITASE-CHANGE-003"),
+            "diagnostics: {:#?}",
+            result.diagnostics
         );
     }
 

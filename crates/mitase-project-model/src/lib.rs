@@ -91,9 +91,27 @@ pub struct ValidationConfigInput {
     #[serde(default)]
     pub preset: Option<ValidationPreset>,
     #[serde(default)]
+    pub authoring: Option<AuthoringValidationConfigInput>,
+    #[serde(default)]
     pub readiness: Option<ReadinessConfigInput>,
     #[serde(default)]
     pub changed: Option<ChangedConfigInput>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoringValidationConfigInput {
+    #[serde(default)]
+    pub limits: Option<AuthoringLimitsInput>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoringLimitsInput {
+    #[serde(default)]
+    pub max_nonblank_lines: Option<usize>,
+    #[serde(default)]
+    pub max_top_level_items: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -181,7 +199,7 @@ impl ProjectConfigInput {
         };
         let inventory =
             resolve_inventory(self.inventory, root, &spec_roots, &mut applied_conventions)?;
-        let validation = resolve_validation(self.validation, &mut applied_conventions);
+        let validation = resolve_validation(self.validation, &mut applied_conventions)?;
         let verification = match self.verification {
             Some(verification) => verification,
             None => {
@@ -389,7 +407,7 @@ fn merge_provider_exceptions(
 fn resolve_validation(
     input: ValidationConfigInput,
     applied_conventions: &mut Vec<String>,
-) -> ValidationConfig {
+) -> Result<ValidationConfig, String> {
     let preset = input.preset.unwrap_or_else(|| {
         applied_conventions.push("validation.preset=standard".into());
         ValidationPreset::Standard
@@ -413,8 +431,35 @@ fn resolve_validation(
         applied_conventions.push("validation.changed.require_owned_changes=false".into());
         false
     });
-    ValidationConfig {
+    let authoring_limits = input
+        .authoring
+        .unwrap_or_default()
+        .limits
+        .unwrap_or_default();
+    let max_nonblank_lines = authoring_limits.max_nonblank_lines.unwrap_or_else(|| {
+        applied_conventions.push("validation.authoring.limits.max_nonblank_lines=1000".into());
+        1000
+    });
+    let max_top_level_items = authoring_limits.max_top_level_items.unwrap_or_else(|| {
+        applied_conventions.push("validation.authoring.limits.max_top_level_items=12".into());
+        12
+    });
+    if max_nonblank_lines == 0 {
+        return Err("validation.authoring.limits.max_nonblank_lines must be greater than 0".into());
+    }
+    if max_top_level_items == 0 {
+        return Err(
+            "validation.authoring.limits.max_top_level_items must be greater than 0".into(),
+        );
+    }
+    Ok(ValidationConfig {
         preset,
+        authoring: AuthoringValidationConfig {
+            limits: AuthoringLimits {
+                max_nonblank_lines,
+                max_top_level_items,
+            },
+        },
         readiness: ReadinessConfig {
             target: readiness_target,
             probes: readiness_input.probes.unwrap_or_default(),
@@ -426,7 +471,7 @@ fn resolve_validation(
             baseline: changed_input.baseline,
             require_owned_changes,
         },
-    }
+    })
 }
 
 fn discover_inventory_providers(
@@ -576,8 +621,20 @@ pub enum ValidationPreset {
 #[serde(deny_unknown_fields)]
 pub struct ValidationConfig {
     pub preset: ValidationPreset,
+    pub authoring: AuthoringValidationConfig,
     pub readiness: ReadinessConfig,
     pub changed: ChangedConfig,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoringValidationConfig {
+    pub limits: AuthoringLimits,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoringLimits {
+    pub max_nonblank_lines: usize,
+    pub max_top_level_items: usize,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -704,6 +761,8 @@ inventory:
   profiles: [{ id: default, providers: { rust: {} } }]
 validation:
   preset: strict
+  authoring:
+    limits: { max_nonblank_lines: 1000, max_top_level_items: 12 }
   readiness:
     target: traceable
     probes:
@@ -788,6 +847,13 @@ verification: { runners: {} }
             vec![RepoPath::new(DEFAULT_SPEC_ROOT).unwrap()]
         );
         assert_eq!(effective.validation.preset, ValidationPreset::Standard);
+        assert_eq!(
+            effective.validation.authoring.limits,
+            AuthoringLimits {
+                max_nonblank_lines: 1000,
+                max_top_level_items: 12,
+            }
+        );
         assert_eq!(effective.validation.readiness.target, ReadinessLevel::Off);
         assert!(!effective.validation.changed.require_owned_changes);
         assert_eq!(effective.inventory.active_profile, "default");
@@ -806,6 +872,58 @@ verification: { runners: {} }
             effective
                 .applied_conventions
                 .contains(&"inventory.providers=repository-discovery".to_string())
+        );
+        assert!(
+            effective
+                .applied_conventions
+                .contains(&"validation.authoring.limits.max_nonblank_lines=1000".to_string())
+        );
+        assert!(
+            effective
+                .applied_conventions
+                .contains(&"validation.authoring.limits.max_top_level_items=12".to_string())
+        );
+    }
+
+    #[test]
+    fn authoring_limits_accept_positive_overrides_and_reject_zero_or_unknown_fields() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for (lines, items) in [(500, 8), (1600, 20)] {
+            let source = format!(
+                "schema: mitase/config/v1\nvalidation:\n  authoring:\n    limits: {{ max_nonblank_lines: {lines}, max_top_level_items: {items} }}\n"
+            );
+            let effective = EffectiveProjectConfig::from_source(&root, &source)
+                .expect("positive authoring limit overrides");
+            assert_eq!(
+                effective.validation.authoring.limits,
+                AuthoringLimits {
+                    max_nonblank_lines: lines,
+                    max_top_level_items: items,
+                }
+            );
+            assert!(
+                effective
+                    .applied_conventions
+                    .iter()
+                    .all(|convention| { !convention.starts_with("validation.authoring.limits.") })
+            );
+        }
+        for (field, value) in [("max_nonblank_lines", 0), ("max_top_level_items", 0)] {
+            let source = format!(
+                "schema: mitase/config/v1\nvalidation:\n  authoring:\n    limits: {{ {field}: {value} }}\n"
+            );
+            assert!(
+                EffectiveProjectConfig::from_source(&root, &source)
+                    .unwrap_err()
+                    .contains(&format!("{field} must be greater than 0"))
+            );
+        }
+        assert!(
+            EffectiveProjectConfig::from_source(
+                &root,
+                "schema: mitase/config/v1\nvalidation: { authoring: { unknown: true } }\n"
+            )
+            .is_err()
         );
     }
 
@@ -884,6 +1002,8 @@ inventory:
       providers: { rust: { mode: source } }
 validation:
   preset: strict
+  authoring:
+    limits: { max_nonblank_lines: 800, max_top_level_items: 10 }
   readiness:
     target: traceable
     probes: { changed_units: true }

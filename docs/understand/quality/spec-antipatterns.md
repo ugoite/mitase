@@ -159,6 +159,16 @@ those statements still belong together.
 makes it obvious why siblings live together, not just convenient for the
 current week.
 
+Authoring validation has hard safety ceilings of 1000 nonblank lines and 12
+top-level items per file. These ceilings flag documents that have become
+difficult to review; they are not ideal file-size targets. Split unrelated
+topics when their ownership or subject stops fitting together, even when the
+document is still below either limit. As a practical guide, aim for a few
+hundred lines and no more than about eight top-level items when that makes the
+spec easier to navigate. If one top-level item alone is very large, split its
+semantic responsibilities into coherent items instead of only moving the YAML
+envelope around.
+
 Some practical heuristics:
 
 - split a **document** when its items stop sharing a clear topic or owner

@@ -41,6 +41,19 @@ Candidates are evidence for explaining a resolution failure, not permission
 to choose on the user's behalf. Ambiguous resolution remains a validation
 error until the author makes the declaration exact.
 
+Authoring documents also have configurable per-file safety ceilings:
+
+- `MITASE-AUTHORING-005` reports a document whose nonblank source line count
+  exceeds `validation.authoring.limits.max_nonblank_lines` (default `1000`).
+  Blank lines are ignored; comments count.
+- `MITASE-AUTHORING-006` reports a document whose normalized top-level
+  Philosophy, Policy, Requirement, or Feature count exceeds
+  `validation.authoring.limits.max_top_level_items` (default `12`).
+
+Both are fixed errors in Standard and Strict presets, run in the Graph phase,
+and include `actual` and `configured-limit` evidence. Split the document or
+raise the corresponding positive limit in `mitase.yaml`.
+
 The text format is a compact human-readable view of the same diagnostic. Use
 JSON when an integration needs stable fields or exact locations.
 
