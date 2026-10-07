@@ -43,6 +43,108 @@ fn current_workspace_checks_and_reports_configured_readiness() {
 }
 
 #[test]
+fn effective_config_displays_default_authoring_limits() {
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["config", "effective", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let effective: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        effective["validation"]["authoring"]["limits"]["max_nonblank_lines"],
+        1000
+    );
+    assert_eq!(
+        effective["validation"]["authoring"]["limits"]["max_top_level_items"],
+        12
+    );
+    let conventions = effective["applied_conventions"].as_array().unwrap();
+    assert!(
+        conventions
+            .iter()
+            .any(|value| { value == "validation.authoring.limits.max_nonblank_lines=1000" })
+    );
+    assert!(
+        conventions
+            .iter()
+            .any(|value| { value == "validation.authoring.limits.max_top_level_items=12" })
+    );
+}
+
+#[test]
+fn check_rejects_an_oversized_nested_authoring_document() {
+    let temp = tempdir().unwrap();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/first-run-short");
+    copy_fixture_tree(&fixture, temp.path());
+    let nested = temp.path().join("docs/mitase/nested");
+    fs::create_dir_all(&nested).unwrap();
+    fs::rename(
+        temp.path().join("docs/mitase/requirement.yaml"),
+        nested.join("requirement.yaml"),
+    )
+    .unwrap();
+    let config_path = temp.path().join("mitase.yaml");
+    let mut config = fs::read_to_string(&config_path).unwrap();
+    config.push_str(
+        "\nvalidation:\n  authoring:\n    limits: { max_nonblank_lines: 1, max_top_level_items: 12 }\n",
+    );
+    fs::write(config_path, config).unwrap();
+    initialize_fixture_git(temp.path());
+
+    let output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", ".", "--format", "json"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let diagnostic = report["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "MITASE-AUTHORING-005")
+        .unwrap_or_else(|| {
+            panic!(
+                "authoring line-limit diagnostic missing: {}",
+                serde_json::to_string_pretty(&report).unwrap()
+            )
+        });
+    assert_eq!(diagnostic["phase"], "graph");
+    assert_eq!(
+        diagnostic["primary"]["path"],
+        "docs/mitase/nested/requirement.yaml"
+    );
+    assert!(
+        diagnostic["evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|evidence| {
+                evidence["kind"] == "actual"
+                    && evidence["value"]
+                        .as_str()
+                        .unwrap()
+                        .parse::<usize>()
+                        .unwrap()
+                        > 1
+            })
+    );
+    assert!(
+        diagnostic["evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|evidence| { evidence["kind"] == "configured-limit" && evidence["value"] == "1" })
+    );
+}
+
+#[test]
 fn compact_format_is_available_for_ci_and_has_no_ansi() {
     let output = Command::cargo_bin("mitase")
         .unwrap()

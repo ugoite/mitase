@@ -20,6 +20,32 @@ use std::{
 pub struct LoadedDocument {
     pub path: PathBuf,
     pub document: SemanticDocument,
+    pub authoring_metrics: AuthoringMetrics,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthoringMetrics {
+    pub nonblank_lines: usize,
+    pub top_level_items: usize,
+}
+
+impl AuthoringMetrics {
+    fn from_source(source: &str, document: &SemanticDocument) -> Self {
+        let nonblank_lines = source
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count();
+        let top_level_items = match document {
+            SemanticDocument::Philosophies { philosophies, .. } => philosophies.len(),
+            SemanticDocument::Policies { policies, .. } => policies.len(),
+            SemanticDocument::Requirements { requirements, .. } => requirements.len(),
+            SemanticDocument::Features { features, .. } => features.len(),
+        };
+        Self {
+            nonblank_lines,
+            top_level_items,
+        }
+    }
 }
 
 /// Legacy schema marker recognized only to route explicit migration guidance.
@@ -253,7 +279,12 @@ impl SpecWorkspace {
         for path in paths {
             let source = fs::read_to_string(&path)?;
             let document = load_spec_document(&source, &path)?;
-            documents.push(LoadedDocument { path, document });
+            let authoring_metrics = AuthoringMetrics::from_source(&source, &document);
+            documents.push(LoadedDocument {
+                path,
+                document,
+                authoring_metrics,
+            });
         }
         let frontend_diagnostics = effective_config
             .applied_conventions
@@ -3118,6 +3149,104 @@ mod tests {
         assert!(error.contains("docs/mitase/authoring-requirement.yaml"));
         assert!(error.contains("normalize authoring document"));
         assert!(error.contains("cannot infer requirement.implementation.target.adapter"));
+    }
+
+    #[test]
+    fn authoring_metrics_count_nonblank_source_and_normalized_short_requirements() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs/mitase/nested")).expect("spec directory");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            "schema: mitase/config/v1\n",
+        )
+        .expect("minimal config");
+        let source = concat!(
+            "# leading comment\n",
+            "schema: mitase/authoring/v2\n",
+            "kind: requirement\n",
+            "namespace: test\n",
+            "category: Test\n",
+            "\n",
+            "# before item\n",
+            "requirement:\n",
+            "  id: REQ-METRIC-001\n",
+            "  title: Count the short requirement\n",
+            "  description: A short-form requirement is one semantic item.\n",
+            "  priority: medium\n",
+            "  status: planned\n",
+            "  criterion:\n",
+            "    id: behavior\n",
+            "    kind: behavior\n",
+            "    statement: The normalized document contains one requirement.\n",
+            "    governed_by: []\n",
+            "  implementation:\n",
+            "    facet: delivery\n",
+            "    responsibility: Implement the requirement.\n",
+            "    target:\n",
+            "      adapter: rust\n",
+            "      path: src/lib.rs\n",
+            "      satisfies: behavior\n",
+            "  verification:\n",
+            "    facet: verification\n",
+            "    responsibility: Verify the requirement.\n",
+            "    target:\n",
+            "      adapter: rust\n",
+            "      path: tests/example.rs\n",
+            "      verifies:\n",
+            "        criterion: behavior\n",
+            "        covers: [source]\n",
+            "        runner: cargo-test\n",
+            "\n",
+        );
+        let path = tempdir
+            .path()
+            .join("docs/mitase/nested/short-requirement.yaml");
+        fs::write(&path, source).expect("authoring document");
+        let path = path.canonicalize().expect("canonical authoring path");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let loaded = workspace
+            .documents
+            .iter()
+            .find(|loaded| loaded.path == path)
+            .expect("nested authoring document");
+        assert_eq!(
+            loaded.authoring_metrics,
+            AuthoringMetrics {
+                nonblank_lines: 34,
+                top_level_items: 1,
+            }
+        );
+
+        let collection_source = concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: features\n",
+            "namespace: test\n",
+            "category: Test\n",
+            "features:\n",
+            "  - id: FEAT-METRIC-001\n",
+            "    title: First feature\n",
+            "    summary: First semantic item.\n",
+            "    status: planned\n",
+            "    bindings: []\n",
+            "  - id: FEAT-METRIC-002\n",
+            "    title: Second feature\n",
+            "    summary: Second semantic item.\n",
+            "    status: planned\n",
+            "    bindings: []\n",
+        );
+        let collection_path = tempdir.path().join("docs/mitase/nested/features.yaml");
+        fs::write(&collection_path, collection_source).expect("feature collection");
+        let collection_path = collection_path
+            .canonicalize()
+            .expect("canonical feature collection path");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace with collection");
+        let collection = workspace
+            .documents
+            .iter()
+            .find(|loaded| loaded.path == collection_path)
+            .expect("nested feature collection");
+        assert_eq!(collection.authoring_metrics.top_level_items, 2);
     }
 
     #[test]

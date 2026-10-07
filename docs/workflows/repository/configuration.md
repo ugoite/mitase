@@ -32,7 +32,31 @@ The output includes `applied_conventions`. Explicit values always win over
 conventions. The initial conventions cover the standard spec root and
 excludes, one default inventory profile, Rust/JavaScript/TypeScript source and
 test discovery, validation defaults, and repository-specific common runner
-presets.
+presets. Authoring validation defaults to a maximum of 1000 nonblank source
+lines and 12 semantic top-level items per file:
+
+```yaml
+validation:
+  authoring:
+    limits:
+      max_nonblank_lines: 1000
+      max_top_level_items: 12
+```
+
+These are hard safety ceilings, not recommended file sizes. Set positive values
+to tighten or relax either limit for the repository. A value of zero is
+invalid; use an explicit larger positive value when a repository needs more
+room. The effective config output shows both resolved values, while
+`applied_conventions` identifies defaults that were not set in `mitase.yaml`.
+For example, a repository can raise both limits as follows:
+
+```yaml
+validation:
+  authoring:
+    limits:
+      max_nonblank_lines: 1600
+      max_top_level_items: 20
+```
 
 When a normal workspace load applies one of these mechanical conventions, the
 CLI and LSP expose it as the shared informational diagnostic
@@ -119,6 +143,11 @@ Key fields:
 - `workspace.excludes`: paths excluded from specification and inventory discovery.
 - `inventory.active_profile`: the one provider profile used to build canonical artifact identities.
 - `validation.readiness.target`: the repository-wide floor.
+- `validation.authoring.limits.max_nonblank_lines`: the maximum number of
+  nonblank source lines in one authoring document (default `1000`).
+- `validation.authoring.limits.max_top_level_items`: the maximum number of
+  normalized Philosophy, Policy, Requirement, or Feature items in one document
+  (default `12`).
 - `validation.readiness.probes.implemented_criteria`: exact criterion-and-level pairs. A bounded list is the normal gradual-adoption path.
 - `validation.readiness.probes.public_entrypoints`: set `selection: all` and the required `level` to govern every discovered public entrypoint with one exact owner and one capability exposure.
 - `validation.readiness.probes.changed_units`: include changed artifact ownership in readiness when enabled.
