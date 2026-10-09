@@ -54,6 +54,32 @@ Both are fixed errors in Standard and Strict presets, run in the Graph phase,
 and include `actual` and `configured-limit` evidence. Split the document or
 raise the corresponding positive limit in `mitase.yaml`.
 
+## Specification quality diagnostics
+
+Quality diagnostics (`MITASE-QUALITY-*`) report structurally unnatural but
+formally valid specifications: repeated normative statements across layers
+and incoherent responsibility bundles. They run in the Graph phase in both
+Standard and Strict presets, and they are Warning or Info findings only. A
+workspace that reports only quality findings still passes `mitase check`;
+existing errors are unchanged and never weakened.
+
+Filter the quality-only subset by code prefix in text, JSON, and LSP output:
+
+```bash
+mitase check . --format json | jq '[.diagnostics[] | select(.code | startswith("MITASE-QUALITY-"))]'
+```
+
+Each finding carries stable string key/value `evidence` (matched statements,
+signs, reference counts, shared tokens or targets, component sizes), the
+subject and counterpart anchors, and a `suggested_action` describing the
+authoring choice. Mitase offers no automatic fix: keep the local condition,
+generalize the reusable decision, split by responsibility, consolidate the
+obligation, or record why the shape is intentional.
+
+For the rule table, comparison rules, negative controls, and what is
+deliberately not decided mechanically, see [Spec quality
+diagnostics](../../understand/quality/spec-quality-diagnostics.md).
+
 The text format is a compact human-readable view of the same diagnostic. Use
 JSON when an integration needs stable fields or exact locations.
 

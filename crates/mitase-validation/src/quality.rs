@@ -103,6 +103,7 @@ pub(crate) fn validate_quality(
     validate_redundant_rule_description(workspace, out);
     validate_fragmented_requirement(workspace, index, out);
     validate_duplicate_obligation(index, out);
+    validate_one_off_policy(index, out);
 }
 
 /// Q001 Layer Echo: a Criterion directly governed by a Policy rule states the
@@ -444,6 +445,303 @@ fn current_implementation_identities(
         .collect()
 }
 
+/// Minimum normalized length, in Unicode scalar values, for the statement
+/// similarity sign to be evaluated.
+///
+/// Rationale: character trigrams need enough material to be stable. Below
+/// about twelve characters every shared word dominates the score, so short
+/// pairs are excluded from sign (c) and say so in the evidence instead of
+/// guessing.
+pub(crate) const MIN_SIMILARITY_CHARS: usize = 12;
+
+/// Trigram Dice threshold for the statement similarity sign.
+///
+/// Rationale: above 0.6 two normalized statements share most of their
+/// phrasing, which is the textual footprint of a decision stated twice. The
+/// boundary is pinned by unit tests with margin on both sides: near
+/// paraphrases score well above it, topically different sentences well below.
+pub(crate) const SIMILARITY_THRESHOLD: f64 = 0.6;
+
+/// Minimum overlap coverage for the shared-targets sign, measured against
+/// the smaller of the rule-evidence and criterion-implementation identity
+/// sets.
+///
+/// Rationale: one shared file out of many proves little, while half or more
+/// of the smaller side sharing exact identities means both levels are
+/// evidenced by the same repository facts.
+pub(crate) const TARGET_OVERLAP_THRESHOLD: f64 = 0.5;
+
+/// Concrete detail tokens of one raw statement: numbers, file-like and
+/// path-like tokens, and camelCase API names, compared case-insensitively.
+///
+/// Ordinary prose words never qualify, so a shared topic word alone cannot
+/// satisfy sign (b). A lone digit such as `4` does qualify: copying a bare
+/// number is exactly the footprint sign (b) is meant to catch, and it can
+/// only fire together with two other signs.
+pub(crate) fn concrete_tokens(statement: &str) -> BTreeSet<String> {
+    fn is_token_char(c: char) -> bool {
+        c.is_alphanumeric() || matches!(c, '_' | '.' | '/' | '-' | ':' | '+')
+    }
+    statement
+        .split(|c: char| !is_token_char(c))
+        .map(|token| token.trim_matches(|c: char| matches!(c, '.' | '/' | '_' | ':' | '-')))
+        .filter(|token| !token.is_empty())
+        .filter(|token| {
+            if token.chars().any(|c| c.is_numeric()) {
+                return true;
+            }
+            if token.chars().count() < 2 {
+                return false;
+            }
+            if token
+                .chars()
+                .any(|c| matches!(c, '.' | '/' | '_' | ':' | '+'))
+            {
+                return true;
+            }
+            let mut previous_lower = false;
+            for c in token.chars() {
+                if previous_lower && c.is_uppercase() {
+                    return true;
+                }
+                previous_lower = c.is_lowercase();
+            }
+            false
+        })
+        .map(|token| token.to_lowercase())
+        .collect()
+}
+
+/// Character-trigram Dice similarity of two normalized statements.
+///
+/// The score is `2 * intersection / (len_a + len_b)` over trigram bags, so
+/// it is symmetric, deterministic, and language-independent. Two empty
+/// trigram bags score 1.0 only when the inputs are equal.
+pub(crate) fn trigram_similarity(first: &str, second: &str) -> f64 {
+    fn bags(value: &str) -> BTreeMap<(char, char, char), usize> {
+        let mut bags = BTreeMap::new();
+        let chars: Vec<char> = value.chars().collect();
+        for window in chars.windows(3) {
+            *bags.entry((window[0], window[1], window[2])).or_default() += 1;
+        }
+        bags
+    }
+    let left = bags(first);
+    let right = bags(second);
+    let left_len: usize = left.values().sum();
+    let right_len: usize = right.values().sum();
+    if left_len == 0 || right_len == 0 {
+        return f64::from(first == second);
+    }
+    let mut intersection = 0;
+    for (trigram, count) in &left {
+        intersection += (*count).min(*right.get(trigram).unwrap_or(&0));
+    }
+    2.0 * intersection as f64 / (left_len + right_len) as f64
+}
+
+/// Exact implementation artifact identities evidencing one Policy rule:
+/// targets of Enforcement bindings enforcing the rule and Evidence bindings
+/// evidencing it, restricted to currently resolved identities.
+fn rule_evidence_identities(index: &SpecIndex, rule: &SpecAnchor) -> BTreeSet<String> {
+    let mut refs = BTreeSet::new();
+    for (binding_anchor, binding) in &index.bindings {
+        for target in &binding.targets {
+            let claimed = target.claims.iter().any(|claim| match claim {
+                mitase_spec_model::TargetClaim::Enforces { rule: enforced } => {
+                    binding.role == mitase_spec_model::BindingRole::Enforcement && enforced == rule
+                }
+                mitase_spec_model::TargetClaim::Evidences { anchor } => {
+                    binding.role == mitase_spec_model::BindingRole::Evidence && anchor == rule
+                }
+                _ => false,
+            });
+            if claimed {
+                refs.insert(mitase_spec_model::BoundTargetRef {
+                    binding: binding_anchor.clone(),
+                    target_id: target.id.clone(),
+                });
+            }
+        }
+    }
+    refs.into_iter()
+        .filter_map(|target| index.target_to_artifact.get(&target))
+        .cloned()
+        .collect()
+}
+
+/// Criteria directly governed by one rule, restricted to anchors that
+/// currently exist as Criteria. Dangling references stay owned by the
+/// structural diagnostics.
+fn downstream_criteria(index: &SpecIndex, rule: &SpecAnchor) -> Vec<SpecAnchor> {
+    index
+        .criteria_to_rules
+        .iter()
+        .filter(|(_, governors)| governors.contains(rule))
+        .map(|(criterion, _)| criterion)
+        .filter(|criterion| {
+            index
+                .anchors
+                .get(*criterion)
+                .is_some_and(|value| matches!(value, mitase_workspace::AnchorValue::Criterion(_)))
+        })
+        .cloned()
+        .collect()
+}
+
+/// Q002 One-off Policy: one Policy rule governs a single Criterion while
+/// sharing its concrete detail, phrasing, and implementation evidence.
+///
+/// Sign (a), exactly one downstream Criterion, is mandatory; at least two of
+/// (b) shared concrete tokens, (c) high statement similarity, and (d) strong
+/// target overlap must also hold. A lone specific rule, such as a genuine
+/// security invariant, stays silent without the remaining composite
+/// evidence. Unknown identities and short texts never contribute a sign and
+/// say so in the evidence.
+fn validate_one_off_policy(index: &SpecIndex, out: &mut Vec<Diagnostic>) {
+    let rules: Vec<(SpecAnchor, String)> = index
+        .anchors
+        .iter()
+        .filter(|(_, value)| matches!(value, mitase_workspace::AnchorValue::Rule(_)))
+        .map(|(anchor, _)| (anchor.clone(), item_path(index, anchor)))
+        .collect();
+    for (rule, path) in rules {
+        let Some(mitase_workspace::AnchorValue::Rule(rule_value)) = index.anchors.get(&rule) else {
+            continue;
+        };
+        let downstream = downstream_criteria(index, &rule);
+        if downstream.len() != 1 {
+            continue;
+        }
+        let criterion = &downstream[0];
+        let Some(mitase_workspace::AnchorValue::Criterion(criterion_value)) =
+            index.anchors.get(criterion)
+        else {
+            continue;
+        };
+        let shared: Vec<String> = concrete_tokens(&rule_value.statement)
+            .intersection(&concrete_tokens(&criterion_value.statement))
+            .cloned()
+            .collect();
+        let normalized_rule = normalize_statement(&rule_value.statement);
+        let normalized_criterion = normalize_statement(&criterion_value.statement);
+        let similarity_eligible = normalized_len(&normalized_rule) >= MIN_SIMILARITY_CHARS
+            && normalized_len(&normalized_criterion) >= MIN_SIMILARITY_CHARS;
+        let similarity = if similarity_eligible {
+            trigram_similarity(&normalized_rule, &normalized_criterion)
+        } else {
+            0.0
+        };
+        let rule_identities = rule_evidence_identities(index, &rule);
+        let criterion_identities = current_implementation_identities(index, criterion);
+        let overlap: Vec<String> = rule_identities
+            .intersection(&criterion_identities)
+            .cloned()
+            .collect();
+        let smaller = rule_identities.len().min(criterion_identities.len());
+        let coverage = if smaller == 0 {
+            0.0
+        } else {
+            overlap.len() as f64 / smaller as f64
+        };
+        let sign_b = !shared.is_empty();
+        let sign_c = similarity_eligible && similarity >= SIMILARITY_THRESHOLD;
+        let sign_d = !rule_identities.is_empty()
+            && !criterion_identities.is_empty()
+            && coverage >= TARGET_OVERLAP_THRESHOLD;
+        let met = 1 + usize::from(sign_b) + usize::from(sign_c) + usize::from(sign_d);
+        if met < 3 {
+            continue;
+        }
+        let mut met_signs = vec!["a"];
+        if sign_b {
+            met_signs.push("b");
+        }
+        if sign_c {
+            met_signs.push("c");
+        }
+        if sign_d {
+            met_signs.push("d");
+        }
+        let mut diagnostic = Diagnostic::warning(
+            "MITASE-QUALITY-002",
+            format!(
+                "Policy rule {rule} governs only Criterion {criterion} and matches {met}/4 \
+                 one-off signs ({})",
+                met_signs.join("+")
+            ),
+            path,
+        );
+        diagnostic.set_subject_anchor(&rule);
+        diagnostic.reference = Some(anchor_subject(criterion));
+        diagnostic.relation = Some(RelationRef {
+            relation: "governs".into(),
+            source: anchor_subject(&rule),
+            targets: vec![anchor_subject(criterion)],
+        });
+        diagnostic.related.push(RelatedLocation {
+            location: Location {
+                path: item_path(index, criterion),
+                line: None,
+                column: None,
+                end_line: None,
+                end_column: None,
+                label: Some("sole governed criterion".into()),
+            },
+            message: format!("sole governed criterion {criterion}"),
+        });
+        diagnostic.evidence = vec![
+            Evidence {
+                kind: "signs_met".into(),
+                value: format!("{met}/4"),
+            },
+            Evidence {
+                kind: "met_signs".into(),
+                value: met_signs.join("+"),
+            },
+            Evidence {
+                kind: "downstream_criteria".into(),
+                value: "1".into(),
+            },
+            Evidence {
+                kind: "shared_concrete_tokens".into(),
+                value: if shared.is_empty() {
+                    "none".into()
+                } else {
+                    shared.join(",")
+                },
+            },
+            Evidence {
+                kind: "statement_similarity".into(),
+                value: if similarity_eligible {
+                    format!("{similarity:.2}")
+                } else {
+                    "too-short".into()
+                },
+            },
+            Evidence {
+                kind: "target_overlap".into(),
+                value: if rule_identities.is_empty() || criterion_identities.is_empty() {
+                    "none".into()
+                } else {
+                    format!("{}/{}", overlap.len(), smaller)
+                },
+            },
+        ];
+        diagnostic.help = Some(
+            "Either generalize this Policy into a reusable decision rule with broader \
+             evidence, merge the decision into the Criterion, or record why this \
+             single-criterion rule must stand alone."
+                .into(),
+        );
+        diagnostic.next.push(ReadOnlyHint {
+            kind: "show".into(),
+            value: rule.item.to_string(),
+        });
+        out.push(diagnostic);
+    }
+}
+
 /// Q004 Duplicate Obligation: Criteria in different Requirements state the
 /// same normative text under a common governing Policy rule and share one
 /// exact implementation target.
@@ -709,6 +1007,52 @@ mod tests {
         );
         assert_eq!(components[1].len(), 1);
         assert_eq!(components[2].len(), 1);
+    }
+
+    #[test]
+    fn concrete_tokens_keep_numbers_paths_and_api_names_only() {
+        assert_eq!(
+            concrete_tokens("Widget digests must bundle at most 4 entries per signed envelope."),
+            BTreeSet::from(["4".to_string()])
+        );
+        assert_eq!(
+            concrete_tokens("Use src/auth/passwords.rs and entryPoint with v2 config."),
+            BTreeSet::from([
+                "src/auth/passwords.rs".to_string(),
+                "entrypoint".to_string(),
+                "v2".to_string()
+            ])
+        );
+        assert!(
+            concrete_tokens("Secrets must never leave the encrypted vault boundary.").is_empty()
+        );
+        assert!(concrete_tokens("C++ builds use retries.").contains("c++"));
+    }
+
+    #[test]
+    fn trigram_similarity_separates_paraphrase_from_new_topic() {
+        let paraphrase = trigram_similarity(
+            &normalize_statement("Widget archives must retain every entry exactly as submitted."),
+            &normalize_statement(
+                "Widget archives must retain every entry exactly as submitted with no silent mutation.",
+            ),
+        );
+        assert!(
+            paraphrase > SIMILARITY_THRESHOLD + 0.1,
+            "paraphrase scores with margin: {paraphrase}"
+        );
+        let different = trigram_similarity(
+            &normalize_statement("Widget archives must retain every entry exactly as submitted."),
+            &normalize_statement(
+                "Credentials must rotate before the documented expiry window closes.",
+            ),
+        );
+        assert!(
+            different < SIMILARITY_THRESHOLD - 0.1,
+            "new topic scores with margin: {different}"
+        );
+        assert_eq!(trigram_similarity("", ""), 1.0);
+        assert_eq!(trigram_similarity("ab", "cd"), 0.0);
     }
 
     #[test]
