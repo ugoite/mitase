@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 pub mod pr_context;
+mod quality;
 mod readiness;
 use anyhow::{Context, Result, bail};
 use mitase_diagnostics::{
@@ -128,6 +129,20 @@ macro_rules! fixed_metadata {
         }
     };
 }
+/// Advisory quality findings are never hard errors: they prompt authoring
+/// review in both presets and never change the success condition of
+/// `mitase check` on their own.
+macro_rules! advisory_metadata {
+    ($id:literal) => {
+        RuleMetadata {
+            id: $id,
+            title: $id,
+            default_error: false,
+            override_policy: OverridePolicy::Suppressible,
+            presets: &[ValidationPreset::Standard, ValidationPreset::Strict],
+        }
+    };
+}
 pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("MITASE-SCHEMA-001"),
     fixed_metadata!("MITASE-SCHEMA-002"),
@@ -178,6 +193,8 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("MITASE-READINESS-001"),
     fixed_metadata!("MITASE-VERIFICATION-001"),
     fixed_metadata!("MITASE-VERIFICATION-002"),
+    advisory_metadata!("MITASE-QUALITY-001"),
+    advisory_metadata!("MITASE-QUALITY-005"),
 ];
 
 /// Canonical rule-to-phase classification for presentation clients.  This is
@@ -209,6 +226,7 @@ pub fn phase_for_rule(rule: &str) -> ValidationPhase {
         "MITASE-REQUIREMENT-",
         "MITASE-FEATURE-",
         "MITASE-DOC-",
+        "MITASE-QUALITY-",
     ]
     .iter()
     .any(|prefix| rule.starts_with(prefix))
@@ -577,6 +595,9 @@ fn validate_inner(ctx: &ValidationContext<'_>, include_readiness: bool) -> Valid
     set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
     let start = diagnostics.len();
     validate_graph(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
+    let start = diagnostics.len();
+    quality::validate_quality(ctx.workspace, ctx.index, &mut diagnostics);
     set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
     let start = diagnostics.len();
     validate_targets(ctx, &mut diagnostics);
@@ -4786,6 +4807,372 @@ requirements:
                 .map(|subject| subject.value.as_str())
                 .collect::<Vec<_>>(),
             vec![source_a.to_string(), source_b.to_string()]
+        );
+    }
+
+    fn quality_fixture() -> (TempDir, SpecWorkspace, SpecIndex) {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("spec")).expect("spec dir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
+        fs::create_dir_all(tempdir.path().join("docs")).expect("docs dir");
+        fs::write(
+            tempdir.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  excludes: []\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers:\n",
+                "        rust: { mode: test, include_tests: true }\n",
+                "        markdown: { roots: [docs] }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64 }\n",
+                "  changed: { require_owned_changes: false }\n",
+                "verification:\n",
+                "  runners:\n",
+                "    proof:\n",
+                "      executable: external-runner\n",
+                "      arguments: [\"{test}\"]\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("Cargo.toml"),
+            "[package]\nname = \"quality-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .expect("manifest");
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn implementation() {}\n",
+        )
+        .expect("implementation");
+        fs::write(tempdir.path().join("docs/guide.md"), "# Guide\n")
+            .expect("verification artifact");
+        fs::write(
+            tempdir.path().join("spec/philosophy.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: philosophies\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "philosophies:\n",
+                "  - id: PHIL-QUALITY-001\n",
+                "    title: Meaningful layers\n",
+                "    summary: Each layer carries its own meaning.\n",
+                "    principles:\n",
+                "      - { id: distinct-meaning, statement: Each layer preserves meaning its neighbors do not express., applies_to: [product] }\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("philosophy fixture");
+        fs::write(
+            tempdir.path().join("spec/policy.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: policies\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "policies:\n",
+                "  - id: POL-QUALITY-001\n",
+                "    title: Generic dashboard responses\n",
+                "    summary: Dashboard failures share one public shape.\n",
+                "    description: Dashboard failures expose one generic response to every caller in every region.\n",
+                "    rules:\n",
+                "      - id: generic-response\n",
+                "        level: should\n",
+                "        statement: Dashboard failures expose one generic response to every caller in every region.\n",
+                "        governed_by: [PHIL-QUALITY-001#principle.distinct-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "      - id: japanese-response\n",
+                "        level: should\n",
+                "        statement: ダッシュボードの失敗はすべての呼び出し元に対して汎用的な応答を返すものとする\n",
+                "        governed_by: [PHIL-QUALITY-001#principle.distinct-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "      - id: short-rule\n",
+                "        level: should\n",
+                "        statement: Must be secure.\n",
+                "        governed_by: [PHIL-QUALITY-001#principle.distinct-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "    bindings: []\n",
+                "  - id: POL-QUALITY-002\n",
+                "    title: Credential rotation\n",
+                "    summary: Credentials rotate on a documented schedule.\n",
+                "    description: Contributors rotate credentials on a documented schedule.\n",
+                "    rules:\n",
+                "      - id: rotation\n",
+                "        level: should\n",
+                "        statement: Credentials must rotate before the documented expiry window closes.\n",
+                "        governed_by: [PHIL-QUALITY-001#principle.distinct-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "    bindings: []\n",
+                "  - id: POL-QUALITY-003\n",
+                "    title: Undescribed policy\n",
+                "    summary: A policy without a description stays silent.\n",
+                "    rules:\n",
+                "      - id: undescribed\n",
+                "        level: should\n",
+                "        statement: Every release records its provenance in the release manifest for audit purposes.\n",
+                "        governed_by: [PHIL-QUALITY-001#principle.distinct-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("policy fixture");
+        fs::write(
+            tempdir.path().join("spec/requirement.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: requirements\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "requirements:\n",
+                "  - id: REQ-QUALITY-001\n",
+                "    title: Dashboard failure shape\n",
+                "    description: Dashboard failures share the generic shape.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: echo\n",
+                "        kind: behavior\n",
+                "        statement: dashboard failures expose one generic response to every caller in every region.\n",
+                "        governed_by: [POL-QUALITY-001#rule.generic-response]\n",
+                "      - id: japanese-echo\n",
+                "        kind: behavior\n",
+                "        statement: 「ダッシュボードの失敗は、すべての呼び出し元に対して汎用的な応答を返すものとする。」\n",
+                "        governed_by: [POL-QUALITY-001#rule.japanese-response]\n",
+                "      - id: ungoverned-echo\n",
+                "        kind: behavior\n",
+                "        statement: Dashboard failures expose one generic response to every caller in every region.\n",
+                "        governed_by: []\n",
+                "      - id: negated-echo\n",
+                "        kind: behavior\n",
+                "        statement: Dashboard failures must never expose one generic response to any caller in any region.\n",
+                "        governed_by: [POL-QUALITY-001#rule.generic-response]\n",
+                "      - id: short-echo\n",
+                "        kind: behavior\n",
+                "        statement: Must be secure.\n",
+                "        governed_by: [POL-QUALITY-001#rule.short-rule]\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("requirement fixture");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        (tempdir, workspace, index)
+    }
+
+    fn quality_diagnostics(result: &ValidationResult) -> Vec<&Diagnostic> {
+        result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.rule_id.starts_with("MITASE-QUALITY-"))
+            .collect()
+    }
+
+    #[test]
+    fn quality_layer_echo_and_redundant_description_fire_with_evidence() {
+        let (_tempdir, workspace, index) = quality_fixture();
+        for preset in [ValidationPreset::Standard, ValidationPreset::Strict] {
+            let result = validate(&ValidationContext {
+                config: &workspace.config,
+                workspace: &workspace,
+                index: &index,
+                changed_files: None,
+                reported_changed_files: None,
+                preset,
+                revision: None,
+                change_base_revision: None,
+            });
+            let diagnostics = quality_diagnostics(&result);
+            let codes = diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    (
+                        diagnostic.rule_id.as_str(),
+                        diagnostic
+                            .subject
+                            .as_ref()
+                            .map(|subject| subject.value.as_str())
+                            .unwrap_or(""),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                codes,
+                [
+                    ("MITASE-QUALITY-001", "REQ-QUALITY-001#criterion.echo"),
+                    (
+                        "MITASE-QUALITY-001",
+                        "REQ-QUALITY-001#criterion.japanese-echo"
+                    ),
+                    (
+                        "MITASE-QUALITY-005",
+                        "POL-QUALITY-001#rule.generic-response"
+                    ),
+                ],
+                "only the echo criteria and the redundant description fire in {preset:?}"
+            );
+            for diagnostic in &diagnostics {
+                assert_eq!(diagnostic.phase, ValidationPhase::Graph);
+                assert!(diagnostic.help.as_deref().unwrap_or("").len() > 20);
+            }
+            let echo = diagnostics
+                .iter()
+                .find(|diagnostic| {
+                    diagnostic
+                        .subject
+                        .as_ref()
+                        .is_some_and(|subject| subject.value == "REQ-QUALITY-001#criterion.echo")
+                })
+                .expect("english echo fires");
+            assert_eq!(
+                echo.severity,
+                mitase_diagnostics::Severity::Warning,
+                "Q001 is a warning"
+            );
+            assert_eq!(
+                echo.reference
+                    .as_ref()
+                    .map(|reference| reference.value.as_str()),
+                Some("POL-QUALITY-001#rule.generic-response")
+            );
+            assert_eq!(echo.related.len(), 1);
+            assert!(
+                echo.related[0].location.path.ends_with("spec/policy.yaml"),
+                "related span names the policy file: {}",
+                echo.related[0].location.path
+            );
+            assert_eq!(
+                echo.relation
+                    .as_ref()
+                    .map(|relation| relation.relation.as_str()),
+                Some("governed-by")
+            );
+            assert_eq!(
+                echo.evidence
+                    .iter()
+                    .map(|evidence| (evidence.kind.as_str(), evidence.value.as_str()))
+                    .collect::<Vec<_>>(),
+                [
+                    ("normalized_statement_equal", "true"),
+                    ("governed_by", "direct"),
+                    ("normalized_length", "78"),
+                ]
+            );
+            assert!(
+                echo.help
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("Keep the local acceptance condition")
+            );
+            let redundant = diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.rule_id == "MITASE-QUALITY-005")
+                .expect("redundant description fires");
+            assert_eq!(
+                redundant.severity,
+                mitase_diagnostics::Severity::Info,
+                "Q005 is info"
+            );
+            assert_eq!(
+                redundant
+                    .evidence
+                    .iter()
+                    .map(|evidence| (evidence.kind.as_str(), evidence.value.as_str()))
+                    .collect::<Vec<_>>(),
+                [
+                    ("description_statement_equal", "true"),
+                    ("normalized_length", "78"),
+                ]
+            );
+            assert!(
+                result.is_valid(),
+                "quality warnings must not fail validation"
+            );
+        }
+    }
+
+    #[test]
+    fn quality_diagnostics_serialize_with_the_stable_contract_fields() {
+        let (_tempdir, workspace, index) = quality_fixture();
+        let result = validate_loaded_workspace(&workspace, &index);
+        let diagnostic = quality_diagnostics(&result)
+            .into_iter()
+            .find(|diagnostic| diagnostic.rule_id == "MITASE-QUALITY-001")
+            .expect("quality diagnostic exists")
+            .clone();
+        let value = serde_json::to_value(&diagnostic).expect("diagnostic serializes");
+        assert_eq!(value["code"], "MITASE-QUALITY-001");
+        assert_eq!(value["phase"], "graph");
+        assert_eq!(value["severity"], "warning");
+        assert!(
+            value["reason"]
+                .as_str()
+                .unwrap_or("")
+                .contains("same normative statement")
+        );
+        assert!(
+            value["primary"]["path"]
+                .as_str()
+                .unwrap_or("")
+                .ends_with("spec/requirement.yaml")
+        );
+        assert!(value["related_spans"].is_array());
+        assert_eq!(value["subject"]["kind"], "spec-anchor");
+        assert_eq!(value["reference"]["kind"], "spec-anchor");
+        assert_eq!(value["relation"]["relation"], "governed-by");
+        assert!(value["evidence"].is_array());
+        assert!(value["suggested_action"].as_str().unwrap_or("").len() > 20);
+        assert!(value.get("rule_id").is_none());
+        assert!(value.get("message").is_none());
+        let decoded: Diagnostic = serde_json::from_value(value).expect("diagnostic round-trips");
+        assert_eq!(decoded, diagnostic);
+    }
+
+    #[test]
+    fn quality_diagnostics_are_deterministic_for_the_same_input() {
+        let (_tempdir, workspace, index) = quality_fixture();
+        let first = validate_loaded_workspace(&workspace, &index);
+        let second = validate_loaded_workspace(&workspace, &index);
+        let signature = |result: &ValidationResult| {
+            quality_diagnostics(result)
+                .into_iter()
+                .map(|diagnostic| {
+                    (
+                        diagnostic.rule_id.clone(),
+                        diagnostic.primary.path.clone(),
+                        diagnostic.message.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(signature(&first), signature(&second));
+    }
+
+    #[test]
+    fn quality_checks_stay_silent_on_the_valid_fixture() {
+        let (_tempdir, workspace, index) = load_fixture_workspace();
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(
+            quality_diagnostics(&result).is_empty(),
+            "valid fixture must not raise quality diagnostics: {:?}",
+            quality_diagnostics(&result)
+                .iter()
+                .map(|diagnostic| (
+                    diagnostic.rule_id.as_str(),
+                    diagnostic
+                        .subject
+                        .as_ref()
+                        .map(|subject| subject.value.as_str())
+                ))
+                .collect::<Vec<_>>()
         );
     }
 }

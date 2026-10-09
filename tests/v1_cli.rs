@@ -2273,3 +2273,144 @@ fn initialized_workspace_passes_check_after_commit() {
         .assert()
         .success();
 }
+
+#[test]
+fn check_reports_quality_warnings_without_failing() {
+    let temp = tempdir().unwrap();
+    fs::write(
+        temp.path().join("mitase.yaml"),
+        "schema: mitase/config/v1\nvalidation:\n  readiness:\n    target: off\n",
+    )
+    .unwrap();
+    let spec_dir = temp.path().join("docs/mitase");
+    fs::create_dir_all(&spec_dir).unwrap();
+    fs::write(
+        spec_dir.join("philosophy.yaml"),
+        concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: philosophies\n",
+            "namespace: demo\n",
+            "category: Demo\n",
+            "philosophies:\n",
+            "  - id: PHIL-DEMO-001\n",
+            "    title: Meaningful layers\n",
+            "    summary: Each layer carries its own meaning.\n",
+            "    principles:\n",
+            "      - { id: distinct-meaning, statement: Each layer preserves meaning its neighbors do not express., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        spec_dir.join("policy.yaml"),
+        concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: policies\n",
+            "namespace: demo\n",
+            "category: Demo\n",
+            "policies:\n",
+            "  - id: POL-DEMO-001\n",
+            "    title: Generic demo responses\n",
+            "    summary: Demo failures share one public shape.\n",
+            "    description: Demo failures expose one generic response to every caller in every region.\n",
+            "    rules:\n",
+            "      - id: generic-response\n",
+            "        level: should\n",
+            "        statement: Demo failures expose one generic response to every caller in every region.\n",
+            "        governed_by: [PHIL-DEMO-001#principle.distinct-meaning]\n",
+            "        applies_to: { roles: [implementation] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        spec_dir.join("requirement.yaml"),
+        concat!(
+            "schema: mitase/authoring/v2\n",
+            "kind: requirements\n",
+            "namespace: demo\n",
+            "category: Demo\n",
+            "requirements:\n",
+            "  - id: REQ-DEMO-001\n",
+            "    title: Demo failure shape\n",
+            "    description: Demo failures share the generic shape.\n",
+            "    priority: high\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: echo\n",
+            "        kind: behavior\n",
+            "        statement: Demo failures expose one generic response to every caller in every region.\n",
+            "        governed_by: [POL-DEMO-001#rule.generic-response]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    initialize_fixture_git(temp.path());
+
+    let json_output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", ".", "--format", "json"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        json_output.status.code(),
+        Some(0),
+        "quality warnings must not fail check: {}",
+        String::from_utf8_lossy(&json_output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&json_output.stdout).unwrap();
+    let quality: Vec<&serde_json::Value> = report["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic["code"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("MITASE-QUALITY-")
+        })
+        .collect();
+    assert_eq!(quality.len(), 2, "Q001 and Q005 fire: {quality:?}");
+    let echo = quality
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "MITASE-QUALITY-001")
+        .expect("layer echo fires");
+    assert_eq!(echo["phase"], "graph");
+    assert_eq!(echo["severity"], "warning");
+    assert_eq!(echo["subject"]["value"], "REQ-DEMO-001#criterion.echo");
+    assert_eq!(
+        echo["reference"]["value"],
+        "POL-DEMO-001#rule.generic-response"
+    );
+    assert!(echo["related_spans"].as_array().unwrap().len() == 1);
+    assert!(echo["evidence"].as_array().unwrap().len() == 3);
+    assert!(
+        echo["suggested_action"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Keep the local acceptance condition")
+    );
+    let redundant = quality
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "MITASE-QUALITY-005")
+        .expect("redundant description fires");
+    assert_eq!(redundant["severity"], "info");
+
+    let text_output = Command::cargo_bin("mitase")
+        .unwrap()
+        .args(["check", "."])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(text_output.status.code(), Some(0));
+    let text = String::from_utf8_lossy(&text_output.stdout);
+    assert!(
+        text.contains("MITASE-QUALITY-001"),
+        "text shows Q001: {text}"
+    );
+    assert!(
+        text.contains("MITASE-QUALITY-005"),
+        "text shows Q005: {text}"
+    );
+}
