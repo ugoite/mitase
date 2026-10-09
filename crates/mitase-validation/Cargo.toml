@@ -16,3 +16,4 @@ mitase-workspace = { path = "../mitase-workspace" }
 serde_yaml = "0.9"
 serde_json.workspace = true
 tempfile.workspace = true
+unicode-normalization.workspace = true
