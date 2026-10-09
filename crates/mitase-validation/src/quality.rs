@@ -16,8 +16,9 @@
 use mitase_diagnostics::{
     Diagnostic, DiagnosticSubject, Evidence, Location, ReadOnlyHint, RelatedLocation, RelationRef,
 };
-use mitase_spec_model::{LocalAnchorKind, SemanticDocument, SpecAnchor};
+use mitase_spec_model::{ItemStatus, LocalAnchorKind, SemanticDocument, SpecAnchor};
 use mitase_workspace::{SpecIndex, SpecWorkspace};
+use std::collections::{BTreeMap, BTreeSet};
 use unicode_normalization::UnicodeNormalization;
 
 /// Minimum length, in Unicode scalar values, of a normalized statement that
@@ -100,6 +101,8 @@ pub(crate) fn validate_quality(
 ) {
     validate_layer_echo(index, out);
     validate_redundant_rule_description(workspace, out);
+    validate_fragmented_requirement(workspace, index, out);
+    validate_duplicate_obligation(index, out);
 }
 
 /// Q001 Layer Echo: a Criterion directly governed by a Policy rule states the
@@ -236,6 +239,343 @@ fn validate_redundant_rule_description(workspace: &SpecWorkspace, out: &mut Vec<
     }
 }
 
+/// Minimum Criterion count for a Requirement to be a fragmentation candidate.
+///
+/// Rationale: below five Criteria, a Requirement is small enough to review by
+/// eye; splitting pressure from component counting would be noise. Pinned by
+/// the fragmented-fixture integration test.
+pub(crate) const MIN_FRAGMENTED_CRITERIA: usize = 5;
+
+/// Minimum connected-component count for a fragmentation finding.
+///
+/// Rationale: two implementation groups often reflect a natural primary plus
+/// auxiliary split. Three or more groups signal scattered responsibilities.
+pub(crate) const MIN_FRAGMENTED_COMPONENTS: usize = 3;
+
+/// A fragmentation finding requires the largest component to hold at most
+/// this share of the Requirement's Criteria, expressed as `largest * 5 <=
+/// total * 2` (40%). A dominant group means the Requirement still has a
+/// center; scattered small groups do not.
+fn largest_component_within_limit(largest: usize, total: usize) -> bool {
+    largest * 5 <= total * 2
+}
+
+/// Connected Criterion groups of one Requirement over direct `satisfies`
+/// relations.
+///
+/// Criteria are joined when they share one owning item (usually a Feature)
+/// through authored direct-satisfies bindings. Facets never split a group:
+/// the union key is the owner item, not the binding or facet. `exposes`
+/// relations are never consulted. Bindings that no longer exist are skipped;
+/// the structural diagnostics own that finding.
+pub(crate) fn criterion_components(
+    index: &SpecIndex,
+    criteria: &[SpecAnchor],
+) -> Vec<Vec<SpecAnchor>> {
+    fn find(parent: &mut [usize], mut node: usize) -> usize {
+        while parent[node] != node {
+            parent[node] = parent[parent[node]];
+            node = parent[node];
+        }
+        node
+    }
+    let mut parent: Vec<usize> = (0..criteria.len()).collect();
+    let mut owner_groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (position, criterion) in criteria.iter().enumerate() {
+        let mut owners = BTreeSet::new();
+        if let Some(bindings) = index.criteria_to_implementations.get(criterion) {
+            for binding in bindings {
+                if index.bindings.contains_key(binding) {
+                    owners.insert(binding.item.to_string());
+                }
+            }
+        }
+        for owner in owners {
+            owner_groups.entry(owner).or_default().push(position);
+        }
+    }
+    for positions in owner_groups.values() {
+        for window in positions.windows(2) {
+            let left = find(&mut parent, window[0]);
+            let right = find(&mut parent, window[1]);
+            if left != right {
+                parent[left] = right;
+            }
+        }
+    }
+    let mut groups: BTreeMap<usize, Vec<SpecAnchor>> = BTreeMap::new();
+    for (position, criterion) in criteria.iter().enumerate() {
+        let root = find(&mut parent, position);
+        groups.entry(root).or_default().push(criterion.clone());
+    }
+    let mut components: Vec<Vec<SpecAnchor>> = groups.into_values().collect();
+    for component in &mut components {
+        component.sort();
+    }
+    components.sort();
+    components
+}
+
+/// Q003 Fragmented Requirement: one Requirement's Criteria split into many
+/// small implementation groups with no dominant center.
+///
+/// All of the Requirement's Criteria must currently resolve to at least one
+/// exact implementation target. Planned, absent, or unresolved relations
+/// never count as independence: when relations are too sparse the existing
+/// coverage diagnostics own the finding and Q003 stays silent.
+fn validate_fragmented_requirement(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    out: &mut Vec<Diagnostic>,
+) {
+    for loaded in &workspace.documents {
+        let SemanticDocument::Requirements { requirements, .. } = &loaded.document else {
+            continue;
+        };
+        let path = loaded.path.to_string_lossy().into_owned();
+        for requirement in requirements {
+            if index.item_status.get(&requirement.id) != Some(&ItemStatus::Implemented) {
+                continue;
+            }
+            let criteria: Vec<SpecAnchor> = requirement
+                .criteria
+                .iter()
+                .map(|criterion| SpecAnchor {
+                    item: requirement.id.clone(),
+                    kind: LocalAnchorKind::Criterion,
+                    local_id: criterion.id.clone(),
+                })
+                .collect();
+            if criteria.len() < MIN_FRAGMENTED_CRITERIA {
+                continue;
+            }
+            let resolved = criteria.iter().all(|criterion| {
+                index
+                    .criteria_to_implementation_targets
+                    .get(criterion)
+                    .is_some_and(|targets| !targets.is_empty())
+            });
+            if !resolved {
+                continue;
+            }
+            let components = criterion_components(index, &criteria);
+            if components.len() < MIN_FRAGMENTED_COMPONENTS {
+                continue;
+            }
+            let largest = components.iter().map(Vec::len).max().unwrap_or(0);
+            if !largest_component_within_limit(largest, criteria.len()) {
+                continue;
+            }
+            let mut owners = BTreeSet::new();
+            for criterion in &criteria {
+                if let Some(bindings) = index.criteria_to_implementations.get(criterion) {
+                    for binding in bindings {
+                        if index.bindings.contains_key(binding) {
+                            owners.insert(binding.item.to_string());
+                        }
+                    }
+                }
+            }
+            let mut diagnostic = Diagnostic::warning(
+                "MITASE-QUALITY-003",
+                format!(
+                    "Requirement {} has {} criteria in {} disconnected implementation groups; \
+                     the largest holds {} of {}",
+                    requirement.id,
+                    criteria.len(),
+                    components.len(),
+                    largest,
+                    criteria.len()
+                ),
+                path.clone(),
+            );
+            diagnostic.subject = Some(DiagnosticSubject {
+                kind: "spec-item".into(),
+                value: requirement.id.to_string(),
+            });
+            diagnostic.evidence = vec![
+                Evidence {
+                    kind: "criteria_count".into(),
+                    value: criteria.len().to_string(),
+                },
+                Evidence {
+                    kind: "component_count".into(),
+                    value: components.len().to_string(),
+                },
+                Evidence {
+                    kind: "largest_component".into(),
+                    value: format!("{largest}/{}", criteria.len()),
+                },
+                Evidence {
+                    kind: "implementation_owners".into(),
+                    value: owners.into_iter().collect::<Vec<_>>().join(","),
+                },
+            ];
+            diagnostic.help = Some(
+                "Consider splitting this Requirement by independent change reason so each \
+                 item keeps one coherent implementation story. Keep the breadth only when \
+                 it is the real design choice."
+                    .into(),
+            );
+            diagnostic.next.push(ReadOnlyHint {
+                kind: "show".into(),
+                value: requirement.id.to_string(),
+            });
+            out.push(diagnostic);
+        }
+    }
+}
+
+/// Current exact implementation artifact identities for one Criterion.
+///
+/// Only non-planned, present, uniquely resolved targets count. An empty set
+/// means the Criterion has no current implementation evidence.
+fn current_implementation_identities(
+    index: &SpecIndex,
+    criterion: &SpecAnchor,
+) -> BTreeSet<String> {
+    index
+        .criteria_to_implementation_targets
+        .get(criterion)
+        .into_iter()
+        .flatten()
+        .filter_map(|target| index.target_to_artifact.get(target))
+        .cloned()
+        .collect()
+}
+
+/// Q004 Duplicate Obligation: Criteria in different Requirements state the
+/// same normative text under a common governing Policy rule and share one
+/// exact implementation target.
+///
+/// All three conditions are required together. Matching text alone, or text
+/// plus only a common target, stays silent so legitimate parallel Criteria on
+/// different surfaces are never pushed toward hasty consolidation.
+fn validate_duplicate_obligation(index: &SpecIndex, out: &mut Vec<Diagnostic>) {
+    let mut groups: BTreeMap<String, Vec<SpecAnchor>> = BTreeMap::new();
+    for (anchor, value) in &index.anchors {
+        let mitase_workspace::AnchorValue::Criterion(criterion) = value else {
+            continue;
+        };
+        if index.criterion_status.get(anchor) != Some(&ItemStatus::Implemented) {
+            continue;
+        }
+        let normalized = normalize_statement(&criterion.statement);
+        if normalized_len(&normalized) < MIN_NORMALIZED_STATEMENT_LEN {
+            continue;
+        }
+        groups.entry(normalized).or_default().push(anchor.clone());
+    }
+    for members in groups.values() {
+        if members.len() < 2 {
+            continue;
+        }
+        // Members iterate in anchor order, so every unordered pair is
+        // visited exactly once in a deterministic sequence.
+        for (position, first) in members.iter().enumerate() {
+            for second in members.iter().skip(position + 1) {
+                if first.item == second.item {
+                    continue;
+                }
+                let shared_rule = index
+                    .criteria_to_rules
+                    .get(first)
+                    .map(|rules| {
+                        rules
+                            .iter()
+                            .filter(|rule| {
+                                index.anchors.get(rule).is_some_and(|value| {
+                                    matches!(value, mitase_workspace::AnchorValue::Rule(_))
+                                })
+                            })
+                            .collect::<BTreeSet<_>>()
+                    })
+                    .unwrap_or_default()
+                    .intersection(
+                        &index
+                            .criteria_to_rules
+                            .get(second)
+                            .map(|rules| {
+                                rules
+                                    .iter()
+                                    .filter(|rule| {
+                                        index.anchors.get(rule).is_some_and(|value| {
+                                            matches!(value, mitase_workspace::AnchorValue::Rule(_))
+                                        })
+                                    })
+                                    .collect::<BTreeSet<_>>()
+                            })
+                            .unwrap_or_default(),
+                    )
+                    .next()
+                    .cloned()
+                    .cloned();
+                let Some(shared_rule) = shared_rule else {
+                    continue;
+                };
+                let shared_target = current_implementation_identities(index, first)
+                    .intersection(&current_implementation_identities(index, second))
+                    .next()
+                    .cloned();
+                let Some(shared_target) = shared_target else {
+                    continue;
+                };
+                let mut diagnostic = Diagnostic::warning(
+                    "MITASE-QUALITY-004",
+                    format!(
+                        "Criteria {first} and {second} express the same obligation under \
+                         {shared_rule} with the same implementation target"
+                    ),
+                    item_path(index, first),
+                );
+                diagnostic.set_subject_anchor(first);
+                diagnostic.reference = Some(anchor_subject(second));
+                diagnostic.relation = Some(RelationRef {
+                    relation: "duplicates".into(),
+                    source: anchor_subject(first),
+                    targets: vec![anchor_subject(second)],
+                });
+                diagnostic.related.push(RelatedLocation {
+                    location: Location {
+                        path: item_path(index, &shared_rule),
+                        line: None,
+                        column: None,
+                        end_line: None,
+                        end_column: None,
+                        label: Some("common governing rule".into()),
+                    },
+                    message: format!("common governing rule {shared_rule}"),
+                });
+                diagnostic.evidence = vec![
+                    Evidence {
+                        kind: "normalized_statement_equal".into(),
+                        value: "true".into(),
+                    },
+                    Evidence {
+                        kind: "common_policy_rule".into(),
+                        value: shared_rule.to_string(),
+                    },
+                    Evidence {
+                        kind: "common_implementation_target".into(),
+                        value: shared_target,
+                    },
+                ];
+                diagnostic.help = Some(
+                    "Keep both Criteria only when different surfaces genuinely need \
+                     parallel acceptance, and record that reason. Otherwise consolidate \
+                     the obligation and share the implementation target."
+                        .into(),
+                );
+                diagnostic.next.push(ReadOnlyHint {
+                    kind: "show".into(),
+                    value: first.item.to_string(),
+                });
+                out.push(diagnostic);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,5 +640,151 @@ mod tests {
             "Login failures expose one generic response to all callers.",
             "Login failures expose two generic responses to all callers."
         ));
+    }
+
+    #[test]
+    fn largest_component_limit_pins_the_forty_percent_boundary() {
+        assert!(largest_component_within_limit(2, 5));
+        assert!(!largest_component_within_limit(3, 5));
+        assert!(largest_component_within_limit(2, 6));
+        assert!(!largest_component_within_limit(3, 6));
+        assert!(largest_component_within_limit(4, 10));
+        assert!(!largest_component_within_limit(5, 10));
+    }
+
+    fn test_binding(facet: &str) -> mitase_spec_model::ArtifactBinding {
+        mitase_spec_model::ArtifactBinding {
+            id: "test".into(),
+            role: mitase_spec_model::BindingRole::Implementation,
+            facet: facet.into(),
+            responsibility: "test responsibility".into(),
+            owns: Vec::new(),
+            targets: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn components_join_one_feature_across_facets() {
+        let a1: SpecAnchor = "REQ-T-001#criterion.a1".parse().unwrap();
+        let a2: SpecAnchor = "REQ-T-001#criterion.a2".parse().unwrap();
+        let b1: SpecAnchor = "REQ-T-001#criterion.b1".parse().unwrap();
+        let c1: SpecAnchor = "REQ-T-001#criterion.c1".parse().unwrap();
+        let binding_one: SpecAnchor = "FEAT-T-001#binding.one".parse().unwrap();
+        let binding_two: SpecAnchor = "FEAT-T-001#binding.two".parse().unwrap();
+        let binding_other: SpecAnchor = "FEAT-T-002#binding.one".parse().unwrap();
+        let binding_gone: SpecAnchor = "FEAT-T-003#binding.gone".parse().unwrap();
+        let mut index = SpecIndex::default();
+        index
+            .bindings
+            .insert(binding_one.clone(), test_binding("backend"));
+        index
+            .bindings
+            .insert(binding_two.clone(), test_binding("frontend"));
+        index
+            .bindings
+            .insert(binding_other.clone(), test_binding("backend"));
+        index
+            .criteria_to_implementations
+            .insert(a1.clone(), vec![binding_one]);
+        index
+            .criteria_to_implementations
+            .insert(a2.clone(), vec![binding_two]);
+        index
+            .criteria_to_implementations
+            .insert(b1.clone(), vec![binding_other]);
+        index
+            .criteria_to_implementations
+            .insert(c1.clone(), vec![binding_gone]);
+        // `binding_gone` is absent from `index.bindings`: the structural
+        // diagnostics own that finding, and the Criterion stays a singleton
+        // instead of joining a phantom group.
+        let components = criterion_components(&index, &[a1, a2, b1, c1]);
+        assert_eq!(components.len(), 3);
+        assert_eq!(
+            components[0]
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            ["REQ-T-001#criterion.a1", "REQ-T-001#criterion.a2"]
+        );
+        assert_eq!(components[1].len(), 1);
+        assert_eq!(components[2].len(), 1);
+    }
+
+    #[test]
+    fn duplicate_pairs_scale_linearithmically_with_group_size() {
+        use mitase_spec_model::{Criterion, CriterionKind, Rule, RuleLevel};
+        const MEMBERS: usize = 120;
+        let statement =
+            "Scale fixture entries must remain exactly comparable across every surface.";
+        let rule: SpecAnchor = "POL-S-001#rule.shared".parse().unwrap();
+        let shared_target: mitase_spec_model::BoundTargetRef =
+            "FEAT-S-001#binding.impl/target.main".parse().unwrap();
+        let mut index = SpecIndex::default();
+        index.anchors.insert(
+            rule.clone(),
+            mitase_workspace::AnchorValue::Rule(Rule {
+                id: "shared".into(),
+                level: RuleLevel::Should,
+                statement: "Unrelated rule text that stays distinct.".into(),
+                governed_by: Vec::new(),
+                applies_to: Default::default(),
+                enforcement: None,
+            }),
+        );
+        index
+            .target_to_artifact
+            .insert(shared_target.clone(), "rust:src/lib.rs::lib::shared".into());
+        let mut members = Vec::new();
+        for number in 0..MEMBERS {
+            let anchor: SpecAnchor = format!("REQ-S-{number:03}#criterion.dup").parse().unwrap();
+            index.anchors.insert(
+                anchor.clone(),
+                mitase_workspace::AnchorValue::Criterion(Criterion {
+                    id: "dup".into(),
+                    kind: CriterionKind::Behavior,
+                    statement: statement.into(),
+                    governed_by: vec![rule.clone()],
+                }),
+            );
+            index
+                .criterion_status
+                .insert(anchor.clone(), ItemStatus::Implemented);
+            index
+                .criteria_to_rules
+                .insert(anchor.clone(), vec![rule.clone()]);
+            index
+                .criteria_to_implementation_targets
+                .insert(anchor.clone(), vec![shared_target.clone()]);
+            members.push(anchor);
+        }
+        let mut out = Vec::new();
+        validate_duplicate_obligation(&index, &mut out);
+        assert_eq!(out.len(), MEMBERS * (MEMBERS - 1) / 2);
+        assert!(
+            out.iter()
+                .all(|diagnostic| diagnostic.rule_id == "MITASE-QUALITY-004")
+        );
+        let mut signatures: Vec<String> = out
+            .iter()
+            .map(|diagnostic| {
+                format!(
+                    "{}|{}",
+                    diagnostic
+                        .subject
+                        .as_ref()
+                        .map(|subject| subject.value.as_str())
+                        .unwrap_or(""),
+                    diagnostic
+                        .reference
+                        .as_ref()
+                        .map(|reference| reference.value.as_str())
+                        .unwrap_or("")
+                )
+            })
+            .collect();
+        signatures.sort();
+        signatures.dedup();
+        assert_eq!(signatures.len(), out.len(), "every pair is reported once");
     }
 }

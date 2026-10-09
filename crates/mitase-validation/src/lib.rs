@@ -194,6 +194,8 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("MITASE-VERIFICATION-001"),
     fixed_metadata!("MITASE-VERIFICATION-002"),
     advisory_metadata!("MITASE-QUALITY-001"),
+    advisory_metadata!("MITASE-QUALITY-003"),
+    advisory_metadata!("MITASE-QUALITY-004"),
     advisory_metadata!("MITASE-QUALITY-005"),
 ];
 
@@ -4810,13 +4812,12 @@ requirements:
         );
     }
 
-    fn quality_fixture() -> (TempDir, SpecWorkspace, SpecIndex) {
-        let tempdir = tempdir().expect("tempdir");
-        fs::create_dir_all(tempdir.path().join("spec")).expect("spec dir");
-        fs::create_dir_all(tempdir.path().join("src")).expect("src dir");
-        fs::create_dir_all(tempdir.path().join("docs")).expect("docs dir");
+    fn write_quality_workspace_base(root: &Path, implementation: &str) {
+        fs::create_dir_all(root.join("spec")).expect("spec dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::create_dir_all(root.join("docs")).expect("docs dir");
         fs::write(
-            tempdir.path().join("mitase.yaml"),
+            root.join("mitase.yaml"),
             concat!(
                 "schema: mitase/config/v1\n",
                 "workspace:\n",
@@ -4844,17 +4845,17 @@ requirements:
         )
         .expect("config");
         fs::write(
-            tempdir.path().join("Cargo.toml"),
+            root.join("Cargo.toml"),
             "[package]\nname = \"quality-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
         )
         .expect("manifest");
-        fs::write(
-            tempdir.path().join("src/lib.rs"),
-            "pub fn implementation() {}\n",
-        )
-        .expect("implementation");
-        fs::write(tempdir.path().join("docs/guide.md"), "# Guide\n")
-            .expect("verification artifact");
+        fs::write(root.join("src/lib.rs"), implementation).expect("implementation");
+        fs::write(root.join("docs/guide.md"), "# Guide\n").expect("verification artifact");
+    }
+
+    fn quality_fixture() -> (TempDir, SpecWorkspace, SpecIndex) {
+        let tempdir = tempdir().expect("tempdir");
+        write_quality_workspace_base(tempdir.path(), "pub fn implementation() {}\n");
         fs::write(
             tempdir.path().join("spec/philosophy.yaml"),
             concat!(
@@ -4974,6 +4975,817 @@ requirements:
             .iter()
             .filter(|diagnostic| diagnostic.rule_id.starts_with("MITASE-QUALITY-"))
             .collect()
+    }
+
+    fn quality_graph_fixture() -> (TempDir, SpecWorkspace, SpecIndex) {
+        let tempdir = tempdir().expect("tempdir");
+        write_quality_workspace_base(
+            tempdir.path(),
+            concat!(
+                "pub fn frag_a() {}\n",
+                "pub fn frag_b() {}\n",
+                "pub fn frag_c() {}\n",
+                "pub fn cohesive() {}\n",
+                "pub fn sparse_one() {}\n",
+                "pub fn sparse_two() {}\n",
+                "pub fn duplicate() {}\n",
+                "pub fn solo_t13() {}\n",
+                "pub fn solo_t14() {}\n",
+                "pub fn parallel() {}\n",
+                "pub fn quality_proof() {}\n",
+                "pub fn quality_harness() {}\n",
+            ),
+        );
+        fs::write(
+            tempdir.path().join("spec/philosophy.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: philosophies\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "philosophies:\n",
+                "  - id: PHIL-Q-001\n",
+                "    title: Cohesive layers\n",
+                "    summary: Responsibilities stay together.\n",
+                "    principles:\n",
+                "      - { id: graph-meaning, statement: Implementation groups reveal requirement cohesion., applies_to: [product] }\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("philosophy fixture");
+        fs::write(
+            tempdir.path().join("spec/policy.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: policies\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "policies:\n",
+                "  - id: POL-Q-001\n",
+                "    title: Widget governance\n",
+                "    summary: Widget work follows documented review.\n",
+                "    description: Graph quality fixture policy for cohesion checks.\n",
+                "    rules:\n",
+                "      - id: common\n",
+                "        level: should\n",
+                "        statement: Shared widget decisions must pass through the documented widget review before release.\n",
+                "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "      - id: other\n",
+                "        level: should\n",
+                "        statement: Widget telemetry must use the documented channel with sampling enabled.\n",
+                "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("policy fixture");
+        fs::write(
+            tempdir.path().join("spec/requirement.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: requirements\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "requirements:\n",
+                "  - id: REQ-Q-001\n",
+                "    title: Fragmented widget\n",
+                "    description: Widget work split across three groups.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: frag-1\n",
+                "        kind: behavior\n",
+                "        statement: Widget archives must open with the most recent entry visible without scrolling.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: frag-2\n",
+                "        kind: behavior\n",
+                "        statement: Widget archives must preserve the visible entry across a manual refresh cycle.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: frag-3\n",
+                "        kind: behavior\n",
+                "        statement: Widget exports must carry the originating form label for every retained entry.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: frag-4\n",
+                "        kind: behavior\n",
+                "        statement: Widget exports must record the export moment alongside the entry payload.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: frag-5\n",
+                "        kind: behavior\n",
+                "        statement: Widget restores must keep the archive readable while a restore is in progress.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: frag-6\n",
+                "        kind: behavior\n",
+                "        statement: Widget restores must leave an audit note whenever a draft is replaced.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-002\n",
+                "    title: Cohesive widget\n",
+                "    description: Widget work with one implementation story.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: coh-1\n",
+                "        kind: behavior\n",
+                "        statement: Widget search must match entries by title prefix within one keystroke budget.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: coh-2\n",
+                "        kind: behavior\n",
+                "        statement: Widget search must rank exact title matches above partial matches.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: coh-3\n",
+                "        kind: behavior\n",
+                "        statement: Widget search must ignore archived entries unless the archive scope is open.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: coh-4\n",
+                "        kind: behavior\n",
+                "        statement: Widget search must clear the result list when the query becomes empty.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: coh-5\n",
+                "        kind: behavior\n",
+                "        statement: Widget search must announce result counts through the accessible status channel.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: coh-6\n",
+                "        kind: behavior\n",
+                "        statement: Widget search must restore focus to the query field after the list closes.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-003\n",
+                "    title: Planned widget\n",
+                "    description: Future widget work without current evidence.\n",
+                "    priority: medium\n",
+                "    status: planned\n",
+                "    criteria:\n",
+                "      - id: plan-1\n",
+                "        kind: behavior\n",
+                "        statement: Planned widget sync must reconcile one offline batch per cycle.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: plan-2\n",
+                "        kind: behavior\n",
+                "        statement: Planned widget sync must surface conflicts before applying remote edits.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: plan-3\n",
+                "        kind: behavior\n",
+                "        statement: Planned widget sync must retry dropped batches with backoff.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: plan-4\n",
+                "        kind: behavior\n",
+                "        statement: Planned widget sync must compress payloads above the size threshold.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: plan-5\n",
+                "        kind: behavior\n",
+                "        statement: Planned widget sync must log every applied batch for later audit.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: plan-6\n",
+                "        kind: behavior\n",
+                "        statement: Planned widget sync must pause while the device is offline.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-004\n",
+                "    title: Retired widget\n",
+                "    description: Widget work whose targets are gone.\n",
+                "    priority: medium\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: abs-1\n",
+                "        kind: behavior\n",
+                "        statement: Retired widget badges must have shown counts beside the entry title.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: abs-2\n",
+                "        kind: behavior\n",
+                "        statement: Retired widget badges must have refreshed on every entry update.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: abs-3\n",
+                "        kind: behavior\n",
+                "        statement: Retired widget badges must have hidden zero counts by default.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: abs-4\n",
+                "        kind: behavior\n",
+                "        statement: Retired widget badges must have announced changes accessibly.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: abs-5\n",
+                "        kind: behavior\n",
+                "        statement: Retired widget badges must have survived theme switches.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: abs-6\n",
+                "        kind: behavior\n",
+                "        statement: Retired widget badges must have degraded gracefully offline.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-005\n",
+                "    title: Sparse widget\n",
+                "    description: Widget work missing one implementation link.\n",
+                "    priority: medium\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: sparse-1\n",
+                "        kind: behavior\n",
+                "        statement: Sparse widget filters must apply one predicate per control.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: sparse-2\n",
+                "        kind: behavior\n",
+                "        statement: Sparse widget filters must combine predicates conjunctively.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: sparse-3\n",
+                "        kind: behavior\n",
+                "        statement: Sparse widget filters must reset when the scope changes.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: sparse-4\n",
+                "        kind: behavior\n",
+                "        statement: Sparse widget filters must persist across sessions.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: sparse-5\n",
+                "        kind: behavior\n",
+                "        statement: Sparse widget filters must expose their state to tests.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: sparse-6\n",
+                "        kind: behavior\n",
+                "        statement: Sparse widget filters must debounce rapid control changes.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-010\n",
+                "    title: Duplicate holder A\n",
+                "    description: First holder of the duplicated obligation.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: dup-a\n",
+                "        kind: behavior\n",
+                "        statement: Widget archives must retain every entry exactly as submitted with no silent mutation.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-011\n",
+                "    title: Duplicate holder B\n",
+                "    description: Second holder of the duplicated obligation.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: dup-b\n",
+                "        kind: behavior\n",
+                "        statement: Widget archives must retain every entry exactly as submitted with no silent mutation.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-012\n",
+                "    title: Text-only twin\n",
+                "    description: Same words under another rule with a shared target.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: text-twin\n",
+                "        kind: behavior\n",
+                "        statement: Widget archives must retain every entry exactly as submitted with no silent mutation.\n",
+                "        governed_by: [POL-Q-001#rule.other]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-013\n",
+                "    title: Target twin A\n",
+                "    description: Same rule with a separate target.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: twin-a\n",
+                "        kind: behavior\n",
+                "        statement: Widget exports must include the originating form label for every retained entry.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-014\n",
+                "    title: Target twin B\n",
+                "    description: Same rule with another separate target.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: twin-b\n",
+                "        kind: behavior\n",
+                "        statement: Widget exports must include the originating form label for every retained entry.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-015\n",
+                "    title: Parallel pair\n",
+                "    description: Same obligation twice in one requirement.\n",
+                "    priority: medium\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: par-1\n",
+                "        kind: behavior\n",
+                "        statement: Widget restores must confirm the target entry before replacing the visible draft.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "      - id: par-2\n",
+                "        kind: behavior\n",
+                "        statement: Widget restores must confirm the target entry before replacing the visible draft.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q-016\n",
+                "    title: Graph harness\n",
+                "    description: The proof harness itself is specified.\n",
+                "    priority: low\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: harness-ready\n",
+                "        kind: behavior\n",
+                "        statement: The graph fixture harness must expose one entry point for every proof run.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("requirement fixture");
+        fs::write(
+            tempdir.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: features\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "features:\n",
+                "  - id: FEAT-Q-A\n",
+                "    title: Archive view\n",
+                "    summary: Show the archive.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: archive\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Render the widget archive.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: frag_a }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-001#criterion.frag-1 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-001#criterion.frag-2 }\n",
+                "  - id: FEAT-Q-B\n",
+                "    title: Archive export\n",
+                "    summary: Export the archive.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: archive\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Export the widget archive.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: frag_b }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-001#criterion.frag-3 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-001#criterion.frag-4 }\n",
+                "  - id: FEAT-Q-C\n",
+                "    title: Archive restore\n",
+                "    summary: Restore the archive.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: archive\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Restore the widget archive.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: frag_c }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-001#criterion.frag-5 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-001#criterion.frag-6 }\n",
+                "  - id: FEAT-Q-COH\n",
+                "    title: Widget search\n",
+                "    summary: Search the widget.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: search\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Implement widget search.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: cohesive }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-002#criterion.coh-1 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-002#criterion.coh-2 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-002#criterion.coh-3 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-002#criterion.coh-4 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-002#criterion.coh-5 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-002#criterion.coh-6 }\n",
+                "  - id: FEAT-Q-RET\n",
+                "    title: Retired badges\n",
+                "    summary: Former badge rendering.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: badges\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Rendered entry badges.\n",
+                "        targets:\n",
+                "          - id: old\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: absent_widget }\n",
+                "            lifecycle: absent\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-004#criterion.abs-1 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-004#criterion.abs-2 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-004#criterion.abs-3 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-004#criterion.abs-4 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-004#criterion.abs-5 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-004#criterion.abs-6 }\n",
+                "  - id: FEAT-Q-SPARSE\n",
+                "    title: Widget filters\n",
+                "    summary: Filter the widget.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: filters\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Implement widget filters.\n",
+                "        targets:\n",
+                "          - id: primary\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: sparse_one }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-005#criterion.sparse-1 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-005#criterion.sparse-2 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-005#criterion.sparse-3 }\n",
+                "          - id: secondary\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: sparse_two }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-005#criterion.sparse-4 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-005#criterion.sparse-5 }\n",
+                "  - id: FEAT-Q-D\n",
+                "    title: Archive retention\n",
+                "    summary: Retain every entry.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: retention\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Retain every submitted entry.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: duplicate }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-010#criterion.dup-a }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-011#criterion.dup-b }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-012#criterion.text-twin }\n",
+                "  - id: FEAT-Q-E\n",
+                "    title: Export labels A\n",
+                "    summary: Label exports one way.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: labels\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Label exports.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: solo_t13 }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-013#criterion.twin-a }\n",
+                "  - id: FEAT-Q-F\n",
+                "    title: Export labels B\n",
+                "    summary: Label exports another way.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: labels\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Label exports.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: solo_t14 }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-014#criterion.twin-b }\n",
+                "  - id: FEAT-Q-G\n",
+                "    title: Restore confirmation\n",
+                "    summary: Confirm restores.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: restore\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Confirm entry restores.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: parallel }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-015#criterion.par-1 }\n",
+                "              - { kind: satisfies, criterion: REQ-Q-015#criterion.par-2 }\n",
+                "  - id: FEAT-Q-VERIFY\n",
+                "    title: Graph proof\n",
+                "    summary: Prove the graph fixture.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: harness-impl\n",
+                "        role: implementation\n",
+                "        facet: verification\n",
+                "        responsibility: Expose the graph fixture harness.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: quality_harness }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q-016#criterion.harness-ready }\n",
+                "      - id: proof\n",
+                "        role: verification\n",
+                "        facet: verification\n",
+                "        responsibility: Prove the graph fixture criteria.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: quality_proof }\n",
+                "            claims:\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-Q-016#criterion.harness-ready\n",
+                "                covers: [FEAT-Q-VERIFY#binding.harness-impl/target.main]\n",
+                "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-001#criterion.frag-1\n",
+"                covers: [FEAT-Q-A#binding.archive/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-001#criterion.frag-2\n",
+"                covers: [FEAT-Q-A#binding.archive/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-001#criterion.frag-3\n",
+"                covers: [FEAT-Q-B#binding.archive/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-001#criterion.frag-4\n",
+"                covers: [FEAT-Q-B#binding.archive/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-001#criterion.frag-5\n",
+"                covers: [FEAT-Q-C#binding.archive/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-001#criterion.frag-6\n",
+"                covers: [FEAT-Q-C#binding.archive/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-002#criterion.coh-1\n",
+"                covers: [FEAT-Q-COH#binding.search/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-002#criterion.coh-2\n",
+"                covers: [FEAT-Q-COH#binding.search/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-002#criterion.coh-3\n",
+"                covers: [FEAT-Q-COH#binding.search/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-002#criterion.coh-4\n",
+"                covers: [FEAT-Q-COH#binding.search/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-002#criterion.coh-5\n",
+"                covers: [FEAT-Q-COH#binding.search/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-002#criterion.coh-6\n",
+"                covers: [FEAT-Q-COH#binding.search/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-005#criterion.sparse-1\n",
+"                covers: [FEAT-Q-SPARSE#binding.filters/target.primary]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-005#criterion.sparse-2\n",
+"                covers: [FEAT-Q-SPARSE#binding.filters/target.primary]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-005#criterion.sparse-3\n",
+"                covers: [FEAT-Q-SPARSE#binding.filters/target.primary]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-005#criterion.sparse-4\n",
+"                covers: [FEAT-Q-SPARSE#binding.filters/target.secondary]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-005#criterion.sparse-5\n",
+"                covers: [FEAT-Q-SPARSE#binding.filters/target.secondary]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-010#criterion.dup-a\n",
+"                covers: [FEAT-Q-D#binding.retention/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-011#criterion.dup-b\n",
+"                covers: [FEAT-Q-D#binding.retention/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-012#criterion.text-twin\n",
+"                covers: [FEAT-Q-D#binding.retention/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-013#criterion.twin-a\n",
+"                covers: [FEAT-Q-E#binding.labels/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-014#criterion.twin-b\n",
+"                covers: [FEAT-Q-F#binding.labels/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-015#criterion.par-1\n",
+"                covers: [FEAT-Q-G#binding.restore/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+"              - kind: verifies\n",
+"                criterion: REQ-Q-015#criterion.par-2\n",
+"                covers: [FEAT-Q-G#binding.restore/target.main]\n",
+"                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+            ),
+        )
+        .expect("feature fixture");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        (tempdir, workspace, index)
+    }
+
+    fn quality_codes(result: &ValidationResult, code: &str) -> Vec<String> {
+        quality_diagnostics(result)
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id == code)
+            .filter_map(|diagnostic| {
+                diagnostic
+                    .subject
+                    .as_ref()
+                    .map(|subject| subject.value.clone())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn quality_fragmented_requirement_reports_components() {
+        let (_tempdir, workspace, index) = quality_graph_fixture();
+        for preset in [ValidationPreset::Standard, ValidationPreset::Strict] {
+            let result = validate(&ValidationContext {
+                config: &workspace.config,
+                workspace: &workspace,
+                index: &index,
+                changed_files: None,
+                reported_changed_files: None,
+                preset,
+                revision: None,
+                change_base_revision: None,
+            });
+            let fragmented: Vec<&Diagnostic> = quality_diagnostics(&result)
+                .into_iter()
+                .filter(|diagnostic| diagnostic.rule_id == "MITASE-QUALITY-003")
+                .collect();
+            assert_eq!(
+                fragmented
+                    .iter()
+                    .filter_map(|diagnostic| diagnostic
+                        .subject
+                        .as_ref()
+                        .map(|subject| subject.value.as_str()))
+                    .collect::<Vec<_>>(),
+                ["REQ-Q-001"],
+                "only the fragmented requirement fires in {preset:?}"
+            );
+            let finding = fragmented[0];
+            assert_eq!(finding.phase, ValidationPhase::Graph);
+            assert_eq!(finding.severity, mitase_diagnostics::Severity::Warning);
+            assert!(finding.primary.path.ends_with("spec/requirement.yaml"));
+            assert_eq!(
+                finding
+                    .evidence
+                    .iter()
+                    .map(|evidence| (evidence.kind.as_str(), evidence.value.as_str()))
+                    .collect::<Vec<_>>(),
+                [
+                    ("criteria_count", "6"),
+                    ("component_count", "3"),
+                    ("largest_component", "2/6"),
+                    ("implementation_owners", "FEAT-Q-A,FEAT-Q-B,FEAT-Q-C"),
+                ]
+            );
+            assert!(
+                finding
+                    .help
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("splitting this Requirement")
+            );
+            assert!(
+                result.is_valid(),
+                "quality warnings must not fail validation"
+            );
+        }
+    }
+
+    #[test]
+    fn quality_duplicate_obligation_requires_text_rule_and_target() {
+        let (_tempdir, workspace, index) = quality_graph_fixture();
+        let result = validate_loaded_workspace(&workspace, &index);
+        let duplicates: Vec<&Diagnostic> = quality_diagnostics(&result)
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id == "MITASE-QUALITY-004")
+            .collect();
+        assert_eq!(
+            duplicates.len(),
+            1,
+            "only the full-conjunction pair fires: {:?}",
+            duplicates
+                .iter()
+                .map(|diagnostic| (
+                    diagnostic
+                        .subject
+                        .as_ref()
+                        .map(|subject| subject.value.as_str()),
+                    diagnostic
+                        .reference
+                        .as_ref()
+                        .map(|reference| reference.value.as_str())
+                ))
+                .collect::<Vec<_>>()
+        );
+        let finding = duplicates[0];
+        assert_eq!(
+            finding
+                .subject
+                .as_ref()
+                .map(|subject| subject.value.as_str()),
+            Some("REQ-Q-010#criterion.dup-a")
+        );
+        assert_eq!(
+            finding
+                .reference
+                .as_ref()
+                .map(|reference| reference.value.as_str()),
+            Some("REQ-Q-011#criterion.dup-b")
+        );
+        assert_eq!(finding.phase, ValidationPhase::Graph);
+        assert_eq!(finding.severity, mitase_diagnostics::Severity::Warning);
+        assert_eq!(
+            finding
+                .relation
+                .as_ref()
+                .map(|relation| relation.relation.as_str()),
+            Some("duplicates")
+        );
+        assert!(
+            finding
+                .related
+                .iter()
+                .any(|related| related.location.path.ends_with("spec/policy.yaml"))
+        );
+        let evidence = finding
+            .evidence
+            .iter()
+            .map(|evidence| (evidence.kind.as_str(), evidence.value.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(evidence[0], ("normalized_statement_equal", "true"));
+        assert_eq!(evidence[1].0, "common_policy_rule");
+        assert!(evidence[1].1.contains("POL-Q-001#rule.common"));
+        assert_eq!(evidence[2].0, "common_implementation_target");
+        assert!(
+            finding
+                .help
+                .as_deref()
+                .unwrap_or("")
+                .contains("genuinely need parallel acceptance")
+        );
+    }
+
+    #[test]
+    fn quality_graph_negative_controls_stay_silent() {
+        let (_tempdir, workspace, index) = quality_graph_fixture();
+        let result = validate_loaded_workspace(&workspace, &index);
+        for code in ["MITASE-QUALITY-003", "MITASE-QUALITY-004"] {
+            for subject in quality_codes(&result, code) {
+                assert!(
+                    !subject.starts_with("REQ-Q-002")
+                        && !subject.starts_with("REQ-Q-003")
+                        && !subject.starts_with("REQ-Q-004")
+                        && !subject.starts_with("REQ-Q-005"),
+                    "negative control must not fire for {code}: {subject}"
+                );
+            }
+        }
+        assert!(
+            !quality_codes(&result, "MITASE-QUALITY-004")
+                .iter()
+                .any(|subject| subject.contains("text-twin")
+                    || subject.contains("twin-a")
+                    || subject.contains("twin-b")
+                    || subject.contains("par-")),
+            "partial-conjunction twins stay silent"
+        );
     }
 
     #[test]
