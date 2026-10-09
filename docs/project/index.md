@@ -31,3 +31,5 @@ making architecture jargon the first thing a new user sees.
   Semantic IR Re-Foundation on the stable v2-only line.
 - [0.2.4 release notes](./release-notes-0.2.4.md) — default authoring document
   safety limits for bounded specification files.
+- [0.2.5 release notes](./release-notes-0.2.5.md) — evidence-backed quality
+  diagnostics for structurally unnatural specifications.
