@@ -12,3 +12,5 @@ out the tempting shapes that make a repository harder to change.
 
 - [Spec anti-patterns](./spec-antipatterns.md) — recognize vague, stale, or
   over-broad specifications before they become the new baseline.
+- [Spec quality diagnostics](./spec-quality-diagnostics.md) — the stable
+  Q001–Q005 diagnostic contract for structurally unnatural specifications.

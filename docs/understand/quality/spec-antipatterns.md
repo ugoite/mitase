@@ -15,6 +15,63 @@ like:
 - why does this requirement read like an implementation note?
 - why does one document keep absorbing unrelated work?
 
+## Meaning Before Structure
+
+Specification structure must emerge from distinct decisions and obligations,
+not from a desire to complete a hierarchy. Each layer should preserve meaning
+that its adjacent layers do not already express. Relationships must explain
+normative derivation rather than topical association.
+
+Build meaningful relationships, not complete hierarchies. When one requirement
+is sufficient, do not invent a philosophy or policy to fill the upper layers.
+
+The two quality axes are:
+
+- **Normative Redundancy:** the same promise is repeated at several layers or
+  in several items instead of living in one authoritative place.
+- **Responsibility Cohesion:** the conditions and implementation
+  responsibilities bundled into one item do not share one independent reason
+  to change.
+
+### Six authoring principles
+
+1. **Meaning Before Structure:** settle the promise and the decision first,
+   then create only the layers that carry new meaning.
+2. **One Decision, One Authority:** keep each normative decision in one place.
+   A lower layer must add concrete meaning, not paraphrase its governor.
+3. **Derive, Don't Associate:** `governed_by` means "this condition is
+   required because of that decision", not "these items share a topic".
+4. **Separate Promise From Mechanism:** a Requirement states the product
+   promise, a Feature owns implementation responsibility, and a Binding names
+   the exact target. Protocol detail belongs in a Requirement only when the
+   public protocol itself is the promise.
+5. **One Criterion, One Falsifiable Claim:** each Criterion must be
+   independently testable in principle. A Verification Claim must be plausible
+   evidence for that Criterion. Mitase checks that the declared evidence
+   structure exists; it never declares that a test ran, passed, or proved the
+   intent.
+6. **Cohesion Over Taxonomy:** split by independent change reason and shared
+   semantic responsibility, not by team, language, or file path. When several
+   surfaces satisfy a shared Criterion, express that with Facets rather than
+   by duplicating the obligation.
+
+### Promote, demote, split, merge
+
+- **Promote** a Requirement to Policy when it governs contributors
+  repository-wide instead of stating one deliverable obligation.
+- **Demote** a Philosophy or Policy to Requirement or Feature when it names
+  files, symbols, frameworks, or sprint goals that will churn.
+- **Split** an item when its parts can be implemented, tested, or postponed
+  independently, or when one Requirement hides several falsifiable claims.
+- **Merge** sibling items only when they always change together, share the
+  same links, and never tell different stories.
+
+These moves map to the machine-checkable signals in
+[Spec quality diagnostics](./spec-quality-diagnostics.md): Layer Echo (Q001),
+One-off Policy (Q002), Fragmented Requirement (Q003), Duplicate Obligation
+(Q004), and Redundant Rule Description (Q005). A diagnostic is a prompt to
+review the authoring decision, not proof that the meaning is wrong.
+
 ## 1. Philosophy that changes every sprint
 
 Philosophy should protect values that survive multiple releases. If a
