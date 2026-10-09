@@ -194,6 +194,7 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("MITASE-VERIFICATION-001"),
     fixed_metadata!("MITASE-VERIFICATION-002"),
     advisory_metadata!("MITASE-QUALITY-001"),
+    advisory_metadata!("MITASE-QUALITY-002"),
     advisory_metadata!("MITASE-QUALITY-003"),
     advisory_metadata!("MITASE-QUALITY-004"),
     advisory_metadata!("MITASE-QUALITY-005"),
@@ -3334,6 +3335,7 @@ fn normalize_end(start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::quality::SIMILARITY_THRESHOLD;
     use mitase_workspace::AuthoringMetrics;
     use std::fs;
     use std::process::Command;
@@ -4994,6 +4996,10 @@ requirements:
                 "pub fn parallel() {}\n",
                 "pub fn quality_proof() {}\n",
                 "pub fn quality_harness() {}\n",
+                "pub fn q2_solo() {}\n",
+                "pub fn q2_vault() {}\n",
+                "pub fn q2_coin() {}\n",
+                "pub fn q2_multi() {}\n",
             ),
         );
         fs::write(
@@ -5037,6 +5043,54 @@ requirements:
                 "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
                 "        applies_to: { roles: [implementation] }\n",
                 "    bindings: []\n",
+                "  - id: POL-Q2-001\n",
+                "    title: Single dashboard bound\n",
+                "    summary: One rule per narrow decision.\n",
+                "    description: One-off policy fixture for single-criterion rules.\n",
+                "    rules:\n",
+                "      - id: solo\n",
+                "        level: should\n",
+                "        statement: Widget digests must bundle at most 4 entries per signed envelope for offline review.\n",
+                "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "      - id: guarded\n",
+                "        level: should\n",
+                "        statement: Secrets must never leave the encrypted vault boundary under any circumstance.\n",
+                "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "      - id: coincidental\n",
+                "        level: should\n",
+                "        statement: Widget badges must refresh at most 4 times per session cycle.\n",
+                "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "      - id: multi\n",
+                "        level: should\n",
+                "        statement: Widget labels must follow glossary v2 for every release.\n",
+                "        governed_by: [PHIL-Q-001#principle.graph-meaning]\n",
+                "        applies_to: { roles: [implementation] }\n",
+                "    bindings:\n",
+                "      - id: solo-evidence\n",
+                "        role: enforcement\n",
+                "        facet: graph\n",
+                "        responsibility: Enforce the digest bundle bound.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: q2_solo }\n",
+                "            claims:\n",
+                "              - { kind: enforces, rule: POL-Q2-001#rule.solo }\n",
+                "      - id: multi-evidence\n",
+                "        role: enforcement\n",
+                "        facet: graph\n",
+                "        responsibility: Enforce the label glossary.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: q2_multi }\n",
+                "            claims:\n",
+                "              - { kind: enforces, rule: POL-Q2-001#rule.multi }\n",
             ),
         )
         .expect("policy fixture");
@@ -5203,6 +5257,28 @@ requirements:
                 "        statement: Sparse widget filters must debounce rapid control changes.\n",
                 "        governed_by: [POL-Q-001#rule.common]\n",
                 "    bindings: []\n",
+                "  - id: REQ-Q-016\n",
+                "    title: Graph harness\n",
+                "    description: The proof harness itself is specified.\n",
+                "    priority: low\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: harness-ready\n",
+                "        kind: behavior\n",
+                "        statement: The graph fixture harness must expose one entry point for every proof run.\n",
+                "        governed_by: [POL-Q-001#rule.common]\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("requirement fixture");
+        fs::write(
+            tempdir.path().join("spec/requirement-duplicates.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: requirements\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "requirements:\n",
                 "  - id: REQ-Q-010\n",
                 "    title: Duplicate holder A\n",
                 "    description: First holder of the duplicated obligation.\n",
@@ -5273,20 +5349,75 @@ requirements:
                 "        statement: Widget restores must confirm the target entry before replacing the visible draft.\n",
                 "        governed_by: [POL-Q-001#rule.common]\n",
                 "    bindings: []\n",
-                "  - id: REQ-Q-016\n",
-                "    title: Graph harness\n",
-                "    description: The proof harness itself is specified.\n",
-                "    priority: low\n",
+            ),
+        )
+        .expect("requirement duplicates fixture");
+        fs::write(
+            tempdir.path().join("spec/requirement-oneoff.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: requirements\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "requirements:\n",
+                "  - id: REQ-Q2-001\n",
+                "    title: Digest bundle\n",
+                "    description: Bundle digests for offline review.\n",
+                "    priority: high\n",
                 "    status: implemented\n",
                 "    criteria:\n",
-                "      - id: harness-ready\n",
+                "      - id: solo-c\n",
                 "        kind: behavior\n",
-                "        statement: The graph fixture harness must expose one entry point for every proof run.\n",
-                "        governed_by: [POL-Q-001#rule.common]\n",
+                "        statement: Widget digests must bundle up to 4 entries in each signed envelope for offline review.\n",
+                "        governed_by: [POL-Q2-001#rule.solo]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q2-002\n",
+                "    title: Vault ceremony\n",
+                "    description: Rotate vault credentials.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: vault-c\n",
+                "        kind: behavior\n",
+                "        statement: Operators must rotate vault credentials through the documented ceremony.\n",
+                "        governed_by: [POL-Q2-001#rule.guarded]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q2-003\n",
+                "    title: Badge checksums\n",
+                "    description: Verify badge exports.\n",
+                "    priority: medium\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: coin-c\n",
+                "        kind: behavior\n",
+                "        statement: Archive exports must include 4 checksum characters for verification.\n",
+                "        governed_by: [POL-Q2-001#rule.coincidental]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q2-004\n",
+                "    title: Label glossary surfaces\n",
+                "    description: Label every surface.\n",
+                "    priority: medium\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: multi-a\n",
+                "        kind: behavior\n",
+                "        statement: Widget labels must follow glossary v2 on all surfaces.\n",
+                "        governed_by: [POL-Q2-001#rule.multi]\n",
+                "    bindings: []\n",
+                "  - id: REQ-Q2-005\n",
+                "    title: Label glossary regions\n",
+                "    description: Label every region.\n",
+                "    priority: medium\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: multi-b\n",
+                "        kind: behavior\n",
+                "        statement: Widget labels must follow glossary v2 across regions.\n",
+                "        governed_by: [POL-Q2-001#rule.multi]\n",
                 "    bindings: []\n",
             ),
         )
-        .expect("requirement fixture");
+        .expect("requirement oneoff fixture");
         fs::write(
             tempdir.path().join("spec/feature.yaml"),
             concat!(
@@ -5508,6 +5639,26 @@ requirements:
                 "            selector: { kind: symbol, name: quality_proof }\n",
                 "            claims:\n",
                 "              - kind: verifies\n",
+                "                criterion: REQ-Q2-001#criterion.solo-c\n",
+                "                covers: [FEAT-Q2-SOLO#binding.impl/target.main]\n",
+                "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-Q2-002#criterion.vault-c\n",
+                "                covers: [FEAT-Q2-VAULT#binding.impl/target.main]\n",
+                "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-Q2-003#criterion.coin-c\n",
+                "                covers: [FEAT-Q2-COIN#binding.impl/target.main]\n",
+                "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-Q2-004#criterion.multi-a\n",
+                "                covers: [FEAT-Q2-MULTI#binding.impl/target.main]\n",
+                "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-Q2-005#criterion.multi-b\n",
+                "                covers: [FEAT-Q2-MULTI#binding.impl/target.main]\n",
+                "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
+                "              - kind: verifies\n",
                 "                criterion: REQ-Q-016#criterion.harness-ready\n",
                 "                covers: [FEAT-Q-VERIFY#binding.harness-impl/target.main]\n",
                 "                runner: { runner: proof, arguments: { test: quality_proof } }\n",
@@ -5610,6 +5761,82 @@ requirements:
             ),
         )
         .expect("feature fixture");
+        fs::write(
+            tempdir.path().join("spec/feature-oneoff.yaml"),
+            concat!(
+                "schema: mitase/authoring/v2\n",
+                "kind: features\n",
+                "namespace: test\n",
+                "category: Quality\n",
+                "features:\n",
+                "  - id: FEAT-Q2-SOLO\n",
+                "    title: Digest bundling\n",
+                "    summary: Bundle digests.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Bundle digests for offline review.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: q2_solo }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q2-001#criterion.solo-c }\n",
+                "  - id: FEAT-Q2-VAULT\n",
+                "    title: Vault rotation\n",
+                "    summary: Rotate the vault.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Rotate vault credentials.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: q2_vault }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q2-002#criterion.vault-c }\n",
+                "  - id: FEAT-Q2-COIN\n",
+                "    title: Badge checksums\n",
+                "    summary: Checksum badge exports.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Checksum badge exports.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: q2_coin }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q2-003#criterion.coin-c }\n",
+                "  - id: FEAT-Q2-MULTI\n",
+                "    title: Label glossary\n",
+                "    summary: Apply the label glossary.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: graph\n",
+                "        responsibility: Apply the label glossary.\n",
+                "        targets:\n",
+                "          - id: main\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: q2_multi }\n",
+                "            claims:\n",
+                "              - { kind: satisfies, criterion: REQ-Q2-004#criterion.multi-a }\n",
+                "              - { kind: satisfies, criterion: REQ-Q2-005#criterion.multi-b }\n",
+            ),
+        )
+        .expect("feature oneoff fixture");
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         let index = workspace.index().expect("index");
         (tempdir, workspace, index)
@@ -5760,6 +5987,117 @@ requirements:
                 .unwrap_or("")
                 .contains("genuinely need parallel acceptance")
         );
+    }
+
+    #[test]
+    fn quality_one_off_policy_requires_composite_evidence() {
+        let (_tempdir, workspace, index) = quality_graph_fixture();
+        for preset in [ValidationPreset::Standard, ValidationPreset::Strict] {
+            let result = validate(&ValidationContext {
+                config: &workspace.config,
+                workspace: &workspace,
+                index: &index,
+                changed_files: None,
+                reported_changed_files: None,
+                preset,
+                revision: None,
+                change_base_revision: None,
+            });
+            let one_off: Vec<&Diagnostic> = quality_diagnostics(&result)
+                .into_iter()
+                .filter(|diagnostic| diagnostic.rule_id == "MITASE-QUALITY-002")
+                .collect();
+            assert_eq!(
+                one_off
+                    .iter()
+                    .filter_map(|diagnostic| diagnostic
+                        .subject
+                        .as_ref()
+                        .map(|subject| subject.value.as_str()))
+                    .collect::<Vec<_>>(),
+                ["POL-Q2-001#rule.solo"],
+                "only the composite one-off rule fires in {preset:?}"
+            );
+            let finding = one_off[0];
+            assert_eq!(finding.phase, ValidationPhase::Graph);
+            assert_eq!(finding.severity, mitase_diagnostics::Severity::Warning);
+            assert_eq!(
+                finding
+                    .reference
+                    .as_ref()
+                    .map(|reference| reference.value.as_str()),
+                Some("REQ-Q2-001#criterion.solo-c")
+            );
+            assert_eq!(
+                finding
+                    .relation
+                    .as_ref()
+                    .map(|relation| relation.relation.as_str()),
+                Some("governs")
+            );
+            let evidence = finding
+                .evidence
+                .iter()
+                .map(|evidence| (evidence.kind.as_str(), evidence.value.as_str()))
+                .collect::<Vec<_>>();
+            assert!(evidence.contains(&("signs_met", "4/4")), "{evidence:?}");
+            assert!(evidence.contains(&("met_signs", "a+b+c+d")), "{evidence:?}");
+            assert!(
+                evidence.contains(&("downstream_criteria", "1")),
+                "{evidence:?}"
+            );
+            assert!(
+                evidence.contains(&("shared_concrete_tokens", "4")),
+                "{evidence:?}"
+            );
+            assert!(
+                evidence
+                    .iter()
+                    .any(|(kind, value)| *kind == "statement_similarity"
+                        && value.parse::<f64>().unwrap_or(0.0) >= SIMILARITY_THRESHOLD),
+                "{evidence:?}"
+            );
+            assert!(
+                evidence.contains(&("target_overlap", "1/1")),
+                "{evidence:?}"
+            );
+            assert!(
+                finding
+                    .help
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("must stand alone")
+            );
+            for diagnostic in result
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.severity == mitase_diagnostics::Severity::Error)
+            {
+                eprintln!("DBG-ERROR {}: {}", diagnostic.rule_id, diagnostic.message);
+            }
+            assert!(
+                result.is_valid(),
+                "quality warnings must not fail validation"
+            );
+        }
+    }
+
+    #[test]
+    fn quality_one_off_negatives_record_their_missing_signs() {
+        let (_tempdir, workspace, index) = quality_graph_fixture();
+        let result = validate_loaded_workspace(&workspace, &index);
+        for rule in [
+            "POL-Q2-001#rule.guarded",
+            "POL-Q2-001#rule.coincidental",
+            "POL-Q2-001#rule.multi",
+        ] {
+            assert!(
+                !quality_codes(&result, "MITASE-QUALITY-002")
+                    .iter()
+                    .any(|subject| subject == rule),
+                "negative control stays silent: {rule}"
+            );
+        }
     }
 
     #[test]
