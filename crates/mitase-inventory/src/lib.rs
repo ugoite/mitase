@@ -114,7 +114,8 @@ pub fn discover_tests(adapter: &str, source: &str) -> Result<Vec<TestResolution>
     }
 }
 
-fn discover_tests_for_path(
+/// Discover native tests with the grammar selected by the source path.
+pub fn discover_tests_in_path(
     adapter: &str,
     path: &RepoPath,
     source: &str,
@@ -128,7 +129,7 @@ fn discover_tests_for_path(
 
 /// Resolve one unique native test identity without executing the test.
 pub fn resolve_test(adapter: &str, source: &str, name: &str) -> Result<TestResolution> {
-    resolve_test_from_tests(discover_tests(adapter, source)?, name)
+    resolve_test_from_tests(&discover_tests(adapter, source)?, name)
 }
 
 /// Resolve one native test using the source path to select the language
@@ -139,20 +140,21 @@ pub fn resolve_test_in_path(
     source: &str,
     name: &str,
 ) -> Result<TestResolution> {
-    resolve_test_from_tests(discover_tests_for_path(adapter, path, source)?, name)
+    resolve_test_from_tests(&discover_tests_in_path(adapter, path, source)?, name)
 }
 
-fn resolve_test_from_tests(tests: Vec<TestResolution>, name: &str) -> Result<TestResolution> {
+/// Resolve a unique identity from one source discovery without reparsing.
+pub fn resolve_test_from_tests(tests: &[TestResolution], name: &str) -> Result<TestResolution> {
     if name.trim().is_empty() {
         bail!("test selector must not be empty");
     }
     let matches = tests
-        .into_iter()
+        .iter()
         .filter(|test| test.identity == name)
         .collect::<Vec<_>>();
     match matches.as_slice() {
         [] => bail!("test {name} not found"),
-        [test] => Ok(test.clone()),
+        [test] => Ok((*test).clone()),
         _ => bail!("test {name} is ambiguous"),
     }
 }

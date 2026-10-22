@@ -17,7 +17,8 @@ use mitase_spec_model::{
 };
 use mitase_workspace::{
     AnchorValue, ArtifactResolution, ResolutionFailure, ResolvedTarget, SpecIndex, SpecWorkspace,
-    resolve_target_against_inventory, selector_supports_adapter, selector_supports_editable,
+    map_target_resolutions, resolve_target_against_inventory, selector_supports_adapter,
+    selector_supports_editable,
 };
 pub use readiness::{
     ReadinessAxis, ReadinessAxisId, ReadinessReport, ReadinessSubject,
@@ -2892,6 +2893,22 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             })
         })
         .collect::<BTreeSet<_>>();
+    let targets = ctx
+        .index
+        .bindings
+        .values()
+        .flat_map(|binding| &binding.targets)
+        .collect::<Vec<_>>();
+    let mut resolutions = map_target_resolutions(
+        ctx.workspace,
+        &targets,
+        &ctx.index.artifact_units,
+        |resolution| match resolution {
+            ArtifactResolution::Resolved(_) => None,
+            failure => Some(failure),
+        },
+    )
+    .into_iter();
     let known_facets = BTreeSet::<String>::new();
     for (anchor, binding) in &ctx.index.bindings {
         let path = ctx
@@ -3011,12 +3028,9 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 target_id: target.id.clone(),
             };
             let advisory = advisory_absent_targets.contains(&target_ref);
-            let resolution =
-                resolve_target_against_inventory(ctx.workspace, target, &ctx.index.artifact_units);
+            let resolution = resolutions.next().expect("one resolution per target");
             match resolution {
-                ArtifactResolution::Resolved(_)
-                    if target.lifecycle == ArtifactTargetLifecycle::Absent && !advisory =>
-                {
+                None if target.lifecycle == ArtifactTargetLifecycle::Absent && !advisory => {
                     push(
                         out,
                         "MITASE-TARGET-002",
@@ -3025,8 +3039,8 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                ArtifactResolution::Unresolved(failure)
-                | ArtifactResolution::Ambiguous(failure)
+                Some(ArtifactResolution::Unresolved(failure))
+                | Some(ArtifactResolution::Ambiguous(failure))
                     if target.lifecycle == ArtifactTargetLifecycle::Present && !advisory =>
                 {
                     push_resolution(
@@ -3042,7 +3056,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                             .find_map(|claim| target_relation(&target_ref, claim)),
                     );
                 }
-                ArtifactResolution::Unsupported(failure)
+                Some(ArtifactResolution::Unsupported(failure))
                     if target.lifecycle == ArtifactTargetLifecycle::Present
                         && !advisory
                         && expected =>

@@ -816,6 +816,7 @@ dependencies = [
  "mitase-inventory",
  "mitase-project-model",
  "mitase-spec-model",
+ "serde",
  "serde_json",
  "serde_yaml",
  "sha2",
