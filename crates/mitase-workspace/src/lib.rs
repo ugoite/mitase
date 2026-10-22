@@ -1829,13 +1829,15 @@ pub fn resolve_target_against_inventory(
 }
 
 /// Resolve a batch in input order, parsing each valid native test source once.
-/// Parsed sources live only for the duration of their file's group.
-pub fn resolve_targets_against_inventory(
+/// Parsed sources live only for the duration of their file's group. The mapper
+/// can discard successful payloads immediately when only failures are needed.
+pub fn map_target_resolutions<T>(
     workspace: &SpecWorkspace,
     targets: &[&ArtifactTarget],
     units: &[ArtifactUnit],
-) -> Vec<ArtifactResolution> {
-    let mut results = vec![None; targets.len()];
+    mut map: impl FnMut(ArtifactResolution) -> T,
+) -> Vec<T> {
+    let mut results = (0..targets.len()).map(|_| None).collect::<Vec<_>>();
     let mut test_groups = BTreeMap::<_, Vec<_>>::new();
     for (position, target) in targets.iter().enumerate() {
         match matching_inventory_unit(workspace, target, units) {
@@ -1845,8 +1847,8 @@ pub fn resolve_targets_against_inventory(
                     .or_default()
                     .push((position, unit));
             }
-            Ok(unit) => results[position] = Some(resolve_artifact_unit(workspace, unit)),
-            Err(resolution) => results[position] = Some(*resolution),
+            Ok(unit) => results[position] = Some(map(resolve_artifact_unit(workspace, unit))),
+            Err(resolution) => results[position] = Some(map(*resolution)),
         }
     }
     for ((adapter, path), group) in test_groups {
@@ -1860,14 +1862,14 @@ pub fn resolve_targets_against_inventory(
         for (position, unit) in group {
             // On a read or parse failure, retain the single-target error path
             // so error classification and messages stay identical.
-            results[position] = Some(resolve_test_unit_with(
+            results[position] = Some(map(resolve_test_unit_with(
                 workspace,
                 unit,
                 parsed
                     .as_ref()
                     .ok()
                     .map(|(content, tests)| (content.as_slice(), tests.as_slice())),
-            ));
+            )));
         }
     }
     results
@@ -3023,7 +3025,7 @@ mod tests {
                 .iter()
                 .map(|target| resolve_target_against_inventory(&workspace, target, units))
                 .collect::<Vec<_>>();
-            let batch = resolve_targets_against_inventory(&workspace, &targets, units);
+            let batch = map_target_resolutions(&workspace, &targets, units, std::convert::identity);
             assert_eq!(batch, single);
             batch
         };
@@ -3034,7 +3036,13 @@ mod tests {
         assert!(matches!(results[4], ArtifactResolution::Unresolved(_)));
         assert!(matches!(results[5], ArtifactResolution::Unsupported(_)));
         assert!(
-            resolve_targets_against_inventory(&workspace, &[], &index.artifact_units).is_empty()
+            map_target_resolutions(
+                &workspace,
+                &[],
+                &index.artifact_units,
+                std::convert::identity
+            )
+            .is_empty()
         );
 
         let mut units = index.artifact_units.clone();
