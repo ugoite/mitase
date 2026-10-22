@@ -4,7 +4,8 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use mitase_authoring::{AUTHORING_SCHEMA, AuthoringDocument};
 use mitase_code_intel::resolve_symbol;
 use mitase_inventory::{
-    ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry, resolve_test_in_path,
+    ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry, TestResolution,
+    discover_tests_in_path, resolve_test_from_tests, resolve_test_in_path,
 };
 use mitase_project_model::{CONFIG_SCHEMA, EffectiveProjectConfig, ProjectConfig};
 use mitase_spec_model::format_sha256;
@@ -1717,6 +1718,14 @@ pub fn resolve_artifact_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> 
 }
 
 fn resolve_test_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> ArtifactResolution {
+    resolve_test_unit_with(workspace, unit, None)
+}
+
+fn resolve_test_unit_with(
+    workspace: &SpecWorkspace,
+    unit: &ArtifactUnit,
+    parsed: Option<(&[u8], &[TestResolution])>,
+) -> ArtifactResolution {
     let raw_name =
         match unit_semantic_identity(unit).and_then(|identity| identity.strip_prefix("test::")) {
             Some(name) if !name.is_empty() => name,
@@ -1728,7 +1737,10 @@ fn resolve_test_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> Artifact
                 ));
             }
         };
-    let content = match workspace.read_bytes(&workspace.root.join(unit.path.as_path())) {
+    let content = match parsed
+        .map(|(content, _)| Ok(content.to_vec()))
+        .unwrap_or_else(|| workspace.read_bytes(&workspace.root.join(unit.path.as_path())))
+    {
         Ok(content) => content,
         Err(error) => {
             return ArtifactResolution::Unresolved(failure_for_unit(
@@ -1754,7 +1766,7 @@ fn resolve_test_unit(workspace: &SpecWorkspace, unit: &ArtifactUnit) -> Artifact
         lifecycle: mitase_spec_model::ArtifactTargetLifecycle::Present,
         claims: vec![],
     };
-    match resolve_target_from_content(&target, content) {
+    match resolve_target_from_content_with_tests(&target, content, parsed.map(|(_, tests)| tests)) {
         Ok(mut resolved) => {
             resolved.identity = unit.identity.clone();
             ArtifactResolution::Resolved(resolved)
@@ -1810,8 +1822,67 @@ pub fn resolve_target_against_inventory(
     target: &ArtifactTarget,
     units: &[ArtifactUnit],
 ) -> ArtifactResolution {
+    match matching_inventory_unit(workspace, target, units) {
+        Ok(unit) => resolve_artifact_unit(workspace, unit),
+        Err(resolution) => *resolution,
+    }
+}
+
+/// Resolve a batch in input order, parsing each valid native test source once.
+/// Parsed sources live only for the duration of their file's group.
+pub fn resolve_targets_against_inventory(
+    workspace: &SpecWorkspace,
+    targets: &[&ArtifactTarget],
+    units: &[ArtifactUnit],
+) -> Vec<ArtifactResolution> {
+    let mut results = vec![None; targets.len()];
+    let mut test_groups = BTreeMap::<_, Vec<_>>::new();
+    for (position, target) in targets.iter().enumerate() {
+        match matching_inventory_unit(workspace, target, units) {
+            Ok(unit) if unit.identity.contains("::test::") => {
+                test_groups
+                    .entry((&unit.adapter, &unit.path))
+                    .or_default()
+                    .push((position, unit));
+            }
+            Ok(unit) => results[position] = Some(resolve_artifact_unit(workspace, unit)),
+            Err(resolution) => results[position] = Some(*resolution),
+        }
+    }
+    for ((adapter, path), group) in test_groups {
+        let parsed = workspace
+            .read_bytes(&workspace.root.join(path.as_path()))
+            .and_then(|content| {
+                let tests =
+                    discover_tests_in_path(adapter, path, &String::from_utf8_lossy(&content))?;
+                Ok((content, tests))
+            });
+        for (position, unit) in group {
+            // On a read or parse failure, retain the single-target error path
+            // so error classification and messages stay identical.
+            results[position] = Some(resolve_test_unit_with(
+                workspace,
+                unit,
+                parsed
+                    .as_ref()
+                    .ok()
+                    .map(|(content, tests)| (content.as_slice(), tests.as_slice())),
+            ));
+        }
+    }
+    results
+        .into_iter()
+        .map(|result| result.expect("every target was resolved"))
+        .collect()
+}
+
+fn matching_inventory_unit<'a>(
+    workspace: &SpecWorkspace,
+    target: &ArtifactTarget,
+    units: &'a [ArtifactUnit],
+) -> std::result::Result<&'a ArtifactUnit, Box<ArtifactResolution>> {
     if !selector_supports_adapter(&target.adapter, &target.selector) {
-        return ArtifactResolution::Unsupported(failure(
+        return Err(Box::new(ArtifactResolution::Unsupported(failure(
             target,
             format!(
                 "adapter {} does not support {} selectors",
@@ -1819,7 +1890,7 @@ pub fn resolve_target_against_inventory(
                 selector_kind(&target.selector).as_str()
             ),
             vec![],
-        ));
+        ))));
     }
     if !workspace
         .config
@@ -1829,11 +1900,11 @@ pub fn resolve_target_against_inventory(
         .find(|profile| profile.id == workspace.config.inventory.active_profile)
         .is_some_and(|profile| profile.providers.contains_key(&target.adapter))
     {
-        return ArtifactResolution::Unsupported(failure(
+        return Err(Box::new(ArtifactResolution::Unsupported(failure(
             target,
             format!("adapter {} is disabled", target.adapter),
             vec![],
-        ));
+        ))));
     }
     let matches = units
         .iter()
@@ -1848,13 +1919,17 @@ pub fn resolve_target_against_inventory(
         })
         .collect::<Vec<_>>();
     match matches.as_slice() {
-        [] => ArtifactResolution::Unresolved(failure(target, unresolved_message(target), vec![])),
-        [unit] => resolve_artifact_unit(workspace, unit),
-        _ => ArtifactResolution::Ambiguous(failure(
+        [] => Err(Box::new(ArtifactResolution::Unresolved(failure(
+            target,
+            unresolved_message(target),
+            vec![],
+        )))),
+        [unit] => Ok(unit),
+        _ => Err(Box::new(ArtifactResolution::Ambiguous(failure(
             target,
             ambiguous_message(target, matches.len()),
             matches.iter().map(|unit| unit.identity.clone()).collect(),
-        )),
+        )))),
     }
 }
 
@@ -1935,6 +2010,14 @@ fn resolve_target_from_content(
     target: &ArtifactTarget,
     content: Vec<u8>,
 ) -> Result<ResolvedTarget> {
+    resolve_target_from_content_with_tests(target, content, None)
+}
+
+fn resolve_target_from_content_with_tests(
+    target: &ArtifactTarget,
+    content: Vec<u8>,
+    tests: Option<&[TestResolution]>,
+) -> Result<ResolvedTarget> {
     let text = String::from_utf8_lossy(&content);
     let (description, symbols, byte_start, byte_end, line_start, line_end, excerpt, excerpt_hash) =
         match &target.selector {
@@ -1971,7 +2054,10 @@ fn resolve_target_from_content(
                 )
             }
             Selector::Test { name } => {
-                let resolved = resolve_test_in_path(&target.adapter, &target.path, &text, name)?;
+                let resolved = match tests {
+                    Some(tests) => resolve_test_from_tests(tests, name)?,
+                    None => resolve_test_in_path(&target.adapter, &target.path, &text, name)?,
+                };
                 let start = resolved.byte_start;
                 let end = resolved.byte_end;
                 let excerpt = text[start..end].to_string();
@@ -2336,10 +2422,11 @@ fn json_pointer_span(text: &str, pointer: &str) -> Result<(usize, usize, usize, 
     let mut parser = JsonSpanParser {
         source: text,
         offset: 0,
-        spans: BTreeMap::new(),
+        pointer,
+        span: None,
     };
     parser.parse_value("")?;
-    let Some((start, end)) = parser.spans.get(pointer).copied() else {
+    let Some((start, end)) = parser.span else {
         bail!("pointer {pointer} not found");
     };
     exact_span(text, start, end)
@@ -2348,7 +2435,8 @@ fn json_pointer_span(text: &str, pointer: &str) -> Result<(usize, usize, usize, 
 struct JsonSpanParser<'a> {
     source: &'a str,
     offset: usize,
-    spans: BTreeMap<String, (usize, usize)>,
+    pointer: &'a str,
+    span: Option<(usize, usize)>,
 }
 
 impl JsonSpanParser<'_> {
@@ -2366,6 +2454,20 @@ impl JsonSpanParser<'_> {
     fn parse_value(&mut self, pointer: &str) -> Result<()> {
         self.skip_whitespace();
         let start = self.offset;
+        if pointer != self.pointer
+            && !self
+                .pointer
+                .strip_prefix(pointer)
+                .is_some_and(|suffix| suffix.starts_with('/'))
+        {
+            // The complete document was validated above. Skip branches outside
+            // the requested path without constructing pointers or span entries.
+            let mut stream = serde_json::Deserializer::from_str(&self.source[self.offset..])
+                .into_iter::<serde::de::IgnoredAny>();
+            stream.next().context("unexpected end of JSON")??;
+            self.offset += stream.byte_offset();
+            return Ok(());
+        }
         match self.source.as_bytes().get(self.offset) {
             Some(b'{') => {
                 self.offset += 1;
@@ -2423,7 +2525,9 @@ impl JsonSpanParser<'_> {
             }
             None => bail!("unexpected end of JSON"),
         }
-        self.spans.insert(pointer.into(), (start, self.offset));
+        if pointer == self.pointer {
+            self.span = Some((start, self.offset));
+        }
         Ok(())
     }
 
@@ -2842,6 +2946,179 @@ mod tests {
             &["openapi".into()],
         );
         assert!(matches!(unsupported, ArtifactResolution::Unsupported(_)));
+    }
+
+    #[test]
+    fn batch_resolution_preserves_single_target_results_and_source_changes() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("docs/mitase")).unwrap();
+        fs::write(
+            temp.path().join("mitase.yaml"),
+            concat!(
+                "schema: mitase/config/v1\n",
+                "inventory:\n  profiles:\n    - id: default\n      providers:\n",
+                "        rust: { roots: [native.rs], mode: test }\n",
+                "        typescript: { roots: [native.test.tsx] }\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("native.rs"),
+            "mod suite { #[test] fn first() { assert!(true); } }\n#[test] fn second() {}\n",
+        )
+        .unwrap();
+        let tsx = "it('日本語', () => { const view = <main />; });\nit('duplicate', () => {});\nit('duplicate', () => {});\n";
+        fs::write(temp.path().join("native.test.tsx"), tsx).unwrap();
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let index = workspace.index().unwrap();
+        assert_eq!(index.inventory_error, None);
+        let targets = vec![
+            target(
+                "typescript",
+                "native.test.tsx",
+                Selector::Test {
+                    name: "日本語".into(),
+                },
+            ),
+            target(
+                "rust",
+                "native.rs",
+                Selector::Test {
+                    name: "suite::first".into(),
+                },
+            ),
+            target(
+                "typescript",
+                "native.test.tsx",
+                Selector::Test {
+                    name: "duplicate".into(),
+                },
+            ),
+            target(
+                "rust",
+                "native.rs",
+                Selector::Test {
+                    name: "second".into(),
+                },
+            ),
+            target(
+                "rust",
+                "native.rs",
+                Selector::Test {
+                    name: "missing".into(),
+                },
+            ),
+            target(
+                "markdown",
+                "native.rs",
+                Selector::Test {
+                    name: "second".into(),
+                },
+            ),
+            target("rust", "native.rs", Selector::File),
+        ];
+        let targets = targets.iter().collect::<Vec<_>>();
+        let compare = |units: &[ArtifactUnit]| {
+            let single = targets
+                .iter()
+                .map(|target| resolve_target_against_inventory(&workspace, target, units))
+                .collect::<Vec<_>>();
+            let batch = resolve_targets_against_inventory(&workspace, &targets, units);
+            assert_eq!(batch, single);
+            batch
+        };
+        let results = compare(&index.artifact_units);
+        assert!(matches!(results[0], ArtifactResolution::Resolved(_)));
+        assert!(matches!(results[1], ArtifactResolution::Resolved(_)));
+        assert!(matches!(results[2], ArtifactResolution::Ambiguous(_)));
+        assert!(matches!(results[4], ArtifactResolution::Unresolved(_)));
+        assert!(matches!(results[5], ArtifactResolution::Unsupported(_)));
+        assert!(
+            resolve_targets_against_inventory(&workspace, &[], &index.artifact_units).is_empty()
+        );
+
+        let mut units = index.artifact_units.clone();
+        units.extend(
+            index
+                .artifact_units
+                .iter()
+                .filter(|unit| unit.identity.contains("::test::second@"))
+                .cloned(),
+        );
+        assert!(matches!(
+            compare(&units)[3],
+            ArtifactResolution::Ambiguous(_)
+        ));
+        for unit in &mut units {
+            unit.reachability = mitase_inventory::ArtifactReachability::Inactive;
+        }
+        assert!(matches!(
+            compare(&units)[1],
+            ArtifactResolution::Unresolved(_)
+        ));
+
+        // The inventory is deliberately retained while sources change. A batch
+        // must re-read and parse current bytes, including invalid or missing files.
+        fs::write(
+            temp.path().join("native.rs"),
+            "#[test] fn second() { assert_eq!(2, 2); }\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            compare(&index.artifact_units)[1],
+            ArtifactResolution::Unresolved(_)
+        ));
+        fs::write(
+            temp.path().join("native.test.tsx"),
+            "it('日本語', () => {\n",
+        )
+        .unwrap();
+        compare(&index.artifact_units);
+        fs::remove_file(temp.path().join("native.rs")).unwrap();
+        compare(&index.artifact_units);
+    }
+
+    #[test]
+    fn json_pointer_spans_preserve_exact_paths_and_validate_skipped_branches() {
+        let text = r#"{"a/b":{"~key":[null,{"名前":"値"}]},"a":{"unused":[true,false]},"ab":123}"#;
+        for (pointer, excerpt) in [
+            ("/a~1b/~0key/0", "null"),
+            ("/a~1b/~0key/1", r#"{"名前":"値"}"#),
+            ("/a~1b/~0key/1/名前", r#""値""#),
+            ("/a/unused", "[true,false]"),
+            ("/ab", "123"),
+        ] {
+            let start = text.find(excerpt).unwrap();
+            assert_eq!(
+                json_pointer_span(text, pointer).unwrap(),
+                exact_span(text, start, start + excerpt.len()).unwrap()
+            );
+        }
+        for pointer in [
+            "/a~1b/~0key/01",
+            "/a/unused/2",
+            "/a/missing",
+            "/missing",
+            "/",
+        ] {
+            assert_eq!(
+                json_pointer_span(text, pointer).unwrap_err().to_string(),
+                format!("pointer {pointer} not found")
+            );
+        }
+        let duplicate = r#"{"key":{"value":1},"key":{"value":2}}"#;
+        assert_eq!(json_pointer_span(duplicate, "/key/value").unwrap().4, "2");
+        // Preserve the previous span walk's behavior for repeated ancestor keys.
+        let duplicate = r#"{"key":{"value":1},"key":{}}"#;
+        assert_eq!(json_pointer_span(duplicate, "/key/value").unwrap().4, "1");
+        for invalid in [r#"{"wanted":1,"other":[}"#, r#"{"other":[},"wanted":1}"#] {
+            assert_eq!(
+                json_pointer_span(invalid, "/wanted")
+                    .unwrap_err()
+                    .to_string(),
+                "parse JSON document"
+            );
+        }
     }
 
     #[test]
