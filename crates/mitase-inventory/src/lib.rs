@@ -244,15 +244,19 @@ fn discover_javascript_tests_for_path(
     path: &RepoPath,
     source: &str,
 ) -> Result<Vec<TestResolution>> {
+    let tsx = javascript_test_uses_tsx(adapter, path);
+    discover_javascript_tests_with_language(adapter, source, tsx)
+}
+
+fn javascript_test_uses_tsx(adapter: &str, path: &RepoPath) -> bool {
     let path = path.to_string_lossy();
-    let tsx = matches!(
+    matches!(
         (
             adapter,
             path.rsplit_once('.').map(|(_, extension)| extension)
         ),
         ("javascript" | "typescript", Some("jsx" | "tsx"))
-    );
-    discover_javascript_tests_with_language(adapter, source, tsx)
+    )
 }
 
 fn is_javascript_test_function(function: Node<'_>, source: &str) -> bool {
@@ -288,7 +292,10 @@ fn discover_javascript_tests_with_language(
             "JavaScript/TypeScript source has syntax errors; refusing approximate test inventory"
         );
     }
+    javascript_tests_in_tree(tree.root_node(), source)
+}
 
+fn javascript_tests_in_tree(root: Node<'_>, source: &str) -> Result<Vec<TestResolution>> {
     fn visit(node: Node<'_>, source: &str, tests: &mut Vec<TestResolution>) -> Result<()> {
         if node.kind() == "call_expression"
             && let Some(function) = node.child_by_field_name("function")
@@ -316,7 +323,7 @@ fn discover_javascript_tests_with_language(
     }
 
     let mut tests = Vec::new();
-    visit(tree.root_node(), source, &mut tests)?;
+    visit(root, source, &mut tests)?;
     Ok(tests)
 }
 
@@ -1158,21 +1165,22 @@ fn source_symbol_units(
     let mut identities: BTreeMap<String, usize> = BTreeMap::new();
     let mut parser = TsParser::new();
     let extension = path.extension().and_then(|extension| extension.to_str());
+    let source_language = match extension {
+        // Grammar selection follows the source document, not the
+        // provider name: a JavaScript provider can legitimately own
+        // both plain JavaScript and JSX files.
+        Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
+        Some("jsx") | Some("js") | Some("mjs") | Some("cjs") => {
+            tree_sitter_javascript::LANGUAGE.into()
+        }
+        Some("ts") | Some("mts") | Some("cts") => {
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+        }
+        _ if adapter == "javascript" => tree_sitter_javascript::LANGUAGE.into(),
+        _ => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+    };
     parser
-        .set_language(&match extension {
-            // Grammar selection follows the source document, not the
-            // provider name: a JavaScript provider can legitimately own
-            // both plain JavaScript and JSX files.
-            Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
-            Some("jsx") | Some("js") | Some("mjs") | Some("cjs") => {
-                tree_sitter_javascript::LANGUAGE.into()
-            }
-            Some("ts") | Some("mts") | Some("cts") => {
-                tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
-            }
-            _ if adapter == "javascript" => tree_sitter_javascript::LANGUAGE.into(),
-            _ => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-        })
+        .set_language(&source_language)
         .map_err(|error| anyhow::anyhow!("load JavaScript/TypeScript grammar: {error}"))?;
     let tree = parser
         .parse(&source, None)
@@ -1195,12 +1203,8 @@ fn source_symbol_units(
             }
             let start = node.start_byte();
             let end = node.end_byte();
-            let line_start = source[..start]
-                .bytes()
-                .filter(|byte| *byte == b'\n')
-                .count()
-                + 1;
-            let line_end = source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1;
+            let line_start = node.start_position().row + 1;
+            let line_end = node.end_position().row + 1;
             identities.insert(identity.clone(), units.len());
             units.push(ArtifactUnit {
                 adapter: adapter.into(),
@@ -1285,7 +1289,13 @@ fn source_symbol_units(
         }
     }
     let mut test_occurrences = BTreeMap::<String, usize>::new();
-    for test in discover_javascript_tests_for_path(adapter, &repo_path, &source)? {
+    let test_language = javascript_language(adapter, javascript_test_uses_tsx(adapter, &repo_path));
+    let tests = if source_language == test_language {
+        javascript_tests_in_tree(tree.root_node(), &source)?
+    } else {
+        discover_javascript_tests_for_path(adapter, &repo_path, &source)?
+    };
+    for test in tests {
         let occurrence = test_occurrences.entry(test.identity.clone()).or_insert(0);
         let identity_occurrence = *occurrence;
         *occurrence += 1;
@@ -1318,12 +1328,8 @@ fn source_symbol_units(
                     span: SourceSpan {
                         byte_start: start,
                         byte_end: end,
-                        line_start: source[..start]
-                            .bytes()
-                            .filter(|byte| *byte == b'\n')
-                            .count()
-                            + 1,
-                        line_end: source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1,
+                        line_start: child.start_position().row + 1,
+                        line_end: child.end_position().row + 1,
                     },
                     digest: digest(&source.as_bytes()[start..end]),
                     structural_digest: digest(&source.as_bytes()[start..end]),
@@ -3205,6 +3211,68 @@ mod tests {
                 "{name}"
             );
         }
+    }
+
+    #[test]
+    fn javascript_inventory_tests_match_standalone_discovery_across_grammars() {
+        let temp = tempfile::tempdir().unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        for (name, adapter) in [
+            ("plain.js", "javascript"),
+            ("view.jsx", "javascript"),
+            ("types.ts", "typescript"),
+            ("view.tsx", "typescript"),
+            ("cross.js", "typescript"),
+            (".tsx", "typescript"),
+            (".jsx", "javascript"),
+        ] {
+            let source = "// 日本語\r\nexport const value = 1;\r\nit('one', () => {});\r\nit('one', () => {});\r\nexport * from './other';\r\n";
+            let path = temp.path().join(name);
+            fs::write(&path, source).unwrap();
+            let repo_path = RepoPath::new(name).unwrap();
+            let standalone = discover_tests_in_path(adapter, &repo_path, source).unwrap();
+            let units = source_symbol_units(&context, path, adapter).unwrap();
+            let tests = units
+                .iter()
+                .filter(|unit| unit.exposure == ArtifactExposure::Test)
+                .collect::<Vec<_>>();
+            assert_eq!(tests.len(), standalone.len(), "{name}");
+            for (unit, test) in tests.iter().zip(&standalone) {
+                assert_eq!(unit.span.byte_start, test.byte_start, "{name}");
+                assert_eq!(unit.span.byte_end, test.byte_end, "{name}");
+                assert_eq!(unit.span.line_start, test.line_start, "{name}");
+                assert_eq!(unit.span.line_end, test.line_end, "{name}");
+            }
+            let value = units
+                .iter()
+                .find(|unit| unit.identity.ends_with("::value"))
+                .unwrap();
+            assert_eq!(
+                (value.span.line_start, value.span.line_end),
+                (2, 2),
+                "{name}"
+            );
+            let reexport = units
+                .iter()
+                .find(|unit| unit.identity.ends_with("::re-export::*"))
+                .unwrap();
+            assert_eq!(
+                (reexport.span.line_start, reexport.span.line_end),
+                (5, 5),
+                "{name}"
+            );
+        }
+
+        // Source and test discovery deliberately choose different grammars here.
+        let path = temp.path().join("cross.ts");
+        fs::write(&path, "export interface Shape { id: string }").unwrap();
+        assert!(source_symbol_units(&context, path, "javascript").is_err());
     }
 
     #[test]

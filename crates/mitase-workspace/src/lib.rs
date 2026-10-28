@@ -765,6 +765,7 @@ impl SpecIndex {
         // exact ArtifactTarget are current. Keep the authored relation maps
         // separate so planned and retired targets remain queryable without
         // accidentally becoming current proof coverage.
+        let units_by_path = inventory_units_by_path(&out.artifact_units);
         let mut current_target_refs = BTreeSet::new();
         let mut current_implementation_target_refs = BTreeSet::new();
         let mut current_verification_target_refs = BTreeSet::new();
@@ -781,7 +782,9 @@ impl SpecIndex {
                     binding: binding_anchor.clone(),
                     target_id: target.id.clone(),
                 };
-                if artifact_identities_for_target(&out.artifact_units, target).len() != 1 {
+                if artifact_identities_for_target(units_by_path.get(&target.path), target).len()
+                    != 1
+                {
                     continue;
                 }
                 current_target_refs.insert(target_ref.clone());
@@ -807,7 +810,8 @@ impl SpecIndex {
                     binding: binding_anchor.clone(),
                     target_id: target.id.clone(),
                 };
-                let identities = artifact_identities_for_target(&out.artifact_units, target);
+                let identities =
+                    artifact_identities_for_target(units_by_path.get(&target.path), target);
                 if identities.len() == 1 {
                     let identity = &identities[0];
                     out.all_target_to_artifact
@@ -1075,9 +1079,21 @@ impl SpecIndex {
     }
 }
 
-fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarget) -> Vec<String> {
+fn inventory_units_by_path(units: &[ArtifactUnit]) -> BTreeMap<&RepoPath, Vec<&ArtifactUnit>> {
+    let mut by_path = BTreeMap::<_, Vec<_>>::new();
+    for unit in units {
+        by_path.entry(&unit.path).or_default().push(unit);
+    }
+    by_path
+}
+
+fn artifact_identities_for_target(
+    units: Option<&Vec<&ArtifactUnit>>,
+    target: &ArtifactTarget,
+) -> Vec<String> {
     units
-        .iter()
+        .into_iter()
+        .flatten()
         .filter(|unit| {
             if unit.adapter != target.adapter
                 || unit.path != target.path
@@ -1822,7 +1838,7 @@ pub fn resolve_target_against_inventory(
     target: &ArtifactTarget,
     units: &[ArtifactUnit],
 ) -> ArtifactResolution {
-    match matching_inventory_unit(workspace, target, units) {
+    match matching_inventory_unit(workspace, target, units.iter()) {
         Ok(unit) => resolve_artifact_unit(workspace, unit),
         Err(resolution) => *resolution,
     }
@@ -1838,9 +1854,18 @@ pub fn map_target_resolutions<T>(
     mut map: impl FnMut(ArtifactResolution) -> T,
 ) -> Vec<T> {
     let mut results = (0..targets.len()).map(|_| None).collect::<Vec<_>>();
+    let units_by_path = inventory_units_by_path(units);
     let mut test_groups = BTreeMap::<_, Vec<_>>::new();
     for (position, target) in targets.iter().enumerate() {
-        match matching_inventory_unit(workspace, target, units) {
+        match matching_inventory_unit(
+            workspace,
+            target,
+            units_by_path
+                .get(&target.path)
+                .into_iter()
+                .flatten()
+                .copied(),
+        ) {
             Ok(unit) if unit.identity.contains("::test::") => {
                 test_groups
                     .entry((&unit.adapter, &unit.path))
@@ -1881,7 +1906,7 @@ pub fn map_target_resolutions<T>(
 fn matching_inventory_unit<'a>(
     workspace: &SpecWorkspace,
     target: &ArtifactTarget,
-    units: &'a [ArtifactUnit],
+    units: impl Iterator<Item = &'a ArtifactUnit>,
 ) -> std::result::Result<&'a ArtifactUnit, Box<ArtifactResolution>> {
     if !selector_supports_adapter(&target.adapter, &target.selector) {
         return Err(Box::new(ArtifactResolution::Unsupported(failure(
@@ -1909,7 +1934,6 @@ fn matching_inventory_unit<'a>(
         ))));
     }
     let matches = units
-        .iter()
         .filter(|unit| {
             unit.adapter == target.adapter
                 && unit.path == target.path
@@ -2960,6 +2984,7 @@ mod tests {
                 "schema: mitase/config/v1\n",
                 "inventory:\n  profiles:\n    - id: default\n      providers:\n",
                 "        rust: { roots: [native.rs], mode: test }\n",
+                "        declared: { roots: [other.txt] }\n",
                 "        typescript: { roots: [native.test.tsx] }\n",
             ),
         )
@@ -2971,6 +2996,7 @@ mod tests {
         .unwrap();
         let tsx = "it('日本語', () => { const view = <main />; });\nit('duplicate', () => {});\nit('duplicate', () => {});\n";
         fs::write(temp.path().join("native.test.tsx"), tsx).unwrap();
+        fs::write(temp.path().join("other.txt"), "another file\n").unwrap();
         let workspace = SpecWorkspace::load(temp.path()).unwrap();
         let index = workspace.index().unwrap();
         assert_eq!(index.inventory_error, None);
@@ -3018,6 +3044,8 @@ mod tests {
                 },
             ),
             target("rust", "native.rs", Selector::File),
+            target("declared", "other.txt", Selector::File),
+            target("declared", "native.rs", Selector::File),
         ];
         let targets = targets.iter().collect::<Vec<_>>();
         let compare = |units: &[ArtifactUnit]| {
@@ -3035,6 +3063,8 @@ mod tests {
         assert!(matches!(results[2], ArtifactResolution::Ambiguous(_)));
         assert!(matches!(results[4], ArtifactResolution::Unresolved(_)));
         assert!(matches!(results[5], ArtifactResolution::Unsupported(_)));
+        assert!(matches!(results[7], ArtifactResolution::Resolved(_)));
+        assert!(matches!(results[8], ArtifactResolution::Unresolved(_)));
         assert!(
             map_target_resolutions(
                 &workspace,
@@ -3053,6 +3083,8 @@ mod tests {
                 .filter(|unit| unit.identity.contains("::test::second@"))
                 .cloned(),
         );
+        // Interleaved duplicates retain the same ambiguity candidates and order.
+        units.reverse();
         assert!(matches!(
             compare(&units)[3],
             ArtifactResolution::Ambiguous(_)
